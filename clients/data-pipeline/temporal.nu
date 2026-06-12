@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -83,7 +84,7 @@ def resetReapplyType-completer [] { ["RESET_REAPPLY_TYPE_ALL_ELIGIBLE" "RESET_RE
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "cluster-info GetClusterInfo" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -116,13 +117,14 @@ export def "cluster-info GetClusterInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<supportedClients: record, serverVersion: string, clusterId: string, versionInfo: record<current: record<version: string, releaseTime: string, notes: string>, recommended: record<version: string, releaseTime: string, notes: string>, instructions: string, alerts: list<record>, lastUpdateTime: string>, clusterName: string, historyShardCount: int, persistenceStore: string, visibilityStore: string, initialFailoverVersion: string, failoverVersionIncrement: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/cluster-info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListNamespaces returns the information and configuration for all namespaces.
@@ -137,6 +139,7 @@ export def "namespaces ListNamespaces" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # format: int32
   --nextPageToken: string # format: bytes
   --namespaceFilterincludeDeleted: oneof<nothing, bool> # By default namespaces in NAMESPACE_STATE_DELETED state are not included.  Setting include_deleted to true will include deleted namespaces.  Note: Namespace is in NAMESPACE_STATE_DELETED state when it was deleted from the system but associated data is not deleted yet.
@@ -147,7 +150,7 @@ export def "namespaces ListNamespaces" [
   let full_url = (build-url $base "/api/v1/namespaces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RegisterNamespace creates a new namespace which can be used as a container for all resources.   A Namespace is a top level entity within Temporal, and is used as a container for resources  like workflow executions, task queues, etc. A Namespace acts as a sandbox and provides  isolation for all resources within the namespace. All resources belongs to exactly one  namespace.
@@ -163,6 +166,7 @@ export def "namespaces RegisterNamespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --namespace: string
   --description: string
   --ownerEmail: string
@@ -185,7 +189,7 @@ export def "namespaces RegisterNamespace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DescribeNamespace returns the information and configuration for a registered namespace.
@@ -201,6 +205,7 @@ export def "namespaces DescribeNamespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --weakConsistency: oneof<nothing, bool> # If true, the server may serve the response from an eventually-consistent  source instead of reading through to persistence. Defaults to false,  which preserves read-after-write consistency. SDKs should set this when  fetching namespace capabilities on worker/client startup.
 ]: nothing -> record<namespaceInfo: record<name: string, state: string, description: string, ownerEmail: string, data: record, id: string, capabilities: record<eagerWorkflowStart: bool, syncUpdate: bool, asyncUpdate: bool, workerHeartbeats: bool, reportedProblemsSearchAttribute: bool, workflowPause: bool, standaloneActivities: bool, workerPollCompleteOnShutdown: bool, pollerAutoscaling: bool, workerCommands: bool, standaloneNexusOperation: bool, workflowUpdateCallbacks: bool>, limits: record<blobSizeLimitError: string, memoSizeLimitError: string>, supportsSchedules: bool>, config: record<workflowExecutionRetentionTtl: string, badBinaries: record<binaries: record>, historyArchivalState: string, historyArchivalUri: string, visibilityArchivalState: string, visibilityArchivalUri: string, customSearchAttributeAliases: record>, replicationConfig: record<activeClusterName: string, clusters: list<record>, state: string>, failoverVersion: string, isGlobalNamespace: bool, failoverHistory: table<failoverTime: string, failoverVersion: string>, pollerGroupInfos: table<id: string, weight: float>> {
@@ -210,7 +215,7 @@ export def "namespaces DescribeNamespace" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListActivityExecutions is a visibility API to list activity executions in a specific namespace.
@@ -226,6 +231,7 @@ export def "namespaces-activities ListActivityExecutions-by-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # Max number of executions to return per page. (format: int32)
   --nextPageToken: string # Token returned in ListActivityExecutionsResponse. (format: bytes)
   --qp-query: string # Visibility query, see https://docs.temporal.io/list-filter for the syntax.
@@ -236,7 +242,7 @@ export def "namespaces-activities ListActivityExecutions-by-namespace" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/activities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PauseActivity pauses the execution of an activity specified by its ID or type.  If there are multiple pending activities of the provided type - all of them will be paused   Pausing an activity means:  - If the activity is currently waiting for a retry or is running and subsequently fails,    it will not be rescheduled until it is unpaused.  - If the activity is already paused, calling this method will have no effect.  - If the activity is running and finishes successfully, the activity will be completed.  - If the activity is running and finishes with failure:    * if there is no retry left - the activity will be completed.    * if there are more retries left - the activity will be paused.  For long-running activities:  - activities in paused state will send a cancellation with "activity_paused" set to 'true' in response to 'RecordActivityTaskHeartbeat'.  - The activity should respond to the cancellation accordingly.   Returns a `NotFound` error if there is no pending activity with the provided ID or type  This API will be deprecated soon and replaced with a newer PauseActivityExecution that is better named and  structured to work well for standalone activities.
@@ -252,6 +258,7 @@ export def "namespaces-activities-deprecated-pause PauseActivity-by-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity.
   --execution: any # Execution info of the workflow which scheduled this activity
   --identity: string # The identity of the client who initiated this request.
@@ -268,7 +275,7 @@ export def "namespaces-activities-deprecated-pause PauseActivity-by-namespace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ResetActivity resets the execution of an activity specified by its ID or type.  If there are multiple pending activities of the provided type - all of them will be reset.   Resetting an activity means:  * number of attempts will be reset to 0.  * activity timeouts will be reset.  * if the activity is waiting for retry, and it is not paused or 'keep_paused' is not provided:     it will be scheduled immediately (* see 'jitter' flag),   Flags:   'jitter': the activity will be scheduled at a random time within the jitter duration.  If the activity currently paused it will be unpaused, unless 'keep_paused' flag is provided.  'reset_heartbeats': the activity heartbeat timer and heartbeats will be reset.  'keep_paused': if the activity is paused, it will remain paused.   Returns a `NotFound` error if there is no pending activity with the provided ID or type.  This API will be deprecated soon and replaced with a newer ResetActivityExecution that is better named and  structured to work well for standalone activities.
@@ -284,6 +291,7 @@ export def "namespaces-activities-deprecated-reset ResetActivity-by-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity.
   --execution: any # Execution info of the workflow which scheduled this activity
   --identity: string # The identity of the client who initiated this request.
@@ -303,7 +311,7 @@ export def "namespaces-activities-deprecated-reset ResetActivity-by-namespace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # UnpauseActivity unpauses the execution of an activity specified by its ID or type.  If there are multiple pending activities of the provided type - all of them will be unpaused.   If activity is not paused, this call will have no effect.  If the activity was paused while waiting for retry, it will be scheduled immediately (* see 'jitter' flag).  Once the activity is unpaused, all timeout timers will be regenerated.   Flags:  'jitter': the activity will be scheduled at a random time within the jitter duration.  'reset_attempts': the number of attempts will be reset.  'reset_heartbeat': the activity heartbeat timer and heartbeats will be reset.   Returns a `NotFound` error if there is no pending activity with the provided ID or type  This API will be deprecated soon and replaced with a newer UnpauseActivityExecution that is better named and  structured to work well for standalone activities.
@@ -319,6 +327,7 @@ export def "namespaces-activities-deprecated-unpause UnpauseActivity-by-namespac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity.
   --execution: any # Execution info of the workflow which scheduled this activity
   --identity: string # The identity of the client who initiated this request.
@@ -337,7 +346,7 @@ export def "namespaces-activities-deprecated-unpause UnpauseActivity-by-namespac
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # UpdateActivityOptions is called by the client to update the options of an activity by its ID or type.  If there are multiple pending activities of the provided type - all of them will be updated.  This API will be deprecated soon and replaced with a newer UpdateActivityExecutionOptions that is better named and  structured to work well for standalone activities.
@@ -353,6 +362,7 @@ export def "namespaces-activities-deprecated-update-options UpdateActivityOption
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity
   --execution: any # Execution info of the workflow which scheduled this activity
   --identity: string # The identity of the client who initiated this request
@@ -371,7 +381,7 @@ export def "namespaces-activities-deprecated-update-options UpdateActivityOption
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DescribeActivityExecution returns information about an activity execution.  It can be used to:  - Get current activity info without waiting  - Long-poll for next state change and return new activity info  Response can optionally include activity input or outcome (if the activity has completed).
@@ -388,6 +398,7 @@ export def "namespaces-activities DescribeActivityExecution-by-namespace-activit
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --runId: string # Activity run ID. If empty the request targets the latest run.
   --includeInput: oneof<nothing, bool> # Include the input field in the response.
   --includeOutcome: oneof<nothing, bool> # Include the outcome (result/failure) in the response if the activity has completed.
@@ -401,7 +412,7 @@ export def "namespaces-activities DescribeActivityExecution-by-namespace-activit
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/activities/($activityId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # StartActivityExecution starts a new activity execution.   Returns an `ActivityExecutionAlreadyStarted` error if an instance already exists with same activity ID in this namespace  unless permitted by the specified ID conflict policy.
@@ -420,6 +431,7 @@ export def "namespaces-activities StartActivityExecution-by-namespace-activityId
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --identity: string # The identity of the client who initiated this request
   --requestId: string # A unique identifier for this start request. Typically UUIDv4.
@@ -451,7 +463,7 @@ export def "namespaces-activities StartActivityExecution-by-namespace-activityId
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RequestCancelActivityExecution requests cancellation of an activity execution.   Cancellation is cooperative: this call records the request, but the activity must detect and  acknowledge it for the activity to reach CANCELED status. The cancellation signal is  delivered via `cancel_requested` in the heartbeat response; SDKs surface this via  language-idiomatic mechanisms (context cancellation, exceptions, abort signals).
@@ -468,6 +480,7 @@ export def "namespaces-activities-cancel RequestCancelActivityExecution-by-names
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --body-activityId: string
   --runId: string # Activity run ID, targets the latest run if run_id is empty.
@@ -483,7 +496,7 @@ export def "namespaces-activities-cancel RequestCancelActivityExecution-by-names
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # See `RespondActivityTaskCompleted`. This version allows clients to record completions by  namespace/workflow id/activity id instead of task token.   (-- api-linter: core::0136::prepositions=disabled      aip.dev/not-precedent: "By" is used to indicate request type. --)
@@ -500,6 +513,7 @@ export def "namespaces-activities-complete RespondActivityTaskCompletedById-by-n
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity
   --workflowId: string # Id of the workflow which scheduled this activity, leave empty to target a standalone activity
   --runId: string # For a workflow activity - the run ID of the workflow which scheduled this activity.  For a standalone activity - the run ID of the activity.
@@ -516,7 +530,7 @@ export def "namespaces-activities-complete RespondActivityTaskCompletedById-by-n
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # See `RecordActivityTaskFailed`. This version allows clients to record failures by  namespace/workflow id/activity id instead of task token.   (-- api-linter: core::0136::prepositions=disabled      aip.dev/not-precedent: "By" is used to indicate request type. --)
@@ -533,6 +547,7 @@ export def "namespaces-activities-fail RespondActivityTaskFailedById-by-namespac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity
   --workflowId: string # Id of the workflow which scheduled this activity, leave empty to target a standalone activity
   --runId: string # For a workflow activity - the run ID of the workflow which scheduled this activity.  For a standalone activity - the run ID of the activity.
@@ -550,7 +565,7 @@ export def "namespaces-activities-fail RespondActivityTaskFailedById-by-namespac
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # See `RecordActivityTaskHeartbeat`. This version allows clients to record heartbeats by  namespace/workflow id/activity id instead of task token.   (-- api-linter: core::0136::prepositions=disabled      aip.dev/not-precedent: "By" is used to indicate request type. --)
@@ -567,6 +582,7 @@ export def "namespaces-activities-heartbeat RecordActivityTaskHeartbeatById-by-n
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity
   --workflowId: string # Id of the workflow which scheduled this activity, leave empty to target a standalone activity
   --runId: string # For a workflow activity - the run ID of the workflow which scheduled this activity.  For a standalone activity - the run ID of the activity.
@@ -583,7 +599,7 @@ export def "namespaces-activities-heartbeat RecordActivityTaskHeartbeatById-by-n
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PollActivityExecution long-polls for an activity execution to complete and returns the  outcome (result or failure).
@@ -600,6 +616,7 @@ export def "namespaces-activities-outcome PollActivityExecution-by-namespace-act
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --runId: string # Activity run ID. If empty the request targets the latest run.
 ]: nothing -> record<runId: string, outcome: record<result: record<payloads: list>, failure: record<message: string, source: string, stackTrace: string, encodedAttributes: record, cause: record, applicationFailureInfo: record, timeoutFailureInfo: record, canceledFailureInfo: record, terminatedFailureInfo: record, serverFailureInfo: record, resetWorkflowFailureInfo: record, activityFailureInfo: record, childWorkflowExecutionFailureInfo: record, nexusOperationExecutionFailureInfo: record, nexusHandlerFailureInfo: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -608,7 +625,7 @@ export def "namespaces-activities-outcome PollActivityExecution-by-namespace-act
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/activities/($activityId)/outcome" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PauseActivityExecution pauses the execution of an activity specified by its ID.  This API can be used to target a workflow activity or a standalone activity   Pausing an activity means:  - If the activity is currently waiting for a retry or is running and subsequently fails,    it will not be rescheduled until it is unpaused.  - If the activity is already paused, calling this method will have no effect.  - If the activity is running and finishes successfully, the activity will be completed.  - If the activity is running and finishes with failure:    * if there is no retry left - the activity will be completed.    * if there are more retries left - the activity will be paused.  For long-running activities:  - activities in paused state will send a cancellation with "activity_paused" set to 'true' in response to 'RecordActivityTaskHeartbeat'.   Returns a `NotFound` error if there is no pending activity with the provided ID
@@ -625,6 +642,7 @@ export def "namespaces-activities-pause PauseActivityExecution-by-namespace-acti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity.
   --workflowId: string # If provided, pause a workflow activity (or activities) for the given workflow ID.  If empty, targets a standalone activity.
   --body-activityId: string # The ID of the activity to target.
@@ -642,7 +660,7 @@ export def "namespaces-activities-pause PauseActivityExecution-by-namespace-acti
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ResetActivityExecution resets the execution of an activity specified by its ID.  This API can be used to target a workflow activity or a standalone activity.   Resetting an activity means:  * number of attempts will be reset to 0.  * activity timeouts will be reset.  * if the activity is waiting for retry, and it is not paused or 'keep_paused' is not provided:     it will be scheduled immediately (* see 'jitter' flag)   Returns a `NotFound` error if there is no pending activity with the provided ID or type.
@@ -659,6 +677,7 @@ export def "namespaces-activities-reset ResetActivityExecution-by-namespace-acti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity.
   --workflowId: string # If provided, targets a workflow activity for the given workflow ID.  If empty, targets a standalone activity.
   --body-activityId: string # The ID of the activity to target.
@@ -678,7 +697,7 @@ export def "namespaces-activities-reset ResetActivityExecution-by-namespace-acti
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # See `RespondActivityTaskCanceled`. This version allows clients to record failures by  namespace/workflow id/activity id instead of task token.   (-- api-linter: core::0136::prepositions=disabled      aip.dev/not-precedent: "By" is used to indicate request type. --)
@@ -695,6 +714,7 @@ export def "namespaces-activities-resolve-as-canceled RespondActivityTaskCancele
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity
   --workflowId: string # Id of the workflow which scheduled this activity, leave empty to target a standalone activity
   --runId: string # For a workflow activity - the run ID of the workflow which scheduled this activity.  For a standalone activity - the run ID of the activity.
@@ -712,7 +732,7 @@ export def "namespaces-activities-resolve-as-canceled RespondActivityTaskCancele
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # TerminateActivityExecution terminates an existing activity execution immediately.   Termination does not reach the worker and the activity code cannot react to it. A terminated activity may have a  running attempt.
@@ -729,6 +749,7 @@ export def "namespaces-activities-terminate TerminateActivityExecution-by-namesp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --body-activityId: string
   --runId: string # Activity run ID, targets the latest run if run_id is empty.
@@ -744,7 +765,7 @@ export def "namespaces-activities-terminate TerminateActivityExecution-by-namesp
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # UnpauseActivityExecution unpauses the execution of an activity specified by its ID.  This API can be used to target a workflow activity or a standalone activity.   If activity is not paused, this call will have no effect.  If the activity was paused while waiting for retry, it will be scheduled immediately (* see 'jitter' flag).  Once the activity is unpaused, all timeout timers will be regenerated.   Returns a `NotFound` error if there is no pending activity with the provided ID
@@ -761,6 +782,7 @@ export def "namespaces-activities-unpause UnpauseActivityExecution-by-namespace-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity.
   --workflowId: string # If provided, targets a workflow activity for the given workflow ID.  If empty, targets a standalone activity.
   --body-activityId: string # The ID of the activity to target.
@@ -780,7 +802,7 @@ export def "namespaces-activities-unpause UnpauseActivityExecution-by-namespace-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # UpdateActivityExecutionOptions is called by the client to update the options of an activity by its ID.  This API can be used to target a workflow activity or a standalone activity.
@@ -797,6 +819,7 @@ export def "namespaces-activities-update-options UpdateActivityExecutionOptions-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity
   --workflowId: string # If provided, targets a workflow activity for the given workflow ID.  If empty, targets a standalone activity.
   --body-activityId: string # The ID of the activity to target.
@@ -815,7 +838,7 @@ export def "namespaces-activities-update-options UpdateActivityExecutionOptions-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RespondActivityTaskCompleted is called by workers when they successfully complete an activity  task.   For workflow activities, this results in a new `ACTIVITY_TASK_COMPLETED` event being written to the workflow history  and a new workflow task created for the workflow. Fails with `NotFound` if the task token is  no longer valid due to activity timeout, already being completed, or never having existed.
@@ -831,6 +854,7 @@ export def "namespaces-activity-complete RespondActivityTaskCompleted-by-namespa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --taskToken: string # The task token as received in `PollActivityTaskQueueResponse` (format: bytes)
   --body-result: any # The result of successfully executing the activity
   --identity: string # The identity of the worker/client
@@ -848,7 +872,7 @@ export def "namespaces-activity-complete RespondActivityTaskCompleted-by-namespa
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CountActivityExecutions is a visibility API to count activity executions in a specific namespace.
@@ -864,6 +888,7 @@ export def "namespaces-activity-count CountActivityExecutions-by-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # Visibility query, see https://docs.temporal.io/list-filter for the syntax.
 ]: nothing -> record<count: string, groups: table<groupValues: list, count: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -872,7 +897,7 @@ export def "namespaces-activity-count CountActivityExecutions-by-namespace" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/activity-count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RespondActivityTaskFailed is called by workers when processing an activity task fails.   This results in a new `ACTIVITY_TASK_FAILED` event being written to the workflow history and  a new workflow task created for the workflow. Fails with `NotFound` if the task token is no  longer valid due to activity timeout, already being completed, or never having existed.
@@ -888,6 +913,7 @@ export def "namespaces-activity-fail RespondActivityTaskFailed-by-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --taskToken: string # The task token as received in `PollActivityTaskQueueResponse` (format: bytes)
   --failure: any # Detailed failure information
   --identity: string # The identity of the worker/client
@@ -906,7 +932,7 @@ export def "namespaces-activity-fail RespondActivityTaskFailed-by-namespace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RecordActivityTaskHeartbeat is optionally called by workers while they execute activities.   If a worker fails to heartbeat within the `heartbeat_timeout` interval for the activity task,  then the current attempt times out. Depending on RetryPolicy, this may trigger a retry or  time out the activity.   For workflow activities, an `ACTIVITY_TASK_TIMED_OUT` event will be written to the workflow  history. Calling `RecordActivityTaskHeartbeat` will fail with `NotFound` in such situations,  in that event, the SDK should request cancellation of the activity.   The request may contain response `details` which will be persisted by the server and may be  used by the activity to checkpoint progress. The `cancel_requested` field in the response  indicates whether cancellation has been requested for the activity.
@@ -922,6 +948,7 @@ export def "namespaces-activity-heartbeat RecordActivityTaskHeartbeat-by-namespa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --taskToken: string # The task token as received in `PollActivityTaskQueueResponse` (format: bytes)
   --details: any # Arbitrary data, of which the most recent call is kept, to store for this activity
   --identity: string # The identity of the worker/client
@@ -936,7 +963,7 @@ export def "namespaces-activity-heartbeat RecordActivityTaskHeartbeat-by-namespa
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RespondActivityTaskFailed is called by workers when processing an activity task fails.   For workflow activities, this results in a new `ACTIVITY_TASK_CANCELED` event being written to the workflow history  and a new workflow task created for the workflow. Fails with `NotFound` if the task token is  no longer valid due to activity timeout, already being completed, or never having existed.
@@ -952,6 +979,7 @@ export def "namespaces-activity-resolve-as-canceled RespondActivityTaskCanceled-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --taskToken: string # The task token as received in `PollActivityTaskQueueResponse` (format: bytes)
   --details: any # Serialized additional information to attach to the cancellation
   --identity: string # The identity of the worker/client
@@ -969,7 +997,7 @@ export def "namespaces-activity-resolve-as-canceled RespondActivityTaskCanceled-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListArchivedWorkflowExecutions is a visibility API to list archived workflow executions in a specific namespace.
@@ -985,6 +1013,7 @@ export def "namespaces-archived-workflows ListArchivedWorkflowExecutions-by-name
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # format: int32
   --nextPageToken: string # format: bytes
   --qp-query: string
@@ -995,7 +1024,7 @@ export def "namespaces-archived-workflows ListArchivedWorkflowExecutions-by-name
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/archived-workflows" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListBatchOperations returns a list of batch operations
@@ -1011,6 +1040,7 @@ export def "namespaces-batch-operations ListBatchOperations-by-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # List page size (format: int32)
   --nextPageToken: string # Next page token (format: bytes)
 ]: nothing -> record<operationInfo: table<jobId: string, state: string, startTime: string, closeTime: string>, nextPageToken: string> {
@@ -1020,7 +1050,7 @@ export def "namespaces-batch-operations ListBatchOperations-by-namespace" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/batch-operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DescribeBatchOperation returns the information about a batch operation
@@ -1037,13 +1067,14 @@ export def "namespaces-batch-operations DescribeBatchOperation-by-namespace-jobI
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<operationType: string, jobId: string, state: string, startTime: string, closeTime: string, totalOperationCount: string, completeOperationCount: string, failureOperationCount: string, identity: string, reason: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/batch-operations/($jobId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # StartBatchOperation starts a new batch operation
@@ -1070,6 +1101,7 @@ export def "namespaces-batch-operations StartBatchOperation-by-namespace-jobId" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace that contains the batch operation
   --visibilityQuery: string # Visibility query defines the the group of workflow to apply the batch operation  This field and `executions` are mutually exclusive
   --body-jobId: string # Job ID defines the unique ID for the batch job
@@ -1094,7 +1126,7 @@ export def "namespaces-batch-operations StartBatchOperation-by-namespace-jobId" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # StopBatchOperation stops a batch operation
@@ -1111,6 +1143,7 @@ export def "namespaces-batch-operations-stop StopBatchOperation-by-namespace-job
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace that contains the batch operation
   --body-jobId: string # Batch job id
   --reason: string # Reason to stop a batch operation
@@ -1124,7 +1157,7 @@ export def "namespaces-batch-operations-stop StopBatchOperation-by-namespace-job
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Sets a deployment as the current deployment for its deployment series. Can optionally update  the metadata of the deployment as well.  Experimental. This API might significantly change or be removed in a future release.  Deprecated. Replaced by `SetWorkerDeploymentCurrentVersion`.
@@ -1142,6 +1175,7 @@ export def "namespaces-current-deployment SetCurrentDeployment-by-namespace-depl
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --deployment: record # `Deployment` identifies a deployment of Temporal workers. The combination of deployment series  name + build ID serves as the identifier. User can use `WorkerDeploymentOptions` in their worker  programs to specify these values.  Deprecated. — shape: {seriesName?: string, buildId?: string}
   --identity: string # Optional. The identity of the client who initiated this request.
@@ -1155,7 +1189,7 @@ export def "namespaces-current-deployment SetCurrentDeployment-by-namespace-depl
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns the current deployment (and its info) for a given deployment series.  Experimental. This API might significantly change or be removed in a future release.  Deprecated. Replaced by `current_version` returned by `DescribeWorkerDeployment`.
@@ -1172,13 +1206,14 @@ export def "namespaces-current-deployment GetCurrentDeployment-by-namespace-seri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<currentDeploymentInfo: record<deployment: record<seriesName: string, buildId: string>, createTime: string, taskQueueInfos: list<record>, metadata: record, isCurrent: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/current-deployment/($seriesName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists worker deployments in the namespace. Optionally can filter based on deployment series  name.  Experimental. This API might significantly change or be removed in a future release.  Deprecated. Replaced with `ListWorkerDeployments`.
@@ -1194,6 +1229,7 @@ export def "namespaces-deployments ListDeployments-by-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # format: int32
   --nextPageToken: string # format: bytes
   --seriesName: string # Optional. Use to filter based on exact series name match.
@@ -1204,7 +1240,7 @@ export def "namespaces-deployments ListDeployments-by-namespace" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/deployments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Describes a worker deployment.  Experimental. This API might significantly change or be removed in a future release.  Deprecated. Replaced with `DescribeWorkerDeploymentVersion`.
@@ -1222,6 +1258,7 @@ export def "namespaces-deployments DescribeDeployment-by-namespace-deployment.se
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --deploymentseriesName: string # Different versions of the same worker service/application are related together by having a  shared series name.  Out of all deployments of a series, one can be designated as the current deployment, which  receives new workflow executions and new tasks of workflows with  `VERSIONING_BEHAVIOR_AUTO_UPGRADE` versioning behavior.
   --deploymentbuildId: string # Build ID changes with each version of the worker when the worker program code and/or config  changes.
 ]: nothing -> record<deploymentInfo: record<deployment: record<seriesName: string, buildId: string>, createTime: string, taskQueueInfos: list<record>, metadata: record, isCurrent: bool>> {
@@ -1231,7 +1268,7 @@ export def "namespaces-deployments DescribeDeployment-by-namespace-deployment.se
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/deployments/($deployment.series_name)/($deployment.build_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the reachability level of a worker deployment to help users decide when it is time  to decommission a deployment. Reachability level is calculated based on the deployment's  `status` and existing workflows that depend on the given deployment for their execution.  Calculating reachability is relatively expensive. Therefore, server might return a recently  cached value. In such a case, the `last_update_time` will inform you about the actual  reachability calculation time.  Experimental. This API might significantly change or be removed in a future release.  Deprecated. Replaced with `DrainageInfo` returned by `DescribeWorkerDeploymentVersion`.
@@ -1249,6 +1286,7 @@ export def "namespaces-deployments-reachability GetDeploymentReachability-by-nam
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --deploymentseriesName: string # Different versions of the same worker service/application are related together by having a  shared series name.  Out of all deployments of a series, one can be designated as the current deployment, which  receives new workflow executions and new tasks of workflows with  `VERSIONING_BEHAVIOR_AUTO_UPGRADE` versioning behavior.
   --deploymentbuildId: string # Build ID changes with each version of the worker when the worker program code and/or config  changes.
 ]: nothing -> record<deploymentInfo: record<deployment: record<seriesName: string, buildId: string>, createTime: string, taskQueueInfos: list<record>, metadata: record, isCurrent: bool>, reachability: string, lastUpdateTime: string> {
@@ -1258,7 +1296,7 @@ export def "namespaces-deployments-reachability GetDeploymentReachability-by-nam
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/deployments/($deployment.series_name)/($deployment.build_id)/reachability" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CountNexusOperationExecutions is a visibility API to count Nexus operations in a specific namespace.
@@ -1274,6 +1312,7 @@ export def "namespaces-nexus-operation-count CountNexusOperationExecutions-by-na
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # Visibility query, see https://docs.temporal.io/list-filter for the syntax.  See also ListNexusOperationExecutionsRequest for search attributes available for Nexus operations.
 ]: nothing -> record<count: string, groups: table<groupValues: list, count: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1282,7 +1321,7 @@ export def "namespaces-nexus-operation-count CountNexusOperationExecutions-by-na
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/nexus-operation-count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListNexusOperationExecutions is a visibility API to list Nexus operations in a specific namespace.
@@ -1298,6 +1337,7 @@ export def "namespaces-nexus-operations ListNexusOperationExecutions-by-namespac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # Max number of operations to return per page. (format: int32)
   --nextPageToken: string # Token returned in ListNexusOperationExecutionsResponse. (format: bytes)
   --qp-query: string # Visibility query, see https://docs.temporal.io/list-filter for the syntax.  Search attributes that are avaialble for Nexus operations include:  - OperationId  - RunId  - Endpoint  - Service  - Operation  - RequestId  - StartTime  - ExecutionTime  - CloseTime  - ExecutionStatus  - ExecutionDuration  - StateTransitionCount
@@ -1308,7 +1348,7 @@ export def "namespaces-nexus-operations ListNexusOperationExecutions-by-namespac
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/nexus-operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DescribeNexusOperationExecution returns information about a Nexus operation.  Supported use cases include:  - Get current operation info without waiting  - Long-poll for next state change and return new operation info  Response can optionally include operation input or outcome (if the operation has completed).
@@ -1325,6 +1365,7 @@ export def "namespaces-nexus-operations DescribeNexusOperationExecution-by-names
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --runId: string # Operation run ID. If empty the request targets the latest run.
   --includeInput: oneof<nothing, bool> # Include the input field in the response.
   --includeOutcome: oneof<nothing, bool> # Include the outcome (result/failure) in the response if the operation has completed.
@@ -1336,7 +1377,7 @@ export def "namespaces-nexus-operations DescribeNexusOperationExecution-by-names
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/nexus-operations/($operationId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # StartNexusOperationExecution starts a new Nexus operation.   Returns a `NexusOperationExecutionAlreadyStarted` error if an instance already exists with same operation ID in this  namespace unless permitted by the specified ID conflict policy.
@@ -1353,6 +1394,7 @@ export def "namespaces-nexus-operations StartNexusOperationExecution-by-namespac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --identity: string # The identity of the client who initiated this request.
   --requestId: string # A unique identifier for this caller-side start request. Typically UUIDv4.  StartOperation requests sent to the handler will use a server-generated request ID.
@@ -1378,7 +1420,7 @@ export def "namespaces-nexus-operations StartNexusOperationExecution-by-namespac
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RequestCancelNexusOperationExecution requests cancellation of a Nexus operation.   Requesting to cancel an operation does not automatically transition the operation to canceled status.  The operation will only transition to canceled status if it supports cancellation and the handler  processes the cancellation request.
@@ -1395,6 +1437,7 @@ export def "namespaces-nexus-operations-cancel RequestCancelNexusOperationExecut
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --body-operationId: string
   --runId: string # Operation run ID, targets the latest run if empty.
@@ -1410,7 +1453,7 @@ export def "namespaces-nexus-operations-cancel RequestCancelNexusOperationExecut
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PollNexusOperationExecution long-polls for a Nexus operation for a given wait stage to complete and returns  the outcome (result or failure).
@@ -1427,6 +1470,7 @@ export def "namespaces-nexus-operations-poll PollNexusOperationExecution-by-name
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --runId: string # Operation run ID. If empty the request targets the latest run.
   --waitStage: string@waitStage-completer # Stage to wait for. The operation may be in a more advanced stage when the poll is unblocked. (format: enum)
 ]: nothing -> record<runId: string, waitStage: string, operationToken: string, result: record, failure: record<message: string, source: string, stackTrace: string, encodedAttributes: record, cause: record<message: string, source: string, stackTrace: string, encodedAttributes: record, cause: any, applicationFailureInfo: record, timeoutFailureInfo: record, canceledFailureInfo: record, terminatedFailureInfo: record, serverFailureInfo: record, resetWorkflowFailureInfo: record, activityFailureInfo: record, childWorkflowExecutionFailureInfo: record, nexusOperationExecutionFailureInfo: record, nexusHandlerFailureInfo: record>, applicationFailureInfo: record<type: string, nonRetryable: bool, details: record, nextRetryDelay: string, category: string>, timeoutFailureInfo: record<timeoutType: string, lastHeartbeatDetails: record>, canceledFailureInfo: record<details: record, identity: string>, terminatedFailureInfo: record<identity: string>, serverFailureInfo: record<nonRetryable: bool>, resetWorkflowFailureInfo: record<lastHeartbeatDetails: record>, activityFailureInfo: record<scheduledEventId: string, startedEventId: string, identity: string, activityType: record, activityId: string, retryState: string>, childWorkflowExecutionFailureInfo: record<namespace: string, workflowExecution: record, workflowType: record, initiatedEventId: string, startedEventId: string, retryState: string>, nexusOperationExecutionFailureInfo: record<scheduledEventId: string, endpoint: string, service: string, operation: string, operationId: string, operationToken: string>, nexusHandlerFailureInfo: record<type: string, retryBehavior: string>>> {
@@ -1436,7 +1480,7 @@ export def "namespaces-nexus-operations-poll PollNexusOperationExecution-by-name
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/nexus-operations/($operationId)/poll" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # TerminateNexusOperationExecution terminates an existing Nexus operation immediately.   Termination happens immediately and the operation handler cannot react to it. A terminated operation will have  its outcome set to a failure with a termination reason.
@@ -1453,6 +1497,7 @@ export def "namespaces-nexus-operations-terminate TerminateNexusOperationExecuti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --body-operationId: string
   --runId: string # Operation run ID, targets the latest run if empty.
@@ -1468,7 +1513,7 @@ export def "namespaces-nexus-operations-terminate TerminateNexusOperationExecuti
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CountSchedules is a visibility API to count schedules in a specific namespace.
@@ -1484,6 +1529,7 @@ export def "namespaces-schedule-count CountSchedules-by-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # Visibility query, see https://docs.temporal.io/list-filter for the syntax.
 ]: nothing -> record<count: string, groups: table<groupValues: list, count: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1492,7 +1538,7 @@ export def "namespaces-schedule-count CountSchedules-by-namespace" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/schedule-count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all schedules in a namespace.
@@ -1508,6 +1554,7 @@ export def "namespaces-schedules ListSchedules-by-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maximumPageSize: int # How many to return at once. (format: int32)
   --nextPageToken: string # Token to get the next page of results. (format: bytes)
   --qp-query: string # Query to filter schedules.
@@ -1518,7 +1565,7 @@ export def "namespaces-schedules ListSchedules-by-namespace" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/schedules" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the schedule description and current state of an existing schedule.
@@ -1535,13 +1582,14 @@ export def "namespaces-schedules DescribeSchedule-by-namespace-scheduleId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<schedule: record<spec: record<structuredCalendar: list, cronString: list, calendar: list, interval: list, excludeCalendar: list, excludeStructuredCalendar: list, startTime: string, endTime: string, jitter: string, timezoneName: string, timezoneData: string>, action: record<startWorkflow: record>, policies: record<overlapPolicy: string, catchupWindow: string, pauseOnFailure: bool, keepOriginalWorkflowId: bool>, state: record<notes: string, paused: bool, limitedActions: bool, remainingActions: string>>, info: record<actionCount: string, missedCatchupWindow: string, overlapSkipped: string, bufferDropped: string, bufferSize: string, runningWorkflows: list<record>, recentActions: list<record>, futureActionTimes: list<string>, createTime: string, updateTime: string, invalidScheduleError: string, stateSizeBytes: string>, memo: record<fields: record>, searchAttributes: record<indexedFields: record>, conflictToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/schedules/($scheduleId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new schedule.
@@ -1559,6 +1607,7 @@ export def "namespaces-schedules CreateSchedule-by-namespace-scheduleId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # The namespace the schedule should be created in.
   --body-scheduleId: string # The id of the new schedule.
   --schedule: any # The schedule spec, policies, action, and initial state.
@@ -1576,7 +1625,7 @@ export def "namespaces-schedules CreateSchedule-by-namespace-scheduleId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a schedule, removing it from the system.
@@ -1593,6 +1642,7 @@ export def "namespaces-schedules DeleteSchedule-by-namespace-scheduleId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --identity: string # The identity of the client who initiated this request.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1601,7 +1651,7 @@ export def "namespaces-schedules DeleteSchedule-by-namespace-scheduleId" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/schedules/($scheduleId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists matching times within a range.
@@ -1618,6 +1668,7 @@ export def "namespaces-schedules-matching-times ListScheduleMatchingTimes-by-nam
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startTime: string # Time range to query. (format: date-time)
   --endTime: string # format: date-time
 ]: nothing -> record<startTime: list<string>> {
@@ -1627,7 +1678,7 @@ export def "namespaces-schedules-matching-times ListScheduleMatchingTimes-by-nam
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/schedules/($scheduleId)/matching-times" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Makes a specific change to a schedule or triggers an immediate action.
@@ -1645,6 +1696,7 @@ export def "namespaces-schedules-patch PatchSchedule-by-namespace-scheduleId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # The namespace of the schedule to patch.
   --body-scheduleId: string # The id of the schedule to patch.
   --patch: record # shape: {triggerImmediately?: any, backfillRequest?: list, pause?: string, unpause?: string}
@@ -1659,7 +1711,7 @@ export def "namespaces-schedules-patch PatchSchedule-by-namespace-scheduleId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Changes the configuration or state of an existing schedule.
@@ -1676,6 +1728,7 @@ export def "namespaces-schedules-update UpdateSchedule-by-namespace-scheduleId" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # The namespace of the schedule to update.
   --body-scheduleId: string # The id of the schedule to update.
   --schedule: any # The new schedule. The four main fields of the schedule (spec, action,  policies, state) are replaced completely by the values in this message.
@@ -1693,7 +1746,7 @@ export def "namespaces-schedules-update UpdateSchedule-by-namespace-scheduleId" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListSearchAttributes returns comprehensive information about search attributes.
@@ -1709,13 +1762,14 @@ export def "namespaces-search-attributes ListSearchAttributes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<customAttributes: record, systemAttributes: record, storageSchema: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/search-attributes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates task queue configuration.  For the overall queue rate limit: the rate limit set by this api overrides the worker-set rate limit,  which uncouples the rate limit from the worker lifecycle.  If the overall queue rate limit is unset, the worker-set rate limit takes effect.
@@ -1732,6 +1786,7 @@ export def "namespaces-task-queues-update-config UpdateTaskQueueConfig-by-namesp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --identity: string
   --body-taskQueue: string # Selects the task queue to update.
@@ -1749,7 +1804,7 @@ export def "namespaces-task-queues-update-config UpdateTaskQueueConfig-by-namesp
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deprecated. Use `GetWorkerVersioningRules`.  Will be removed in server version v1.32.0.  Fetches the worker build id versioning sets for a task queue.
@@ -1766,6 +1821,7 @@ export def "namespaces-task-queues-worker-build-id-compatibility GetWorkerBuildI
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxSets: int # Limits how many compatible sets will be returned. Specify 1 to only return the current  default major version set. 0 returns all sets. (format: int32)
 ]: nothing -> record<majorVersionSets: table<buildIds: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1774,7 +1830,7 @@ export def "namespaces-task-queues-worker-build-id-compatibility GetWorkerBuildI
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/task-queues/($taskQueue)/worker-build-id-compatibility" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches the Build ID assignment and redirect rules for a Task Queue.  Will be removed in server version v1.32.0.
@@ -1791,13 +1847,14 @@ export def "namespaces-task-queues-worker-versioning-rules GetWorkerVersioningRu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<assignmentRules: table<rule: record, createTime: string>, compatibleRedirectRules: table<rule: record, createTime: string>, conflictToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/task-queues/($taskQueue)/worker-versioning-rules")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DescribeTaskQueue returns the following information about the target task queue, broken down by Build ID:    - List of pollers    - Workflow Reachability status    - Backlog info for Workflow and/or Activity tasks
@@ -1814,6 +1871,7 @@ export def "namespaces-task-queues DescribeTaskQueue-by-namespace-task_queue.nam
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --taskQueuename: string
   --taskQueuekind: string@taskQueuekind-completer # Default: TASK_QUEUE_KIND_NORMAL. (format: enum)
   --taskQueuenormalName: string # Iff kind == TASK_QUEUE_KIND_STICKY, then this field contains the name of  the normal task queue that the sticky worker is running on.
@@ -1835,7 +1893,7 @@ export def "namespaces-task-queues DescribeTaskQueue-by-namespace-task_queue.nam
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/task-queues/($task_queue.name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateNamespace is used to update the information and configuration of a registered  namespace.
@@ -1854,6 +1912,7 @@ export def "namespaces-update UpdateNamespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --updateInfo: record # shape: {description?: string, ownerEmail?: string, data?: record, state?: "NAMESPACE_STATE_UNSPECIFIED"|"NAMESPACE_STATE_REGISTERED"|"NAMESPACE_STATE_DEPRECATED"|"NAMESPACE_STATE_DELETED"}
   --config: record # shape: {workflowExecutionRetentionTtl?: string, badBinaries?: record, historyArchivalState?: "ARCHIVAL_STATE_UNSPECIFIED"|"ARCHIVAL_STATE_DISABLED"|"ARCHIVAL_STATE_ENABLED", historyArchivalUri?: string, visibilityArchivalState?: "ARCHIVAL_STATE_UNSPECIFIED"|"ARCHIVAL_STATE_DISABLED"|"ARCHIVAL_STATE_ENABLED", visibilityArchivalUri?: string, customSearchAttributeAliases?: record}
@@ -1870,7 +1929,7 @@ export def "namespaces-update UpdateNamespace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CountWorkers counts the number of workers in a specific namespace.
@@ -1886,6 +1945,7 @@ export def "namespaces-worker-count CountWorkers-by-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # Query to filter workers before counting.  Supported filter fields are the same as in ListWorkersRequest.
   --includeSystemWorkers: oneof<nothing, bool> # When true, the count will include system workers that are created implicitly  by the server and not by the user. By default, system workers are excluded.
 ]: nothing -> record<count: string> {
@@ -1895,7 +1955,7 @@ export def "namespaces-worker-count CountWorkers-by-namespace" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/worker-count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new Worker Deployment Version.   Experimental. This API might significantly change or be removed in a  future release.
@@ -1912,6 +1972,7 @@ export def "namespaces-worker-deployment-versions CreateWorkerDeploymentVersion-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --deploymentVersion: any # Required.
   --computeConfig: any # Optional. Contains the new worker compute configuration for the Worker  Deployment. Used for worker scale management.
@@ -1926,7 +1987,7 @@ export def "namespaces-worker-deployment-versions CreateWorkerDeploymentVersion-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Describes a worker deployment version.  Experimental. This API might significantly change or be removed in a future release.
@@ -1944,6 +2005,7 @@ export def "namespaces-worker-deployment-versions DescribeWorkerDeploymentVersio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # Deprecated. Use `deployment_version`.
   --deploymentVersionbuildId: string # A unique identifier for this Version within the Deployment it is a part of.  Not necessarily unique within the namespace.  The combination of `deployment_name` and `build_id` uniquely identifies this  Version within the namespace, because Deployment names are unique within a namespace.
   --deploymentVersiondeploymentName: string # Identifies the Worker Deployment this Version is part of.
@@ -1955,7 +2017,7 @@ export def "namespaces-worker-deployment-versions DescribeWorkerDeploymentVersio
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/worker-deployment-versions/($deployment_version.deployment_name)/($deployment_version.build_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Used for manual deletion of Versions. User can delete a Version only when all the  following conditions are met:   - It is not the Current or Ramping Version of its Deployment.   - It has no active pollers (none of the task queues in the Version have pollers)   - It is not draining (see WorkerDeploymentVersionInfo.drainage_info). This condition     can be skipped by passing `skip-drainage=true`.  Experimental. This API might significantly change or be removed in a future release.
@@ -1973,6 +2035,7 @@ export def "namespaces-worker-deployment-versions DeleteWorkerDeploymentVersion-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # Deprecated. Use `deployment_version`.
   --deploymentVersionbuildId: string # A unique identifier for this Version within the Deployment it is a part of.  Not necessarily unique within the namespace.  The combination of `deployment_name` and `build_id` uniquely identifies this  Version within the namespace, because Deployment names are unique within a namespace.
   --deploymentVersiondeploymentName: string # Identifies the Worker Deployment this Version is part of.
@@ -1985,7 +2048,7 @@ export def "namespaces-worker-deployment-versions DeleteWorkerDeploymentVersion-
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/worker-deployment-versions/($deployment_version.deployment_name)/($deployment_version.build_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the compute config attached to a Worker Deployment Version.  Experimental. This API might significantly change or be removed in a future release.
@@ -2003,6 +2066,7 @@ export def "namespaces-worker-deployment-versions-update-compute-config UpdateWo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --deploymentVersion: any # Required.
   --computeConfigScalingGroups: record # Optional. Contains the compute config scaling groups to add or update for the Worker  Deployment.
@@ -2018,7 +2082,7 @@ export def "namespaces-worker-deployment-versions-update-compute-config UpdateWo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the user-given metadata attached to a Worker Deployment Version.  Experimental. This API might significantly change or be removed in a future release.
@@ -2036,6 +2100,7 @@ export def "namespaces-worker-deployment-versions-update-metadata UpdateWorkerDe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --version: string # Deprecated. Use `deployment_version`.
   --deploymentVersion: any # Required.
@@ -2051,7 +2116,7 @@ export def "namespaces-worker-deployment-versions-update-metadata UpdateWorkerDe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validates the compute config without attaching it to a Worker Deployment Version.  Experimental. This API might significantly change or be removed in a future release.
@@ -2069,6 +2134,7 @@ export def "namespaces-worker-deployment-versions-validate-compute-config Valida
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --deploymentVersion: any # Required.
   --computeConfigScalingGroups: record # Optional. Contains the compute config scaling groups to add or update for the Worker  Deployment.
@@ -2083,7 +2149,7 @@ export def "namespaces-worker-deployment-versions-validate-compute-config Valida
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists all Worker Deployments that are tracked in the Namespace.  Experimental. This API might significantly change or be removed in a future release.
@@ -2099,6 +2165,7 @@ export def "namespaces-worker-deployments ListWorkerDeployments-by-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # format: int32
   --nextPageToken: string # format: bytes
 ]: nothing -> record<nextPageToken: string, workerDeployments: table<name: string, createTime: string, routingConfig: record, latestVersionSummary: record, currentVersionSummary: record, rampingVersionSummary: record>> {
@@ -2108,7 +2175,7 @@ export def "namespaces-worker-deployments ListWorkerDeployments-by-namespace" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/worker-deployments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Describes a Worker Deployment.  Experimental. This API might significantly change or be removed in a future release.
@@ -2125,13 +2192,14 @@ export def "namespaces-worker-deployments DescribeWorkerDeployment-by-namespace-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<conflictToken: string, workerDeploymentInfo: record<name: string, versionSummaries: list<record>, createTime: string, routingConfig: record<currentDeploymentVersion: record, currentVersion: string, rampingDeploymentVersion: record, rampingVersion: string, rampingVersionPercentage: float, currentVersionChangedTime: string, rampingVersionChangedTime: string, rampingVersionPercentageChangedTime: string, revisionNumber: string>, lastModifierIdentity: string, managerIdentity: string, routingConfigUpdateState: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/worker-deployments/($deploymentName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new Worker Deployment.   Experimental. This API might significantly change or be removed in a  future release.
@@ -2148,6 +2216,7 @@ export def "namespaces-worker-deployments CreateWorkerDeployment-by-namespace-de
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --body-deploymentName: string # The name of the Worker Deployment to create. If a Worker Deployment with  this name already exists, an error will be returned.
   --identity: string # Optional. The identity of the client who initiated this request.
@@ -2161,7 +2230,7 @@ export def "namespaces-worker-deployments CreateWorkerDeployment-by-namespace-de
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes records of (an old) Deployment. A deployment can only be deleted if  it has no Version in it.  Experimental. This API might significantly change or be removed in a future release.
@@ -2178,6 +2247,7 @@ export def "namespaces-worker-deployments DeleteWorkerDeployment-by-namespace-de
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --identity: string # Optional. The identity of the client who initiated this request.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2186,7 +2256,7 @@ export def "namespaces-worker-deployments DeleteWorkerDeployment-by-namespace-de
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/worker-deployments/($deploymentName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set/unset the Current Version of a Worker Deployment. Automatically unsets the Ramping  Version if it is the Version being set as Current.  Experimental. This API might significantly change or be removed in a future release.
@@ -2203,6 +2273,7 @@ export def "namespaces-worker-deployments-set-current-version SetWorkerDeploymen
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --body-deploymentName: string
   --version: string # Deprecated. Use `build_id`.
@@ -2220,7 +2291,7 @@ export def "namespaces-worker-deployments-set-current-version SetWorkerDeploymen
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set/unset the ManagerIdentity of a Worker Deployment.  Experimental. This API might significantly change or be removed in a future release.
@@ -2237,6 +2308,7 @@ export def "namespaces-worker-deployments-set-manager SetWorkerDeploymentManager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --body-deploymentName: string
   --managerIdentity: string # Arbitrary value for `manager_identity`.  Empty will unset the field.
@@ -2252,7 +2324,7 @@ export def "namespaces-worker-deployments-set-manager SetWorkerDeploymentManager
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set/unset the Ramping Version of a Worker Deployment and its ramp percentage. Can be used for  gradual ramp to unversioned workers too.  Experimental. This API might significantly change or be removed in a future release.
@@ -2269,6 +2341,7 @@ export def "namespaces-worker-deployments-set-ramping-version SetWorkerDeploymen
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --body-deploymentName: string
   --version: string # Deprecated. Use `build_id`.
@@ -2287,7 +2360,7 @@ export def "namespaces-worker-deployments-set-ramping-version SetWorkerDeploymen
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deprecated. Use `DescribeTaskQueue`.  Will be removed in server version v1.32.0.   Fetches task reachability to determine whether a worker may be retired.  The request may specify task queues to query for or let the server fetch all task queues mapped to the given  build IDs.   When requesting a large number of task queues or all task queues associated with the given build ids in a  namespace, all task queues will be listed in the response but some of them may not contain reachability  information due to a server enforced limit. When reaching the limit, task queues that reachability information  could not be retrieved for will be marked with a single TASK_REACHABILITY_UNSPECIFIED entry. The caller may issue  another call to get the reachability for those task queues.   Open source users can adjust this limit by setting the server's dynamic config value for  `limit.reachabilityTaskQueueScan` with the caveat that this call can strain the visibility store.
@@ -2303,6 +2376,7 @@ export def "namespaces-worker-task-reachability GetWorkerTaskReachability-by-nam
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --buildIds: list # Build ids to retrieve reachability for. An empty string will be interpreted as an unversioned worker.  The number of build ids that can be queried in a single API call is limited.  Open source users can adjust this limit by setting the server's dynamic config value for  `limit.reachabilityQueryBuildIds` with the caveat that this call can strain the visibility store.
   --taskQueues: list # Task queues to retrieve reachability for. Leave this empty to query for all task queues associated with given  build ids in the namespace.  Must specify at least one task queue if querying for an unversioned worker.  The number of task queues that the server will fetch reachability information for is limited.  See the `GetWorkerTaskReachabilityResponse` documentation for more information.
   --reachability: string@reachability-completer # Type of reachability to query for.  `TASK_REACHABILITY_NEW_WORKFLOWS` is always returned in the response.  Use `TASK_REACHABILITY_EXISTING_WORKFLOWS` if your application needs to respond to queries on closed workflows.  Otherwise, use `TASK_REACHABILITY_OPEN_WORKFLOWS`. Default is `TASK_REACHABILITY_EXISTING_WORKFLOWS` if left  unspecified.  See the TaskReachability docstring for information about each enum variant. (format: enum)
@@ -2313,7 +2387,7 @@ export def "namespaces-worker-task-reachability GetWorkerTaskReachability-by-nam
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/worker-task-reachability" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListWorkers is a visibility API to list worker status information in a specific namespace.
@@ -2329,6 +2403,7 @@ export def "namespaces-workers ListWorkers-by-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # format: int32
   --nextPageToken: string # format: bytes
   --qp-query: string # `query` in ListWorkers is used to filter workers based on worker attributes.  Supported attributes: * WorkerInstanceKey * WorkerIdentity * HostName * TaskQueue * DeploymentName * BuildId * SdkName * SdkVersion * StartTime * Status
@@ -2340,7 +2415,7 @@ export def "namespaces-workers ListWorkers-by-namespace" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/workers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DescribeWorker returns information about the specified worker.
@@ -2357,13 +2432,14 @@ export def "namespaces-workers-describe DescribeWorker-by-namespace-workerInstan
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<workerInfo: record<workerHeartbeat: record<workerInstanceKey: string, workerIdentity: string, hostInfo: record, taskQueue: string, deploymentVersion: record, sdkName: string, sdkVersion: string, status: string, startTime: string, heartbeatTime: string, elapsedSinceLastHeartbeat: string, workflowTaskSlotsInfo: record, activityTaskSlotsInfo: record, nexusTaskSlotsInfo: record, localActivitySlotsInfo: record, workflowPollerInfo: record, workflowStickyPollerInfo: record, activityPollerInfo: record, nexusPollerInfo: record, totalStickyCacheHit: int, totalStickyCacheMiss: int, currentStickyCacheSize: int, plugins: list, drivers: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/workers/describe/($workerInstanceKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # FetchWorkerConfig returns the worker configuration for a specific worker.
@@ -2379,6 +2455,7 @@ export def "namespaces-workers-fetch-config FetchWorkerConfig-by-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace this worker belongs to.
   --identity: string # The identity of the client who initiated this request.
   --reason: string # Reason for sending worker command, can be used for audit purpose.
@@ -2393,7 +2470,7 @@ export def "namespaces-workers-fetch-config FetchWorkerConfig-by-namespace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # WorkerHeartbeat receive heartbeat request from the worker.
@@ -2410,6 +2487,7 @@ export def "namespaces-workers-heartbeat RecordWorkerHeartbeat-by-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace this worker belongs to.
   --identity: string # The identity of the client who initiated this request.
   --workerHeartbeat: list # item shape: {workerInstanceKey?: string, workerIdentity?: string, hostInfo?: any, taskQueue?: string, deploymentVersion?: record, sdkName?: string, sdkVersion?: string, status?: "WORKER_STATUS_UNSPECIFIED"|"WORKER_STATUS_RUNNING"|"WORKER_STATUS_SHUTTING_DOWN"|"WORKER_STATUS_SHUTDOWN", startTime?: string, heartbeatTime?: string, elapsedSinceLastHeartbeat?: string, workflowTaskSlotsInfo?: record, activityTaskSlotsInfo?: record, nexusTaskSlotsInfo?: record, localActivitySlotsInfo?: record, workflowPollerInfo?: record, workflowStickyPollerInfo?: record, activityPollerInfo?: record, nexusPollerInfo?: record, totalStickyCacheHit?: int, totalStickyCacheMiss?: int, currentStickyCacheSize?: int, plugins?: list, drivers?: list}
@@ -2423,7 +2501,7 @@ export def "namespaces-workers-heartbeat RecordWorkerHeartbeat-by-namespace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # UpdateWorkerConfig updates the worker configuration of one or more workers.  Can be used to partially update the worker configuration.  Can be used to update the configuration of multiple workers.
@@ -2439,6 +2517,7 @@ export def "namespaces-workers-update-config UpdateWorkerConfig-by-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace this worker belongs to.
   --identity: string # The identity of the client who initiated this request.
   --reason: string # Reason for sending worker command, can be used for audit purpose.
@@ -2455,7 +2534,7 @@ export def "namespaces-workers-update-config UpdateWorkerConfig-by-namespace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CountWorkflowExecutions is a visibility API to count of workflow executions in a specific namespace.
@@ -2471,6 +2550,7 @@ export def "namespaces-workflow-count CountWorkflowExecutions-by-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string
 ]: nothing -> record<count: string, groups: table<groupValues: list, count: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2479,7 +2559,7 @@ export def "namespaces-workflow-count CountWorkflowExecutions-by-namespace" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/workflow-count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return all namespace workflow rules
@@ -2495,6 +2575,7 @@ export def "namespaces-workflow-rules ListWorkflowRules-by-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --nextPageToken: string # format: bytes
 ]: nothing -> record<rules: table<createTime: string, spec: record, createdByIdentity: string, description: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2503,7 +2584,7 @@ export def "namespaces-workflow-rules ListWorkflowRules-by-namespace" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/workflow-rules" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new workflow rule. The rules are used to control the workflow execution.  The rule will be applied to all running and new workflows in the namespace.  If the rule with such ID already exist this call will fail  Note: the rules are part of namespace configuration and will be stored in the namespace config.  Namespace config is eventually consistent.
@@ -2519,6 +2600,7 @@ export def "namespaces-workflow-rules CreateWorkflowRule-by-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --spec: any # The rule specification .
   --forceScan: oneof<nothing, bool> # If true, the rule will be applied to the currently running workflows via batch job.  If not set , the rule will only be applied when triggering condition is satisfied.  visibility_query in the rule will be used to select the workflows to apply the rule to.
@@ -2534,7 +2616,7 @@ export def "namespaces-workflow-rules CreateWorkflowRule-by-namespace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DescribeWorkflowRule return the rule specification for existing rule id.  If there is no rule with such id - NOT FOUND error will be returned.
@@ -2551,13 +2633,14 @@ export def "namespaces-workflow-rules DescribeWorkflowRule-by-namespace-ruleId" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<rule: record<createTime: string, spec: record<id: string, activityStart: record, visibilityQuery: string, actions: list, expirationTime: string>, createdByIdentity: string, description: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/workflow-rules/($ruleId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete rule by rule id
@@ -2574,13 +2657,14 @@ export def "namespaces-workflow-rules DeleteWorkflowRule-by-namespace-ruleId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/workflow-rules/($ruleId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListWorkflowExecutions is a visibility API to list workflow executions in a specific namespace.
@@ -2596,6 +2680,7 @@ export def "namespaces-workflows ListWorkflowExecutions-by-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # format: int32
   --nextPageToken: string # format: bytes
   --qp-query: string
@@ -2606,7 +2691,7 @@ export def "namespaces-workflows ListWorkflowExecutions-by-namespace" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/workflows" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DescribeWorkflowExecution returns information about the specified workflow execution.
@@ -2623,6 +2708,7 @@ export def "namespaces-workflows DescribeWorkflowExecution-by-namespace-executio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --executionworkflowId: string
   --executionrunId: string
 ]: nothing -> record<executionConfig: record<taskQueue: record<name: string, kind: string, normalName: string>, workflowExecutionTimeout: string, workflowRunTimeout: string, defaultWorkflowTaskTimeout: string, userMetadata: record<summary: record, details: record>>, workflowExecutionInfo: record<execution: record<workflowId: string, runId: string>, type: record<name: string>, startTime: string, closeTime: string, status: string, historyLength: string, parentNamespaceId: string, parentExecution: record<workflowId: string, runId: string>, executionTime: string, memo: record<fields: record>, searchAttributes: record<indexedFields: record>, autoResetPoints: record<points: list>, taskQueue: string, stateTransitionCount: string, historySizeBytes: string, mostRecentWorkerVersionStamp: record<buildId: string, useVersioning: bool>, executionDuration: string, rootExecution: record<workflowId: string, runId: string>, assignedBuildId: string, inheritedBuildId: string, firstRunId: string, versioningInfo: record<behavior: string, deployment: record, version: string, deploymentVersion: record, versioningOverride: record, deploymentTransition: record, versionTransition: record, revisionNumber: string, continueAsNewInitialVersioningBehavior: string>, workerDeploymentName: string, priority: record<priorityKey: int, fairnessKey: string, fairnessWeight: float>, externalPayloadSizeBytes: string, externalPayloadCount: string>, pendingActivities: table<activityId: string, activityType: record, state: string, heartbeatDetails: record, lastHeartbeatTime: string, lastStartedTime: string, attempt: int, maximumAttempts: int, scheduledTime: string, expirationTime: string, lastFailure: record, lastWorkerIdentity: string, lastIndependentlyAssignedBuildId: string, lastWorkerVersionStamp: record, currentRetryInterval: string, lastAttemptCompleteTime: string, nextAttemptScheduleTime: string, paused: bool, lastDeployment: record, lastWorkerDeploymentVersion: string, lastDeploymentVersion: record, priority: record, pauseInfo: record, activityOptions: record>, pendingChildren: table<workflowId: string, runId: string, workflowTypeName: string, initiatedId: string, parentClosePolicy: string>, pendingWorkflowTask: record<state: string, scheduledTime: string, originalScheduledTime: string, startedTime: string, attempt: int>, callbacks: table<callback: record, registrationTime: string, state: string, attempt: int, lastAttemptCompleteTime: string, lastAttemptFailure: record, nextAttemptScheduleTime: string, blockedReason: string>, pendingNexusOperations: table<endpoint: string, service: string, operation: string, operationId: string, scheduleToCloseTimeout: string, scheduledTime: string, state: string, attempt: int, lastAttemptCompleteTime: string, lastAttemptFailure: record, nextAttemptScheduleTime: string, cancellationInfo: record, scheduledEventId: string, blockedReason: string, operationToken: string, scheduleToStartTimeout: string, startToCloseTimeout: string>, workflowExtendedInfo: record<executionExpirationTime: string, runExpirationTime: string, cancelRequested: bool, lastResetTime: string, originalStartTime: string, resetRunId: string, requestIdInfos: record, pauseInfo: record<identity: string, pausedTime: string, reason: string>>> {
@@ -2632,7 +2718,7 @@ export def "namespaces-workflows DescribeWorkflowExecution-by-namespace-executio
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/workflows/($execution.workflow_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GetWorkflowExecutionHistory returns the history of specified workflow execution. Fails with  `NotFound` if the specified workflow execution is unknown to the service.
@@ -2649,6 +2735,7 @@ export def "namespaces-workflows-history GetWorkflowExecutionHistory-by-namespac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --executionworkflowId: string
   --executionrunId: string
   --maximumPageSize: int # format: int32
@@ -2663,7 +2750,7 @@ export def "namespaces-workflows-history GetWorkflowExecutionHistory-by-namespac
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/workflows/($execution.workflow_id)/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GetWorkflowExecutionHistoryReverse returns the history of specified workflow execution in reverse  order (starting from last event). Fails with`NotFound` if the specified workflow execution is  unknown to the service.
@@ -2680,6 +2767,7 @@ export def "namespaces-workflows-history-reverse GetWorkflowExecutionHistoryReve
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --executionworkflowId: string
   --executionrunId: string
   --maximumPageSize: int # format: int32
@@ -2691,7 +2779,7 @@ export def "namespaces-workflows-history-reverse GetWorkflowExecutionHistoryReve
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/workflows/($execution.workflow_id)/history-reverse" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # QueryWorkflow requests a query be executed for a specified workflow execution.
@@ -2711,6 +2799,7 @@ export def "namespaces-workflows-query QueryWorkflow-by-namespace-execution.work
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --execution: record # Identifies a specific workflow within a namespace. Practically speaking, because run_id is a  uuid, a workflow execution is globally unique. Note that many commands allow specifying an empty  run id as a way of saying "target the latest run of the workflow". — shape: {workflowId?: string, runId?: string}
   --body-query: record # See https://docs.temporal.io/docs/concepts/queries/ — shape: {queryType?: string, queryArgs?: any, header?: any}
@@ -2724,7 +2813,7 @@ export def "namespaces-workflows-query QueryWorkflow-by-namespace-execution.work
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # TriggerWorkflowRule allows to:   * trigger existing rule for a specific workflow execution;   * trigger rule for a specific workflow execution without creating a rule;  This is useful for one-off operations.
@@ -2741,6 +2830,7 @@ export def "namespaces-workflows-trigger-rule TriggerWorkflowRule-by-namespace-e
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --execution: any # Execution info of the workflow which scheduled this activity
   --id: string
@@ -2755,7 +2845,7 @@ export def "namespaces-workflows-trigger-rule TriggerWorkflowRule-by-namespace-e
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # StartWorkflowExecution starts a new workflow execution.   It will create the execution with a `WORKFLOW_EXECUTION_STARTED` event in its history and  also schedule the first workflow task. Returns `WorkflowExecutionAlreadyStarted`, if an  instance already exists with same workflow id.
@@ -2780,6 +2870,7 @@ export def "namespaces-workflows StartWorkflowExecution-by-namespace-workflowId"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --body-workflowId: string
   --workflowType: record # Represents the identifier used by a workflow author to define the workflow. Typically, the  name of a function. This is sometimes referred to as the workflow's "name" — shape: {name?: string}
@@ -2818,7 +2909,7 @@ export def "namespaces-workflows StartWorkflowExecution-by-namespace-workflowId"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # See `RespondActivityTaskCompleted`. This version allows clients to record completions by  namespace/workflow id/activity id instead of task token.   (-- api-linter: core::0136::prepositions=disabled      aip.dev/not-precedent: "By" is used to indicate request type. --)
@@ -2836,6 +2927,7 @@ export def "namespaces-workflows-activities-complete RespondActivityTaskComplete
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity
   --body-workflowId: string # Id of the workflow which scheduled this activity, leave empty to target a standalone activity
   --runId: string # For a workflow activity - the run ID of the workflow which scheduled this activity.  For a standalone activity - the run ID of the activity.
@@ -2852,7 +2944,7 @@ export def "namespaces-workflows-activities-complete RespondActivityTaskComplete
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # See `RecordActivityTaskFailed`. This version allows clients to record failures by  namespace/workflow id/activity id instead of task token.   (-- api-linter: core::0136::prepositions=disabled      aip.dev/not-precedent: "By" is used to indicate request type. --)
@@ -2870,6 +2962,7 @@ export def "namespaces-workflows-activities-fail RespondActivityTaskFailedById-b
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity
   --body-workflowId: string # Id of the workflow which scheduled this activity, leave empty to target a standalone activity
   --runId: string # For a workflow activity - the run ID of the workflow which scheduled this activity.  For a standalone activity - the run ID of the activity.
@@ -2887,7 +2980,7 @@ export def "namespaces-workflows-activities-fail RespondActivityTaskFailedById-b
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # See `RecordActivityTaskHeartbeat`. This version allows clients to record heartbeats by  namespace/workflow id/activity id instead of task token.   (-- api-linter: core::0136::prepositions=disabled      aip.dev/not-precedent: "By" is used to indicate request type. --)
@@ -2905,6 +2998,7 @@ export def "namespaces-workflows-activities-heartbeat RecordActivityTaskHeartbea
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity
   --body-workflowId: string # Id of the workflow which scheduled this activity, leave empty to target a standalone activity
   --runId: string # For a workflow activity - the run ID of the workflow which scheduled this activity.  For a standalone activity - the run ID of the activity.
@@ -2921,7 +3015,7 @@ export def "namespaces-workflows-activities-heartbeat RecordActivityTaskHeartbea
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PauseActivityExecution pauses the execution of an activity specified by its ID.  This API can be used to target a workflow activity or a standalone activity   Pausing an activity means:  - If the activity is currently waiting for a retry or is running and subsequently fails,    it will not be rescheduled until it is unpaused.  - If the activity is already paused, calling this method will have no effect.  - If the activity is running and finishes successfully, the activity will be completed.  - If the activity is running and finishes with failure:    * if there is no retry left - the activity will be completed.    * if there are more retries left - the activity will be paused.  For long-running activities:  - activities in paused state will send a cancellation with "activity_paused" set to 'true' in response to 'RecordActivityTaskHeartbeat'.   Returns a `NotFound` error if there is no pending activity with the provided ID
@@ -2939,6 +3033,7 @@ export def "namespaces-workflows-activities-pause PauseActivityExecution-by-name
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity.
   --body-workflowId: string # If provided, pause a workflow activity (or activities) for the given workflow ID.  If empty, targets a standalone activity.
   --body-activityId: string # The ID of the activity to target.
@@ -2956,7 +3051,7 @@ export def "namespaces-workflows-activities-pause PauseActivityExecution-by-name
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ResetActivityExecution resets the execution of an activity specified by its ID.  This API can be used to target a workflow activity or a standalone activity.   Resetting an activity means:  * number of attempts will be reset to 0.  * activity timeouts will be reset.  * if the activity is waiting for retry, and it is not paused or 'keep_paused' is not provided:     it will be scheduled immediately (* see 'jitter' flag)   Returns a `NotFound` error if there is no pending activity with the provided ID or type.
@@ -2974,6 +3069,7 @@ export def "namespaces-workflows-activities-reset ResetActivityExecution-by-name
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity.
   --body-workflowId: string # If provided, targets a workflow activity for the given workflow ID.  If empty, targets a standalone activity.
   --body-activityId: string # The ID of the activity to target.
@@ -2993,7 +3089,7 @@ export def "namespaces-workflows-activities-reset ResetActivityExecution-by-name
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # See `RespondActivityTaskCanceled`. This version allows clients to record failures by  namespace/workflow id/activity id instead of task token.   (-- api-linter: core::0136::prepositions=disabled      aip.dev/not-precedent: "By" is used to indicate request type. --)
@@ -3011,6 +3107,7 @@ export def "namespaces-workflows-activities-resolve-as-canceled RespondActivityT
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity
   --body-workflowId: string # Id of the workflow which scheduled this activity, leave empty to target a standalone activity
   --runId: string # For a workflow activity - the run ID of the workflow which scheduled this activity.  For a standalone activity - the run ID of the activity.
@@ -3028,7 +3125,7 @@ export def "namespaces-workflows-activities-resolve-as-canceled RespondActivityT
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # UnpauseActivityExecution unpauses the execution of an activity specified by its ID.  This API can be used to target a workflow activity or a standalone activity.   If activity is not paused, this call will have no effect.  If the activity was paused while waiting for retry, it will be scheduled immediately (* see 'jitter' flag).  Once the activity is unpaused, all timeout timers will be regenerated.   Returns a `NotFound` error if there is no pending activity with the provided ID
@@ -3046,6 +3143,7 @@ export def "namespaces-workflows-activities-unpause UnpauseActivityExecution-by-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity.
   --body-workflowId: string # If provided, targets a workflow activity for the given workflow ID.  If empty, targets a standalone activity.
   --body-activityId: string # The ID of the activity to target.
@@ -3065,7 +3163,7 @@ export def "namespaces-workflows-activities-unpause UnpauseActivityExecution-by-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # UpdateActivityExecutionOptions is called by the client to update the options of an activity by its ID.  This API can be used to target a workflow activity or a standalone activity.
@@ -3083,6 +3181,7 @@ export def "namespaces-workflows-activities-update-options UpdateActivityExecuti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity
   --body-workflowId: string # If provided, targets a workflow activity for the given workflow ID.  If empty, targets a standalone activity.
   --body-activityId: string # The ID of the activity to target.
@@ -3101,7 +3200,7 @@ export def "namespaces-workflows-activities-update-options UpdateActivityExecuti
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Note: This is an experimental API and the behavior may change in a future release.  PauseWorkflowExecution pauses the workflow execution specified in the request. Pausing a workflow execution results in  - The workflow execution status changes to `PAUSED` and a new WORKFLOW_EXECUTION_PAUSED event is added to the history  - No new workflow tasks or activity tasks are dispatched.    - Any workflow task currently executing on the worker will be allowed to complete.    - Any activity task currently executing will be paused.  - All server-side events will continue to be processed by the server.  - Queries & Updates on a paused workflow will be rejected.
@@ -3118,6 +3217,7 @@ export def "namespaces-workflows-pause PauseWorkflowExecution-by-namespace-workf
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow to pause.
   --body-workflowId: string # ID of the workflow execution to be paused. Required.
   --runId: string # Run ID of the workflow execution to be paused. Optional. If not provided, the current run of the workflow will be paused.
@@ -3133,7 +3233,7 @@ export def "namespaces-workflows-pause PauseWorkflowExecution-by-namespace-workf
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SignalWithStartWorkflowExecution is used to ensure a signal is sent to a workflow, even if  it isn't yet started.   If the workflow is running, a `WORKFLOW_EXECUTION_SIGNALED` event is recorded in the history  and a workflow task is generated.   If the workflow is not running or not found, then the workflow is created with  `WORKFLOW_EXECUTION_STARTED` and `WORKFLOW_EXECUTION_SIGNALED` events in its history, and a  workflow task is generated.   (-- api-linter: core::0136::prepositions=disabled      aip.dev/not-precedent: "With" is used to indicate combined operation. --)
@@ -3156,6 +3256,7 @@ export def "namespaces-workflows-signal-with-start SignalWithStartWorkflowExecut
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --body-workflowId: string
   --workflowType: record # Represents the identifier used by a workflow author to define the workflow. Typically, the  name of a function. This is sometimes referred to as the workflow's "name" — shape: {name?: string}
@@ -3191,7 +3292,7 @@ export def "namespaces-workflows-signal-with-start SignalWithStartWorkflowExecut
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Note: This is an experimental API and the behavior may change in a future release.  UnpauseWorkflowExecution unpauses a previously paused workflow execution specified in the request.  Unpausing a workflow execution results in  - The workflow execution status changes to `RUNNING` and a new WORKFLOW_EXECUTION_UNPAUSED event is added to the history  - Workflow tasks and activity tasks are resumed.
@@ -3208,6 +3309,7 @@ export def "namespaces-workflows-unpause UnpauseWorkflowExecution-by-namespace-w
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow to unpause.
   --body-workflowId: string # ID of the workflow execution to be paused. Required.
   --runId: string # Run ID of the workflow execution to be paused. Optional. If not provided, the current run of the workflow will be paused.
@@ -3223,7 +3325,7 @@ export def "namespaces-workflows-unpause UnpauseWorkflowExecution-by-namespace-w
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RequestCancelWorkflowExecution is called by workers when they want to request cancellation of  a workflow execution.   This results in a new `WORKFLOW_EXECUTION_CANCEL_REQUESTED` event being written to the  workflow history and a new workflow task created for the workflow. It returns success if the requested  workflow is already closed. It fails with 'NotFound' if the requested workflow doesn't exist.
@@ -3242,6 +3344,7 @@ export def "namespaces-workflows-cancel RequestCancelWorkflowExecution-by-namesp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --workflowExecution: record # Identifies a specific workflow within a namespace. Practically speaking, because run_id is a  uuid, a workflow execution is globally unique. Note that many commands allow specifying an empty  run id as a way of saying "target the latest run of the workflow". — shape: {workflowId?: string, runId?: string}
   --identity: string # The identity of the worker/client
@@ -3258,7 +3361,7 @@ export def "namespaces-workflows-cancel RequestCancelWorkflowExecution-by-namesp
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ResetWorkflowExecution will reset an existing workflow execution to a specified  `WORKFLOW_TASK_COMPLETED` event (exclusive). It will immediately terminate the current  execution instance. "Exclusive" means the identified completed event itself is not replayed  in the reset history; the preceding `WORKFLOW_TASK_STARTED` event remains and will be marked as failed  immediately, and a new workflow task will be scheduled to retry it.
@@ -3276,6 +3379,7 @@ export def "namespaces-workflows-reset ResetWorkflowExecution-by-namespace-workf
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --workflowExecution: any # The workflow to reset. If this contains a run ID then the workflow will be reset back to the  provided event ID in that run. Otherwise it will be reset to the provided event ID in the  current run. In all cases the current run will be terminated and a new run started.
   --reason: string
@@ -3294,7 +3398,7 @@ export def "namespaces-workflows-reset ResetWorkflowExecution-by-namespace-workf
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SignalWorkflowExecution is used to send a signal to a running workflow execution.   This results in a `WORKFLOW_EXECUTION_SIGNALED` event recorded in the history and a workflow  task being created for the execution.
@@ -3314,6 +3418,7 @@ export def "namespaces-workflows-signal SignalWorkflowExecution-by-namespace-wor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --workflowExecution: record # Identifies a specific workflow within a namespace. Practically speaking, because run_id is a  uuid, a workflow execution is globally unique. Note that many commands allow specifying an empty  run id as a way of saying "target the latest run of the workflow". — shape: {workflowId?: string, runId?: string}
   --body-signalName: string # The workflow author-defined name of the signal to send to the workflow
@@ -3332,7 +3437,7 @@ export def "namespaces-workflows-signal SignalWorkflowExecution-by-namespace-wor
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # TerminateWorkflowExecution terminates an existing workflow execution by recording a  `WORKFLOW_EXECUTION_TERMINATED` event in the history and immediately terminating the  execution instance.
@@ -3351,6 +3456,7 @@ export def "namespaces-workflows-terminate TerminateWorkflowExecution-by-namespa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --workflowExecution: record # Identifies a specific workflow within a namespace. Practically speaking, because run_id is a  uuid, a workflow execution is globally unique. Note that many commands allow specifying an empty  run id as a way of saying "target the latest run of the workflow". — shape: {workflowId?: string, runId?: string}
   --reason: string
@@ -3367,7 +3473,7 @@ export def "namespaces-workflows-terminate TerminateWorkflowExecution-by-namespa
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # UpdateWorkflowExecutionOptions partially updates the WorkflowExecutionOptions of an existing workflow execution.
@@ -3384,6 +3490,7 @@ export def "namespaces-workflows-update-options UpdateWorkflowExecutionOptions-b
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # The namespace name of the target Workflow.
   --workflowExecution: any # The target Workflow Id and (optionally) a specific Run Id thereof.  (-- api-linter: core::0203::optional=disabled      aip.dev/not-precedent: false positive triggered by the word "optional" --)
   --workflowExecutionOptions: any # Workflow Execution options. Partial updates are accepted and controlled by update_mask.
@@ -3398,7 +3505,7 @@ export def "namespaces-workflows-update-options UpdateWorkflowExecutionOptions-b
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invokes the specified Update function on user Workflow code.
@@ -3416,6 +3523,7 @@ export def "namespaces-workflows-update UpdateWorkflowExecution-by-namespace-wor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # The namespace name of the target Workflow.
   --workflowExecution: any # The target Workflow Id and (optionally) a specific Run Id thereof.  (-- api-linter: core::0203::optional=disabled      aip.dev/not-precedent: false positive triggered by the word "optional" --)
   --firstExecutionRunId: string # If set, this call will error if the most recent (if no Run Id is set on  `workflow_execution`), or specified (if it is) Workflow Execution is not  part of the same execution chain as this Id.
@@ -3430,7 +3538,7 @@ export def "namespaces-workflows-update UpdateWorkflowExecution-by-namespace-wor
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all Nexus endpoints for the cluster, sorted by ID in ascending order. Set page_token in the request to the  next_page_token field of the previous response to get the next page of results. An empty next_page_token  indicates that there are no more results. During pagination, a newly added service with an ID lexicographically  earlier than the previous page's last endpoint's ID may be missed.
@@ -3445,6 +3553,7 @@ export def "nexus-endpoints ListNexusEndpoints" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # format: int32
   --nextPageToken: string # To get the next page, pass in `ListNexusEndpointsResponse.next_page_token` from the previous page's  response, the token will be empty if there's no other page.  Note: the last page may be empty if the total number of endpoints registered is a multiple of the page size. (format: bytes)
   --name: string # Name of the incoming endpoint to filter on - optional. Specifying this will result in zero or one results.  (-- api-linter: core::203::field-behavior-required=disabled      aip.dev/not-precedent: Not following linter rules. --)
@@ -3455,7 +3564,7 @@ export def "nexus-endpoints ListNexusEndpoints" [
   let full_url = (build-url $base "/api/v1/nexus/endpoints" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Nexus endpoint. This will fail if an endpoint with the same name is already registered with a status of  ALREADY_EXISTS.  Returns the created endpoint with its initial version. You may use this version for subsequent updates.
@@ -3470,6 +3579,7 @@ export def "nexus-endpoints CreateNexusEndpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --spec: any # Endpoint definition to create.
 ]: any -> record<endpoint: record<version: string, id: string, spec: record<name: string, description: record, target: record>, createdTime: string, lastModifiedTime: string, urlPrefix: string>> {
   let input = $in
@@ -3480,7 +3590,7 @@ export def "nexus-endpoints CreateNexusEndpoint" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a registered Nexus endpoint by ID. The returned version can be used for optimistic updates.
@@ -3496,13 +3606,14 @@ export def "nexus-endpoints GetNexusEndpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<endpoint: record<version: string, id: string, spec: record<name: string, description: record, target: record>, createdTime: string, lastModifiedTime: string, urlPrefix: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/nexus/endpoints/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an incoming Nexus service by ID.
@@ -3518,6 +3629,7 @@ export def "nexus-endpoints DeleteNexusEndpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # Data version for this endpoint. Must match current version.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3526,7 +3638,7 @@ export def "nexus-endpoints DeleteNexusEndpoint" [
   let full_url = (build-url $base $"/api/v1/nexus/endpoints/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Optimistically update a Nexus endpoint based on provided version as obtained via the `GetNexusEndpoint` or  `ListNexusEndpointResponse` APIs. This will fail with a status of FAILED_PRECONDITION if the version does not  match.  Returns the updated endpoint with its updated version. You may use this version for subsequent updates. You don't  need to increment the version yourself. The server will increment the version for you after each update.
@@ -3543,6 +3655,7 @@ export def "nexus-endpoints-update UpdateNexusEndpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-id: string # Server-generated unique endpoint ID.
   --version: string # Data version for this endpoint. Must match current version.
   --spec: record # Contains mutable fields for an Endpoint. — shape: {name?: string, description?: any, target?: any}
@@ -3555,7 +3668,7 @@ export def "nexus-endpoints-update UpdateNexusEndpoint" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GetSystemInfo returns information about the system.
@@ -3570,13 +3683,14 @@ export def "system-info GetSystemInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<serverVersion: string, capabilities: record<signalAndQueryHeader: bool, internalErrorDifferentiation: bool, activityFailureIncludeHeartbeat: bool, supportsSchedules: bool, encodedFailureAttributes: bool, buildIdBasedVersioning: bool, upsertMemo: bool, eagerWorkflowStart: bool, sdkMetadata: bool, countGroupByExecutionStatus: bool, nexus: bool, serverScaledDeployments: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/system-info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GetClusterInfo returns information about temporal cluster
@@ -3591,13 +3705,14 @@ export def "cluster GetClusterInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<supportedClients: record, serverVersion: string, clusterId: string, versionInfo: record<current: record<version: string, releaseTime: string, notes: string>, recommended: record<version: string, releaseTime: string, notes: string>, instructions: string, alerts: list<record>, lastUpdateTime: string>, clusterName: string, historyShardCount: int, persistenceStore: string, visibilityStore: string, initialFailoverVersion: string, failoverVersionIncrement: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cluster")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListNamespaces returns the information and configuration for all namespaces.
@@ -3612,6 +3727,7 @@ export def "cluster-namespaces ListNamespaces" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # format: int32
   --nextPageToken: string # format: bytes
   --namespaceFilterincludeDeleted: oneof<nothing, bool> # By default namespaces in NAMESPACE_STATE_DELETED state are not included.  Setting include_deleted to true will include deleted namespaces.  Note: Namespace is in NAMESPACE_STATE_DELETED state when it was deleted from the system but associated data is not deleted yet.
@@ -3622,7 +3738,7 @@ export def "cluster-namespaces ListNamespaces" [
   let full_url = (build-url $base "/cluster/namespaces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RegisterNamespace creates a new namespace which can be used as a container for all resources.   A Namespace is a top level entity within Temporal, and is used as a container for resources  like workflow executions, task queues, etc. A Namespace acts as a sandbox and provides  isolation for all resources within the namespace. All resources belongs to exactly one  namespace.
@@ -3638,6 +3754,7 @@ export def "cluster-namespaces RegisterNamespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --namespace: string
   --description: string
   --ownerEmail: string
@@ -3660,7 +3777,7 @@ export def "cluster-namespaces RegisterNamespace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DescribeNamespace returns the information and configuration for a registered namespace.
@@ -3676,6 +3793,7 @@ export def "cluster-namespaces DescribeNamespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
   --weakConsistency: oneof<nothing, bool> # If true, the server may serve the response from an eventually-consistent  source instead of reading through to persistence. Defaults to false,  which preserves read-after-write consistency. SDKs should set this when  fetching namespace capabilities on worker/client startup.
 ]: nothing -> record<namespaceInfo: record<name: string, state: string, description: string, ownerEmail: string, data: record, id: string, capabilities: record<eagerWorkflowStart: bool, syncUpdate: bool, asyncUpdate: bool, workerHeartbeats: bool, reportedProblemsSearchAttribute: bool, workflowPause: bool, standaloneActivities: bool, workerPollCompleteOnShutdown: bool, pollerAutoscaling: bool, workerCommands: bool, standaloneNexusOperation: bool, workflowUpdateCallbacks: bool>, limits: record<blobSizeLimitError: string, memoSizeLimitError: string>, supportsSchedules: bool>, config: record<workflowExecutionRetentionTtl: string, badBinaries: record<binaries: record>, historyArchivalState: string, historyArchivalUri: string, visibilityArchivalState: string, visibilityArchivalUri: string, customSearchAttributeAliases: record>, replicationConfig: record<activeClusterName: string, clusters: list<record>, state: string>, failoverVersion: string, isGlobalNamespace: bool, failoverHistory: table<failoverTime: string, failoverVersion: string>, pollerGroupInfos: table<id: string, weight: float>> {
@@ -3685,7 +3803,7 @@ export def "cluster-namespaces DescribeNamespace" [
   let full_url = (build-url $base $"/cluster/namespaces/($namespace)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListSearchAttributes returns comprehensive information about search attributes.
@@ -3701,13 +3819,14 @@ export def "cluster-namespaces-search-attributes ListSearchAttributes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<customAttributes: record, systemAttributes: record, storageSchema: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cluster/namespaces/($namespace)/search-attributes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UpdateNamespace is used to update the information and configuration of a registered  namespace.
@@ -3726,6 +3845,7 @@ export def "cluster-namespaces-update UpdateNamespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --updateInfo: record # shape: {description?: string, ownerEmail?: string, data?: record, state?: "NAMESPACE_STATE_UNSPECIFIED"|"NAMESPACE_STATE_REGISTERED"|"NAMESPACE_STATE_DEPRECATED"|"NAMESPACE_STATE_DELETED"}
   --config: record # shape: {workflowExecutionRetentionTtl?: string, badBinaries?: record, historyArchivalState?: "ARCHIVAL_STATE_UNSPECIFIED"|"ARCHIVAL_STATE_DISABLED"|"ARCHIVAL_STATE_ENABLED", historyArchivalUri?: string, visibilityArchivalState?: "ARCHIVAL_STATE_UNSPECIFIED"|"ARCHIVAL_STATE_DISABLED"|"ARCHIVAL_STATE_ENABLED", visibilityArchivalUri?: string, customSearchAttributeAliases?: record}
@@ -3742,7 +3862,7 @@ export def "cluster-namespaces-update UpdateNamespace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all Nexus endpoints for the cluster, sorted by ID in ascending order. Set page_token in the request to the  next_page_token field of the previous response to get the next page of results. An empty next_page_token  indicates that there are no more results. During pagination, a newly added service with an ID lexicographically  earlier than the previous page's last endpoint's ID may be missed.
@@ -3757,6 +3877,7 @@ export def "cluster-nexus-endpoints ListNexusEndpoints" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # format: int32
   --nextPageToken: string # To get the next page, pass in `ListNexusEndpointsResponse.next_page_token` from the previous page's  response, the token will be empty if there's no other page.  Note: the last page may be empty if the total number of endpoints registered is a multiple of the page size. (format: bytes)
   --name: string # Name of the incoming endpoint to filter on - optional. Specifying this will result in zero or one results.  (-- api-linter: core::203::field-behavior-required=disabled      aip.dev/not-precedent: Not following linter rules. --)
@@ -3767,7 +3888,7 @@ export def "cluster-nexus-endpoints ListNexusEndpoints" [
   let full_url = (build-url $base "/cluster/nexus/endpoints" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Nexus endpoint. This will fail if an endpoint with the same name is already registered with a status of  ALREADY_EXISTS.  Returns the created endpoint with its initial version. You may use this version for subsequent updates.
@@ -3782,6 +3903,7 @@ export def "cluster-nexus-endpoints CreateNexusEndpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --spec: any # Endpoint definition to create.
 ]: any -> record<endpoint: record<version: string, id: string, spec: record<name: string, description: record, target: record>, createdTime: string, lastModifiedTime: string, urlPrefix: string>> {
   let input = $in
@@ -3792,7 +3914,7 @@ export def "cluster-nexus-endpoints CreateNexusEndpoint" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a registered Nexus endpoint by ID. The returned version can be used for optimistic updates.
@@ -3808,13 +3930,14 @@ export def "cluster-nexus-endpoints GetNexusEndpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<endpoint: record<version: string, id: string, spec: record<name: string, description: record, target: record>, createdTime: string, lastModifiedTime: string, urlPrefix: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/cluster/nexus/endpoints/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an incoming Nexus service by ID.
@@ -3830,6 +3953,7 @@ export def "cluster-nexus-endpoints DeleteNexusEndpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # Data version for this endpoint. Must match current version.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3838,7 +3962,7 @@ export def "cluster-nexus-endpoints DeleteNexusEndpoint" [
   let full_url = (build-url $base $"/cluster/nexus/endpoints/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Optimistically update a Nexus endpoint based on provided version as obtained via the `GetNexusEndpoint` or  `ListNexusEndpointResponse` APIs. This will fail with a status of FAILED_PRECONDITION if the version does not  match.  Returns the updated endpoint with its updated version. You may use this version for subsequent updates. You don't  need to increment the version yourself. The server will increment the version for you after each update.
@@ -3855,6 +3979,7 @@ export def "cluster-nexus-endpoints-update UpdateNexusEndpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-id: string # Server-generated unique endpoint ID.
   --version: string # Data version for this endpoint. Must match current version.
   --spec: record # Contains mutable fields for an Endpoint. — shape: {name?: string, description?: any, target?: any}
@@ -3867,7 +3992,7 @@ export def "cluster-nexus-endpoints-update UpdateNexusEndpoint" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListActivityExecutions is a visibility API to list activity executions in a specific namespace.
@@ -3883,6 +4008,7 @@ export def "namespaces-activities ListActivityExecutions-by-namespace-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # Max number of executions to return per page. (format: int32)
   --nextPageToken: string # Token returned in ListActivityExecutionsResponse. (format: bytes)
   --qp-query: string # Visibility query, see https://docs.temporal.io/list-filter for the syntax.
@@ -3893,7 +4019,7 @@ export def "namespaces-activities ListActivityExecutions-by-namespace-1" [
   let full_url = (build-url $base $"/namespaces/($namespace)/activities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PauseActivity pauses the execution of an activity specified by its ID or type.  If there are multiple pending activities of the provided type - all of them will be paused   Pausing an activity means:  - If the activity is currently waiting for a retry or is running and subsequently fails,    it will not be rescheduled until it is unpaused.  - If the activity is already paused, calling this method will have no effect.  - If the activity is running and finishes successfully, the activity will be completed.  - If the activity is running and finishes with failure:    * if there is no retry left - the activity will be completed.    * if there are more retries left - the activity will be paused.  For long-running activities:  - activities in paused state will send a cancellation with "activity_paused" set to 'true' in response to 'RecordActivityTaskHeartbeat'.  - The activity should respond to the cancellation accordingly.   Returns a `NotFound` error if there is no pending activity with the provided ID or type  This API will be deprecated soon and replaced with a newer PauseActivityExecution that is better named and  structured to work well for standalone activities.
@@ -3909,6 +4035,7 @@ export def "namespaces-activities-deprecated-pause PauseActivity-by-namespace-1"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity.
   --execution: any # Execution info of the workflow which scheduled this activity
   --identity: string # The identity of the client who initiated this request.
@@ -3925,7 +4052,7 @@ export def "namespaces-activities-deprecated-pause PauseActivity-by-namespace-1"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ResetActivity resets the execution of an activity specified by its ID or type.  If there are multiple pending activities of the provided type - all of them will be reset.   Resetting an activity means:  * number of attempts will be reset to 0.  * activity timeouts will be reset.  * if the activity is waiting for retry, and it is not paused or 'keep_paused' is not provided:     it will be scheduled immediately (* see 'jitter' flag),   Flags:   'jitter': the activity will be scheduled at a random time within the jitter duration.  If the activity currently paused it will be unpaused, unless 'keep_paused' flag is provided.  'reset_heartbeats': the activity heartbeat timer and heartbeats will be reset.  'keep_paused': if the activity is paused, it will remain paused.   Returns a `NotFound` error if there is no pending activity with the provided ID or type.  This API will be deprecated soon and replaced with a newer ResetActivityExecution that is better named and  structured to work well for standalone activities.
@@ -3941,6 +4068,7 @@ export def "namespaces-activities-deprecated-reset ResetActivity-by-namespace-1"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity.
   --execution: any # Execution info of the workflow which scheduled this activity
   --identity: string # The identity of the client who initiated this request.
@@ -3960,7 +4088,7 @@ export def "namespaces-activities-deprecated-reset ResetActivity-by-namespace-1"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # UnpauseActivity unpauses the execution of an activity specified by its ID or type.  If there are multiple pending activities of the provided type - all of them will be unpaused.   If activity is not paused, this call will have no effect.  If the activity was paused while waiting for retry, it will be scheduled immediately (* see 'jitter' flag).  Once the activity is unpaused, all timeout timers will be regenerated.   Flags:  'jitter': the activity will be scheduled at a random time within the jitter duration.  'reset_attempts': the number of attempts will be reset.  'reset_heartbeat': the activity heartbeat timer and heartbeats will be reset.   Returns a `NotFound` error if there is no pending activity with the provided ID or type  This API will be deprecated soon and replaced with a newer UnpauseActivityExecution that is better named and  structured to work well for standalone activities.
@@ -3976,6 +4104,7 @@ export def "namespaces-activities-deprecated-unpause UnpauseActivity-by-namespac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity.
   --execution: any # Execution info of the workflow which scheduled this activity
   --identity: string # The identity of the client who initiated this request.
@@ -3994,7 +4123,7 @@ export def "namespaces-activities-deprecated-unpause UnpauseActivity-by-namespac
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # UpdateActivityOptions is called by the client to update the options of an activity by its ID or type.  If there are multiple pending activities of the provided type - all of them will be updated.  This API will be deprecated soon and replaced with a newer UpdateActivityExecutionOptions that is better named and  structured to work well for standalone activities.
@@ -4010,6 +4139,7 @@ export def "namespaces-activities-deprecated-update-options UpdateActivityOption
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity
   --execution: any # Execution info of the workflow which scheduled this activity
   --identity: string # The identity of the client who initiated this request
@@ -4028,7 +4158,7 @@ export def "namespaces-activities-deprecated-update-options UpdateActivityOption
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DescribeActivityExecution returns information about an activity execution.  It can be used to:  - Get current activity info without waiting  - Long-poll for next state change and return new activity info  Response can optionally include activity input or outcome (if the activity has completed).
@@ -4045,6 +4175,7 @@ export def "namespaces-activities DescribeActivityExecution-by-namespace-activit
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --runId: string # Activity run ID. If empty the request targets the latest run.
   --includeInput: oneof<nothing, bool> # Include the input field in the response.
   --includeOutcome: oneof<nothing, bool> # Include the outcome (result/failure) in the response if the activity has completed.
@@ -4058,7 +4189,7 @@ export def "namespaces-activities DescribeActivityExecution-by-namespace-activit
   let full_url = (build-url $base $"/namespaces/($namespace)/activities/($activityId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # StartActivityExecution starts a new activity execution.   Returns an `ActivityExecutionAlreadyStarted` error if an instance already exists with same activity ID in this namespace  unless permitted by the specified ID conflict policy.
@@ -4077,6 +4208,7 @@ export def "namespaces-activities StartActivityExecution-by-namespace-activityId
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --identity: string # The identity of the client who initiated this request
   --requestId: string # A unique identifier for this start request. Typically UUIDv4.
@@ -4108,7 +4240,7 @@ export def "namespaces-activities StartActivityExecution-by-namespace-activityId
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RequestCancelActivityExecution requests cancellation of an activity execution.   Cancellation is cooperative: this call records the request, but the activity must detect and  acknowledge it for the activity to reach CANCELED status. The cancellation signal is  delivered via `cancel_requested` in the heartbeat response; SDKs surface this via  language-idiomatic mechanisms (context cancellation, exceptions, abort signals).
@@ -4125,6 +4257,7 @@ export def "namespaces-activities-cancel RequestCancelActivityExecution-by-names
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --body-activityId: string
   --runId: string # Activity run ID, targets the latest run if run_id is empty.
@@ -4140,7 +4273,7 @@ export def "namespaces-activities-cancel RequestCancelActivityExecution-by-names
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # See `RespondActivityTaskCompleted`. This version allows clients to record completions by  namespace/workflow id/activity id instead of task token.   (-- api-linter: core::0136::prepositions=disabled      aip.dev/not-precedent: "By" is used to indicate request type. --)
@@ -4157,6 +4290,7 @@ export def "namespaces-activities-complete RespondActivityTaskCompletedById-by-n
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity
   --workflowId: string # Id of the workflow which scheduled this activity, leave empty to target a standalone activity
   --runId: string # For a workflow activity - the run ID of the workflow which scheduled this activity.  For a standalone activity - the run ID of the activity.
@@ -4173,7 +4307,7 @@ export def "namespaces-activities-complete RespondActivityTaskCompletedById-by-n
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # See `RecordActivityTaskFailed`. This version allows clients to record failures by  namespace/workflow id/activity id instead of task token.   (-- api-linter: core::0136::prepositions=disabled      aip.dev/not-precedent: "By" is used to indicate request type. --)
@@ -4190,6 +4324,7 @@ export def "namespaces-activities-fail RespondActivityTaskFailedById-by-namespac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity
   --workflowId: string # Id of the workflow which scheduled this activity, leave empty to target a standalone activity
   --runId: string # For a workflow activity - the run ID of the workflow which scheduled this activity.  For a standalone activity - the run ID of the activity.
@@ -4207,7 +4342,7 @@ export def "namespaces-activities-fail RespondActivityTaskFailedById-by-namespac
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # See `RecordActivityTaskHeartbeat`. This version allows clients to record heartbeats by  namespace/workflow id/activity id instead of task token.   (-- api-linter: core::0136::prepositions=disabled      aip.dev/not-precedent: "By" is used to indicate request type. --)
@@ -4224,6 +4359,7 @@ export def "namespaces-activities-heartbeat RecordActivityTaskHeartbeatById-by-n
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity
   --workflowId: string # Id of the workflow which scheduled this activity, leave empty to target a standalone activity
   --runId: string # For a workflow activity - the run ID of the workflow which scheduled this activity.  For a standalone activity - the run ID of the activity.
@@ -4240,7 +4376,7 @@ export def "namespaces-activities-heartbeat RecordActivityTaskHeartbeatById-by-n
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PollActivityExecution long-polls for an activity execution to complete and returns the  outcome (result or failure).
@@ -4257,6 +4393,7 @@ export def "namespaces-activities-outcome PollActivityExecution-by-namespace-act
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --runId: string # Activity run ID. If empty the request targets the latest run.
 ]: nothing -> record<runId: string, outcome: record<result: record<payloads: list>, failure: record<message: string, source: string, stackTrace: string, encodedAttributes: record, cause: record, applicationFailureInfo: record, timeoutFailureInfo: record, canceledFailureInfo: record, terminatedFailureInfo: record, serverFailureInfo: record, resetWorkflowFailureInfo: record, activityFailureInfo: record, childWorkflowExecutionFailureInfo: record, nexusOperationExecutionFailureInfo: record, nexusHandlerFailureInfo: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4265,7 +4402,7 @@ export def "namespaces-activities-outcome PollActivityExecution-by-namespace-act
   let full_url = (build-url $base $"/namespaces/($namespace)/activities/($activityId)/outcome" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PauseActivityExecution pauses the execution of an activity specified by its ID.  This API can be used to target a workflow activity or a standalone activity   Pausing an activity means:  - If the activity is currently waiting for a retry or is running and subsequently fails,    it will not be rescheduled until it is unpaused.  - If the activity is already paused, calling this method will have no effect.  - If the activity is running and finishes successfully, the activity will be completed.  - If the activity is running and finishes with failure:    * if there is no retry left - the activity will be completed.    * if there are more retries left - the activity will be paused.  For long-running activities:  - activities in paused state will send a cancellation with "activity_paused" set to 'true' in response to 'RecordActivityTaskHeartbeat'.   Returns a `NotFound` error if there is no pending activity with the provided ID
@@ -4282,6 +4419,7 @@ export def "namespaces-activities-pause PauseActivityExecution-by-namespace-acti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity.
   --workflowId: string # If provided, pause a workflow activity (or activities) for the given workflow ID.  If empty, targets a standalone activity.
   --body-activityId: string # The ID of the activity to target.
@@ -4299,7 +4437,7 @@ export def "namespaces-activities-pause PauseActivityExecution-by-namespace-acti
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ResetActivityExecution resets the execution of an activity specified by its ID.  This API can be used to target a workflow activity or a standalone activity.   Resetting an activity means:  * number of attempts will be reset to 0.  * activity timeouts will be reset.  * if the activity is waiting for retry, and it is not paused or 'keep_paused' is not provided:     it will be scheduled immediately (* see 'jitter' flag)   Returns a `NotFound` error if there is no pending activity with the provided ID or type.
@@ -4316,6 +4454,7 @@ export def "namespaces-activities-reset ResetActivityExecution-by-namespace-acti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity.
   --workflowId: string # If provided, targets a workflow activity for the given workflow ID.  If empty, targets a standalone activity.
   --body-activityId: string # The ID of the activity to target.
@@ -4335,7 +4474,7 @@ export def "namespaces-activities-reset ResetActivityExecution-by-namespace-acti
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # See `RespondActivityTaskCanceled`. This version allows clients to record failures by  namespace/workflow id/activity id instead of task token.   (-- api-linter: core::0136::prepositions=disabled      aip.dev/not-precedent: "By" is used to indicate request type. --)
@@ -4352,6 +4491,7 @@ export def "namespaces-activities-resolve-as-canceled RespondActivityTaskCancele
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity
   --workflowId: string # Id of the workflow which scheduled this activity, leave empty to target a standalone activity
   --runId: string # For a workflow activity - the run ID of the workflow which scheduled this activity.  For a standalone activity - the run ID of the activity.
@@ -4369,7 +4509,7 @@ export def "namespaces-activities-resolve-as-canceled RespondActivityTaskCancele
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # TerminateActivityExecution terminates an existing activity execution immediately.   Termination does not reach the worker and the activity code cannot react to it. A terminated activity may have a  running attempt.
@@ -4386,6 +4526,7 @@ export def "namespaces-activities-terminate TerminateActivityExecution-by-namesp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --body-activityId: string
   --runId: string # Activity run ID, targets the latest run if run_id is empty.
@@ -4401,7 +4542,7 @@ export def "namespaces-activities-terminate TerminateActivityExecution-by-namesp
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # UnpauseActivityExecution unpauses the execution of an activity specified by its ID.  This API can be used to target a workflow activity or a standalone activity.   If activity is not paused, this call will have no effect.  If the activity was paused while waiting for retry, it will be scheduled immediately (* see 'jitter' flag).  Once the activity is unpaused, all timeout timers will be regenerated.   Returns a `NotFound` error if there is no pending activity with the provided ID
@@ -4418,6 +4559,7 @@ export def "namespaces-activities-unpause UnpauseActivityExecution-by-namespace-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity.
   --workflowId: string # If provided, targets a workflow activity for the given workflow ID.  If empty, targets a standalone activity.
   --body-activityId: string # The ID of the activity to target.
@@ -4437,7 +4579,7 @@ export def "namespaces-activities-unpause UnpauseActivityExecution-by-namespace-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # UpdateActivityExecutionOptions is called by the client to update the options of an activity by its ID.  This API can be used to target a workflow activity or a standalone activity.
@@ -4454,6 +4596,7 @@ export def "namespaces-activities-update-options UpdateActivityExecutionOptions-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity
   --workflowId: string # If provided, targets a workflow activity for the given workflow ID.  If empty, targets a standalone activity.
   --body-activityId: string # The ID of the activity to target.
@@ -4472,7 +4615,7 @@ export def "namespaces-activities-update-options UpdateActivityExecutionOptions-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RespondActivityTaskCompleted is called by workers when they successfully complete an activity  task.   For workflow activities, this results in a new `ACTIVITY_TASK_COMPLETED` event being written to the workflow history  and a new workflow task created for the workflow. Fails with `NotFound` if the task token is  no longer valid due to activity timeout, already being completed, or never having existed.
@@ -4488,6 +4631,7 @@ export def "namespaces-activity-complete RespondActivityTaskCompleted-by-namespa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --taskToken: string # The task token as received in `PollActivityTaskQueueResponse` (format: bytes)
   --body-result: any # The result of successfully executing the activity
   --identity: string # The identity of the worker/client
@@ -4505,7 +4649,7 @@ export def "namespaces-activity-complete RespondActivityTaskCompleted-by-namespa
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CountActivityExecutions is a visibility API to count activity executions in a specific namespace.
@@ -4521,6 +4665,7 @@ export def "namespaces-activity-count CountActivityExecutions-by-namespace-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # Visibility query, see https://docs.temporal.io/list-filter for the syntax.
 ]: nothing -> record<count: string, groups: table<groupValues: list, count: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4529,7 +4674,7 @@ export def "namespaces-activity-count CountActivityExecutions-by-namespace-1" [
   let full_url = (build-url $base $"/namespaces/($namespace)/activity-count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # RespondActivityTaskFailed is called by workers when processing an activity task fails.   This results in a new `ACTIVITY_TASK_FAILED` event being written to the workflow history and  a new workflow task created for the workflow. Fails with `NotFound` if the task token is no  longer valid due to activity timeout, already being completed, or never having existed.
@@ -4545,6 +4690,7 @@ export def "namespaces-activity-fail RespondActivityTaskFailed-by-namespace-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --taskToken: string # The task token as received in `PollActivityTaskQueueResponse` (format: bytes)
   --failure: any # Detailed failure information
   --identity: string # The identity of the worker/client
@@ -4563,7 +4709,7 @@ export def "namespaces-activity-fail RespondActivityTaskFailed-by-namespace-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RecordActivityTaskHeartbeat is optionally called by workers while they execute activities.   If a worker fails to heartbeat within the `heartbeat_timeout` interval for the activity task,  then the current attempt times out. Depending on RetryPolicy, this may trigger a retry or  time out the activity.   For workflow activities, an `ACTIVITY_TASK_TIMED_OUT` event will be written to the workflow  history. Calling `RecordActivityTaskHeartbeat` will fail with `NotFound` in such situations,  in that event, the SDK should request cancellation of the activity.   The request may contain response `details` which will be persisted by the server and may be  used by the activity to checkpoint progress. The `cancel_requested` field in the response  indicates whether cancellation has been requested for the activity.
@@ -4579,6 +4725,7 @@ export def "namespaces-activity-heartbeat RecordActivityTaskHeartbeat-by-namespa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --taskToken: string # The task token as received in `PollActivityTaskQueueResponse` (format: bytes)
   --details: any # Arbitrary data, of which the most recent call is kept, to store for this activity
   --identity: string # The identity of the worker/client
@@ -4593,7 +4740,7 @@ export def "namespaces-activity-heartbeat RecordActivityTaskHeartbeat-by-namespa
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RespondActivityTaskFailed is called by workers when processing an activity task fails.   For workflow activities, this results in a new `ACTIVITY_TASK_CANCELED` event being written to the workflow history  and a new workflow task created for the workflow. Fails with `NotFound` if the task token is  no longer valid due to activity timeout, already being completed, or never having existed.
@@ -4609,6 +4756,7 @@ export def "namespaces-activity-resolve-as-canceled RespondActivityTaskCanceled-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --taskToken: string # The task token as received in `PollActivityTaskQueueResponse` (format: bytes)
   --details: any # Serialized additional information to attach to the cancellation
   --identity: string # The identity of the worker/client
@@ -4626,7 +4774,7 @@ export def "namespaces-activity-resolve-as-canceled RespondActivityTaskCanceled-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ListArchivedWorkflowExecutions is a visibility API to list archived workflow executions in a specific namespace.
@@ -4642,6 +4790,7 @@ export def "namespaces-archived-workflows ListArchivedWorkflowExecutions-by-name
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # format: int32
   --nextPageToken: string # format: bytes
   --qp-query: string
@@ -4652,7 +4801,7 @@ export def "namespaces-archived-workflows ListArchivedWorkflowExecutions-by-name
   let full_url = (build-url $base $"/namespaces/($namespace)/archived-workflows" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListBatchOperations returns a list of batch operations
@@ -4668,6 +4817,7 @@ export def "namespaces-batch-operations ListBatchOperations-by-namespace-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # List page size (format: int32)
   --nextPageToken: string # Next page token (format: bytes)
 ]: nothing -> record<operationInfo: table<jobId: string, state: string, startTime: string, closeTime: string>, nextPageToken: string> {
@@ -4677,7 +4827,7 @@ export def "namespaces-batch-operations ListBatchOperations-by-namespace-1" [
   let full_url = (build-url $base $"/namespaces/($namespace)/batch-operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DescribeBatchOperation returns the information about a batch operation
@@ -4694,13 +4844,14 @@ export def "namespaces-batch-operations DescribeBatchOperation-by-namespace-jobI
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<operationType: string, jobId: string, state: string, startTime: string, closeTime: string, totalOperationCount: string, completeOperationCount: string, failureOperationCount: string, identity: string, reason: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/namespaces/($namespace)/batch-operations/($jobId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # StartBatchOperation starts a new batch operation
@@ -4727,6 +4878,7 @@ export def "namespaces-batch-operations StartBatchOperation-by-namespace-jobId-1
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace that contains the batch operation
   --visibilityQuery: string # Visibility query defines the the group of workflow to apply the batch operation  This field and `executions` are mutually exclusive
   --body-jobId: string # Job ID defines the unique ID for the batch job
@@ -4751,7 +4903,7 @@ export def "namespaces-batch-operations StartBatchOperation-by-namespace-jobId-1
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # StopBatchOperation stops a batch operation
@@ -4768,6 +4920,7 @@ export def "namespaces-batch-operations-stop StopBatchOperation-by-namespace-job
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace that contains the batch operation
   --body-jobId: string # Batch job id
   --reason: string # Reason to stop a batch operation
@@ -4781,7 +4934,7 @@ export def "namespaces-batch-operations-stop StopBatchOperation-by-namespace-job
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Sets a deployment as the current deployment for its deployment series. Can optionally update  the metadata of the deployment as well.  Experimental. This API might significantly change or be removed in a future release.  Deprecated. Replaced by `SetWorkerDeploymentCurrentVersion`.
@@ -4799,6 +4952,7 @@ export def "namespaces-current-deployment SetCurrentDeployment-by-namespace-depl
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --deployment: record # `Deployment` identifies a deployment of Temporal workers. The combination of deployment series  name + build ID serves as the identifier. User can use `WorkerDeploymentOptions` in their worker  programs to specify these values.  Deprecated. — shape: {seriesName?: string, buildId?: string}
   --identity: string # Optional. The identity of the client who initiated this request.
@@ -4812,7 +4966,7 @@ export def "namespaces-current-deployment SetCurrentDeployment-by-namespace-depl
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns the current deployment (and its info) for a given deployment series.  Experimental. This API might significantly change or be removed in a future release.  Deprecated. Replaced by `current_version` returned by `DescribeWorkerDeployment`.
@@ -4829,13 +4983,14 @@ export def "namespaces-current-deployment GetCurrentDeployment-by-namespace-seri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<currentDeploymentInfo: record<deployment: record<seriesName: string, buildId: string>, createTime: string, taskQueueInfos: list<record>, metadata: record, isCurrent: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/namespaces/($namespace)/current-deployment/($seriesName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists worker deployments in the namespace. Optionally can filter based on deployment series  name.  Experimental. This API might significantly change or be removed in a future release.  Deprecated. Replaced with `ListWorkerDeployments`.
@@ -4851,6 +5006,7 @@ export def "namespaces-deployments ListDeployments-by-namespace-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # format: int32
   --nextPageToken: string # format: bytes
   --seriesName: string # Optional. Use to filter based on exact series name match.
@@ -4861,7 +5017,7 @@ export def "namespaces-deployments ListDeployments-by-namespace-1" [
   let full_url = (build-url $base $"/namespaces/($namespace)/deployments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Describes a worker deployment.  Experimental. This API might significantly change or be removed in a future release.  Deprecated. Replaced with `DescribeWorkerDeploymentVersion`.
@@ -4879,6 +5035,7 @@ export def "namespaces-deployments DescribeDeployment-by-namespace-deployment.se
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --deploymentseriesName: string # Different versions of the same worker service/application are related together by having a  shared series name.  Out of all deployments of a series, one can be designated as the current deployment, which  receives new workflow executions and new tasks of workflows with  `VERSIONING_BEHAVIOR_AUTO_UPGRADE` versioning behavior.
   --deploymentbuildId: string # Build ID changes with each version of the worker when the worker program code and/or config  changes.
 ]: nothing -> record<deploymentInfo: record<deployment: record<seriesName: string, buildId: string>, createTime: string, taskQueueInfos: list<record>, metadata: record, isCurrent: bool>> {
@@ -4888,7 +5045,7 @@ export def "namespaces-deployments DescribeDeployment-by-namespace-deployment.se
   let full_url = (build-url $base $"/namespaces/($namespace)/deployments/($deployment.series_name)/($deployment.build_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the reachability level of a worker deployment to help users decide when it is time  to decommission a deployment. Reachability level is calculated based on the deployment's  `status` and existing workflows that depend on the given deployment for their execution.  Calculating reachability is relatively expensive. Therefore, server might return a recently  cached value. In such a case, the `last_update_time` will inform you about the actual  reachability calculation time.  Experimental. This API might significantly change or be removed in a future release.  Deprecated. Replaced with `DrainageInfo` returned by `DescribeWorkerDeploymentVersion`.
@@ -4906,6 +5063,7 @@ export def "namespaces-deployments-reachability GetDeploymentReachability-by-nam
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --deploymentseriesName: string # Different versions of the same worker service/application are related together by having a  shared series name.  Out of all deployments of a series, one can be designated as the current deployment, which  receives new workflow executions and new tasks of workflows with  `VERSIONING_BEHAVIOR_AUTO_UPGRADE` versioning behavior.
   --deploymentbuildId: string # Build ID changes with each version of the worker when the worker program code and/or config  changes.
 ]: nothing -> record<deploymentInfo: record<deployment: record<seriesName: string, buildId: string>, createTime: string, taskQueueInfos: list<record>, metadata: record, isCurrent: bool>, reachability: string, lastUpdateTime: string> {
@@ -4915,7 +5073,7 @@ export def "namespaces-deployments-reachability GetDeploymentReachability-by-nam
   let full_url = (build-url $base $"/namespaces/($namespace)/deployments/($deployment.series_name)/($deployment.build_id)/reachability" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CountNexusOperationExecutions is a visibility API to count Nexus operations in a specific namespace.
@@ -4931,6 +5089,7 @@ export def "namespaces-nexus-operation-count CountNexusOperationExecutions-by-na
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # Visibility query, see https://docs.temporal.io/list-filter for the syntax.  See also ListNexusOperationExecutionsRequest for search attributes available for Nexus operations.
 ]: nothing -> record<count: string, groups: table<groupValues: list, count: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4939,7 +5098,7 @@ export def "namespaces-nexus-operation-count CountNexusOperationExecutions-by-na
   let full_url = (build-url $base $"/namespaces/($namespace)/nexus-operation-count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListNexusOperationExecutions is a visibility API to list Nexus operations in a specific namespace.
@@ -4955,6 +5114,7 @@ export def "namespaces-nexus-operations ListNexusOperationExecutions-by-namespac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # Max number of operations to return per page. (format: int32)
   --nextPageToken: string # Token returned in ListNexusOperationExecutionsResponse. (format: bytes)
   --qp-query: string # Visibility query, see https://docs.temporal.io/list-filter for the syntax.  Search attributes that are avaialble for Nexus operations include:  - OperationId  - RunId  - Endpoint  - Service  - Operation  - RequestId  - StartTime  - ExecutionTime  - CloseTime  - ExecutionStatus  - ExecutionDuration  - StateTransitionCount
@@ -4965,7 +5125,7 @@ export def "namespaces-nexus-operations ListNexusOperationExecutions-by-namespac
   let full_url = (build-url $base $"/namespaces/($namespace)/nexus-operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DescribeNexusOperationExecution returns information about a Nexus operation.  Supported use cases include:  - Get current operation info without waiting  - Long-poll for next state change and return new operation info  Response can optionally include operation input or outcome (if the operation has completed).
@@ -4982,6 +5142,7 @@ export def "namespaces-nexus-operations DescribeNexusOperationExecution-by-names
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --runId: string # Operation run ID. If empty the request targets the latest run.
   --includeInput: oneof<nothing, bool> # Include the input field in the response.
   --includeOutcome: oneof<nothing, bool> # Include the outcome (result/failure) in the response if the operation has completed.
@@ -4993,7 +5154,7 @@ export def "namespaces-nexus-operations DescribeNexusOperationExecution-by-names
   let full_url = (build-url $base $"/namespaces/($namespace)/nexus-operations/($operationId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # StartNexusOperationExecution starts a new Nexus operation.   Returns a `NexusOperationExecutionAlreadyStarted` error if an instance already exists with same operation ID in this  namespace unless permitted by the specified ID conflict policy.
@@ -5010,6 +5171,7 @@ export def "namespaces-nexus-operations StartNexusOperationExecution-by-namespac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --identity: string # The identity of the client who initiated this request.
   --requestId: string # A unique identifier for this caller-side start request. Typically UUIDv4.  StartOperation requests sent to the handler will use a server-generated request ID.
@@ -5035,7 +5197,7 @@ export def "namespaces-nexus-operations StartNexusOperationExecution-by-namespac
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RequestCancelNexusOperationExecution requests cancellation of a Nexus operation.   Requesting to cancel an operation does not automatically transition the operation to canceled status.  The operation will only transition to canceled status if it supports cancellation and the handler  processes the cancellation request.
@@ -5052,6 +5214,7 @@ export def "namespaces-nexus-operations-cancel RequestCancelNexusOperationExecut
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --body-operationId: string
   --runId: string # Operation run ID, targets the latest run if empty.
@@ -5067,7 +5230,7 @@ export def "namespaces-nexus-operations-cancel RequestCancelNexusOperationExecut
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PollNexusOperationExecution long-polls for a Nexus operation for a given wait stage to complete and returns  the outcome (result or failure).
@@ -5084,6 +5247,7 @@ export def "namespaces-nexus-operations-poll PollNexusOperationExecution-by-name
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --runId: string # Operation run ID. If empty the request targets the latest run.
   --waitStage: string@waitStage-completer # Stage to wait for. The operation may be in a more advanced stage when the poll is unblocked. (format: enum)
 ]: nothing -> record<runId: string, waitStage: string, operationToken: string, result: record, failure: record<message: string, source: string, stackTrace: string, encodedAttributes: record, cause: record<message: string, source: string, stackTrace: string, encodedAttributes: record, cause: any, applicationFailureInfo: record, timeoutFailureInfo: record, canceledFailureInfo: record, terminatedFailureInfo: record, serverFailureInfo: record, resetWorkflowFailureInfo: record, activityFailureInfo: record, childWorkflowExecutionFailureInfo: record, nexusOperationExecutionFailureInfo: record, nexusHandlerFailureInfo: record>, applicationFailureInfo: record<type: string, nonRetryable: bool, details: record, nextRetryDelay: string, category: string>, timeoutFailureInfo: record<timeoutType: string, lastHeartbeatDetails: record>, canceledFailureInfo: record<details: record, identity: string>, terminatedFailureInfo: record<identity: string>, serverFailureInfo: record<nonRetryable: bool>, resetWorkflowFailureInfo: record<lastHeartbeatDetails: record>, activityFailureInfo: record<scheduledEventId: string, startedEventId: string, identity: string, activityType: record, activityId: string, retryState: string>, childWorkflowExecutionFailureInfo: record<namespace: string, workflowExecution: record, workflowType: record, initiatedEventId: string, startedEventId: string, retryState: string>, nexusOperationExecutionFailureInfo: record<scheduledEventId: string, endpoint: string, service: string, operation: string, operationId: string, operationToken: string>, nexusHandlerFailureInfo: record<type: string, retryBehavior: string>>> {
@@ -5093,7 +5257,7 @@ export def "namespaces-nexus-operations-poll PollNexusOperationExecution-by-name
   let full_url = (build-url $base $"/namespaces/($namespace)/nexus-operations/($operationId)/poll" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # TerminateNexusOperationExecution terminates an existing Nexus operation immediately.   Termination happens immediately and the operation handler cannot react to it. A terminated operation will have  its outcome set to a failure with a termination reason.
@@ -5110,6 +5274,7 @@ export def "namespaces-nexus-operations-terminate TerminateNexusOperationExecuti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --body-operationId: string
   --runId: string # Operation run ID, targets the latest run if empty.
@@ -5125,7 +5290,7 @@ export def "namespaces-nexus-operations-terminate TerminateNexusOperationExecuti
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CountSchedules is a visibility API to count schedules in a specific namespace.
@@ -5141,6 +5306,7 @@ export def "namespaces-schedule-count CountSchedules-by-namespace-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # Visibility query, see https://docs.temporal.io/list-filter for the syntax.
 ]: nothing -> record<count: string, groups: table<groupValues: list, count: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5149,7 +5315,7 @@ export def "namespaces-schedule-count CountSchedules-by-namespace-1" [
   let full_url = (build-url $base $"/namespaces/($namespace)/schedule-count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all schedules in a namespace.
@@ -5165,6 +5331,7 @@ export def "namespaces-schedules ListSchedules-by-namespace-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maximumPageSize: int # How many to return at once. (format: int32)
   --nextPageToken: string # Token to get the next page of results. (format: bytes)
   --qp-query: string # Query to filter schedules.
@@ -5175,7 +5342,7 @@ export def "namespaces-schedules ListSchedules-by-namespace-1" [
   let full_url = (build-url $base $"/namespaces/($namespace)/schedules" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the schedule description and current state of an existing schedule.
@@ -5192,13 +5359,14 @@ export def "namespaces-schedules DescribeSchedule-by-namespace-scheduleId-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<schedule: record<spec: record<structuredCalendar: list, cronString: list, calendar: list, interval: list, excludeCalendar: list, excludeStructuredCalendar: list, startTime: string, endTime: string, jitter: string, timezoneName: string, timezoneData: string>, action: record<startWorkflow: record>, policies: record<overlapPolicy: string, catchupWindow: string, pauseOnFailure: bool, keepOriginalWorkflowId: bool>, state: record<notes: string, paused: bool, limitedActions: bool, remainingActions: string>>, info: record<actionCount: string, missedCatchupWindow: string, overlapSkipped: string, bufferDropped: string, bufferSize: string, runningWorkflows: list<record>, recentActions: list<record>, futureActionTimes: list<string>, createTime: string, updateTime: string, invalidScheduleError: string, stateSizeBytes: string>, memo: record<fields: record>, searchAttributes: record<indexedFields: record>, conflictToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/namespaces/($namespace)/schedules/($scheduleId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new schedule.
@@ -5216,6 +5384,7 @@ export def "namespaces-schedules CreateSchedule-by-namespace-scheduleId-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # The namespace the schedule should be created in.
   --body-scheduleId: string # The id of the new schedule.
   --schedule: any # The schedule spec, policies, action, and initial state.
@@ -5233,7 +5402,7 @@ export def "namespaces-schedules CreateSchedule-by-namespace-scheduleId-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a schedule, removing it from the system.
@@ -5250,6 +5419,7 @@ export def "namespaces-schedules DeleteSchedule-by-namespace-scheduleId-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --identity: string # The identity of the client who initiated this request.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5258,7 +5428,7 @@ export def "namespaces-schedules DeleteSchedule-by-namespace-scheduleId-1" [
   let full_url = (build-url $base $"/namespaces/($namespace)/schedules/($scheduleId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists matching times within a range.
@@ -5275,6 +5445,7 @@ export def "namespaces-schedules-matching-times ListScheduleMatchingTimes-by-nam
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startTime: string # Time range to query. (format: date-time)
   --endTime: string # format: date-time
 ]: nothing -> record<startTime: list<string>> {
@@ -5284,7 +5455,7 @@ export def "namespaces-schedules-matching-times ListScheduleMatchingTimes-by-nam
   let full_url = (build-url $base $"/namespaces/($namespace)/schedules/($scheduleId)/matching-times" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Makes a specific change to a schedule or triggers an immediate action.
@@ -5302,6 +5473,7 @@ export def "namespaces-schedules-patch PatchSchedule-by-namespace-scheduleId-1" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # The namespace of the schedule to patch.
   --body-scheduleId: string # The id of the schedule to patch.
   --patch: record # shape: {triggerImmediately?: any, backfillRequest?: list, pause?: string, unpause?: string}
@@ -5316,7 +5488,7 @@ export def "namespaces-schedules-patch PatchSchedule-by-namespace-scheduleId-1" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Changes the configuration or state of an existing schedule.
@@ -5333,6 +5505,7 @@ export def "namespaces-schedules-update UpdateSchedule-by-namespace-scheduleId-1
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # The namespace of the schedule to update.
   --body-scheduleId: string # The id of the schedule to update.
   --schedule: any # The new schedule. The four main fields of the schedule (spec, action,  policies, state) are replaced completely by the values in this message.
@@ -5350,7 +5523,7 @@ export def "namespaces-schedules-update UpdateSchedule-by-namespace-scheduleId-1
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates task queue configuration.  For the overall queue rate limit: the rate limit set by this api overrides the worker-set rate limit,  which uncouples the rate limit from the worker lifecycle.  If the overall queue rate limit is unset, the worker-set rate limit takes effect.
@@ -5367,6 +5540,7 @@ export def "namespaces-task-queues-update-config UpdateTaskQueueConfig-by-namesp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --identity: string
   --body-taskQueue: string # Selects the task queue to update.
@@ -5384,7 +5558,7 @@ export def "namespaces-task-queues-update-config UpdateTaskQueueConfig-by-namesp
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deprecated. Use `GetWorkerVersioningRules`.  Will be removed in server version v1.32.0.  Fetches the worker build id versioning sets for a task queue.
@@ -5401,6 +5575,7 @@ export def "namespaces-task-queues-worker-build-id-compatibility GetWorkerBuildI
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxSets: int # Limits how many compatible sets will be returned. Specify 1 to only return the current  default major version set. 0 returns all sets. (format: int32)
 ]: nothing -> record<majorVersionSets: table<buildIds: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5409,7 +5584,7 @@ export def "namespaces-task-queues-worker-build-id-compatibility GetWorkerBuildI
   let full_url = (build-url $base $"/namespaces/($namespace)/task-queues/($taskQueue)/worker-build-id-compatibility" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches the Build ID assignment and redirect rules for a Task Queue.  Will be removed in server version v1.32.0.
@@ -5426,13 +5601,14 @@ export def "namespaces-task-queues-worker-versioning-rules GetWorkerVersioningRu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<assignmentRules: table<rule: record, createTime: string>, compatibleRedirectRules: table<rule: record, createTime: string>, conflictToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/namespaces/($namespace)/task-queues/($taskQueue)/worker-versioning-rules")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DescribeTaskQueue returns the following information about the target task queue, broken down by Build ID:    - List of pollers    - Workflow Reachability status    - Backlog info for Workflow and/or Activity tasks
@@ -5449,6 +5625,7 @@ export def "namespaces-task-queues DescribeTaskQueue-by-namespace-task_queue.nam
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --taskQueuename: string
   --taskQueuekind: string@taskQueuekind-completer # Default: TASK_QUEUE_KIND_NORMAL. (format: enum)
   --taskQueuenormalName: string # Iff kind == TASK_QUEUE_KIND_STICKY, then this field contains the name of  the normal task queue that the sticky worker is running on.
@@ -5470,7 +5647,7 @@ export def "namespaces-task-queues DescribeTaskQueue-by-namespace-task_queue.nam
   let full_url = (build-url $base $"/namespaces/($namespace)/task-queues/($task_queue.name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # CountWorkers counts the number of workers in a specific namespace.
@@ -5486,6 +5663,7 @@ export def "namespaces-worker-count CountWorkers-by-namespace-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # Query to filter workers before counting.  Supported filter fields are the same as in ListWorkersRequest.
   --includeSystemWorkers: oneof<nothing, bool> # When true, the count will include system workers that are created implicitly  by the server and not by the user. By default, system workers are excluded.
 ]: nothing -> record<count: string> {
@@ -5495,7 +5673,7 @@ export def "namespaces-worker-count CountWorkers-by-namespace-1" [
   let full_url = (build-url $base $"/namespaces/($namespace)/worker-count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new Worker Deployment Version.   Experimental. This API might significantly change or be removed in a  future release.
@@ -5512,6 +5690,7 @@ export def "namespaces-worker-deployment-versions CreateWorkerDeploymentVersion-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --deploymentVersion: any # Required.
   --computeConfig: any # Optional. Contains the new worker compute configuration for the Worker  Deployment. Used for worker scale management.
@@ -5526,7 +5705,7 @@ export def "namespaces-worker-deployment-versions CreateWorkerDeploymentVersion-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Describes a worker deployment version.  Experimental. This API might significantly change or be removed in a future release.
@@ -5544,6 +5723,7 @@ export def "namespaces-worker-deployment-versions DescribeWorkerDeploymentVersio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # Deprecated. Use `deployment_version`.
   --deploymentVersionbuildId: string # A unique identifier for this Version within the Deployment it is a part of.  Not necessarily unique within the namespace.  The combination of `deployment_name` and `build_id` uniquely identifies this  Version within the namespace, because Deployment names are unique within a namespace.
   --deploymentVersiondeploymentName: string # Identifies the Worker Deployment this Version is part of.
@@ -5555,7 +5735,7 @@ export def "namespaces-worker-deployment-versions DescribeWorkerDeploymentVersio
   let full_url = (build-url $base $"/namespaces/($namespace)/worker-deployment-versions/($deployment_version.deployment_name)/($deployment_version.build_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Used for manual deletion of Versions. User can delete a Version only when all the  following conditions are met:   - It is not the Current or Ramping Version of its Deployment.   - It has no active pollers (none of the task queues in the Version have pollers)   - It is not draining (see WorkerDeploymentVersionInfo.drainage_info). This condition     can be skipped by passing `skip-drainage=true`.  Experimental. This API might significantly change or be removed in a future release.
@@ -5573,6 +5753,7 @@ export def "namespaces-worker-deployment-versions DeleteWorkerDeploymentVersion-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # Deprecated. Use `deployment_version`.
   --deploymentVersionbuildId: string # A unique identifier for this Version within the Deployment it is a part of.  Not necessarily unique within the namespace.  The combination of `deployment_name` and `build_id` uniquely identifies this  Version within the namespace, because Deployment names are unique within a namespace.
   --deploymentVersiondeploymentName: string # Identifies the Worker Deployment this Version is part of.
@@ -5585,7 +5766,7 @@ export def "namespaces-worker-deployment-versions DeleteWorkerDeploymentVersion-
   let full_url = (build-url $base $"/namespaces/($namespace)/worker-deployment-versions/($deployment_version.deployment_name)/($deployment_version.build_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the compute config attached to a Worker Deployment Version.  Experimental. This API might significantly change or be removed in a future release.
@@ -5603,6 +5784,7 @@ export def "namespaces-worker-deployment-versions-update-compute-config UpdateWo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --deploymentVersion: any # Required.
   --computeConfigScalingGroups: record # Optional. Contains the compute config scaling groups to add or update for the Worker  Deployment.
@@ -5618,7 +5800,7 @@ export def "namespaces-worker-deployment-versions-update-compute-config UpdateWo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the user-given metadata attached to a Worker Deployment Version.  Experimental. This API might significantly change or be removed in a future release.
@@ -5636,6 +5818,7 @@ export def "namespaces-worker-deployment-versions-update-metadata UpdateWorkerDe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --version: string # Deprecated. Use `deployment_version`.
   --deploymentVersion: any # Required.
@@ -5651,7 +5834,7 @@ export def "namespaces-worker-deployment-versions-update-metadata UpdateWorkerDe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validates the compute config without attaching it to a Worker Deployment Version.  Experimental. This API might significantly change or be removed in a future release.
@@ -5669,6 +5852,7 @@ export def "namespaces-worker-deployment-versions-validate-compute-config Valida
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --deploymentVersion: any # Required.
   --computeConfigScalingGroups: record # Optional. Contains the compute config scaling groups to add or update for the Worker  Deployment.
@@ -5683,7 +5867,7 @@ export def "namespaces-worker-deployment-versions-validate-compute-config Valida
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists all Worker Deployments that are tracked in the Namespace.  Experimental. This API might significantly change or be removed in a future release.
@@ -5699,6 +5883,7 @@ export def "namespaces-worker-deployments ListWorkerDeployments-by-namespace-1" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # format: int32
   --nextPageToken: string # format: bytes
 ]: nothing -> record<nextPageToken: string, workerDeployments: table<name: string, createTime: string, routingConfig: record, latestVersionSummary: record, currentVersionSummary: record, rampingVersionSummary: record>> {
@@ -5708,7 +5893,7 @@ export def "namespaces-worker-deployments ListWorkerDeployments-by-namespace-1" 
   let full_url = (build-url $base $"/namespaces/($namespace)/worker-deployments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Describes a Worker Deployment.  Experimental. This API might significantly change or be removed in a future release.
@@ -5725,13 +5910,14 @@ export def "namespaces-worker-deployments DescribeWorkerDeployment-by-namespace-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<conflictToken: string, workerDeploymentInfo: record<name: string, versionSummaries: list<record>, createTime: string, routingConfig: record<currentDeploymentVersion: record, currentVersion: string, rampingDeploymentVersion: record, rampingVersion: string, rampingVersionPercentage: float, currentVersionChangedTime: string, rampingVersionChangedTime: string, rampingVersionPercentageChangedTime: string, revisionNumber: string>, lastModifierIdentity: string, managerIdentity: string, routingConfigUpdateState: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/namespaces/($namespace)/worker-deployments/($deploymentName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new Worker Deployment.   Experimental. This API might significantly change or be removed in a  future release.
@@ -5748,6 +5934,7 @@ export def "namespaces-worker-deployments CreateWorkerDeployment-by-namespace-de
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --body-deploymentName: string # The name of the Worker Deployment to create. If a Worker Deployment with  this name already exists, an error will be returned.
   --identity: string # Optional. The identity of the client who initiated this request.
@@ -5761,7 +5948,7 @@ export def "namespaces-worker-deployments CreateWorkerDeployment-by-namespace-de
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes records of (an old) Deployment. A deployment can only be deleted if  it has no Version in it.  Experimental. This API might significantly change or be removed in a future release.
@@ -5778,6 +5965,7 @@ export def "namespaces-worker-deployments DeleteWorkerDeployment-by-namespace-de
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --identity: string # Optional. The identity of the client who initiated this request.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5786,7 +5974,7 @@ export def "namespaces-worker-deployments DeleteWorkerDeployment-by-namespace-de
   let full_url = (build-url $base $"/namespaces/($namespace)/worker-deployments/($deploymentName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set/unset the Current Version of a Worker Deployment. Automatically unsets the Ramping  Version if it is the Version being set as Current.  Experimental. This API might significantly change or be removed in a future release.
@@ -5803,6 +5991,7 @@ export def "namespaces-worker-deployments-set-current-version SetWorkerDeploymen
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --body-deploymentName: string
   --version: string # Deprecated. Use `build_id`.
@@ -5820,7 +6009,7 @@ export def "namespaces-worker-deployments-set-current-version SetWorkerDeploymen
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set/unset the ManagerIdentity of a Worker Deployment.  Experimental. This API might significantly change or be removed in a future release.
@@ -5837,6 +6026,7 @@ export def "namespaces-worker-deployments-set-manager SetWorkerDeploymentManager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --body-deploymentName: string
   --managerIdentity: string # Arbitrary value for `manager_identity`.  Empty will unset the field.
@@ -5852,7 +6042,7 @@ export def "namespaces-worker-deployments-set-manager SetWorkerDeploymentManager
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set/unset the Ramping Version of a Worker Deployment and its ramp percentage. Can be used for  gradual ramp to unversioned workers too.  Experimental. This API might significantly change or be removed in a future release.
@@ -5869,6 +6059,7 @@ export def "namespaces-worker-deployments-set-ramping-version SetWorkerDeploymen
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --body-deploymentName: string
   --version: string # Deprecated. Use `build_id`.
@@ -5887,7 +6078,7 @@ export def "namespaces-worker-deployments-set-ramping-version SetWorkerDeploymen
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deprecated. Use `DescribeTaskQueue`.  Will be removed in server version v1.32.0.   Fetches task reachability to determine whether a worker may be retired.  The request may specify task queues to query for or let the server fetch all task queues mapped to the given  build IDs.   When requesting a large number of task queues or all task queues associated with the given build ids in a  namespace, all task queues will be listed in the response but some of them may not contain reachability  information due to a server enforced limit. When reaching the limit, task queues that reachability information  could not be retrieved for will be marked with a single TASK_REACHABILITY_UNSPECIFIED entry. The caller may issue  another call to get the reachability for those task queues.   Open source users can adjust this limit by setting the server's dynamic config value for  `limit.reachabilityTaskQueueScan` with the caveat that this call can strain the visibility store.
@@ -5903,6 +6094,7 @@ export def "namespaces-worker-task-reachability GetWorkerTaskReachability-by-nam
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --buildIds: list # Build ids to retrieve reachability for. An empty string will be interpreted as an unversioned worker.  The number of build ids that can be queried in a single API call is limited.  Open source users can adjust this limit by setting the server's dynamic config value for  `limit.reachabilityQueryBuildIds` with the caveat that this call can strain the visibility store.
   --taskQueues: list # Task queues to retrieve reachability for. Leave this empty to query for all task queues associated with given  build ids in the namespace.  Must specify at least one task queue if querying for an unversioned worker.  The number of task queues that the server will fetch reachability information for is limited.  See the `GetWorkerTaskReachabilityResponse` documentation for more information.
   --reachability: string@reachability-completer # Type of reachability to query for.  `TASK_REACHABILITY_NEW_WORKFLOWS` is always returned in the response.  Use `TASK_REACHABILITY_EXISTING_WORKFLOWS` if your application needs to respond to queries on closed workflows.  Otherwise, use `TASK_REACHABILITY_OPEN_WORKFLOWS`. Default is `TASK_REACHABILITY_EXISTING_WORKFLOWS` if left  unspecified.  See the TaskReachability docstring for information about each enum variant. (format: enum)
@@ -5913,7 +6105,7 @@ export def "namespaces-worker-task-reachability GetWorkerTaskReachability-by-nam
   let full_url = (build-url $base $"/namespaces/($namespace)/worker-task-reachability" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListWorkers is a visibility API to list worker status information in a specific namespace.
@@ -5929,6 +6121,7 @@ export def "namespaces-workers ListWorkers-by-namespace-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # format: int32
   --nextPageToken: string # format: bytes
   --qp-query: string # `query` in ListWorkers is used to filter workers based on worker attributes.  Supported attributes: * WorkerInstanceKey * WorkerIdentity * HostName * TaskQueue * DeploymentName * BuildId * SdkName * SdkVersion * StartTime * Status
@@ -5940,7 +6133,7 @@ export def "namespaces-workers ListWorkers-by-namespace-1" [
   let full_url = (build-url $base $"/namespaces/($namespace)/workers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DescribeWorker returns information about the specified worker.
@@ -5957,13 +6150,14 @@ export def "namespaces-workers-describe DescribeWorker-by-namespace-workerInstan
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<workerInfo: record<workerHeartbeat: record<workerInstanceKey: string, workerIdentity: string, hostInfo: record, taskQueue: string, deploymentVersion: record, sdkName: string, sdkVersion: string, status: string, startTime: string, heartbeatTime: string, elapsedSinceLastHeartbeat: string, workflowTaskSlotsInfo: record, activityTaskSlotsInfo: record, nexusTaskSlotsInfo: record, localActivitySlotsInfo: record, workflowPollerInfo: record, workflowStickyPollerInfo: record, activityPollerInfo: record, nexusPollerInfo: record, totalStickyCacheHit: int, totalStickyCacheMiss: int, currentStickyCacheSize: int, plugins: list, drivers: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/namespaces/($namespace)/workers/describe/($workerInstanceKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # FetchWorkerConfig returns the worker configuration for a specific worker.
@@ -5979,6 +6173,7 @@ export def "namespaces-workers-fetch-config FetchWorkerConfig-by-namespace-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace this worker belongs to.
   --identity: string # The identity of the client who initiated this request.
   --reason: string # Reason for sending worker command, can be used for audit purpose.
@@ -5993,7 +6188,7 @@ export def "namespaces-workers-fetch-config FetchWorkerConfig-by-namespace-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # WorkerHeartbeat receive heartbeat request from the worker.
@@ -6010,6 +6205,7 @@ export def "namespaces-workers-heartbeat RecordWorkerHeartbeat-by-namespace-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace this worker belongs to.
   --identity: string # The identity of the client who initiated this request.
   --workerHeartbeat: list # item shape: {workerInstanceKey?: string, workerIdentity?: string, hostInfo?: any, taskQueue?: string, deploymentVersion?: record, sdkName?: string, sdkVersion?: string, status?: "WORKER_STATUS_UNSPECIFIED"|"WORKER_STATUS_RUNNING"|"WORKER_STATUS_SHUTTING_DOWN"|"WORKER_STATUS_SHUTDOWN", startTime?: string, heartbeatTime?: string, elapsedSinceLastHeartbeat?: string, workflowTaskSlotsInfo?: record, activityTaskSlotsInfo?: record, nexusTaskSlotsInfo?: record, localActivitySlotsInfo?: record, workflowPollerInfo?: record, workflowStickyPollerInfo?: record, activityPollerInfo?: record, nexusPollerInfo?: record, totalStickyCacheHit?: int, totalStickyCacheMiss?: int, currentStickyCacheSize?: int, plugins?: list, drivers?: list}
@@ -6023,7 +6219,7 @@ export def "namespaces-workers-heartbeat RecordWorkerHeartbeat-by-namespace-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # UpdateWorkerConfig updates the worker configuration of one or more workers.  Can be used to partially update the worker configuration.  Can be used to update the configuration of multiple workers.
@@ -6039,6 +6235,7 @@ export def "namespaces-workers-update-config UpdateWorkerConfig-by-namespace-1" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace this worker belongs to.
   --identity: string # The identity of the client who initiated this request.
   --reason: string # Reason for sending worker command, can be used for audit purpose.
@@ -6055,7 +6252,7 @@ export def "namespaces-workers-update-config UpdateWorkerConfig-by-namespace-1" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # CountWorkflowExecutions is a visibility API to count of workflow executions in a specific namespace.
@@ -6071,6 +6268,7 @@ export def "namespaces-workflow-count CountWorkflowExecutions-by-namespace-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string
 ]: nothing -> record<count: string, groups: table<groupValues: list, count: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6079,7 +6277,7 @@ export def "namespaces-workflow-count CountWorkflowExecutions-by-namespace-1" [
   let full_url = (build-url $base $"/namespaces/($namespace)/workflow-count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return all namespace workflow rules
@@ -6095,6 +6293,7 @@ export def "namespaces-workflow-rules ListWorkflowRules-by-namespace-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --nextPageToken: string # format: bytes
 ]: nothing -> record<rules: table<createTime: string, spec: record, createdByIdentity: string, description: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6103,7 +6302,7 @@ export def "namespaces-workflow-rules ListWorkflowRules-by-namespace-1" [
   let full_url = (build-url $base $"/namespaces/($namespace)/workflow-rules" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new workflow rule. The rules are used to control the workflow execution.  The rule will be applied to all running and new workflows in the namespace.  If the rule with such ID already exist this call will fail  Note: the rules are part of namespace configuration and will be stored in the namespace config.  Namespace config is eventually consistent.
@@ -6119,6 +6318,7 @@ export def "namespaces-workflow-rules CreateWorkflowRule-by-namespace-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --spec: any # The rule specification .
   --forceScan: oneof<nothing, bool> # If true, the rule will be applied to the currently running workflows via batch job.  If not set , the rule will only be applied when triggering condition is satisfied.  visibility_query in the rule will be used to select the workflows to apply the rule to.
@@ -6134,7 +6334,7 @@ export def "namespaces-workflow-rules CreateWorkflowRule-by-namespace-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DescribeWorkflowRule return the rule specification for existing rule id.  If there is no rule with such id - NOT FOUND error will be returned.
@@ -6151,13 +6351,14 @@ export def "namespaces-workflow-rules DescribeWorkflowRule-by-namespace-ruleId-1
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<rule: record<createTime: string, spec: record<id: string, activityStart: record, visibilityQuery: string, actions: list, expirationTime: string>, createdByIdentity: string, description: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/namespaces/($namespace)/workflow-rules/($ruleId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete rule by rule id
@@ -6174,13 +6375,14 @@ export def "namespaces-workflow-rules DeleteWorkflowRule-by-namespace-ruleId-1" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/namespaces/($namespace)/workflow-rules/($ruleId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ListWorkflowExecutions is a visibility API to list workflow executions in a specific namespace.
@@ -6196,6 +6398,7 @@ export def "namespaces-workflows ListWorkflowExecutions-by-namespace-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageSize: int # format: int32
   --nextPageToken: string # format: bytes
   --qp-query: string
@@ -6206,7 +6409,7 @@ export def "namespaces-workflows ListWorkflowExecutions-by-namespace-1" [
   let full_url = (build-url $base $"/namespaces/($namespace)/workflows" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DescribeWorkflowExecution returns information about the specified workflow execution.
@@ -6223,6 +6426,7 @@ export def "namespaces-workflows DescribeWorkflowExecution-by-namespace-executio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --executionworkflowId: string
   --executionrunId: string
 ]: nothing -> record<executionConfig: record<taskQueue: record<name: string, kind: string, normalName: string>, workflowExecutionTimeout: string, workflowRunTimeout: string, defaultWorkflowTaskTimeout: string, userMetadata: record<summary: record, details: record>>, workflowExecutionInfo: record<execution: record<workflowId: string, runId: string>, type: record<name: string>, startTime: string, closeTime: string, status: string, historyLength: string, parentNamespaceId: string, parentExecution: record<workflowId: string, runId: string>, executionTime: string, memo: record<fields: record>, searchAttributes: record<indexedFields: record>, autoResetPoints: record<points: list>, taskQueue: string, stateTransitionCount: string, historySizeBytes: string, mostRecentWorkerVersionStamp: record<buildId: string, useVersioning: bool>, executionDuration: string, rootExecution: record<workflowId: string, runId: string>, assignedBuildId: string, inheritedBuildId: string, firstRunId: string, versioningInfo: record<behavior: string, deployment: record, version: string, deploymentVersion: record, versioningOverride: record, deploymentTransition: record, versionTransition: record, revisionNumber: string, continueAsNewInitialVersioningBehavior: string>, workerDeploymentName: string, priority: record<priorityKey: int, fairnessKey: string, fairnessWeight: float>, externalPayloadSizeBytes: string, externalPayloadCount: string>, pendingActivities: table<activityId: string, activityType: record, state: string, heartbeatDetails: record, lastHeartbeatTime: string, lastStartedTime: string, attempt: int, maximumAttempts: int, scheduledTime: string, expirationTime: string, lastFailure: record, lastWorkerIdentity: string, lastIndependentlyAssignedBuildId: string, lastWorkerVersionStamp: record, currentRetryInterval: string, lastAttemptCompleteTime: string, nextAttemptScheduleTime: string, paused: bool, lastDeployment: record, lastWorkerDeploymentVersion: string, lastDeploymentVersion: record, priority: record, pauseInfo: record, activityOptions: record>, pendingChildren: table<workflowId: string, runId: string, workflowTypeName: string, initiatedId: string, parentClosePolicy: string>, pendingWorkflowTask: record<state: string, scheduledTime: string, originalScheduledTime: string, startedTime: string, attempt: int>, callbacks: table<callback: record, registrationTime: string, state: string, attempt: int, lastAttemptCompleteTime: string, lastAttemptFailure: record, nextAttemptScheduleTime: string, blockedReason: string>, pendingNexusOperations: table<endpoint: string, service: string, operation: string, operationId: string, scheduleToCloseTimeout: string, scheduledTime: string, state: string, attempt: int, lastAttemptCompleteTime: string, lastAttemptFailure: record, nextAttemptScheduleTime: string, cancellationInfo: record, scheduledEventId: string, blockedReason: string, operationToken: string, scheduleToStartTimeout: string, startToCloseTimeout: string>, workflowExtendedInfo: record<executionExpirationTime: string, runExpirationTime: string, cancelRequested: bool, lastResetTime: string, originalStartTime: string, resetRunId: string, requestIdInfos: record, pauseInfo: record<identity: string, pausedTime: string, reason: string>>> {
@@ -6232,7 +6436,7 @@ export def "namespaces-workflows DescribeWorkflowExecution-by-namespace-executio
   let full_url = (build-url $base $"/namespaces/($namespace)/workflows/($execution.workflow_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GetWorkflowExecutionHistory returns the history of specified workflow execution. Fails with  `NotFound` if the specified workflow execution is unknown to the service.
@@ -6249,6 +6453,7 @@ export def "namespaces-workflows-history GetWorkflowExecutionHistory-by-namespac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --executionworkflowId: string
   --executionrunId: string
   --maximumPageSize: int # format: int32
@@ -6263,7 +6468,7 @@ export def "namespaces-workflows-history GetWorkflowExecutionHistory-by-namespac
   let full_url = (build-url $base $"/namespaces/($namespace)/workflows/($execution.workflow_id)/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GetWorkflowExecutionHistoryReverse returns the history of specified workflow execution in reverse  order (starting from last event). Fails with`NotFound` if the specified workflow execution is  unknown to the service.
@@ -6280,6 +6485,7 @@ export def "namespaces-workflows-history-reverse GetWorkflowExecutionHistoryReve
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --executionworkflowId: string
   --executionrunId: string
   --maximumPageSize: int # format: int32
@@ -6291,7 +6497,7 @@ export def "namespaces-workflows-history-reverse GetWorkflowExecutionHistoryReve
   let full_url = (build-url $base $"/namespaces/($namespace)/workflows/($execution.workflow_id)/history-reverse" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # QueryWorkflow requests a query be executed for a specified workflow execution.
@@ -6311,6 +6517,7 @@ export def "namespaces-workflows-query QueryWorkflow-by-namespace-execution.work
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --execution: record # Identifies a specific workflow within a namespace. Practically speaking, because run_id is a  uuid, a workflow execution is globally unique. Note that many commands allow specifying an empty  run id as a way of saying "target the latest run of the workflow". — shape: {workflowId?: string, runId?: string}
   --body-query: record # See https://docs.temporal.io/docs/concepts/queries/ — shape: {queryType?: string, queryArgs?: any, header?: any}
@@ -6324,7 +6531,7 @@ export def "namespaces-workflows-query QueryWorkflow-by-namespace-execution.work
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # TriggerWorkflowRule allows to:   * trigger existing rule for a specific workflow execution;   * trigger rule for a specific workflow execution without creating a rule;  This is useful for one-off operations.
@@ -6341,6 +6548,7 @@ export def "namespaces-workflows-trigger-rule TriggerWorkflowRule-by-namespace-e
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --execution: any # Execution info of the workflow which scheduled this activity
   --id: string
@@ -6355,7 +6563,7 @@ export def "namespaces-workflows-trigger-rule TriggerWorkflowRule-by-namespace-e
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # StartWorkflowExecution starts a new workflow execution.   It will create the execution with a `WORKFLOW_EXECUTION_STARTED` event in its history and  also schedule the first workflow task. Returns `WorkflowExecutionAlreadyStarted`, if an  instance already exists with same workflow id.
@@ -6380,6 +6588,7 @@ export def "namespaces-workflows StartWorkflowExecution-by-namespace-workflowId-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --body-workflowId: string
   --workflowType: record # Represents the identifier used by a workflow author to define the workflow. Typically, the  name of a function. This is sometimes referred to as the workflow's "name" — shape: {name?: string}
@@ -6418,7 +6627,7 @@ export def "namespaces-workflows StartWorkflowExecution-by-namespace-workflowId-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # See `RespondActivityTaskCompleted`. This version allows clients to record completions by  namespace/workflow id/activity id instead of task token.   (-- api-linter: core::0136::prepositions=disabled      aip.dev/not-precedent: "By" is used to indicate request type. --)
@@ -6436,6 +6645,7 @@ export def "namespaces-workflows-activities-complete RespondActivityTaskComplete
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity
   --body-workflowId: string # Id of the workflow which scheduled this activity, leave empty to target a standalone activity
   --runId: string # For a workflow activity - the run ID of the workflow which scheduled this activity.  For a standalone activity - the run ID of the activity.
@@ -6452,7 +6662,7 @@ export def "namespaces-workflows-activities-complete RespondActivityTaskComplete
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # See `RecordActivityTaskFailed`. This version allows clients to record failures by  namespace/workflow id/activity id instead of task token.   (-- api-linter: core::0136::prepositions=disabled      aip.dev/not-precedent: "By" is used to indicate request type. --)
@@ -6470,6 +6680,7 @@ export def "namespaces-workflows-activities-fail RespondActivityTaskFailedById-b
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity
   --body-workflowId: string # Id of the workflow which scheduled this activity, leave empty to target a standalone activity
   --runId: string # For a workflow activity - the run ID of the workflow which scheduled this activity.  For a standalone activity - the run ID of the activity.
@@ -6487,7 +6698,7 @@ export def "namespaces-workflows-activities-fail RespondActivityTaskFailedById-b
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # See `RecordActivityTaskHeartbeat`. This version allows clients to record heartbeats by  namespace/workflow id/activity id instead of task token.   (-- api-linter: core::0136::prepositions=disabled      aip.dev/not-precedent: "By" is used to indicate request type. --)
@@ -6505,6 +6716,7 @@ export def "namespaces-workflows-activities-heartbeat RecordActivityTaskHeartbea
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity
   --body-workflowId: string # Id of the workflow which scheduled this activity, leave empty to target a standalone activity
   --runId: string # For a workflow activity - the run ID of the workflow which scheduled this activity.  For a standalone activity - the run ID of the activity.
@@ -6521,7 +6733,7 @@ export def "namespaces-workflows-activities-heartbeat RecordActivityTaskHeartbea
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PauseActivityExecution pauses the execution of an activity specified by its ID.  This API can be used to target a workflow activity or a standalone activity   Pausing an activity means:  - If the activity is currently waiting for a retry or is running and subsequently fails,    it will not be rescheduled until it is unpaused.  - If the activity is already paused, calling this method will have no effect.  - If the activity is running and finishes successfully, the activity will be completed.  - If the activity is running and finishes with failure:    * if there is no retry left - the activity will be completed.    * if there are more retries left - the activity will be paused.  For long-running activities:  - activities in paused state will send a cancellation with "activity_paused" set to 'true' in response to 'RecordActivityTaskHeartbeat'.   Returns a `NotFound` error if there is no pending activity with the provided ID
@@ -6539,6 +6751,7 @@ export def "namespaces-workflows-activities-pause PauseActivityExecution-by-name
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity.
   --body-workflowId: string # If provided, pause a workflow activity (or activities) for the given workflow ID.  If empty, targets a standalone activity.
   --body-activityId: string # The ID of the activity to target.
@@ -6556,7 +6769,7 @@ export def "namespaces-workflows-activities-pause PauseActivityExecution-by-name
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ResetActivityExecution resets the execution of an activity specified by its ID.  This API can be used to target a workflow activity or a standalone activity.   Resetting an activity means:  * number of attempts will be reset to 0.  * activity timeouts will be reset.  * if the activity is waiting for retry, and it is not paused or 'keep_paused' is not provided:     it will be scheduled immediately (* see 'jitter' flag)   Returns a `NotFound` error if there is no pending activity with the provided ID or type.
@@ -6574,6 +6787,7 @@ export def "namespaces-workflows-activities-reset ResetActivityExecution-by-name
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity.
   --body-workflowId: string # If provided, targets a workflow activity for the given workflow ID.  If empty, targets a standalone activity.
   --body-activityId: string # The ID of the activity to target.
@@ -6593,7 +6807,7 @@ export def "namespaces-workflows-activities-reset ResetActivityExecution-by-name
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # See `RespondActivityTaskCanceled`. This version allows clients to record failures by  namespace/workflow id/activity id instead of task token.   (-- api-linter: core::0136::prepositions=disabled      aip.dev/not-precedent: "By" is used to indicate request type. --)
@@ -6611,6 +6825,7 @@ export def "namespaces-workflows-activities-resolve-as-canceled RespondActivityT
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity
   --body-workflowId: string # Id of the workflow which scheduled this activity, leave empty to target a standalone activity
   --runId: string # For a workflow activity - the run ID of the workflow which scheduled this activity.  For a standalone activity - the run ID of the activity.
@@ -6628,7 +6843,7 @@ export def "namespaces-workflows-activities-resolve-as-canceled RespondActivityT
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # UnpauseActivityExecution unpauses the execution of an activity specified by its ID.  This API can be used to target a workflow activity or a standalone activity.   If activity is not paused, this call will have no effect.  If the activity was paused while waiting for retry, it will be scheduled immediately (* see 'jitter' flag).  Once the activity is unpaused, all timeout timers will be regenerated.   Returns a `NotFound` error if there is no pending activity with the provided ID
@@ -6646,6 +6861,7 @@ export def "namespaces-workflows-activities-unpause UnpauseActivityExecution-by-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity.
   --body-workflowId: string # If provided, targets a workflow activity for the given workflow ID.  If empty, targets a standalone activity.
   --body-activityId: string # The ID of the activity to target.
@@ -6665,7 +6881,7 @@ export def "namespaces-workflows-activities-unpause UnpauseActivityExecution-by-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # UpdateActivityExecutionOptions is called by the client to update the options of an activity by its ID.  This API can be used to target a workflow activity or a standalone activity.
@@ -6683,6 +6899,7 @@ export def "namespaces-workflows-activities-update-options UpdateActivityExecuti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow which scheduled this activity
   --body-workflowId: string # If provided, targets a workflow activity for the given workflow ID.  If empty, targets a standalone activity.
   --body-activityId: string # The ID of the activity to target.
@@ -6701,7 +6918,7 @@ export def "namespaces-workflows-activities-update-options UpdateActivityExecuti
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Note: This is an experimental API and the behavior may change in a future release.  PauseWorkflowExecution pauses the workflow execution specified in the request. Pausing a workflow execution results in  - The workflow execution status changes to `PAUSED` and a new WORKFLOW_EXECUTION_PAUSED event is added to the history  - No new workflow tasks or activity tasks are dispatched.    - Any workflow task currently executing on the worker will be allowed to complete.    - Any activity task currently executing will be paused.  - All server-side events will continue to be processed by the server.  - Queries & Updates on a paused workflow will be rejected.
@@ -6718,6 +6935,7 @@ export def "namespaces-workflows-pause PauseWorkflowExecution-by-namespace-workf
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow to pause.
   --body-workflowId: string # ID of the workflow execution to be paused. Required.
   --runId: string # Run ID of the workflow execution to be paused. Optional. If not provided, the current run of the workflow will be paused.
@@ -6733,7 +6951,7 @@ export def "namespaces-workflows-pause PauseWorkflowExecution-by-namespace-workf
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SignalWithStartWorkflowExecution is used to ensure a signal is sent to a workflow, even if  it isn't yet started.   If the workflow is running, a `WORKFLOW_EXECUTION_SIGNALED` event is recorded in the history  and a workflow task is generated.   If the workflow is not running or not found, then the workflow is created with  `WORKFLOW_EXECUTION_STARTED` and `WORKFLOW_EXECUTION_SIGNALED` events in its history, and a  workflow task is generated.   (-- api-linter: core::0136::prepositions=disabled      aip.dev/not-precedent: "With" is used to indicate combined operation. --)
@@ -6756,6 +6974,7 @@ export def "namespaces-workflows-signal-with-start SignalWithStartWorkflowExecut
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --body-workflowId: string
   --workflowType: record # Represents the identifier used by a workflow author to define the workflow. Typically, the  name of a function. This is sometimes referred to as the workflow's "name" — shape: {name?: string}
@@ -6791,7 +7010,7 @@ export def "namespaces-workflows-signal-with-start SignalWithStartWorkflowExecut
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Note: This is an experimental API and the behavior may change in a future release.  UnpauseWorkflowExecution unpauses a previously paused workflow execution specified in the request.  Unpausing a workflow execution results in  - The workflow execution status changes to `RUNNING` and a new WORKFLOW_EXECUTION_UNPAUSED event is added to the history  - Workflow tasks and activity tasks are resumed.
@@ -6808,6 +7027,7 @@ export def "namespaces-workflows-unpause UnpauseWorkflowExecution-by-namespace-w
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # Namespace of the workflow to unpause.
   --body-workflowId: string # ID of the workflow execution to be paused. Required.
   --runId: string # Run ID of the workflow execution to be paused. Optional. If not provided, the current run of the workflow will be paused.
@@ -6823,7 +7043,7 @@ export def "namespaces-workflows-unpause UnpauseWorkflowExecution-by-namespace-w
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # RequestCancelWorkflowExecution is called by workers when they want to request cancellation of  a workflow execution.   This results in a new `WORKFLOW_EXECUTION_CANCEL_REQUESTED` event being written to the  workflow history and a new workflow task created for the workflow. It returns success if the requested  workflow is already closed. It fails with 'NotFound' if the requested workflow doesn't exist.
@@ -6842,6 +7062,7 @@ export def "namespaces-workflows-cancel RequestCancelWorkflowExecution-by-namesp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --workflowExecution: record # Identifies a specific workflow within a namespace. Practically speaking, because run_id is a  uuid, a workflow execution is globally unique. Note that many commands allow specifying an empty  run id as a way of saying "target the latest run of the workflow". — shape: {workflowId?: string, runId?: string}
   --identity: string # The identity of the worker/client
@@ -6858,7 +7079,7 @@ export def "namespaces-workflows-cancel RequestCancelWorkflowExecution-by-namesp
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # ResetWorkflowExecution will reset an existing workflow execution to a specified  `WORKFLOW_TASK_COMPLETED` event (exclusive). It will immediately terminate the current  execution instance. "Exclusive" means the identified completed event itself is not replayed  in the reset history; the preceding `WORKFLOW_TASK_STARTED` event remains and will be marked as failed  immediately, and a new workflow task will be scheduled to retry it.
@@ -6876,6 +7097,7 @@ export def "namespaces-workflows-reset ResetWorkflowExecution-by-namespace-workf
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --workflowExecution: any # The workflow to reset. If this contains a run ID then the workflow will be reset back to the  provided event ID in that run. Otherwise it will be reset to the provided event ID in the  current run. In all cases the current run will be terminated and a new run started.
   --reason: string
@@ -6894,7 +7116,7 @@ export def "namespaces-workflows-reset ResetWorkflowExecution-by-namespace-workf
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # SignalWorkflowExecution is used to send a signal to a running workflow execution.   This results in a `WORKFLOW_EXECUTION_SIGNALED` event recorded in the history and a workflow  task being created for the execution.
@@ -6914,6 +7136,7 @@ export def "namespaces-workflows-signal SignalWorkflowExecution-by-namespace-wor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --workflowExecution: record # Identifies a specific workflow within a namespace. Practically speaking, because run_id is a  uuid, a workflow execution is globally unique. Note that many commands allow specifying an empty  run id as a way of saying "target the latest run of the workflow". — shape: {workflowId?: string, runId?: string}
   --body-signalName: string # The workflow author-defined name of the signal to send to the workflow
@@ -6932,7 +7155,7 @@ export def "namespaces-workflows-signal SignalWorkflowExecution-by-namespace-wor
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # TerminateWorkflowExecution terminates an existing workflow execution by recording a  `WORKFLOW_EXECUTION_TERMINATED` event in the history and immediately terminating the  execution instance.
@@ -6951,6 +7174,7 @@ export def "namespaces-workflows-terminate TerminateWorkflowExecution-by-namespa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string
   --workflowExecution: record # Identifies a specific workflow within a namespace. Practically speaking, because run_id is a  uuid, a workflow execution is globally unique. Note that many commands allow specifying an empty  run id as a way of saying "target the latest run of the workflow". — shape: {workflowId?: string, runId?: string}
   --reason: string
@@ -6967,7 +7191,7 @@ export def "namespaces-workflows-terminate TerminateWorkflowExecution-by-namespa
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # UpdateWorkflowExecutionOptions partially updates the WorkflowExecutionOptions of an existing workflow execution.
@@ -6984,6 +7208,7 @@ export def "namespaces-workflows-update-options UpdateWorkflowExecutionOptions-b
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # The namespace name of the target Workflow.
   --workflowExecution: any # The target Workflow Id and (optionally) a specific Run Id thereof.  (-- api-linter: core::0203::optional=disabled      aip.dev/not-precedent: false positive triggered by the word "optional" --)
   --workflowExecutionOptions: any # Workflow Execution options. Partial updates are accepted and controlled by update_mask.
@@ -6998,7 +7223,7 @@ export def "namespaces-workflows-update-options UpdateWorkflowExecutionOptions-b
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invokes the specified Update function on user Workflow code.
@@ -7016,6 +7241,7 @@ export def "namespaces-workflows-update UpdateWorkflowExecution-by-namespace-wor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-namespace: string # The namespace name of the target Workflow.
   --workflowExecution: any # The target Workflow Id and (optionally) a specific Run Id thereof.  (-- api-linter: core::0203::optional=disabled      aip.dev/not-precedent: false positive triggered by the word "optional" --)
   --firstExecutionRunId: string # If set, this call will error if the most recent (if no Run Id is set on  `workflow_execution`), or specified (if it is) Workflow Execution is not  part of the same execution chain as this Id.
@@ -7030,7 +7256,7 @@ export def "namespaces-workflows-update UpdateWorkflowExecution-by-namespace-wor
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GetSystemInfo returns information about the system.
@@ -7045,11 +7271,12 @@ export def "system-info GetSystemInfo-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<serverVersion: string, capabilities: record<signalAndQueryHeader: bool, internalErrorDifferentiation: bool, activityFailureIncludeHeartbeat: bool, supportsSchedules: bool, encodedFailureAttributes: bool, buildIdBasedVersioning: bool, upsertMemo: bool, eagerWorkflowStart: bool, sdkMetadata: bool, countGroupByExecutionStatus: bool, nexus: bool, serverScaledDeployments: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system-info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

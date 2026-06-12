@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -77,7 +78,7 @@ def projection-completer-1 [] { ["data" "html" "legacy"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "property-search PropertySearch" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -110,6 +111,7 @@ export def "property-search PropertySearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --postcode: string # Filters the results to include properties which match the provided postcode. The search is not case sensitive and must contain the 'Outward Code' (e.g. RH1). This, or at least one other search parameter, must be included in your search.
   --billingAuthorityReference: string # Filters the results to include properties which are inside the provided billing authority. The search is not case sensitive and supports partial references. This, or at least one other search parameter, must be included in your search.
   --uarn: int # Filters the results down to a single property with the given UARN. This, or at least one other search parameter, must be included in your search. (format: int64, e.g. 12345678901)
@@ -126,7 +128,7 @@ export def "property-search PropertySearch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Valuation history
@@ -142,6 +144,7 @@ export def "properties-valuations GetValuationHistory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --propertyLinkSubmissionId: string # The property link you wish to filter the history on (e.g. PL123456)
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
 ]: nothing -> record {
@@ -153,7 +156,7 @@ export def "properties-valuations GetValuationHistory" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Valuation
@@ -170,6 +173,7 @@ export def "properties-valuations GetValuation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projection: string@projection-completer # Return summary (simplified) projection, or detailed (full) view of the resource. (default: summary)
   --propertyLinkSubmissionId: string # The property link ID of the property you wish to view (required with projection=detailed) (e.g. PL123456)
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
@@ -182,7 +186,7 @@ export def "properties-valuations GetValuation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # My organisation's property links
@@ -197,6 +201,7 @@ export def "my-organisation-property-links GetMyOrganisationsPropertyLinks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --address: string # Address, or part of the address (e.g. street name or postcode), to filter by
   --uarn: int # The Unique Address Reference Number (UARN) of the property (format: int64, e.g. 12345678901)
   --billingAuthorityReference: string # Filters the results to include properties which are inside the provided billing authority.
@@ -215,7 +220,7 @@ export def "my-organisation-property-links GetMyOrganisationsPropertyLinks" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create property link
@@ -230,6 +235,7 @@ export def "my-organisation-property-links CreatePropertyLink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
   --body: record
 ]: any -> record {
@@ -242,7 +248,7 @@ export def "my-organisation-property-links CreatePropertyLink" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # My organisation's property link
@@ -258,6 +264,7 @@ export def "my-organisation-property-links GetMyOrganisationsPropertyLink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projection: string@projection-completer # Return summary (simplified) projection, or detailed (full) view of the resource. (default: summary)
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
 ]: nothing -> any {
@@ -269,7 +276,7 @@ export def "my-organisation-property-links GetMyOrganisationsPropertyLink" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Attach property link evidence
@@ -285,6 +292,7 @@ export def "my-organisation-property-links-evidence AttachPropertyLinkEvidence" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
   --body: record
 ]: any -> record {
@@ -297,7 +305,7 @@ export def "my-organisation-property-links-evidence AttachPropertyLinkEvidence" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Status of property link evidence
@@ -314,6 +322,7 @@ export def "my-organisation-property-links-evidence GetPropertyLinkEvidenceStatu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -323,7 +332,7 @@ export def "my-organisation-property-links-evidence GetPropertyLinkEvidenceStatu
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # My organisation's check cases
@@ -338,6 +347,7 @@ export def "my-organisation-check-cases GetMyOrganisationsCheckCases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --propertyLinkSubmissionId: string # The property link you wish to filter on (e.g. PLQQ2YMP)
   --checkCaseStatus: string@checkCaseStatus-completer # The check case status you wish to filter on
   --checkCaseReference: string # The check case reference you wish to filter on
@@ -353,7 +363,7 @@ export def "my-organisation-check-cases GetMyOrganisationsCheckCases" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a check case
@@ -368,6 +378,7 @@ export def "my-organisation-check-cases CreateCheckCase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
   --body: record
 ]: any -> record {
@@ -380,7 +391,7 @@ export def "my-organisation-check-cases CreateCheckCase" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # My organisation's check case
@@ -396,6 +407,7 @@ export def "my-organisation-check-cases GetMyOrganisationsCheckCase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --propertyLinkSubmissionId: string # The property link associated with this check case (e.g. PLQQ2YMP)
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
 ]: nothing -> record {
@@ -407,7 +419,7 @@ export def "my-organisation-check-cases GetMyOrganisationsCheckCase" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Attach check case evidence
@@ -423,6 +435,7 @@ export def "my-organisation-check-cases-evidence AttachCheckCaseEvidence" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
   --body: record
 ]: any -> record {
@@ -435,7 +448,7 @@ export def "my-organisation-check-cases-evidence AttachCheckCaseEvidence" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Status of check case evidence
@@ -452,6 +465,7 @@ export def "my-organisation-check-cases-evidence GetCheckCaseEvidenceStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -461,7 +475,7 @@ export def "my-organisation-check-cases-evidence GetCheckCaseEvidenceStatus" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # My organisation's challenge cases
@@ -476,6 +490,7 @@ export def "my-organisation-challenge-cases GetMyOrganisationsChallengeCases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --propertyLinkSubmissionId: string # The property link you wish to filter on (e.g. PLQQ2YMP)
   --page: int # The results for this endpoint are paginated and this refers to the page number (format: int32, default: 1)
   --pageSize: int # The results for this endpoint are paginated and this refers to the number of elements per page (format: int32, default: 15)
@@ -489,7 +504,7 @@ export def "my-organisation-challenge-cases GetMyOrganisationsChallengeCases" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a challenge case
@@ -504,6 +519,7 @@ export def "my-organisation-challenge-cases CreateChallengeCase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
   --body: record
 ]: any -> record {
@@ -516,7 +532,7 @@ export def "my-organisation-challenge-cases CreateChallengeCase" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # My organisation's challenge case
@@ -532,6 +548,7 @@ export def "my-organisation-challenge-cases GetMyOrganisationsChallengeCase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projection: string@projection-completer # Return summary (simplified) projection, or detailed (full) view of the resource.
   --propertyLinkSubmissionId: string # The property link you wish to filter on
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
@@ -544,7 +561,7 @@ export def "my-organisation-challenge-cases GetMyOrganisationsChallengeCase" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Attach challenge case evidence
@@ -560,6 +577,7 @@ export def "my-organisation-challenge-cases-evidence AttachChallengeCaseEvidence
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
   --body: record
 ]: any -> record {
@@ -572,7 +590,7 @@ export def "my-organisation-challenge-cases-evidence AttachChallengeCaseEvidence
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Status of challenge case evidence
@@ -589,6 +607,7 @@ export def "my-organisation-challenge-cases-evidence GetChallengeCaseEvidenceSta
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -598,7 +617,7 @@ export def "my-organisation-challenge-cases-evidence GetChallengeCaseEvidenceSta
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # My clients
@@ -613,6 +632,7 @@ export def "my-organisation-clients GetClients" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientOrganisation: string # This parameter allows you to filter your clients by the start of their organisation's name
   --appointedFromDate: string # Filters the results to include only clients appointed on or after this date (format: date, e.g. 2020-01-31)
   --appointedToDate: string # Filters the results to include only clients appointed on or before this date (format: date, e.g. 2020-12-31)
@@ -628,7 +648,7 @@ export def "my-organisation-clients GetClients" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # My client's check cases
@@ -643,6 +663,7 @@ export def "my-organisation-clients-all-check-cases GetMyClientsCheckCases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --propertyLinkSubmissionId: string # The property link you wish to filter on
   --checkCaseStatus: string@checkCaseStatus-completer # The check case status you wish to filter on
   --checkCaseReference: string # The check case reference you wish to filter on
@@ -658,7 +679,7 @@ export def "my-organisation-clients-all-check-cases GetMyClientsCheckCases" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a client check case
@@ -673,6 +694,7 @@ export def "my-organisation-clients-all-check-cases CreateCheckCaseForClient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
   --body: record
 ]: any -> record {
@@ -685,7 +707,7 @@ export def "my-organisation-clients-all-check-cases CreateCheckCaseForClient" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # My client's check case
@@ -701,6 +723,7 @@ export def "my-organisation-clients-all-check-cases GetCheckCaseForClient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -710,7 +733,7 @@ export def "my-organisation-clients-all-check-cases GetCheckCaseForClient" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Attach check case evidence for client
@@ -726,6 +749,7 @@ export def "my-organisation-clients-all-check-cases-evidence AttachCheckCaseEvid
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
   --body: record
 ]: any -> record {
@@ -738,7 +762,7 @@ export def "my-organisation-clients-all-check-cases-evidence AttachCheckCaseEvid
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Status of check case evidence for a client
@@ -755,6 +779,7 @@ export def "my-organisation-clients-all-check-cases-evidence GetClientCheckCaseE
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -764,7 +789,7 @@ export def "my-organisation-clients-all-check-cases-evidence GetClientCheckCaseE
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # My client's challenge cases
@@ -779,6 +804,7 @@ export def "my-organisation-clients-all-challenge-cases GetMyClientsChallengeCas
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --propertyLinkSubmissionId: string # The property link you wish to filter on
   --page: int # The results for this endpoint are paginated and this refers to the page number (format: int32, default: 1)
   --pageSize: int # The results for this endpoint are paginated and this refers to the number of elements per page (format: int32, default: 15)
@@ -792,7 +818,7 @@ export def "my-organisation-clients-all-challenge-cases GetMyClientsChallengeCas
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a client challenge case
@@ -807,6 +833,7 @@ export def "my-organisation-clients-all-challenge-cases CreateChallengeCaseForCl
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
   --body: record
 ]: any -> record {
@@ -819,7 +846,7 @@ export def "my-organisation-clients-all-challenge-cases CreateChallengeCaseForCl
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # My client's challenge case
@@ -835,6 +862,7 @@ export def "my-organisation-clients-all-challenge-cases GetChallengeCaseForClien
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --propertyLinkSubmissionId: string # The property link associated with this challenge case
   --projection: string@projection-completer # Return summary (simplified) projection, or detailed (full) view of the resource.
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
@@ -847,7 +875,7 @@ export def "my-organisation-clients-all-challenge-cases GetChallengeCaseForClien
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Attach challenge case evidence for clients
@@ -863,6 +891,7 @@ export def "my-organisation-clients-all-challenge-cases-evidence AttachChallenge
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
   --body: record
 ]: any -> record {
@@ -875,7 +904,7 @@ export def "my-organisation-clients-all-challenge-cases-evidence AttachChallenge
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Status of challenge case evidence for a client
@@ -892,6 +921,7 @@ export def "my-organisation-clients-all-challenge-cases-evidence GetClientsChall
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -901,7 +931,7 @@ export def "my-organisation-clients-all-challenge-cases-evidence GetClientsChall
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # My client's property links
@@ -916,6 +946,7 @@ export def "my-organisation-clients-all-property-links GetMyClientsPropertyLinks
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --address: string # Address, or part of the address (e.g. street name or postcode), to filter by
   --uarn: int # The Unique Address Reference Number (UARN) of the property (format: int64, e.g. 12345678901)
   --billingAuthorityReference: string # Filters the results to include properties which are inside the provided billing authority.
@@ -937,7 +968,7 @@ export def "my-organisation-clients-all-property-links GetMyClientsPropertyLinks
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create property link on client's behalf
@@ -952,6 +983,7 @@ export def "my-organisation-clients-all-property-links CreatePropertyLinkForClie
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
   --body: record
 ]: any -> record {
@@ -964,7 +996,7 @@ export def "my-organisation-clients-all-property-links CreatePropertyLinkForClie
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # My client's property link
@@ -980,6 +1012,7 @@ export def "my-organisation-clients-all-property-links GetMyClientsPropertyLink"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projection: string@projection-completer # Return summary (simplified) projection, or detailed (full) view of the resource. (default: summary)
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
 ]: nothing -> any {
@@ -991,7 +1024,7 @@ export def "my-organisation-clients-all-property-links GetMyClientsPropertyLink"
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Attach property link evidence for a client
@@ -1007,6 +1040,7 @@ export def "my-organisation-clients-all-property-links-evidence AttachPropertyLi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
   --body: record
 ]: any -> record {
@@ -1019,7 +1053,7 @@ export def "my-organisation-clients-all-property-links-evidence AttachPropertyLi
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Status of property link evidence for a client
@@ -1036,6 +1070,7 @@ export def "my-organisation-clients-all-property-links-evidence GetClientPropert
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1045,7 +1080,7 @@ export def "my-organisation-clients-all-property-links-evidence GetClientPropert
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Messages summary
@@ -1060,6 +1095,7 @@ export def "my-organisation-messages GetMessageSummary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ccaCaseRef: string # The ccaCaseRef of the check case
   --hereditamentAddress: string # The address of the check case
   --ipOrganisationName: string # The organisation the message relates to
@@ -1080,7 +1116,7 @@ export def "my-organisation-messages GetMessageSummary" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Detailed message
@@ -1096,6 +1132,7 @@ export def "my-organisation-messages GetMessageDetailed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projection: string@projection-completer-1 # Currently only accepts 'data', 'html', and 'legacy' (default) projection.
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
 ]: nothing -> any {
@@ -1107,7 +1144,7 @@ export def "my-organisation-messages GetMessageDetailed" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Mark message as read
@@ -1123,6 +1160,7 @@ export def "my-organisation-messages MarkMessageAsRead" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1132,7 +1170,7 @@ export def "my-organisation-messages MarkMessageAsRead" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unread message count
@@ -1147,6 +1185,7 @@ export def "my-organisation-messages-unread-count UnreadMessageCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1156,7 +1195,7 @@ export def "my-organisation-messages-unread-count UnreadMessageCount" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lookup values by type
@@ -1172,6 +1211,7 @@ export def "lookup-codes GetLookupValues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1181,5 +1221,5 @@ export def "lookup-codes GetLookupValues" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

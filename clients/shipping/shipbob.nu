@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -76,7 +77,7 @@ def sort-order-completer [] { ["Ascending" "Descending"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "2026-01-channel get-channels" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -109,6 +110,7 @@ export def "2026-01-channel get-channels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --RecordsPerPage: int # The number of records to return per page. This parameter is used for pagination. If not provided, a default value will be used. (default: 50)
   --Cursor: string # A cursor for pagination. This parameter is used to fetch the next set of results.
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
@@ -121,7 +123,7 @@ export def "2026-01-channel get-channels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Order
@@ -141,6 +143,7 @@ export def "2026-01-order create-order" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --shipbob-channel-id: string # Retrieve your channel ID from the [GET /channel](/api/channels/get-channels) endpoint. Use the channel ID that has write scopes.
   --financials: record # shape: {total_price?: float}
@@ -169,7 +172,7 @@ export def "2026-01-order create-order" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Orders
@@ -184,6 +187,7 @@ export def "2026-01-order get-orders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Page: int # Page of orders to get
   --Limit: int # Amount of orders per page to request
   --IDs: string # order ids to filter by, comma separated <br /><strong>Example:</strong> ?IDs=1,2
@@ -208,7 +212,7 @@ export def "2026-01-order get-orders" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Order
@@ -224,6 +228,7 @@ export def "2026-01-order get-order" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --shipbob-channel-id: string # Retrieve your channel ID from the [GET /channel](/api/channels/get-channels) endpoint. Use the channel ID that has write scopes.
 ]: nothing -> record<channel: record<id: int, name: string>, created_date: string, financials: record<total_price: float>, gift_message: string, id: int, order_number: string, products: table<external_line_id: int, gtin: string, id: int, quantity: int, quantity_unit_of_measure_code: string, reference_id: string, sku: string, unit_price: float, upc: string>, purchase_date: string, recipient: record<address: any, email: string, name: string, phone_number: string>, reference_id: string, retailer_program_data: record<addresses: list<record>, customer_ticket_number: string, delivery_date: string, department: string, doNotShipBeforeDate: string, mark_for_store: string, purchase_order_number: string, retailer_program_type: string, shipByDate: string>, shipments: table<actual_fulfillment_date: string, created_date: string, delivery_date: string, estimated_fulfillment_date: string, estimated_fulfillment_date_status: string, gift_message: string, id: int, insurance_value: float, invoice_amount: float, invoice_currency_code: string, is_tracking_uploaded: bool, last_tracking_update_at: string, last_update_at: string, location: record, measurements: record, order_id: int, package_material_type: string, parent_cartons: list, products: list, recipient: record, reference_id: string, require_signature: bool, ship_option: string, status: string, status_details: list, tracking: record>, shipping_method: string, shipping_terms: record<carrier_type: string, payment_term: string>, status: string, tags: table<name: string, value: string>, type: string> {
@@ -234,7 +239,7 @@ export def "2026-01-order get-order" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Shipment
@@ -250,6 +255,7 @@ export def "2026-01-shipment get-shipment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --shipbob-channel-id: string # Retrieve your channel ID from the [GET /channel](/api/channels/get-channels) endpoint. Use the channel ID that has write scopes.
 ]: nothing -> record<actual_fulfillment_date: string, created_date: string, delivery_date: string, estimated_fulfillment_date: string, estimated_fulfillment_date_status: string, gift_message: string, id: int, insurance_value: float, invoice_amount: float, invoice_currency_code: string, is_tracking_uploaded: bool, last_tracking_update_at: string, last_update_at: string, location: record<id: int, name: string>, measurements: record<depth_in: int, length_in: int, total_weight_oz: int, width_in: int>, order_id: int, package_material_type: string, parent_cartons: table<barcode: string, cartons: list, measurements: record, type: string>, products: table<id: int, inventory_items: list, name: string, reference_id: string, sku: string>, recipient: record<address: any, email: string, full_name: string, name: string, phone_number: string>, reference_id: string, require_signature: bool, ship_option: string, status: string, status_details: table<description: string, exception_fulfillment_center_id: int, extra_information: record, id: int, inventory_id: int, name: string>, tracking: record<bol: string, carrier: string, carrier_service: string, pro_number: string, scac: string, shipping_date: string, tracking_number: string, tracking_url: string>> {
@@ -260,7 +266,7 @@ export def "2026-01-shipment get-shipment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Shipment Timeline
@@ -276,6 +282,7 @@ export def "2026-01-shipment-timeline get-shipment-timeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --shipbob-channel-id: string # Retrieve your channel ID from the [GET /channel](/api/channels/get-channels) endpoint. Use the channel ID that has write scopes.
 ]: nothing -> table<log_type_id: int, log_type_name: string, log_type_text: string, metadata: record, timestamp: string> {
@@ -286,7 +293,7 @@ export def "2026-01-shipment-timeline get-shipment-timeline" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Batch Cancel Shipments
@@ -301,6 +308,7 @@ export def "2026-01-shipment-batch-cancel batch-cancel-shipments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --shipbob-channel-id: string # Retrieve your channel ID from the [GET /channel](/api/channels/get-channels) endpoint. Use the channel ID that has write scopes.
   --shipment-ids: list # Shipment IDs to cancel (nullable)
@@ -315,7 +323,7 @@ export def "2026-01-shipment-batch-cancel batch-cancel-shipments" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Mark Tracking Uploaded
@@ -330,6 +338,7 @@ export def "2026-01-shipment-batch-update-tracking-upload mark-tracking-uploaded
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --is-tracking-uploaded: oneof<nothing, bool> # Indicates whether the Shipment was marked with tracking information uploaded to a third-party system where the order originated. Applies to all shipments in shipment_ids
   --shipment-ids: list # Shipment IDs to apply the tracking upload status to (nullable)
@@ -344,7 +353,7 @@ export def "2026-01-shipment-batch-update-tracking-upload mark-tracking-uploaded
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Shipment Address
@@ -360,6 +369,7 @@ export def "2026-01-shipment update-shipment-address" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   city: string # City of customer address
   --company-name: string # Company name (optional) (nullable)
@@ -382,7 +392,7 @@ export def "2026-01-shipment update-shipment-address" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Shipment Line Items
@@ -398,6 +408,7 @@ export def "2026-01-shipment get-shipment-line-items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> table<committed_quantity: int, inventory_id: int, is_hazmat: bool, is_lot: bool, lot: record<lot_date: string, lot_number: string, selection_method: string>, product_variant: record<id: int, name: string, sku: string>, quantity: int, serial_numbers: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -407,7 +418,7 @@ export def "2026-01-shipment get-shipment-line-items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Shipment Line Items
@@ -424,6 +435,7 @@ export def "2026-01-shipment update-shipment-line-items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   items: list # Complete list of line items for the shipment. Must include all line items — partial updates are not supported — item shape: {fulfillment_center_id?: int, id?: int, inventory_id: int, is_manually_assigned_lot?: bool, lot_date?: string, lot_number?: string, quantity: int}
 ]: any -> record<error: record<code: string, message: string>, id: int, is_success: bool, shipment_line_items: table<action: string, inventory_id: int, new_value: string, previous_value: string>> {
@@ -437,7 +449,7 @@ export def "2026-01-shipment update-shipment-line-items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk Update Shipping Service
@@ -452,6 +464,7 @@ export def "2026-01-shipment-bulk-update-shipping-service bulk-update-shipping-s
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   reason: string # Reason for updating the shipping service
   requested_shipping_service_id: int # ID of the shipping service to assign to the shipments
@@ -467,7 +480,7 @@ export def "2026-01-shipment-bulk-update-shipping-service bulk-update-shipping-s
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel Order
@@ -483,6 +496,7 @@ export def "2026-01-order cancel-order" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> record<canceled_shipment_results: table<action: string, is_success: bool, reason: string, shipment_id: int>, order: record<channel: record<id: int, name: string>, created_date: string, financials: record<total_price: float>, gift_message: string, id: int, order_number: string, products: list<record>, purchase_date: string, recipient: record<address: any, email: string, name: string, phone_number: string>, reference_id: string, retailer_program_data: record<addresses: list, customer_ticket_number: string, delivery_date: string, department: string, doNotShipBeforeDate: string, mark_for_store: string, purchase_order_number: string, retailer_program_type: string, shipByDate: string>, shipments: list<record>, shipping_method: string, shipping_terms: record<carrier_type: string, payment_term: string>, status: string, tags: list<record>, type: string>, order_id: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -492,7 +506,7 @@ export def "2026-01-order cancel-order" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel Shipment
@@ -508,6 +522,7 @@ export def "2026-01-shipment cancel-shipment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> record<actual_fulfillment_date: string, created_date: string, delivery_date: string, estimated_fulfillment_date: string, estimated_fulfillment_date_status: string, gift_message: string, id: int, insurance_value: float, invoice_amount: float, invoice_currency_code: string, is_tracking_uploaded: bool, last_tracking_update_at: string, last_update_at: string, location: record<id: int, name: string>, measurements: record<depth_in: int, length_in: int, total_weight_oz: int, width_in: int>, order_id: int, package_material_type: string, parent_cartons: table<barcode: string, cartons: list, measurements: record, type: string>, products: table<id: int, inventory_items: list, name: string, reference_id: string, sku: string>, recipient: record<address: any, email: string, full_name: string, name: string, phone_number: string>, reference_id: string, require_signature: bool, ship_option: string, status: string, status_details: table<description: string, exception_fulfillment_center_id: int, extra_information: record, id: int, inventory_id: int, name: string>, tracking: record<bol: string, carrier: string, carrier_service: string, pro_number: string, scac: string, shipping_date: string, tracking_number: string, tracking_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -517,7 +532,7 @@ export def "2026-01-shipment cancel-shipment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Shipping Methods
@@ -532,6 +547,7 @@ export def "2026-01-shipping-method get-shipping-methods" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Page: int # Page of orders to get
   --Limit: int # Amount of records per page to request
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
@@ -544,7 +560,7 @@ export def "2026-01-shipping-method get-shipping-methods" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Shipment Status Timeline by Order ID and Shipment ID
@@ -561,6 +577,7 @@ export def "2026-01-order-shipment-timeline get-shipment-status-timeline-by-orde
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --shipbob-channel-id: string # Retrieve your channel ID from the [GET /channel](/api/channels/get-channels) endpoint. Use the channel ID that has write scopes.
 ]: nothing -> table<log_type_id: int, log_type_name: string, log_type_text: string, metadata: record, timestamp: string> {
@@ -571,7 +588,7 @@ export def "2026-01-order-shipment-timeline get-shipment-status-timeline-by-orde
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get All Shipments for Order
@@ -587,6 +604,7 @@ export def "2026-01-order-shipment get-all-shipments-for-order" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --shipbob-channel-id: string # Retrieve your channel ID from the [GET /channel](/api/channels/get-channels) endpoint. Use the channel ID that has write scopes.
 ]: nothing -> table<actual_fulfillment_date: string, created_date: string, delivery_date: string, estimated_fulfillment_date: string, estimated_fulfillment_date_status: string, gift_message: string, id: int, insurance_value: float, invoice_amount: float, invoice_currency_code: string, is_tracking_uploaded: bool, last_tracking_update_at: string, last_update_at: string, location: record<id: int, name: string>, measurements: record<depth_in: int, length_in: int, total_weight_oz: int, width_in: int>, order_id: int, package_material_type: string, parent_cartons: list<record>, products: list<record>, recipient: record<address: any, email: string, full_name: string, name: string, phone_number: string>, reference_id: string, require_signature: bool, ship_option: string, status: string, status_details: list<record>, tracking: record<bol: string, carrier: string, carrier_service: string, pro_number: string, scac: string, shipping_date: string, tracking_number: string, tracking_url: string>> {
@@ -597,7 +615,7 @@ export def "2026-01-order-shipment get-all-shipments-for-order" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Shipment Logs by Order ID and Shipment ID
@@ -614,6 +632,7 @@ export def "2026-01-order-shipment-logs get-shipment-logs-by-order-id-and-shipme
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> table<log_type_id: int, log_type_name: string, log_type_text: string, metadata: record, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -623,7 +642,7 @@ export def "2026-01-order-shipment-logs get-shipment-logs-by-order-id-and-shipme
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel Shipment by Order ID and Shipment ID
@@ -640,6 +659,7 @@ export def "2026-01-order-shipment cancel-shipment-by-order-id-and-shipment-id" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> record<actual_fulfillment_date: string, created_date: string, delivery_date: string, estimated_fulfillment_date: string, estimated_fulfillment_date_status: string, gift_message: string, id: int, insurance_value: float, invoice_amount: float, invoice_currency_code: string, is_tracking_uploaded: bool, last_tracking_update_at: string, last_update_at: string, location: record<id: int, name: string>, measurements: record<depth_in: int, length_in: int, total_weight_oz: int, width_in: int>, order_id: int, package_material_type: string, parent_cartons: table<barcode: string, cartons: list, measurements: record, type: string>, products: table<id: int, inventory_items: list, name: string, reference_id: string, sku: string>, recipient: record<address: any, email: string, full_name: string, name: string, phone_number: string>, reference_id: string, require_signature: bool, ship_option: string, status: string, status_details: table<description: string, exception_fulfillment_center_id: int, extra_information: record, id: int, inventory_id: int, name: string>, tracking: record<bol: string, carrier: string, carrier_service: string, pro_number: string, scac: string, shipping_date: string, tracking_number: string, tracking_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -649,7 +669,7 @@ export def "2026-01-order-shipment cancel-shipment-by-order-id-and-shipment-id" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Shipment Logs
@@ -665,6 +685,7 @@ export def "2026-01-shipment-logs get-shipment-logs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --shipbob-channel-id: string # Retrieve your channel ID from the [GET /channel](/api/channels/get-channels) endpoint. Use the channel ID that has write scopes.
 ]: nothing -> table<log_type_id: int, log_type_name: string, log_type_text: string, metadata: record, timestamp: string> {
@@ -675,7 +696,7 @@ export def "2026-01-shipment-logs get-shipment-logs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Shipment by Order ID and Shipment ID
@@ -692,6 +713,7 @@ export def "2026-01-order-shipment get-shipment-by-order-id-and-shipment-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --shipbob-channel-id: string # Retrieve your channel ID from the [GET /channel](/api/channels/get-channels) endpoint. Use the channel ID that has write scopes.
 ]: nothing -> record<actual_fulfillment_date: string, created_date: string, delivery_date: string, estimated_fulfillment_date: string, estimated_fulfillment_date_status: string, gift_message: string, id: int, insurance_value: float, invoice_amount: float, invoice_currency_code: string, is_tracking_uploaded: bool, last_tracking_update_at: string, last_update_at: string, location: record<id: int, name: string>, measurements: record<depth_in: int, length_in: int, total_weight_oz: int, width_in: int>, order_id: int, package_material_type: string, parent_cartons: table<barcode: string, cartons: list, measurements: record, type: string>, products: table<id: int, inventory_items: list, name: string, reference_id: string, sku: string>, recipient: record<address: any, email: string, full_name: string, name: string, phone_number: string>, reference_id: string, require_signature: bool, ship_option: string, status: string, status_details: table<description: string, exception_fulfillment_center_id: int, extra_information: record, id: int, inventory_id: int, name: string>, tracking: record<bol: string, carrier: string, carrier_service: string, pro_number: string, scac: string, shipping_date: string, tracking_number: string, tracking_url: string>> {
@@ -702,7 +724,7 @@ export def "2026-01-order-shipment get-shipment-by-order-id-and-shipment-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Estimate Fulfillment Cost For Order
@@ -719,6 +741,7 @@ export def "2026-01-order-estimate estimate-fulfillment-cost-for-order" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --shipbob-channel-id: string # Retrieve your channel ID from the [GET /channel](/api/channels/get-channels) endpoint. Use the channel ID that has write scopes.
   address: record # shape: {address1?: string, address2?: string, city?: string, company_name?: string, country: string, state?: string, zip_code?: string}
@@ -735,7 +758,7 @@ export def "2026-01-order-estimate estimate-fulfillment-cost-for-order" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Order Store Data
@@ -751,6 +774,7 @@ export def "2026-01-order-store-order-json get-order-store-data" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -760,7 +784,7 @@ export def "2026-01-order-store-order-json get-order-store-data" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Product
@@ -776,6 +800,7 @@ export def "2026-01-product create-product" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --name: string # The name of the product (nullable)
   --taxonomy-id: int # The taxonomy ID for categorizing the product (nullable)
@@ -793,7 +818,7 @@ export def "2026-01-product create-product" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Products
@@ -808,6 +833,7 @@ export def "2026-01-product get-products" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Search: string # Search Products by name, sku, inventory id or product Id.
   --Barcode: string # Barcode Associated with variant
   --Barcodes: string # Barcodes Associated with variant
@@ -844,7 +870,7 @@ export def "2026-01-product get-products" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Product
@@ -860,6 +886,7 @@ export def "2026-01-product get-product" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> record<created_on: string, id: int, name: string, taxonomy: record<id: int, name: string, parent_id: int, parent_name: string, path: string>, type: string, updated_on: string, user_id: int, variants: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -869,7 +896,7 @@ export def "2026-01-product get-product" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Product
@@ -886,6 +913,7 @@ export def "2026-01-product update-product" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --name: string # The name of the product (nullable)
   --taxonomy-id: int # The taxonomy ID for categorizing the product (nullable)
@@ -903,7 +931,7 @@ export def "2026-01-product update-product" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Product Bundle
@@ -919,6 +947,7 @@ export def "2026-01-product delete-product-bundle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -928,7 +957,7 @@ export def "2026-01-product delete-product-bundle" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Product Variants
@@ -944,6 +973,7 @@ export def "2026-01-product-variants get-product-variants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> table<additional_hazmat_attributes: record<charge_state_percentage: float, container_metal: bool, container_type: string, lithium_battery_packaging: string, lithium_battery_type: string, magnet: bool, net_volume: float, net_weight: float>, associated_bundles: list<record>, bundle_definition: list<record>, created_on: string, customs: record<country_code_of_origin: string, currency: string, description: string, hs_tariff_code: string, is321_eligible: bool, value: int>, dimension: record<height: float, is_locked: bool, length: float, source: string, unit: string, width: float>, fulfillment_settings: record<dangerous_goods: bool, is_bpm_parcel: bool, is_case_pick: bool, msds_url: string, requires_prop65: bool, serial_scan: record>, gtin: string, id: int, inventory: record<inventory_id: int, on_hand_qty: int>, is_digital: bool, is_image_uploaded: bool, lot_information: record<is_lot: bool, minimum_shelf_life_days: int>, merge_children: list<record>, name: string, packaging_material_type: record<id: int, name: string>, packaging_requirement: record<id: int, name: string>, return_preferences: record<backup_action: record, instructions: string, primary_action: record, return_to_sender_backup_action: record, return_to_sender_primary_action: record>, reviews_pending: list<string>, sku: string, status: string, upc: string, updated_on: string, weight: record<unit: string, weight: float>, barcodes: list<record>, channel_metadata: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -953,7 +983,7 @@ export def "2026-01-product-variants get-product-variants" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Product Variants
@@ -969,6 +999,7 @@ export def "2026-01-product-variants add-product-variants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --body: record
 ]: any -> record<created_on: string, id: int, name: string, taxonomy: record<id: int, name: string, parent_id: int, parent_name: string, path: string>, type: string, updated_on: string, user_id: int, variants: list<any>> {
@@ -981,7 +1012,7 @@ export def "2026-01-product-variants add-product-variants" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Product Variants
@@ -1005,6 +1036,7 @@ export def "2026-01-product-variants update-product-variants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --additional-hazmat-attributes: record # shape: {charge_state_percentage?: float, container_metal?: bool, container_type?: string, lithium_battery_packaging?: string, lithium_battery_type?: string, magnet?: bool, net_volume?: float, net_weight?: float}
   --bundle-definition: list # nullable — item shape: {quantity?: int, variant_id?: int}
@@ -1037,7 +1069,7 @@ export def "2026-01-product-variants update-product-variants" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Merge Variants
@@ -1053,6 +1085,7 @@ export def "2026-01-variant merge-variants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --body: record
 ]: any -> record<created_on: string, id: int, name: string, taxonomy: record<id: int, name: string, parent_id: int, parent_name: string, path: string>, type: string, updated_on: string, user_id: int, variants: list<any>> {
@@ -1065,7 +1098,7 @@ export def "2026-01-variant merge-variants" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Move Variants Between Products
@@ -1082,6 +1115,7 @@ export def "2026-01-product move-variants-between-products" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --category-id: int # nullable
   --name: string # nullable
@@ -1100,7 +1134,7 @@ export def "2026-01-product move-variants-between-products" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Move Variants to New Product
@@ -1116,6 +1150,7 @@ export def "2026-01-product-move-variants move-variants-to-new-product" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --category-id: int # nullable
   --name: string # nullable
@@ -1134,7 +1169,7 @@ export def "2026-01-product-move-variants move-variants-to-new-product" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Packaging Requirement
@@ -1149,6 +1184,7 @@ export def "2026-01-packaging-requirement get-packaging-requirement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> table<applicable_categories: list<record>, applicable_packaging_material_types: list<record>, applicable_taxonomy: list<string>, description: string, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1158,7 +1194,7 @@ export def "2026-01-packaging-requirement get-packaging-requirement" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Taxonomies
@@ -1173,6 +1209,7 @@ export def "2026-01-taxonomy get-taxonomies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> table<id: int, name: string, path: string, children: list<record>, parent: any> {
@@ -1184,7 +1221,7 @@ export def "2026-01-taxonomy get-taxonomies" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Taxonomy by ID
@@ -1200,6 +1237,7 @@ export def "2026-01-taxonomy get-taxonomy-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> record<id: int, name: string, path: string, children: table<id: int, name: string, path: string, has_children: bool>, parent: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1209,7 +1247,7 @@ export def "2026-01-taxonomy get-taxonomy-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Taxonomy Parent
@@ -1225,6 +1263,7 @@ export def "2026-01-taxonomy-parent get-taxonomy-parent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> record<id: int, name: string, path: string, children: table<id: int, name: string, path: string, has_children: bool>, parent: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1234,7 +1273,7 @@ export def "2026-01-taxonomy-parent get-taxonomy-parent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Convert Variant to Bundle
@@ -1251,6 +1290,7 @@ export def "2026-01-variant convert-variant-to-bundle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --bundle-definition: list # nullable — item shape: {quantity?: int, variant_id?: int}
   --channel-metadata: list # nullable
@@ -1267,7 +1307,7 @@ export def "2026-01-variant convert-variant-to-bundle" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get All Inventory Levels
@@ -1282,6 +1322,7 @@ export def "2026-01-inventory-level get-all-inventory-levels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --SearchBy: string # Search is available for 3 fields: Inventory ID, Name, and SKU. Expected behavior for search by Inventory ID is exact match. Expected behavior for search by Inventory Name or SKU is partial match (consecutive characters, case insensitive).
   --InventoryIds: string # Comma-separated list of inventory IDs to filter results. Use this to retrieve inventory levels for specific inventory items only.
   --IsActive: oneof<nothing, bool> # Filter inventory levels by active status. Set to true to return only active inventory items, false for inactive items. Omit to return all items regardless of status.
@@ -1298,7 +1339,7 @@ export def "2026-01-inventory-level get-all-inventory-levels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Inventory Levels
@@ -1314,6 +1355,7 @@ export def "2026-01-inventory-level get-inventory-levels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> record<inventory_id: int, name: string, sku: string, total_awaiting_quantity: int, total_backordered_quantity: int, total_committed_quantity: int, total_exception_quantity: int, total_fulfillable_quantity: int, total_internal_transfer_quantity: int, total_on_hand_quantity: int, total_sellable_quantity: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1323,7 +1365,7 @@ export def "2026-01-inventory-level get-inventory-levels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Inventory
@@ -1339,6 +1381,7 @@ export def "2026-01-inventory get-inventory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> record<barcode: string, dimensions: record<height: float, is_locked: bool, length: float, unit: string, validated: bool, width: float>, inventory_id: int, is_case: bool, is_lot: bool, name: string, sku: string, user_id: int, variant: record<hazmat: record<is_hazmat: bool, validated: bool>, is_active: bool, is_bundle: bool, is_digital: bool>, weight: record<unit: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1348,7 +1391,7 @@ export def "2026-01-inventory get-inventory" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get All Inventories
@@ -1363,6 +1406,7 @@ export def "2026-01-inventory get-all-inventories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --SearchBy: string # Search is available for 3 fields: Inventory ID, Name, and SKU. Expected behavior for search by Inventory ID is exact match. Expected behavior for search by Inventory Name or SKU is partial match (consecutive characters, case insensitive).
   --FilterOperations: string # Advanced filtering operations. Apply multiple key-value filters to refine inventory results. Each filter operation contains a 'key' (field name) and 'rawValue' (filter value) to match.
   --InventoryIds: string # Comma-separated list of inventory IDs to filter results. Use this to retrieve information for specific inventory items only.
@@ -1380,7 +1424,7 @@ export def "2026-01-inventory get-all-inventories" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Inventory History Events
@@ -1395,6 +1439,7 @@ export def "2026-01-inventory-history-query query-inventory-history-events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # format: int32
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --cursor: int # Optional. Pagination cursor using the `inventory_audit_event_id` from the previous response. Returns events after this ID. (nullable)
@@ -1415,7 +1460,7 @@ export def "2026-01-inventory-history-query query-inventory-history-events" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get All Inventory Levels Grouped By Fulfillment Center
@@ -1430,6 +1475,7 @@ export def "2026-01-inventory-level-locations get-all-inventory-levels-grouped-b
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --LocationType: string # Filter by location type. Valid values: 'hub', 'spoke', or 'lts'. Defaults to all locations if not specified.
   --LocationId: string # Filter by specific fulfillment center location ID. Use this to retrieve inventory levels for a particular fulfillment center. (format: int32)
   --SearchBy: string # Search is available for 3 fields: Inventory ID, Name, and SKU. Expected behavior for search by Inventory ID is exact match. Expected behavior for search by Inventory Name or SKU is partial match (consecutive characters, case insensitive).
@@ -1448,7 +1494,7 @@ export def "2026-01-inventory-level-locations get-all-inventory-levels-grouped-b
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Inventory Levels Grouped By Fulfillment Center
@@ -1464,6 +1510,7 @@ export def "2026-01-inventory-level-locations get-inventory-levels-grouped-by-fu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> record<inventory_id: int, locations: table<awaiting_quantity: int, committed_quantity: int, fulfillable_quantity: int, internal_transfer_quantity: int, location_id: int, name: string, on_hand_quantity: int>, name: string, sku: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1473,7 +1520,7 @@ export def "2026-01-inventory-level-locations get-inventory-levels-grouped-by-fu
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get All Inventory Levels Grouped By Lot
@@ -1488,6 +1535,7 @@ export def "2026-01-inventory-level-lots get-all-inventory-levels-grouped-by-lot
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --LocationId: string # Filter by specific fulfillment center location ID. Use this to retrieve lot-based inventory levels for a particular warehouse or distribution center. (format: int32)
   --SearchBy: string # Search is available for 3 fields: Inventory ID, Name, and SKU. Expected behavior for search by Inventory ID is exact match. Expected behavior for search by Inventory Name or SKU is partial match (consecutive characters, case insensitive).
   --InventoryIds: string # Comma-separated list of inventory IDs to filter results. Use this to retrieve lot-grouped inventory levels for specific inventory items only.
@@ -1505,7 +1553,7 @@ export def "2026-01-inventory-level-lots get-all-inventory-levels-grouped-by-lot
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Inventory Levels Grouped By Lot
@@ -1521,6 +1569,7 @@ export def "2026-01-inventory-level-lots get-inventory-levels-grouped-by-lot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> record<inventory_id: int, lots: table<awaiting_quantity: int, committed_quantity: int, fulfillable_quantity: int, internal_transfer_quantity: int, locations: list, lot_date: string, lot_number: string, on_hand_quantity: int>, name: string, sku: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1530,7 +1579,7 @@ export def "2026-01-inventory-level-lots get-inventory-levels-grouped-by-lot" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Warehouse Receiving Order
@@ -1547,6 +1596,7 @@ export def "2026-01-receiving create-warehouse-receiving-order" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   box_packaging_type: string@box-packaging-type-completer
   --boxes: list # Box shipments to be added to this receiving order (nullable) — item shape: {box_items: list, tracking_number: string}
@@ -1565,7 +1615,7 @@ export def "2026-01-receiving create-warehouse-receiving-order" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Multiple Warehouse Receiving Orders
@@ -1580,6 +1630,7 @@ export def "2026-01-receiving get-multiple-warehouse-receiving-orders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Page: string # Page of WROs to get  (format: int32)
   --Limit: string # Number of WROs per page to request  (format: int32)
   --IDs: string # Comma separated list of WRO IDs to filter by
@@ -1601,7 +1652,7 @@ export def "2026-01-receiving get-multiple-warehouse-receiving-orders" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Warehouse Receiving Order
@@ -1617,6 +1668,7 @@ export def "2026-01-receiving get-warehouse-receiving-order" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> record<box_labels_uri: string, box_packaging_type: string, expected_arrival_date: string, external_sync_timestamp: string, fulfillment_center: record<address1: string, address2: string, city: string, country: string, email: string, id: int, name: string, phone_number: string, state: string, timezone: string, zip_code: string>, id: int, insert_date: string, inventory_quantities: table<expected_quantity: int, inventory_id: int, received_quantity: int, sku: string, stowed_quantity: int>, last_updated_date: string, package_type: string, purchase_order_number: string, status: string, status_history: table<id: int, status: string, timestamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1626,7 +1678,7 @@ export def "2026-01-receiving get-warehouse-receiving-order" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Fulfillment Centers
@@ -1641,6 +1693,7 @@ export def "2026-01-fulfillment-center get-fulfillment-centers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> table<address1: string, address2: string, city: string, country: string, email: string, id: int, name: string, phone_number: string, state: string, timezone: string, zip_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1650,7 +1703,7 @@ export def "2026-01-fulfillment-center get-fulfillment-centers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Warehouse Receiving Order Boxes
@@ -1666,6 +1719,7 @@ export def "2026-01-receiving-boxes get-warehouse-receiving-order-boxes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> table<arrived_date: string, box_id: int, box_items: list<record>, box_number: int, box_status: string, counting_started_date: string, received_date: string, tracking_number: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1675,7 +1729,7 @@ export def "2026-01-receiving-boxes get-warehouse-receiving-order-boxes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Warehouse Receiving Order Box Labels
@@ -1691,6 +1745,7 @@ export def "2026-01-receiving-labels get-warehouse-receiving-order-box-labels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1700,7 +1755,7 @@ export def "2026-01-receiving-labels get-warehouse-receiving-order-box-labels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel Warehouse Receiving Order
@@ -1716,6 +1771,7 @@ export def "2026-01-receiving cancel-warehouse-receiving-order" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> record<box_labels_uri: string, box_packaging_type: string, expected_arrival_date: string, external_sync_timestamp: string, fulfillment_center: record<address1: string, address2: string, city: string, country: string, email: string, id: int, name: string, phone_number: string, state: string, timezone: string, zip_code: string>, id: int, insert_date: string, inventory_quantities: table<expected_quantity: int, inventory_id: int, received_quantity: int, sku: string, stowed_quantity: int>, last_updated_date: string, package_type: string, purchase_order_number: string, status: string, status_history: table<id: int, status: string, timestamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1725,7 +1781,7 @@ export def "2026-01-receiving cancel-warehouse-receiving-order" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set ExternalSync flag for Wros
@@ -1740,6 +1796,7 @@ export def "2026-01-receiving-set-external-sync set-external-sync-flag-for-wros"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --ids: list # nullable
   --is-external-sync: oneof<nothing, bool>
@@ -1754,7 +1811,7 @@ export def "2026-01-receiving-set-external-sync set-external-sync-flag-for-wros"
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Inventory Distributions by WRO ID
@@ -1770,6 +1827,7 @@ export def "2026-01-receiving-distributions get-inventory-distributions-by-wro-i
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> record<distributions: table<expected_quantity: int, fulfillment_center_abbreviation: string, fulfillment_center_id: int, inventory_id: int, lot_date: string, lot_number: string, product_sku: string, received_quantity: int, status: string, stowed_quantity: int>, id: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1779,7 +1837,7 @@ export def "2026-01-receiving-distributions get-inventory-distributions-by-wro-i
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Return Order
@@ -1796,6 +1854,7 @@ export def "2026-01-return create-return-order" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --shipbob-channel-id: string # Retrieve your channel ID from the [GET /channel](/api/channels/get-channels) endpoint. Use the channel ID that has write scopes.
   fulfillment_center: record # A Facility to process Returns. — shape: {id: int, name?: string}
@@ -1814,7 +1873,7 @@ export def "2026-01-return create-return-order" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Return Orders
@@ -1829,6 +1888,7 @@ export def "2026-01-return get-return-orders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Ids: string # The IDs of the returns to fetch. Accepts a comma-separated list of return IDs (e.g., 123,456,789).
   --ReferenceIds: string # Comma-separated list of return reference IDs (RMA numbers) to filter by.
   --Status: string # Comma-separated list of return statuses to filter by (e.g., AwaitingArrival,Arrived,Processing,Completed,Cancelled).
@@ -1858,7 +1918,7 @@ export def "2026-01-return get-return-orders" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Return Order
@@ -1874,6 +1934,7 @@ export def "2026-01-return get-return-order" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --shipbob-channel-id: string # Retrieve your channel ID from the [GET /channel](/api/channels/get-channels) endpoint. Use the channel ID that has write scopes.
 ]: nothing -> record<arrived_date: string, awaiting_arrival_date: string, cancelled_date: string, channel: record<id: int, name: string>, completed_date: string, customer_name: string, fulfillment_center: record<id: int, name: string>, id: int, insert_date: string, inventory: table<action_requested: record, action_taken: list, barcodes: list, id: int, lot_information: record, name: string, quantity: int, sku: string>, invoice: record<amount: float, currency_code: string>, original_shipment_id: int, processing_date: string, reference_id: string, return_type: string, shipment_tracking_number: string, status: string, status_history: table<status: string, timestamp: string>, store_order_id: string, tracking_number: string, transactions: table<amount: float, transaction_type: string>> {
@@ -1884,7 +1945,7 @@ export def "2026-01-return get-return-order" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit Return Order
@@ -1902,6 +1963,7 @@ export def "2026-01-return edit-return-order" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   fulfillment_center: record # A Facility to process Returns. — shape: {id: int, name?: string}
   inventory: list # Array of inventory items being returned — item shape: {id: int, lot_date?: string, lot_number?: string, quantity: int, requested_action: "Default"|"Restock"|"Quarantine"|"Dispose"}
@@ -1919,7 +1981,7 @@ export def "2026-01-return edit-return-order" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel Return order
@@ -1935,6 +1997,7 @@ export def "2026-01-return cancel-return-order" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1944,7 +2007,7 @@ export def "2026-01-return cancel-return-order" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Subscription
@@ -1959,6 +2022,7 @@ export def "2026-01-webhook create-subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --description: string # Description of the webhook subscription. (nullable)
   --secret: string # A secret key used to sign the webhook payload for verifying its authenticity on the receiver's end. (nullable)
@@ -1975,7 +2039,7 @@ export def "2026-01-webhook create-subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Subscriptions
@@ -1990,6 +2054,7 @@ export def "2026-01-webhook get-subscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --RecordsPerPage: int # Number of webhooks returned per page in a paginated response.
   --Cursor: string # [Optional] A pagination token used to retrieve the next or previous page of results. Omit to start at the first page.
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
@@ -2002,7 +2067,7 @@ export def "2026-01-webhook get-subscriptions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Subscription
@@ -2018,6 +2083,7 @@ export def "2026-01-webhook delete-subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2027,7 +2093,7 @@ export def "2026-01-webhook delete-subscription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Locations
@@ -2042,6 +2108,7 @@ export def "2026-01-location get-locations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --IncludeInactive: oneof<nothing, bool> # Whether the inactive locations should be included or not
   --ReceivingEnabled: oneof<nothing, bool> # Return all the receiving enabled locations
   --AccessGranted: oneof<nothing, bool> # Return all the access granted locations
@@ -2055,7 +2122,7 @@ export def "2026-01-location get-locations" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search Transactions
@@ -2070,6 +2137,7 @@ export def "2026-01-transactions-query search-transactions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Cursor: string # [Optional] A pagination token used to jump to first, last, next or previous pages. When supplied, it overrides all other filter parameters.
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --from-date: string # Start date for filtering transactions by charge date. Defaults to 7 days before the current date if not specified. (nullable, format: date-time)
@@ -2094,7 +2162,7 @@ export def "2026-01-transactions-query search-transactions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Invoices
@@ -2109,6 +2177,7 @@ export def "2026-01-invoices get-invoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Cursor: string # [Optional] A pagination token used to jump to first, last, next or previous pages. When supplied, it overrides all other filter parameters.
   --FromDate: string # [Optional] Start date for filtering invoices by invoice date. Default is current - 1 month date.  (format: date-time)
   --ToDate: string # [Optional] End date for filtering invoices by invoice date. Default is current date.  (format: date-time)
@@ -2125,7 +2194,7 @@ export def "2026-01-invoices get-invoices" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Transactions by Invoice ID
@@ -2141,6 +2210,7 @@ export def "2026-01-invoices-transactions get-transactions-by-invoice-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Cursor: string # [Optional] A pagination token used to jump to first, last, next or previous pages. When supplied, it overrides all other filter parameters.
   --PageSize: int # Number of transactions to return per page (default is 100, to be entered when API is called for first time). Must be between 1 and 1000.
   --SortOrder: string # Sort order of the results. Valid values: Ascending or Descending (default: Descending).
@@ -2154,7 +2224,7 @@ export def "2026-01-invoices-transactions get-transactions-by-invoice-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Transaction Fees
@@ -2169,6 +2239,7 @@ export def "2026-01-transaction-fees get-transaction-fees" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> record<fee_list: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2178,7 +2249,7 @@ export def "2026-01-transaction-fees get-transaction-fees" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Simulates Shipment
@@ -2194,6 +2265,7 @@ export def "2026-01-simulate-shipment simulates-shipment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --shipment-id: string # The ShipBob shipment id the simulation should target. (nullable)
   simulation: record # Defines a simulation action to run, with an optional delay and an optional next action to allow chaining. — shape: {action: any, delay?: int, next?: record}
@@ -2208,7 +2280,7 @@ export def "2026-01-simulate-shipment simulates-shipment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Simulation Status
@@ -2224,6 +2296,7 @@ export def "2026-01-simulate-status get-simulation-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> record<entity_id: string, entity_type: string, simulation: record<action: any, message: string, next: any, schedule_time: string, status: string>, simulation_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2233,5 +2306,5 @@ export def "2026-01-simulate-status get-simulation-status" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

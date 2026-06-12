@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -130,7 +131,7 @@ def status-completer-2 [] { ["PENDING" "PURCHASE_FAIL" "PURCHASE_SUCCESS" "REFUN
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "ping get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -162,13 +163,14 @@ export def "ping get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v3/ping")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check Server Time
@@ -182,13 +184,14 @@ export def "time get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<serverTime: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v3/time")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Exchange Information
@@ -202,6 +205,7 @@ export def "exchange-info get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --symbols: string # e.g. ["BTCUSDT","BNBBTC"]
   --permissions: string # e.g. 'SPOT' or ['MARGIN','LEVERAGED']
@@ -212,7 +216,7 @@ export def "exchange-info get" [
   let full_url = (build-url $base "/api/v3/exchangeInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Order Book
@@ -226,6 +230,7 @@ export def "depth get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --limit: int # If limit > 5000, then the response will truncate to 5000 (format: int32, default: 100, e.g. 100)
 ]: nothing -> record<lastUpdateId: int, bids: list<list<string>>, asks: list<list<string>>> {
@@ -235,7 +240,7 @@ export def "depth get" [
   let full_url = (build-url $base "/api/v3/depth" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Recent Trades List
@@ -249,6 +254,7 @@ export def "trades get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --limit: int # Default 500; max 1000. (format: int32, e.g. 5)
 ]: nothing -> table<id: int, price: string, qty: string, quoteQty: string, time: int, isBuyerMaker: bool, isBestMatch: bool> {
@@ -258,7 +264,7 @@ export def "trades get" [
   let full_url = (build-url $base "/api/v3/trades" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Old Trade Lookup
@@ -272,6 +278,7 @@ export def "historical-trades get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --limit: int # Default 500; max 1000. (format: int32, e.g. 5)
   --fromId: int # Trade id to fetch from. Default gets most recent trades. (format: int64)
@@ -282,7 +289,7 @@ export def "historical-trades get" [
   let full_url = (build-url $base "/api/v3/historicalTrades" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Compressed/Aggregate Trades List
@@ -296,6 +303,7 @@ export def "agg-trades get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --fromId: int # Trade id to fetch from. Default gets most recent trades. (format: int64)
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -308,7 +316,7 @@ export def "agg-trades get" [
   let full_url = (build-url $base "/api/v3/aggTrades" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Kline/Candlestick Data
@@ -322,6 +330,7 @@ export def "klines get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --interval: string@interval-completer # kline intervals (e.g. "1m")
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -335,7 +344,7 @@ export def "klines get" [
   let full_url = (build-url $base "/api/v3/klines" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UIKlines
@@ -349,6 +358,7 @@ export def "ui-klines get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --interval: string@interval-completer # kline intervals (e.g. "1m")
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -362,7 +372,7 @@ export def "ui-klines get" [
   let full_url = (build-url $base "/api/v3/uiKlines" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Current Average Price
@@ -376,6 +386,7 @@ export def "avg-price get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
 ]: nothing -> record<mins: int, price: string, closeTime: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
@@ -384,7 +395,7 @@ export def "avg-price get" [
   let full_url = (build-url $base "/api/v3/avgPrice" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # 24hr Ticker Price Change Statistics
@@ -398,6 +409,7 @@ export def "ticker-24hr get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --symbols: string # e.g. ["BTCUSDT","BNBBTC"]
   --type: string@type-completer # Supported values: FULL or MINI. If none provided, the default is FULL (e.g. FULL)
@@ -408,7 +420,7 @@ export def "ticker-24hr get" [
   let full_url = (build-url $base "/api/v3/ticker/24hr" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Trading Day Ticker
@@ -422,6 +434,7 @@ export def "ticker-trading-day get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --symbols: string # e.g. ["BTCUSDT","BNBBTC"]
   --timeZone: string # Default: 0 (UTC)
@@ -433,7 +446,7 @@ export def "ticker-trading-day get" [
   let full_url = (build-url $base "/api/v3/ticker/tradingDay" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Symbol Price Ticker
@@ -447,6 +460,7 @@ export def "ticker-price get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --symbols: string # e.g. ["BTCUSDT","BNBBTC"]
 ]: nothing -> any {
@@ -456,7 +470,7 @@ export def "ticker-price get" [
   let full_url = (build-url $base "/api/v3/ticker/price" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Symbol Order Book Ticker
@@ -470,6 +484,7 @@ export def "ticker-book-ticker get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --symbols: string # e.g. ["BTCUSDT","BNBBTC"]
 ]: nothing -> any {
@@ -479,7 +494,7 @@ export def "ticker-book-ticker get" [
   let full_url = (build-url $base "/api/v3/ticker/bookTicker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Rolling window price change statistics
@@ -493,6 +508,7 @@ export def "ticker get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --symbols: string # e.g. ["BTCUSDT","BNBBTC"]
   --windowSize: string # Defaults to 1d if no parameter provided. Supported windowSize values: 1m,2m....59m for minutes 1h, 2h....23h - for hours 1d...7d - for days.  Units cannot be combined (e.g. 1d2h is not allowed)
@@ -504,7 +520,7 @@ export def "ticker get" [
   let full_url = (build-url $base "/api/v3/ticker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Test New Order (TRADE)
@@ -518,6 +534,7 @@ export def "order-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --side: string@side-completer # e.g. SELL
   --type: string@type-completer-1 # Order type (e.g. LIMIT)
@@ -543,7 +560,7 @@ export def "order-test post" [
   let full_url = (build-url $base "/api/v3/order/test" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Order (USER_DATA)
@@ -557,6 +574,7 @@ export def "order get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --orderId: int # Order id (format: int64)
   --origClientOrderId: string # Order id from client
@@ -570,7 +588,7 @@ export def "order get" [
   let full_url = (build-url $base "/api/v3/order" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # New Order (TRADE)
@@ -584,6 +602,7 @@ export def "order post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --side: string@side-completer # e.g. SELL
   --type: string@type-completer-1 # Order type (e.g. LIMIT)
@@ -609,7 +628,7 @@ export def "order post" [
   let full_url = (build-url $base "/api/v3/order" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel Order (TRADE)
@@ -623,6 +642,7 @@ export def "order delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --orderId: int # Order id (format: int64)
   --origClientOrderId: string # Order id from client
@@ -638,7 +658,7 @@ export def "order delete" [
   let full_url = (build-url $base "/api/v3/order" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel an Existing Order and Send a New Order (Trade)
@@ -652,6 +672,7 @@ export def "order-cancel-replace post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --side: string@side-completer # e.g. SELL
   --type: string@type-completer-1 # Order type (e.g. LIMIT)
@@ -682,7 +703,7 @@ export def "order-cancel-replace post" [
   let full_url = (build-url $base "/api/v3/order/cancelReplace" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Current Open Orders (USER_DATA)
@@ -696,6 +717,7 @@ export def "open-orders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -707,7 +729,7 @@ export def "open-orders get" [
   let full_url = (build-url $base "/api/v3/openOrders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel all Open Orders on a Symbol (TRADE)
@@ -721,6 +743,7 @@ export def "open-orders delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -732,7 +755,7 @@ export def "open-orders delete" [
   let full_url = (build-url $base "/api/v3/openOrders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # All Orders (USER_DATA)
@@ -746,6 +769,7 @@ export def "all-orders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --orderId: int # Order id (format: int64)
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -761,7 +785,7 @@ export def "all-orders get" [
   let full_url = (build-url $base "/api/v3/allOrders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # New Order list - OCO (TRADE)
@@ -775,6 +799,7 @@ export def "order-list-oco post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --listClientOrderId: string # Arbitrary unique ID among open order lists. Automatically generated if not sent. A new order list with the same `listClientOrderId` is accepted only when the previous one is filled or completely expired. `listClientOrderId` is distinct from the `aboveClientOrderId` and the `belowCLientOrderId`.
   --side: string@side-completer # e.g. SELL
@@ -809,7 +834,7 @@ export def "order-list-oco post" [
   let full_url = (build-url $base "/api/v3/orderList/oco" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # New Order List - OTO (TRADE)
@@ -823,6 +848,7 @@ export def "order-list-oto post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --listClientOrderId: string # Arbitrary unique ID among open order lists. Automatically generated if not sent. A new order list with the same `listClientOrderId` is accepted only when the previous one is filled or completely expired. `listClientOrderId` is distinct from the `workingClientOrderId` and the `pendingClientOrderId`.
   --newOrderRespType: string@newOrderRespType-completer # Set the response JSON.
@@ -856,7 +882,7 @@ export def "order-list-oto post" [
   let full_url = (build-url $base "/api/v3/orderList/oto" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # New Order List - OTOCO (TRADE)
@@ -870,6 +896,7 @@ export def "order-list-otoco post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --listClientOrderId: string # Arbitrary unique ID among open order lists. Automatically generated if not sent. A new order list with the same `listClientOrderId` is accepted only when the previous one is filled or completely expired. `listClientOrderId` is distinct from the `workingClientOrderId` and the `pendingClientOrderId`.
   --newOrderRespType: string@newOrderRespType-completer # Set the response JSON.
@@ -913,7 +940,7 @@ export def "order-list-otoco post" [
   let full_url = (build-url $base "/api/v3/orderList/otoco" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query OCO (USER_DATA)
@@ -927,6 +954,7 @@ export def "order-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orderListId: int # Order list id (format: int64)
   --origClientOrderId: string # Order id from client
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -939,7 +967,7 @@ export def "order-list get" [
   let full_url = (build-url $base "/api/v3/orderList" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel OCO (TRADE)
@@ -953,6 +981,7 @@ export def "order-list delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --orderListId: int # Order list id (format: int64)
   --listClientOrderId: string # A unique Id for the entire orderList
@@ -967,7 +996,7 @@ export def "order-list delete" [
   let full_url = (build-url $base "/api/v3/orderList" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query all OCO (USER_DATA)
@@ -981,6 +1010,7 @@ export def "all-order-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromId: int # Trade id to fetch from. Default gets most recent trades. (format: int64)
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
@@ -995,7 +1025,7 @@ export def "all-order-list get" [
   let full_url = (build-url $base "/api/v3/allOrderList" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Open OCO (USER_DATA)
@@ -1009,6 +1039,7 @@ export def "open-order-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -1019,7 +1050,7 @@ export def "open-order-list get" [
   let full_url = (build-url $base "/api/v3/openOrderList" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # New order using SOR (TRADE)
@@ -1033,6 +1064,7 @@ export def "sor-order post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --side: string@side-completer # e.g. SELL
   --type: string@type-completer-1 # Order type (e.g. LIMIT)
@@ -1055,7 +1087,7 @@ export def "sor-order post" [
   let full_url = (build-url $base "/api/v3/sor/order" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Test new order using SOR (TRADE)
@@ -1069,6 +1101,7 @@ export def "sor-order-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --side: string@side-completer # e.g. SELL
   --type: string@type-completer-1 # Order type (e.g. LIMIT)
@@ -1092,7 +1125,7 @@ export def "sor-order-test post" [
   let full_url = (build-url $base "/api/v3/sor/order/test" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Account Information (USER_DATA)
@@ -1106,6 +1139,7 @@ export def "account get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -1116,7 +1150,7 @@ export def "account get" [
   let full_url = (build-url $base "/api/v3/account" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Account Trade List (USER_DATA)
@@ -1130,6 +1164,7 @@ export def "my-trades get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --orderId: int # This can only be used in combination with symbol. (format: int64)
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -1146,7 +1181,7 @@ export def "my-trades get" [
   let full_url = (build-url $base "/api/v3/myTrades" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Current Order Count Usage (TRADE)
@@ -1160,6 +1195,7 @@ export def "rate-limit-order get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -1170,7 +1206,7 @@ export def "rate-limit-order get" [
   let full_url = (build-url $base "/api/v3/rateLimit/order" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Prevented Matches
@@ -1184,6 +1220,7 @@ export def "my-prevented-matches get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --preventedMatchId: int # format: int64, e.g. 1
   --orderId: int # Order id (format: int64)
@@ -1199,7 +1236,7 @@ export def "my-prevented-matches get" [
   let full_url = (build-url $base "/api/v3/myPreventedMatches" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Allocations (USER_DATA)
@@ -1213,6 +1250,7 @@ export def "my-allocations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
@@ -1229,7 +1267,7 @@ export def "my-allocations get" [
   let full_url = (build-url $base "/api/v3/myAllocations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Commission Rates (USER_DATA)
@@ -1243,6 +1281,7 @@ export def "account-commission get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -1253,7 +1292,7 @@ export def "account-commission get" [
   let full_url = (build-url $base "/api/v3/account/commission" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Margin account borrow/repay(MARGIN)
@@ -1267,6 +1306,7 @@ export def "sapi-margin-borrow-repay post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BTC
   --isIsolated: string # TRUE for isolated margin, FALSE for crossed margin
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
@@ -1282,7 +1322,7 @@ export def "sapi-margin-borrow-repay post" [
   let full_url = (build-url $base "/sapi/v1/margin/borrow-repay" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query borrow/repay records in Margin account(USER_DATA)
@@ -1296,6 +1336,7 @@ export def "sapi-margin-borrow-repay get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BTC
   --isolatedSymbol: string # Isolated symbol
   --txId: int # tranId in POST /sapi/v1/margin/loan (format: int64)
@@ -1314,7 +1355,7 @@ export def "sapi-margin-borrow-repay get" [
   let full_url = (build-url $base "/sapi/v1/margin/borrow-repay" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Cross Margin Transfer History (USER_DATA)
@@ -1328,6 +1369,7 @@ export def "sapi-margin-transfer get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BNB
   --type: string@type-completer-2
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -1345,7 +1387,7 @@ export def "sapi-margin-transfer get" [
   let full_url = (build-url $base "/sapi/v1/margin/transfer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get All Margin Assets (MARKET_DATA)
@@ -1359,6 +1401,7 @@ export def "sapi-margin-all-assets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BTC
 ]: nothing -> table<assetFullName: string, assetName: string, isBorrowable: bool, isMortgageable: bool, userMinBorrow: string, userMinRepay: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
@@ -1367,7 +1410,7 @@ export def "sapi-margin-all-assets get" [
   let full_url = (build-url $base "/sapi/v1/margin/allAssets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get All Cross Margin Pairs (MARKET_DATA)
@@ -1381,6 +1424,7 @@ export def "sapi-margin-all-pairs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
 ]: nothing -> table<base: string, id: int, isBuyAllowed: bool, isMarginTrade: bool, isSellAllowed: bool, quote: string, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
@@ -1389,7 +1433,7 @@ export def "sapi-margin-all-pairs get" [
   let full_url = (build-url $base "/sapi/v1/margin/allPairs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Margin PriceIndex (MARKET_DATA)
@@ -1403,6 +1447,7 @@ export def "sapi-margin-price-index get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
 ]: nothing -> record<calcTime: int, price: string, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
@@ -1411,7 +1456,7 @@ export def "sapi-margin-price-index get" [
   let full_url = (build-url $base "/sapi/v1/margin/priceIndex" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Margin Account's Order (USER_DATA)
@@ -1425,6 +1470,7 @@ export def "sapi-margin-order get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --isIsolated: string@isIsolated-completer # * `TRUE` - For isolated margin * `FALSE` - Default, not for isolated margin
   --orderId: int # Order id (format: int64)
@@ -1439,7 +1485,7 @@ export def "sapi-margin-order get" [
   let full_url = (build-url $base "/sapi/v1/margin/order" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Margin Account New Order (TRADE)
@@ -1453,6 +1499,7 @@ export def "sapi-margin-order post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --isIsolated: string@isIsolated-completer # * `TRUE` - For isolated margin * `FALSE` - Default, not for isolated margin
   --side: string@side-completer # e.g. SELL
@@ -1478,7 +1525,7 @@ export def "sapi-margin-order post" [
   let full_url = (build-url $base "/sapi/v1/margin/order" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Margin Account Cancel Order (TRADE)
@@ -1492,6 +1539,7 @@ export def "sapi-margin-order delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --isIsolated: string@isIsolated-completer # * `TRUE` - For isolated margin * `FALSE` - Default, not for isolated margin
   --orderId: int # Order id (format: int64)
@@ -1507,7 +1555,7 @@ export def "sapi-margin-order delete" [
   let full_url = (build-url $base "/sapi/v1/margin/order" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Interest History (USER_DATA)
@@ -1521,6 +1569,7 @@ export def "sapi-margin-interest-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BNB
   --isolatedSymbol: string # Isolated symbol
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -1538,7 +1587,7 @@ export def "sapi-margin-interest-history get" [
   let full_url = (build-url $base "/sapi/v1/margin/interestHistory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Force Liquidation Record (USER_DATA)
@@ -1552,6 +1601,7 @@ export def "sapi-margin-force-liquidation-rec get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
   --isolatedSymbol: string # Isolated symbol
@@ -1567,7 +1617,7 @@ export def "sapi-margin-force-liquidation-rec get" [
   let full_url = (build-url $base "/sapi/v1/margin/forceLiquidationRec" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Cross Margin Account Details (USER_DATA)
@@ -1581,6 +1631,7 @@ export def "sapi-margin-account get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -1591,7 +1642,7 @@ export def "sapi-margin-account get" [
   let full_url = (build-url $base "/sapi/v1/margin/account" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Margin Account's Open Orders (USER_DATA)
@@ -1605,6 +1656,7 @@ export def "sapi-margin-open-orders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --isIsolated: string@isIsolated-completer # * `TRUE` - For isolated margin * `FALSE` - Default, not for isolated margin
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -1617,7 +1669,7 @@ export def "sapi-margin-open-orders get" [
   let full_url = (build-url $base "/sapi/v1/margin/openOrders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Margin Account Cancel all Open Orders on a Symbol (TRADE)
@@ -1631,6 +1683,7 @@ export def "sapi-margin-open-orders delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --isIsolated: string@isIsolated-completer # * `TRUE` - For isolated margin * `FALSE` - Default, not for isolated margin
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -1643,7 +1696,7 @@ export def "sapi-margin-open-orders delete" [
   let full_url = (build-url $base "/sapi/v1/margin/openOrders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Margin Account's All Orders (USER_DATA)
@@ -1657,6 +1710,7 @@ export def "sapi-margin-all-orders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --isIsolated: string@isIsolated-completer # * `TRUE` - For isolated margin * `FALSE` - Default, not for isolated margin
   --orderId: int # Order id (format: int64)
@@ -1673,7 +1727,7 @@ export def "sapi-margin-all-orders get" [
   let full_url = (build-url $base "/sapi/v1/margin/allOrders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Margin Account New OCO (TRADE)
@@ -1687,6 +1741,7 @@ export def "sapi-margin-order-oco post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --isIsolated: string@isIsolated-completer # * `TRUE` - For isolated margin * `FALSE` - Default, not for isolated margin
   --listClientOrderId: string # A unique Id for the entire orderList
@@ -1713,7 +1768,7 @@ export def "sapi-margin-order-oco post" [
   let full_url = (build-url $base "/sapi/v1/margin/order/oco" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Margin Account's OCO (USER_DATA)
@@ -1727,6 +1782,7 @@ export def "sapi-margin-order-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isIsolated: string@isIsolated-completer # * `TRUE` - For isolated margin * `FALSE` - Default, not for isolated margin
   --symbol: string # Mandatory for isolated margin, not supported for cross margin
   --orderListId: int # Order list id (format: int64)
@@ -1741,7 +1797,7 @@ export def "sapi-margin-order-list get" [
   let full_url = (build-url $base "/sapi/v1/margin/orderList" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Margin Account Cancel OCO (TRADE)
@@ -1755,6 +1811,7 @@ export def "sapi-margin-order-list delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --isIsolated: string@isIsolated-completer # * `TRUE` - For isolated margin * `FALSE` - Default, not for isolated margin
   --orderListId: int # Order list id (format: int64)
@@ -1770,7 +1827,7 @@ export def "sapi-margin-order-list delete" [
   let full_url = (build-url $base "/sapi/v1/margin/orderList" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Margin Account's all OCO (USER_DATA)
@@ -1784,6 +1841,7 @@ export def "sapi-margin-all-order-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isIsolated: string@isIsolated-completer # * `TRUE` - For isolated margin * `FALSE` - Default, not for isolated margin
   --symbol: string # Mandatory for isolated margin, not supported for cross margin
   --fromId: string # If supplied, neither `startTime` or `endTime` can be provided
@@ -1800,7 +1858,7 @@ export def "sapi-margin-all-order-list get" [
   let full_url = (build-url $base "/sapi/v1/margin/allOrderList" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Margin Account's Open OCO (USER_DATA)
@@ -1814,6 +1872,7 @@ export def "sapi-margin-open-order-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isIsolated: string@isIsolated-completer # * `TRUE` - For isolated margin * `FALSE` - Default, not for isolated margin
   --symbol: string # Mandatory for isolated margin, not supported for cross margin
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -1826,7 +1885,7 @@ export def "sapi-margin-open-order-list get" [
   let full_url = (build-url $base "/sapi/v1/margin/openOrderList" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Margin Account's Trade List (USER_DATA)
@@ -1840,6 +1899,7 @@ export def "sapi-margin-my-trades get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --isIsolated: string@isIsolated-completer # * `TRUE` - For isolated margin * `FALSE` - Default, not for isolated margin
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -1856,7 +1916,7 @@ export def "sapi-margin-my-trades get" [
   let full_url = (build-url $base "/sapi/v1/margin/myTrades" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Max Borrow (USER_DATA)
@@ -1870,6 +1930,7 @@ export def "sapi-margin-max-borrowable get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BTC
   --isolatedSymbol: string # Isolated symbol
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -1882,7 +1943,7 @@ export def "sapi-margin-max-borrowable get" [
   let full_url = (build-url $base "/sapi/v1/margin/maxBorrowable" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Max Transfer-Out Amount (USER_DATA)
@@ -1896,6 +1957,7 @@ export def "sapi-margin-max-transferable get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BTC
   --isolatedSymbol: string # Isolated symbol
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -1908,7 +1970,7 @@ export def "sapi-margin-max-transferable get" [
   let full_url = (build-url $base "/sapi/v1/margin/maxTransferable" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Summary of Margin account (USER_DATA)
@@ -1922,6 +1984,7 @@ export def "sapi-margin-trade-coeff get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Email Address (e.g. me@email.com)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -1933,7 +1996,7 @@ export def "sapi-margin-trade-coeff get" [
   let full_url = (build-url $base "/sapi/v1/margin/tradeCoeff" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Isolated Margin Account Info (USER_DATA)
@@ -1947,6 +2010,7 @@ export def "sapi-margin-isolated-account get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # Max 5 symbols can be sent; separated by ',' (e.g. BTCUSDT,BNBUSDT,ADAUSDT)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -1958,7 +2022,7 @@ export def "sapi-margin-isolated-account get" [
   let full_url = (build-url $base "/sapi/v1/margin/isolated/account" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disable Isolated Margin Account (TRADE)
@@ -1972,6 +2036,7 @@ export def "sapi-margin-isolated-account delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -1983,7 +2048,7 @@ export def "sapi-margin-isolated-account delete" [
   let full_url = (build-url $base "/sapi/v1/margin/isolated/account" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable Isolated Margin Account (TRADE)
@@ -1997,6 +2062,7 @@ export def "sapi-margin-isolated-account post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -2008,7 +2074,7 @@ export def "sapi-margin-isolated-account post" [
   let full_url = (build-url $base "/sapi/v1/margin/isolated/account" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Enabled Isolated Margin Account Limit (USER_DATA)
@@ -2022,6 +2088,7 @@ export def "sapi-margin-isolated-account-limit get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -2032,7 +2099,7 @@ export def "sapi-margin-isolated-account-limit get" [
   let full_url = (build-url $base "/sapi/v1/margin/isolated/accountLimit" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get All Isolated Margin Symbol(USER_DATA)
@@ -2046,6 +2113,7 @@ export def "sapi-margin-isolated-all-pairs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -2057,7 +2125,7 @@ export def "sapi-margin-isolated-all-pairs get" [
   let full_url = (build-url $base "/sapi/v1/margin/isolated/allPairs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Toggle BNB Burn On Spot Trade And Margin Interest (USER_DATA)
@@ -2071,6 +2139,7 @@ export def "sapi-bnb-burn post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --spotBNBBurn: string@spotBNBBurn-completer # Determines whether to use BNB to pay for trading fees on SPOT (e.g. true)
   --interestBNBBurn: string@interestBNBBurn-completer # Determines whether to use BNB to pay for margin loan's interest (e.g. false)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -2083,7 +2152,7 @@ export def "sapi-bnb-burn post" [
   let full_url = (build-url $base "/sapi/v1/bnbBurn" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get BNB Burn Status(USER_DATA)
@@ -2097,6 +2166,7 @@ export def "sapi-bnb-burn get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -2107,7 +2177,7 @@ export def "sapi-bnb-burn get" [
   let full_url = (build-url $base "/sapi/v1/bnbBurn" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Margin Interest Rate History (USER_DATA)
@@ -2121,6 +2191,7 @@ export def "sapi-margin-interest-rate-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BTC
   --vipLevel: int # Defaults to user's vip level (format: int32, e.g. 1)
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -2135,7 +2206,7 @@ export def "sapi-margin-interest-rate-history get" [
   let full_url = (build-url $base "/sapi/v1/margin/interestRateHistory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Cross Margin Fee Data (USER_DATA)
@@ -2149,6 +2220,7 @@ export def "sapi-margin-cross-margin-data get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --vipLevel: int # Defaults to user's vip level (format: int32, e.g. 1)
   --coin: string # Coin name (e.g. BNB)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -2161,7 +2233,7 @@ export def "sapi-margin-cross-margin-data get" [
   let full_url = (build-url $base "/sapi/v1/margin/crossMarginData" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Isolated Margin Fee Data (USER_DATA)
@@ -2175,6 +2247,7 @@ export def "sapi-margin-isolated-margin-data get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --vipLevel: int # Defaults to user's vip level (format: int32, e.g. 1)
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -2187,7 +2260,7 @@ export def "sapi-margin-isolated-margin-data get" [
   let full_url = (build-url $base "/sapi/v1/margin/isolatedMarginData" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Isolated Margin Tier Data (USER_DATA)
@@ -2201,6 +2274,7 @@ export def "sapi-margin-isolated-margin-tier get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --tier: string # All margin tier data will be returned if tier is omitted (e.g. 1)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -2213,7 +2287,7 @@ export def "sapi-margin-isolated-margin-tier get" [
   let full_url = (build-url $base "/sapi/v1/margin/isolatedMarginTier" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Current Margin Order Count Usage (TRADE)
@@ -2227,6 +2301,7 @@ export def "sapi-margin-rate-limit-order get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isIsolated: string # * `TRUE` - For isolated margin * `FALSE` - Default, not for isolated margin
   --symbol: string # isolated symbol, mandatory for isolated margin
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -2239,7 +2314,7 @@ export def "sapi-margin-rate-limit-order get" [
   let full_url = (build-url $base "/sapi/v1/margin/rateLimit/order" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cross margin collateral ratio (MARKET_DATA)
@@ -2253,13 +2328,14 @@ export def "sapi-margin-cross-margin-collateral-ratio get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<collaterals: list<record>, assetNames: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sapi/v1/margin/crossMarginCollateralRatio")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Small Liability Exchange Coin List (USER_DATA)
@@ -2273,6 +2349,7 @@ export def "sapi-margin-exchange-small-liability get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -2283,7 +2360,7 @@ export def "sapi-margin-exchange-small-liability get" [
   let full_url = (build-url $base "/sapi/v1/margin/exchange-small-liability" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Small Liability Exchange History (USER_DATA)
@@ -2297,6 +2374,7 @@ export def "sapi-margin-exchange-small-liability-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --current: int # Current querying page. Start from 1. Default:1 (format: int32, e.g. 1)
   --size: int # Default:10 Max:100 (format: int32, e.g. 100)
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -2311,7 +2389,7 @@ export def "sapi-margin-exchange-small-liability-history get" [
   let full_url = (build-url $base "/sapi/v1/margin/exchange-small-liability-history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a future hourly interest rate (USER_DATA)
@@ -2325,6 +2403,7 @@ export def "sapi-margin-next-hourly-interest-rate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --assets: string # List of assets, separated by commas, up to 20 (e.g. BTC,ETH)
   --isIsolated: string@isIsolated-completer # for isolated margin or not, "TRUE", "FALSE" (e.g. TRUE)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -2337,7 +2416,7 @@ export def "sapi-margin-next-hourly-interest-rate get" [
   let full_url = (build-url $base "/sapi/v1/margin/next-hourly-interest-rate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get cross or isolated margin capital flow(USER_DATA)
@@ -2351,6 +2430,7 @@ export def "sapi-margin-capital-flow get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BNB
   --symbol: string # Required when querying isolated data (e.g. BTCUSDT)
   --type: string@type-completer-3
@@ -2368,7 +2448,7 @@ export def "sapi-margin-capital-flow get" [
   let full_url = (build-url $base "/sapi/v1/margin/capital-flow" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tokens or symbols delist schedule for cross margin and isolated margin (MARKET_DATA)
@@ -2382,6 +2462,7 @@ export def "sapi-margin-delist-schedule get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -2392,7 +2473,7 @@ export def "sapi-margin-delist-schedule get" [
   let full_url = (build-url $base "/sapi/v1/margin/delist-schedule" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Margin Available Inventory (USER_DATA)
@@ -2406,6 +2487,7 @@ export def "sapi-margin-available-inventory get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -2416,7 +2498,7 @@ export def "sapi-margin-available-inventory get" [
   let full_url = (build-url $base "/sapi/v1/margin/available-inventory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Margin manual liquidation(MARGIN)
@@ -2430,6 +2512,7 @@ export def "sapi-margin-manual-liquidation post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4
   --symbol: string # e.g. BTCUSDT
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -2441,7 +2524,7 @@ export def "sapi-margin-manual-liquidation post" [
   let full_url = (build-url $base "/sapi/v1/margin/manual-liquidation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Margin Account New OTO (TRADE)
@@ -2455,6 +2538,7 @@ export def "sapi-margin-order-oto post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --isIsolated: string@isIsolated-completer # * `TRUE` - For isolated margin * `FALSE` - Default, not for isolated margin
   --listClientOrderId: string # Arbitrary unique ID among open order lists. Automatically generated if not sent. A new order list with the same `listClientOrderId` is accepted only when the previous one is filled or completely expired. `listClientOrderId` is distinct from the `workingClientOrderId` and the `pendingClientOrderId`.
@@ -2487,7 +2571,7 @@ export def "sapi-margin-order-oto post" [
   let full_url = (build-url $base "/sapi/v1/margin/order/oto" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Margin Account New OTOCO (TRADE)
@@ -2501,6 +2585,7 @@ export def "sapi-margin-order-otoco post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --isIsolated: string@isIsolated-completer # * `TRUE` - For isolated margin * `FALSE` - Default, not for isolated margin
   --sideEffectType: string@sideEffectType-completer-1 # Default `NO_SIDE_EFFECT`
@@ -2540,7 +2625,7 @@ export def "sapi-margin-order-otoco post" [
   let full_url = (build-url $base "/sapi/v1/margin/order/otoco" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adjust cross margin max leverage (USER_DATA)
@@ -2554,6 +2639,7 @@ export def "sapi-margin-max-leverage post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxLeverage: int # Can only adjust 3 or 5 (e.g. 3)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -2565,7 +2651,7 @@ export def "sapi-margin-max-leverage post" [
   let full_url = (build-url $base "/sapi/v1/margin/max-leverage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Liability Coin Leverage Bracket in Cross Margin Pro Mode (MARKET_DATA)
@@ -2579,13 +2665,14 @@ export def "sapi-margin-leverage-bracket get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<assetNames: list<string>, rank: int, brackets: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sapi/v1/margin/leverageBracket")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # System Status (System)
@@ -2599,13 +2686,14 @@ export def "sapi-system-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<status: int, msg: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sapi/v1/system/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # All Coins' Information (USER_DATA)
@@ -2619,6 +2707,7 @@ export def "sapi-capital-config-getall get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -2629,7 +2718,7 @@ export def "sapi-capital-config-getall get" [
   let full_url = (build-url $base "/sapi/v1/capital/config/getall" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Daily Account Snapshot (USER_DATA)
@@ -2643,6 +2732,7 @@ export def "sapi-account-snapshot get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-5
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
@@ -2657,7 +2747,7 @@ export def "sapi-account-snapshot get" [
   let full_url = (build-url $base "/sapi/v1/accountSnapshot" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disable Fast Withdraw Switch (USER_DATA)
@@ -2671,6 +2761,7 @@ export def "sapi-account-disable-fast-withdraw-switch post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -2681,7 +2772,7 @@ export def "sapi-account-disable-fast-withdraw-switch post" [
   let full_url = (build-url $base "/sapi/v1/account/disableFastWithdrawSwitch" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable Fast Withdraw Switch (USER_DATA)
@@ -2695,6 +2786,7 @@ export def "sapi-account-enable-fast-withdraw-switch post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -2705,7 +2797,7 @@ export def "sapi-account-enable-fast-withdraw-switch post" [
   let full_url = (build-url $base "/sapi/v1/account/enableFastWithdrawSwitch" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Withdraw (USER_DATA)
@@ -2719,6 +2811,7 @@ export def "sapi-capital-withdraw-apply post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --coin: string # Coin name (e.g. BNB)
   --withdrawOrderId: string # Client id for withdraw
   --network: string # e.g. BTC
@@ -2738,7 +2831,7 @@ export def "sapi-capital-withdraw-apply post" [
   let full_url = (build-url $base "/sapi/v1/capital/withdraw/apply" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deposit History(supporting network) (USER_DATA)
@@ -2752,6 +2845,7 @@ export def "sapi-capital-deposit-hisrec get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --coin: string # Coin name (e.g. BNB)
   --status: int # * `0` - pending * `6` - credited but cannot withdraw * `1` - success (format: int32)
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -2768,7 +2862,7 @@ export def "sapi-capital-deposit-hisrec get" [
   let full_url = (build-url $base "/sapi/v1/capital/deposit/hisrec" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Withdraw History (supporting network) (USER_DATA)
@@ -2782,6 +2876,7 @@ export def "sapi-capital-withdraw-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --coin: string # Coin name (e.g. BNB)
   --withdrawOrderId: string
   --status: int # * `0` - Email Sent * `1` - Cancelled * `2` - Awaiting Approval * `3` - Rejected * `4` - Processing * `5` - Failure * `6` - Completed (format: int32)
@@ -2799,7 +2894,7 @@ export def "sapi-capital-withdraw-history get" [
   let full_url = (build-url $base "/sapi/v1/capital/withdraw/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deposit Address (supporting network) (USER_DATA)
@@ -2813,6 +2908,7 @@ export def "sapi-capital-deposit-address get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --coin: string # Coin name (e.g. BNB)
   --network: string # e.g. BTC
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -2825,7 +2921,7 @@ export def "sapi-capital-deposit-address get" [
   let full_url = (build-url $base "/sapi/v1/capital/deposit/address" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Account Status (USER_DATA)
@@ -2839,6 +2935,7 @@ export def "sapi-account-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -2849,7 +2946,7 @@ export def "sapi-account-status get" [
   let full_url = (build-url $base "/sapi/v1/account/status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Account API Trading Status (USER_DATA)
@@ -2863,6 +2960,7 @@ export def "sapi-account-api-trading-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -2873,7 +2971,7 @@ export def "sapi-account-api-trading-status get" [
   let full_url = (build-url $base "/sapi/v1/account/apiTradingStatus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DustLog(USER_DATA)
@@ -2887,6 +2985,7 @@ export def "sapi-asset-dribblet get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountType: string@accountType-completer # SPOT or MARGIN, default SPOT
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
@@ -2900,7 +2999,7 @@ export def "sapi-asset-dribblet get" [
   let full_url = (build-url $base "/sapi/v1/asset/dribblet" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Assets That Can Be Converted Into BNB (USER_DATA)
@@ -2914,6 +3013,7 @@ export def "sapi-asset-dust-btc post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountType: string@accountType-completer # SPOT or MARGIN, default SPOT
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -2925,7 +3025,7 @@ export def "sapi-asset-dust-btc post" [
   let full_url = (build-url $base "/sapi/v1/asset/dust-btc" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Dust Transfer (USER_DATA)
@@ -2939,6 +3039,7 @@ export def "sapi-asset-dust post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: list # The asset being converted. For example, asset=BTC&asset=USDT
   --accountType: string@accountType-completer # SPOT or MARGIN, default SPOT
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -2951,7 +3052,7 @@ export def "sapi-asset-dust post" [
   let full_url = (build-url $base "/sapi/v1/asset/dust" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Asset Dividend Record (USER_DATA)
@@ -2965,6 +3066,7 @@ export def "sapi-asset-asset-dividend get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BNB
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
@@ -2979,7 +3081,7 @@ export def "sapi-asset-asset-dividend get" [
   let full_url = (build-url $base "/sapi/v1/asset/assetDividend" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Asset Detail (USER_DATA)
@@ -2993,6 +3095,7 @@ export def "sapi-asset-asset-detail get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BNB
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -3004,7 +3107,7 @@ export def "sapi-asset-asset-detail get" [
   let full_url = (build-url $base "/sapi/v1/asset/assetDetail" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Trade Fee (USER_DATA)
@@ -3018,6 +3121,7 @@ export def "sapi-asset-trade-fee get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -3029,7 +3133,7 @@ export def "sapi-asset-trade-fee get" [
   let full_url = (build-url $base "/sapi/v1/asset/tradeFee" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query User Universal Transfer History (USER_DATA)
@@ -3043,6 +3147,7 @@ export def "sapi-asset-transfer get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-6 # Universal transfer type (e.g. MAIN_C2C)
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
@@ -3060,7 +3165,7 @@ export def "sapi-asset-transfer get" [
   let full_url = (build-url $base "/sapi/v1/asset/transfer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # User Universal Transfer (USER_DATA)
@@ -3074,6 +3179,7 @@ export def "sapi-asset-transfer post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-6 # Universal transfer type (e.g. MAIN_C2C)
   --asset: string # e.g. BTC
   --amount: float # format: double, e.g. 1.01
@@ -3089,7 +3195,7 @@ export def "sapi-asset-transfer post" [
   let full_url = (build-url $base "/sapi/v1/asset/transfer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Funding Wallet (USER_DATA)
@@ -3103,6 +3209,7 @@ export def "sapi-asset-get-funding-asset post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BNB
   --needBtcValuation: string@needBtcValuation-completer
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -3115,7 +3222,7 @@ export def "sapi-asset-get-funding-asset post" [
   let full_url = (build-url $base "/sapi/v1/asset/get-funding-asset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # User Asset (USER_DATA)
@@ -3129,6 +3236,7 @@ export def "sapi-asset-get-user-asset post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BNB
   --needBtcValuation: string@needBtcValuation-completer
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -3141,7 +3249,7 @@ export def "sapi-asset-get-user-asset post" [
   let full_url = (build-url $base "/sapi/v3/asset/getUserAsset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Convert Transfer (USER_DATA)
@@ -3155,6 +3263,7 @@ export def "sapi-asset-convert-transfer post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientTranId: string # The unique flag, the min length is 20
   --asset: string # e.g. BTC
   --amount: float # format: double, e.g. 1.01
@@ -3169,7 +3278,7 @@ export def "sapi-asset-convert-transfer post" [
   let full_url = (build-url $base "/sapi/v1/asset/convert-transfer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Convert Transfer (USER_DATA)
@@ -3183,6 +3292,7 @@ export def "sapi-asset-convert-transfer-query-by-page get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tranId: int # The transaction id (format: int64, e.g. 118263615991)
   --asset: string # If it is blank, we will match deducted asset and target asset. (e.g. BTC)
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -3200,7 +3310,7 @@ export def "sapi-asset-convert-transfer-query-by-page get" [
   let full_url = (build-url $base "/sapi/v1/asset/convert-transfer/queryByPage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Cloud-Mining payment and refund history (USER_DATA)
@@ -3214,6 +3324,7 @@ export def "sapi-asset-ledger-transfer-cloud-mining-query-by-page get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tranId: int # The transaction id (format: int64, e.g. 118263615991)
   --clientTranId: string # The unique flag
   --asset: string # If it is blank, we will query all assets (e.g. BTC)
@@ -3231,7 +3342,7 @@ export def "sapi-asset-ledger-transfer-cloud-mining-query-by-page get" [
   let full_url = (build-url $base "/sapi/v1/asset/ledger-transfer/cloud-mining/queryByPage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get API Key Permission (USER_DATA)
@@ -3245,6 +3356,7 @@ export def "sapi-account-api-restrictions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -3255,7 +3367,7 @@ export def "sapi-account-api-restrictions get" [
   let full_url = (build-url $base "/sapi/v1/account/apiRestrictions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query auto-converting stable coins (USER_DATA)
@@ -3269,13 +3381,14 @@ export def "sapi-capital-contract-convertible-coins get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<convertEnabled: bool, coins: list<string>, exchangeRates: record<USDC: string, TUSD: string, USDP: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sapi/v1/capital/contract/convertible-coins")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Switch on/off BUSD and stable coins conversion (USER_DATA) (USER_DATA)
@@ -3289,6 +3402,7 @@ export def "sapi-capital-contract-convertible-coins post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --coin: string # Must be USDC, USDP or TUSD
   --enable: oneof<nothing, bool> # true: turn on the auto-conversion. false: turn off the auto-conversion
 ]: nothing -> record {
@@ -3298,7 +3412,7 @@ export def "sapi-capital-contract-convertible-coins post" [
   let full_url = (build-url $base "/sapi/v1/capital/contract/convertible-coins" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Virtual Sub-account(For Master Account)
@@ -3312,6 +3426,7 @@ export def "sapi-sub-account-virtual-sub-account post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subAccountString: string # Please input a string. We will create a virtual email using that string for you to register
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -3323,7 +3438,7 @@ export def "sapi-sub-account-virtual-sub-account post" [
   let full_url = (build-url $base "/sapi/v1/sub-account/virtualSubAccount" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Sub-account List (For Master Account)
@@ -3337,6 +3452,7 @@ export def "sapi-sub-account-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Sub-account email
   --isFreeze: string@isFreeze-completer
   --page: int # Default 1 (format: int32, e.g. 1)
@@ -3351,7 +3467,7 @@ export def "sapi-sub-account-list get" [
   let full_url = (build-url $base "/sapi/v1/sub-account/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sub-account Spot Asset Transfer History (For Master Account)
@@ -3365,6 +3481,7 @@ export def "sapi-sub-account-sub-transfer-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromEmail: string # Sub-account email
   --toEmail: string # Sub-account email
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -3381,7 +3498,7 @@ export def "sapi-sub-account-sub-transfer-history get" [
   let full_url = (build-url $base "/sapi/v1/sub-account/sub/transfer/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sub-account Futures Asset Transfer History (For Master Account)
@@ -3395,6 +3512,7 @@ export def "sapi-sub-account-futures-internal-transfer get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Sub-account email
   --futuresType: int # 1:USDT-margined Futures, 2: Coin-margined Futures (format: int32, e.g. 2)
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -3411,7 +3529,7 @@ export def "sapi-sub-account-futures-internal-transfer get" [
   let full_url = (build-url $base "/sapi/v1/sub-account/futures/internalTransfer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sub-account Futures Asset Transfer (For Master Account)
@@ -3425,6 +3543,7 @@ export def "sapi-sub-account-futures-internal-transfer post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromEmail: string # Sender email
   --toEmail: string # Recipient email
   --futuresType: int # 1:USDT-margined Futures,2: Coin-margined Futures (format: int32, e.g. 2)
@@ -3440,7 +3559,7 @@ export def "sapi-sub-account-futures-internal-transfer post" [
   let full_url = (build-url $base "/sapi/v1/sub-account/futures/internalTransfer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sub-account Assets (For Master Account)
@@ -3454,6 +3573,7 @@ export def "sapi-sub-account-assets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Sub-account email
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -3465,7 +3585,7 @@ export def "sapi-sub-account-assets get" [
   let full_url = (build-url $base "/sapi/v3/sub-account/assets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sub-account Spot Assets Summary (For Master Account)
@@ -3479,6 +3599,7 @@ export def "sapi-sub-account-spot-summary get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Sub-account email
   --page: int # Default 1 (format: int32, e.g. 1)
   --size: int # Default:10 Max:20 (format: int32)
@@ -3492,7 +3613,7 @@ export def "sapi-sub-account-spot-summary get" [
   let full_url = (build-url $base "/sapi/v1/sub-account/spotSummary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sub-account Spot Assets Summary (For Master Account)
@@ -3506,6 +3627,7 @@ export def "sapi-capital-deposit-sub-address get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Sub-account email
   --coin: string # Coin name (e.g. BNB)
   --network: string # e.g. BTC
@@ -3519,7 +3641,7 @@ export def "sapi-capital-deposit-sub-address get" [
   let full_url = (build-url $base "/sapi/v1/capital/deposit/subAddress" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sub-account Deposit History (For Master Account)
@@ -3533,6 +3655,7 @@ export def "sapi-capital-deposit-sub-hisrec get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Sub-account email
   --coin: string # Coin name (e.g. BNB)
   --status: int # 0(0:pending,6: credited but cannot withdraw, 1:success) (format: int32)
@@ -3550,7 +3673,7 @@ export def "sapi-capital-deposit-sub-hisrec get" [
   let full_url = (build-url $base "/sapi/v1/capital/deposit/subHisrec" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # One click arrival deposit apply (USER_DATA)
@@ -3564,6 +3687,7 @@ export def "sapi-capital-deposit-credit-apply post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --depositId: int # Deposit record Id, priority use (format: int64)
   --txId: string # Deposit txId, used when depositId is not specified
   --subAccountId: int # format: int64
@@ -3578,7 +3702,7 @@ export def "sapi-capital-deposit-credit-apply post" [
   let full_url = (build-url $base "/sapi/v1/capital/deposit/credit-apply" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query User Wallet Balance (USER_DATA)
@@ -3592,6 +3716,7 @@ export def "sapi-asset-wallet-balance get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -3602,7 +3727,7 @@ export def "sapi-asset-wallet-balance get" [
   let full_url = (build-url $base "/sapi/v1/asset/wallet/balance" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query User Delegation History(For Master Account) (USER_DATA)
@@ -3616,6 +3741,7 @@ export def "sapi-asset-custody-transfer-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # e.g. alice@test.com
   --startTime: int # format: int64, e.g. 1695205406000
   --endTime: int # format: int64, e.g. 1695205396000
@@ -3633,7 +3759,7 @@ export def "sapi-asset-custody-transfer-history get" [
   let full_url = (build-url $base "/sapi/v1/asset/custody/transfer-history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch deposit address list with network (USER_DATA)
@@ -3647,6 +3773,7 @@ export def "sapi-capital-deposit-address-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --coin: string # e.g. BTC
   --network: string # e.g. BTC
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -3659,7 +3786,7 @@ export def "sapi-capital-deposit-address-list get" [
   let full_url = (build-url $base "/sapi/v1/capital/deposit/address/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get symbols delist schedule for spot (MARKET_DATA)
@@ -3673,6 +3800,7 @@ export def "sapi-spot-delist-schedule get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -3683,7 +3811,7 @@ export def "sapi-spot-delist-schedule get" [
   let full_url = (build-url $base "/sapi/v1/spot/delist-schedule" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch withdraw address list (USER_DATA)
@@ -3697,13 +3825,14 @@ export def "sapi-capital-withdraw-address-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<address: string, addressTag: string, coin: string, name: string, network: string, origin: string, originType: string, whiteStatus: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sapi/v1/capital/withdraw/address/list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Account info (USER_DATA)
@@ -3717,6 +3846,7 @@ export def "sapi-account-info get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -3727,7 +3857,7 @@ export def "sapi-account-info get" [
   let full_url = (build-url $base "/sapi/v1/account/info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sub-account's Status on Margin/Futures (For Master Account)
@@ -3741,6 +3871,7 @@ export def "sapi-sub-account-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Sub-account email
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -3752,7 +3883,7 @@ export def "sapi-sub-account-status get" [
   let full_url = (build-url $base "/sapi/v1/sub-account/status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable Margin for Sub-account (For Master Account)
@@ -3766,6 +3897,7 @@ export def "sapi-sub-account-margin-enable post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Sub-account email
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -3777,7 +3909,7 @@ export def "sapi-sub-account-margin-enable post" [
   let full_url = (build-url $base "/sapi/v1/sub-account/margin/enable" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Detail on Sub-account's Margin Account (For Master Account)
@@ -3791,6 +3923,7 @@ export def "sapi-sub-account-margin-account get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Sub-account email
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -3802,7 +3935,7 @@ export def "sapi-sub-account-margin-account get" [
   let full_url = (build-url $base "/sapi/v1/sub-account/margin/account" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Summary of Sub-account's Margin Account (For Master Account)
@@ -3816,6 +3949,7 @@ export def "sapi-sub-account-margin-account-summary get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -3826,7 +3960,7 @@ export def "sapi-sub-account-margin-account-summary get" [
   let full_url = (build-url $base "/sapi/v1/sub-account/margin/accountSummary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable Futures for Sub-account (For Master Account)
@@ -3840,6 +3974,7 @@ export def "sapi-sub-account-futures-enable post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Sub-account email
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -3851,7 +3986,7 @@ export def "sapi-sub-account-futures-enable post" [
   let full_url = (build-url $base "/sapi/v1/sub-account/futures/enable" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Detail on Sub-account's Futures Account (For Master Account)
@@ -3865,6 +4000,7 @@ export def "sapi-sub-account-futures-account get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # e.g. alice@test.com
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -3876,7 +4012,7 @@ export def "sapi-sub-account-futures-account get" [
   let full_url = (build-url $base "/sapi/v1/sub-account/futures/account" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Summary of Sub-account's Futures Account (For Master Account)
@@ -3890,6 +4026,7 @@ export def "sapi-sub-account-futures-account-summary get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -3900,7 +4037,7 @@ export def "sapi-sub-account-futures-account-summary get" [
   let full_url = (build-url $base "/sapi/v1/sub-account/futures/accountSummary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Futures Position-Risk of Sub-account (For Master Account)
@@ -3914,6 +4051,7 @@ export def "sapi-sub-account-futures-position-risk get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Sub-account email
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -3925,7 +4063,7 @@ export def "sapi-sub-account-futures-position-risk get" [
   let full_url = (build-url $base "/sapi/v1/sub-account/futures/positionRisk" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Transfer for Sub-account (For Master Account)
@@ -3939,6 +4077,7 @@ export def "sapi-sub-account-futures-transfer post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Sub-account email
   --asset: string # e.g. BTC
   --amount: float # format: double, e.g. 1.01
@@ -3953,7 +4092,7 @@ export def "sapi-sub-account-futures-transfer post" [
   let full_url = (build-url $base "/sapi/v1/sub-account/futures/transfer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Margin Transfer for Sub-account (For Master Account)
@@ -3967,6 +4106,7 @@ export def "sapi-sub-account-margin-transfer post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Sub-account email
   --asset: string # e.g. BTC
   --amount: float # format: double, e.g. 1.01
@@ -3981,7 +4121,7 @@ export def "sapi-sub-account-margin-transfer post" [
   let full_url = (build-url $base "/sapi/v1/sub-account/margin/transfer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Transfer to Sub-account of Same Master (For Sub-account)
@@ -3995,6 +4135,7 @@ export def "sapi-sub-account-transfer-sub-to-sub post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --toEmail: string # Recipient email
   --asset: string # e.g. BTC
   --amount: float # format: double, e.g. 1.01
@@ -4008,7 +4149,7 @@ export def "sapi-sub-account-transfer-sub-to-sub post" [
   let full_url = (build-url $base "/sapi/v1/sub-account/transfer/subToSub" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Transfer to Master (For Sub-account)
@@ -4022,6 +4163,7 @@ export def "sapi-sub-account-transfer-sub-to-master post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BTC
   --amount: float # format: double, e.g. 1.01
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -4034,7 +4176,7 @@ export def "sapi-sub-account-transfer-sub-to-master post" [
   let full_url = (build-url $base "/sapi/v1/sub-account/transfer/subToMaster" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sub-account Transfer History (For Sub-account)
@@ -4048,6 +4190,7 @@ export def "sapi-sub-account-transfer-sub-user-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BNB
   --type: int # * `1` - transfer in * `2` - transfer out (format: int32)
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -4063,7 +4206,7 @@ export def "sapi-sub-account-transfer-sub-user-history get" [
   let full_url = (build-url $base "/sapi/v1/sub-account/transfer/subUserHistory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Universal Transfer History (For Master Account)
@@ -4077,6 +4220,7 @@ export def "sapi-sub-account-universal-transfer get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromEmail: string # Sub-account email
   --toEmail: string # Sub-account email
   --clientTranId: string
@@ -4094,7 +4238,7 @@ export def "sapi-sub-account-universal-transfer get" [
   let full_url = (build-url $base "/sapi/v1/sub-account/universalTransfer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Universal Transfer (For Master Account)
@@ -4108,6 +4252,7 @@ export def "sapi-sub-account-universal-transfer post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromEmail: string # Sub-account email
   --toEmail: string # Sub-account email
   --fromAccountType: string@fromAccountType-completer
@@ -4126,7 +4271,7 @@ export def "sapi-sub-account-universal-transfer post" [
   let full_url = (build-url $base "/sapi/v1/sub-account/universalTransfer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Detail on Sub-account's Futures Account V2 (For Master Account)
@@ -4140,6 +4285,7 @@ export def "sapi-sub-account-futures-account get-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Sub-account email
   --futuresType: int # * `1` - USDT Margined Futures * `2` - COIN Margined Futures (format: int32, e.g. 1)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -4152,7 +4298,7 @@ export def "sapi-sub-account-futures-account get-1" [
   let full_url = (build-url $base "/sapi/v2/sub-account/futures/account" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Summary of Sub-account's Futures Account V2 (For Master Account)
@@ -4166,6 +4312,7 @@ export def "sapi-sub-account-futures-account-summary get-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --futuresType: int # * `1` - USDT Margined Futures * `2` - COIN Margined Futures (format: int32, e.g. 1)
   --page: int # Default 1 (format: int32, e.g. 1)
   --limit: int # Default 10, Max 20 (format: int32)
@@ -4179,7 +4326,7 @@ export def "sapi-sub-account-futures-account-summary get-1" [
   let full_url = (build-url $base "/sapi/v2/sub-account/futures/accountSummary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Futures Position-Risk of Sub-account V2 (For Master Account)
@@ -4193,6 +4340,7 @@ export def "sapi-sub-account-futures-position-risk get-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Sub-account email
   --futuresType: int # * `1` - USDT Margined Futures * `2` - COIN Margined Futures (format: int32, e.g. 1)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -4205,7 +4353,7 @@ export def "sapi-sub-account-futures-position-risk get-1" [
   let full_url = (build-url $base "/sapi/v2/sub-account/futures/positionRisk" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable Leverage Token for Sub-account (For Master Account)
@@ -4219,6 +4367,7 @@ export def "sapi-sub-account-blvt-enable post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Sub-account email
   --enableBlvt: oneof<nothing, bool> # Only true for now
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -4231,7 +4380,7 @@ export def "sapi-sub-account-blvt-enable post" [
   let full_url = (build-url $base "/sapi/v1/sub-account/blvt/enable" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deposit assets into the managed sub-account(For Investor Master Account)
@@ -4245,6 +4394,7 @@ export def "sapi-managed-subaccount-deposit post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --toEmail: string # Recipient email
   --asset: string # e.g. BTC
   --amount: float # format: double, e.g. 1.01
@@ -4258,7 +4408,7 @@ export def "sapi-managed-subaccount-deposit post" [
   let full_url = (build-url $base "/sapi/v1/managed-subaccount/deposit" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Managed sub-account asset details(For Investor Master Account)
@@ -4272,6 +4422,7 @@ export def "sapi-managed-subaccount-asset get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Sub-account email
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -4283,7 +4434,7 @@ export def "sapi-managed-subaccount-asset get" [
   let full_url = (build-url $base "/sapi/v1/managed-subaccount/asset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Withdrawl assets from the managed sub-account(For Investor Master Account)
@@ -4297,6 +4448,7 @@ export def "sapi-managed-subaccount-withdraw post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromEmail: string # Sender email
   --asset: string # e.g. BTC
   --amount: float # format: double, e.g. 1.01
@@ -4311,7 +4463,7 @@ export def "sapi-managed-subaccount-withdraw post" [
   let full_url = (build-url $base "/sapi/v1/managed-subaccount/withdraw" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Managed sub-account snapshot (For Investor Master Account)
@@ -4325,6 +4477,7 @@ export def "sapi-managed-subaccount-account-snapshot get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Sub-account email
   --type: string # "SPOT", "MARGIN"(cross), "FUTURES"(UM) (e.g. SPOT)
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -4340,7 +4493,7 @@ export def "sapi-managed-subaccount-account-snapshot get" [
   let full_url = (build-url $base "/sapi/v1/managed-subaccount/accountSnapshot" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Managed Sub Account Transfer Log (For Investor Master Account)
@@ -4354,6 +4507,7 @@ export def "sapi-managed-subaccount-query-trans-log-for-investor get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
@@ -4371,7 +4525,7 @@ export def "sapi-managed-subaccount-query-trans-log-for-investor get" [
   let full_url = (build-url $base "/sapi/v1/managed-subaccount/queryTransLogForInvestor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Managed Sub Account Transfer Log (For Trading Team Master Account)
@@ -4385,6 +4539,7 @@ export def "sapi-managed-subaccount-query-trans-log-for-trade-parent get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
@@ -4402,7 +4557,7 @@ export def "sapi-managed-subaccount-query-trans-log-for-trade-parent get" [
   let full_url = (build-url $base "/sapi/v1/managed-subaccount/queryTransLogForTradeParent" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Managed Sub-account Futures Asset Details (For Investor Master Account)
@@ -4416,6 +4571,7 @@ export def "sapi-managed-subaccount-fetch-future-asset get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -4427,7 +4583,7 @@ export def "sapi-managed-subaccount-fetch-future-asset get" [
   let full_url = (build-url $base "/sapi/v1/managed-subaccount/fetch-future-asset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Managed Sub-account Margin Asset Details (For Investor Master Account)
@@ -4441,6 +4597,7 @@ export def "sapi-managed-subaccount-margin-asset get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -4452,7 +4609,7 @@ export def "sapi-managed-subaccount-margin-asset get" [
   let full_url = (build-url $base "/sapi/v1/managed-subaccount/marginAsset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Managed Sub-account List (For Investor)
@@ -4466,6 +4623,7 @@ export def "sapi-managed-subaccount-info get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string
   --page: int # Default 1 (format: int32, e.g. 1)
   --limit: int # Default 500; max 1000. (format: int32, e.g. 5)
@@ -4479,7 +4637,7 @@ export def "sapi-managed-subaccount-info get" [
   let full_url = (build-url $base "/sapi/v1/managed-subaccount/info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Managed Sub-account Deposit Address (For Investor Master Account)
@@ -4493,6 +4651,7 @@ export def "sapi-managed-subaccount-deposit-address get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string
   --coin: string # Coin name (e.g. BNB)
   --network: string # e.g. BTC
@@ -4506,7 +4665,7 @@ export def "sapi-managed-subaccount-deposit-address get" [
   let full_url = (build-url $base "/sapi/v1/managed-subaccount/deposit/address" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Managed Sub Account Transfer Log (For Trading Team Sub Account)(USER_DATA)
@@ -4520,6 +4679,7 @@ export def "sapi-managed-subaccount-query-trans-log get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
   --page: int # Default 1 (format: int32, e.g. 1)
@@ -4536,7 +4696,7 @@ export def "sapi-managed-subaccount-query-trans-log get" [
   let full_url = (build-url $base "/sapi/v1/managed-subaccount/query-trans-log" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get IP Restriction for a Sub-account API Key (For Master Account)
@@ -4550,6 +4710,7 @@ export def "sapi-sub-account-sub-account-api-ip-restriction get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Sub-account email
   --subAccountApiKey: string
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -4562,7 +4723,7 @@ export def "sapi-sub-account-sub-account-api-ip-restriction get" [
   let full_url = (build-url $base "/sapi/v1/sub-account/subAccountApi/ipRestriction" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete IP List for a Sub-account API Key (For Master Account)
@@ -4576,6 +4737,7 @@ export def "sapi-sub-account-sub-account-api-ip-restriction-ip-list delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Sub-account email
   --subAccountApiKey: string
   --ipAddress: string # Can be added in batches, separated by commas
@@ -4590,7 +4752,7 @@ export def "sapi-sub-account-sub-account-api-ip-restriction-ip-list delete" [
   let full_url = (build-url $base "/sapi/v1/sub-account/subAccountApi/ipRestriction/ipList" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Sub-account Transaction Statistics (For Master Account)
@@ -4604,6 +4766,7 @@ export def "sapi-sub-account-transaction-statistics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -4615,7 +4778,7 @@ export def "sapi-sub-account-transaction-statistics get" [
   let full_url = (build-url $base "/sapi/v1/sub-account/transaction-statistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable Options for Sub-account (For Master Account)(USER_DATA)
@@ -4629,6 +4792,7 @@ export def "sapi-sub-account-eoptions-enable post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -4640,7 +4804,7 @@ export def "sapi-sub-account-eoptions-enable post" [
   let full_url = (build-url $base "/sapi/v1/sub-account/eoptions/enable" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update IP Restriction for Sub-Account API key (For Master Account)
@@ -4654,6 +4818,7 @@ export def "sapi-sub-account-sub-account-api-ip-restriction post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Sub-account email
   --subAccountApiKey: string
   --status: string # IP Restriction status. 1 = IP Unrestricted. 2 = Restrict access to trusted IPs only. 3 = Restrict access to users' trusted third party IPs only (e.g. 1)
@@ -4668,7 +4833,7 @@ export def "sapi-sub-account-sub-account-api-ip-restriction post" [
   let full_url = (build-url $base "/sapi/v2/sub-account/subAccountApi/ipRestriction" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Sub-account Assets (For Master Account)
@@ -4682,6 +4847,7 @@ export def "sapi-sub-account-assets get-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -4693,7 +4859,7 @@ export def "sapi-sub-account-assets get-1" [
   let full_url = (build-url $base "/sapi/v4/sub-account/assets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a ListenKey (USER_STREAM)
@@ -4707,13 +4873,14 @@ export def "user-data-stream post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<listenKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v3/userDataStream")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Ping/Keep-alive a ListenKey (USER_STREAM)
@@ -4727,6 +4894,7 @@ export def "user-data-stream put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --listenKey: string # User websocket listen key (e.g. pqia91ma19a5s61cv6a81va65sdf19v8a65a1a5s61cv6a81va65sdf19v8a65a1)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
@@ -4735,7 +4903,7 @@ export def "user-data-stream put" [
   let full_url = (build-url $base "/api/v3/userDataStream" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Close a ListenKey (USER_STREAM)
@@ -4749,6 +4917,7 @@ export def "user-data-stream delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --listenKey: string # User websocket listen key (e.g. pqia91ma19a5s61cv6a81va65sdf19v8a65a1a5s61cv6a81va65sdf19v8a65a1)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
@@ -4757,7 +4926,7 @@ export def "user-data-stream delete" [
   let full_url = (build-url $base "/api/v3/userDataStream" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a ListenKey (USER_STREAM)
@@ -4771,13 +4940,14 @@ export def "sapi-user-data-stream post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<listenKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sapi/v1/userDataStream")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Ping/Keep-alive a ListenKey (USER_STREAM)
@@ -4791,6 +4961,7 @@ export def "sapi-user-data-stream put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --listenKey: string # User websocket listen key (e.g. pqia91ma19a5s61cv6a81va65sdf19v8a65a1a5s61cv6a81va65sdf19v8a65a1)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
@@ -4799,7 +4970,7 @@ export def "sapi-user-data-stream put" [
   let full_url = (build-url $base "/sapi/v1/userDataStream" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Close a ListenKey (USER_STREAM)
@@ -4813,6 +4984,7 @@ export def "sapi-user-data-stream delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --listenKey: string # User websocket listen key (e.g. pqia91ma19a5s61cv6a81va65sdf19v8a65a1a5s61cv6a81va65sdf19v8a65a1)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
@@ -4821,7 +4993,7 @@ export def "sapi-user-data-stream delete" [
   let full_url = (build-url $base "/sapi/v1/userDataStream" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate a Listen Key (USER_STREAM)
@@ -4835,13 +5007,14 @@ export def "sapi-user-data-stream-isolated post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<listenKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sapi/v1/userDataStream/isolated")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Ping/Keep-alive a Listen Key (USER_STREAM)
@@ -4855,6 +5028,7 @@ export def "sapi-user-data-stream-isolated put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --listenKey: string # User websocket listen key (e.g. pqia91ma19a5s61cv6a81va65sdf19v8a65a1a5s61cv6a81va65sdf19v8a65a1)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
@@ -4863,7 +5037,7 @@ export def "sapi-user-data-stream-isolated put" [
   let full_url = (build-url $base "/sapi/v1/userDataStream/isolated" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Close a ListenKey (USER_STREAM)
@@ -4877,6 +5051,7 @@ export def "sapi-user-data-stream-isolated delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --listenKey: string # User websocket listen key (e.g. pqia91ma19a5s61cv6a81va65sdf19v8a65a1a5s61cv6a81va65sdf19v8a65a1)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
@@ -4885,7 +5060,7 @@ export def "sapi-user-data-stream-isolated delete" [
   let full_url = (build-url $base "/sapi/v1/userDataStream/isolated" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fiat Deposit/Withdraw History (USER_DATA)
@@ -4899,6 +5074,7 @@ export def "sapi-fiat-orders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --transactionType: int # * `0` - deposit * `1` - withdraw (format: int32)
   --beginTime: int # format: int64, e.g. 1626144956000
   --endTime: int # UTC timestamp in ms (format: int64)
@@ -4914,7 +5090,7 @@ export def "sapi-fiat-orders get" [
   let full_url = (build-url $base "/sapi/v1/fiat/orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fiat Payments History (USER_DATA)
@@ -4928,6 +5104,7 @@ export def "sapi-fiat-payments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --transactionType: int # * `0` - deposit * `1` - withdraw (format: int32)
   --beginTime: int # format: int64, e.g. 1626144956000
   --endTime: int # UTC timestamp in ms (format: int64)
@@ -4943,7 +5120,7 @@ export def "sapi-fiat-payments get" [
   let full_url = (build-url $base "/sapi/v1/fiat/payments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Fixed/Activity Project List(USER_DATA)
@@ -4957,6 +5134,7 @@ export def "sapi-lending-project-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BNB
   --type: string@type-completer-7
   --status: string@status-completer # Default `ALL`
@@ -4974,7 +5152,7 @@ export def "sapi-lending-project-list get" [
   let full_url = (build-url $base "/sapi/v1/lending/project/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Purchase Fixed/Activity Project (USER_DATA)
@@ -4988,6 +5166,7 @@ export def "sapi-lending-customized-fixed-purchase post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string
   --lot: string
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -5000,7 +5179,7 @@ export def "sapi-lending-customized-fixed-purchase post" [
   let full_url = (build-url $base "/sapi/v1/lending/customizedFixed/purchase" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Fixed/Activity Project Position (USER_DATA)
@@ -5014,6 +5193,7 @@ export def "sapi-lending-project-position-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BTC
   --projectId: string
   --status: string@status-completer # Default `ALL`
@@ -5027,7 +5207,7 @@ export def "sapi-lending-project-position-list get" [
   let full_url = (build-url $base "/sapi/v1/lending/project/position/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change Fixed/Activity Position to Daily Position (USER_DATA)
@@ -5041,6 +5221,7 @@ export def "sapi-lending-position-changed post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string
   --lot: string
   --positionId: string
@@ -5054,7 +5235,7 @@ export def "sapi-lending-position-changed post" [
   let full_url = (build-url $base "/sapi/v1/lending/positionChanged" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Acquiring Algorithm (MARKET_DATA)
@@ -5068,13 +5249,14 @@ export def "sapi-mining-pub-algo-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, msg: string, data: table<algoName: string, algoId: int, poolIndex: int, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sapi/v1/mining/pub/algoList")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Acquiring CoinName (MARKET_DATA)
@@ -5088,13 +5270,14 @@ export def "sapi-mining-pub-coin-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, msg: string, data: table<coinName: string, coinId: int, poolIndex: int, algoId: int, algoName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sapi/v1/mining/pub/coinList")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Request for Detail Miner List (USER_DATA)
@@ -5108,6 +5291,7 @@ export def "sapi-mining-worker-detail get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --algo: string # Algorithm(sha256)
   --userName: string # Mining Account
   --workerName: string # Miner’s name
@@ -5121,7 +5305,7 @@ export def "sapi-mining-worker-detail get" [
   let full_url = (build-url $base "/sapi/v1/mining/worker/detail" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Request for Miner List (USER_DATA)
@@ -5135,6 +5319,7 @@ export def "sapi-mining-worker-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --algo: string # Algorithm(sha256)
   --userName: string # Mining Account
   --pageIndex: int # Page number, default is first page, start form 1 (format: int32)
@@ -5151,7 +5336,7 @@ export def "sapi-mining-worker-list get" [
   let full_url = (build-url $base "/sapi/v1/mining/worker/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Earnings List (USER_DATA)
@@ -5165,6 +5350,7 @@ export def "sapi-mining-payment-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --algo: string # Algorithm(sha256)
   --userName: string # Mining Account
   --coin: string # Coin name (e.g. BNB)
@@ -5182,7 +5368,7 @@ export def "sapi-mining-payment-list get" [
   let full_url = (build-url $base "/sapi/v1/mining/payment/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Extra Bonus List (USER_DATA)
@@ -5196,6 +5382,7 @@ export def "sapi-mining-payment-other get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --algo: string # Algorithm(sha256)
   --userName: string # Mining Account
   --coin: string # Coin name (e.g. BNB)
@@ -5213,7 +5400,7 @@ export def "sapi-mining-payment-other get" [
   let full_url = (build-url $base "/sapi/v1/mining/payment/other" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Hashrate Resale List (USER_DATA)
@@ -5227,6 +5414,7 @@ export def "sapi-mining-hash-transfer-config-details-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageIndex: int # Page number, default is first page, start form 1 (format: int32)
   --pageSize: string # Number of pages, minimum 10, maximum 200
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -5239,7 +5427,7 @@ export def "sapi-mining-hash-transfer-config-details-list get" [
   let full_url = (build-url $base "/sapi/v1/mining/hash-transfer/config/details/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Hashrate Resale Details (USER_DATA)
@@ -5253,6 +5441,7 @@ export def "sapi-mining-hash-transfer-profit-details get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --configId: string # Mining ID
   --userName: string # Mining Account
   --pageIndex: int # Page number, default is first page, start form 1 (format: int32)
@@ -5267,7 +5456,7 @@ export def "sapi-mining-hash-transfer-profit-details get" [
   let full_url = (build-url $base "/sapi/v1/mining/hash-transfer/profit/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Hashrate Resale Request (USER_DATA)
@@ -5281,6 +5470,7 @@ export def "sapi-mining-hash-transfer-config post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userName: string # Mining Account
   --algo: string # Algorithm(sha256)
   --startDate: string # Search date, millisecond timestamp, while empty query all
@@ -5297,7 +5487,7 @@ export def "sapi-mining-hash-transfer-config post" [
   let full_url = (build-url $base "/sapi/v1/mining/hash-transfer/config" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel Hashrate Resale configuration (USER_DATA)
@@ -5311,6 +5501,7 @@ export def "sapi-mining-hash-transfer-config-cancel post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --configId: string # Mining ID
   --userName: string # Mining Account
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -5323,7 +5514,7 @@ export def "sapi-mining-hash-transfer-config-cancel post" [
   let full_url = (build-url $base "/sapi/v1/mining/hash-transfer/config/cancel" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Statistic List (USER_DATA)
@@ -5337,6 +5528,7 @@ export def "sapi-mining-statistics-user-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --algo: string # Algorithm(sha256)
   --userName: string # Mining Account
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -5349,7 +5541,7 @@ export def "sapi-mining-statistics-user-status get" [
   let full_url = (build-url $base "/sapi/v1/mining/statistics/user/status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Account List (USER_DATA)
@@ -5363,6 +5555,7 @@ export def "sapi-mining-statistics-user-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --algo: string # Algorithm(sha256)
   --userName: string # Mining Account
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -5375,7 +5568,7 @@ export def "sapi-mining-statistics-user-list get" [
   let full_url = (build-url $base "/sapi/v1/mining/statistics/user/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Mining Account Earning (USER_DATA)
@@ -5389,6 +5582,7 @@ export def "sapi-mining-payment-uid get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --algo: string # Algorithm(sha256)
   --startDate: string # Search date, millisecond timestamp, while empty query all
   --endDate: string # Search date, millisecond timestamp, while empty query all
@@ -5404,7 +5598,7 @@ export def "sapi-mining-payment-uid get" [
   let full_url = (build-url $base "/sapi/v1/mining/payment/uid" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # New Future Account Transfer (USER_DATA)
@@ -5418,6 +5612,7 @@ export def "sapi-futures-transfer post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BTC
   --amount: float # format: double, e.g. 1.01
   --type: int # 1: transfer from spot account to USDT-Ⓜ futures account. 2: transfer from USDT-Ⓜ futures account to spot account. 3: transfer from spot account to COIN-Ⓜ futures account. 4: transfer from COIN-Ⓜ futures account to spot account. (format: int64)
@@ -5431,7 +5626,7 @@ export def "sapi-futures-transfer post" [
   let full_url = (build-url $base "/sapi/v1/futures/transfer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Future Account Transaction History List (USER_DATA)
@@ -5445,6 +5640,7 @@ export def "sapi-futures-transfer get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BTC
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
@@ -5460,7 +5656,7 @@ export def "sapi-futures-transfer get" [
   let full_url = (build-url $base "/sapi/v1/futures/transfer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Future TickLevel Orderbook Historical Data Download Link (USER_DATA)
@@ -5474,6 +5670,7 @@ export def "sapi-futures-hist-data-link get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # e.g. BTCUSDT
   --dataType: string@dataType-completer # e.g. T_DEPTH
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -5488,7 +5685,7 @@ export def "sapi-futures-hist-data-link get" [
   let full_url = (build-url $base "/sapi/v1/futures/histDataLink" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Volume Participation(VP) New Order (TRADE)
@@ -5502,6 +5699,7 @@ export def "sapi-algo-futures-new-order-vp post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --side: string@side-completer # e.g. SELL
   --positionSide: string@positionSide-completer # Default BOTH for One-way Mode ; LONG or SHORT for Hedge Mode. It must be sent in Hedge Mode. (e.g. BOTH)
@@ -5520,7 +5718,7 @@ export def "sapi-algo-futures-new-order-vp post" [
   let full_url = (build-url $base "/sapi/v1/algo/futures/newOrderVp" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Time-Weighted Average Price(Twap) New Order (TRADE)
@@ -5534,6 +5732,7 @@ export def "sapi-algo-futures-new-order-twap post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --side: string@side-completer # e.g. SELL
   --positionSide: string@positionSide-completer # Default BOTH for One-way Mode ; LONG or SHORT for Hedge Mode. It must be sent in Hedge Mode. (e.g. BOTH)
@@ -5552,7 +5751,7 @@ export def "sapi-algo-futures-new-order-twap post" [
   let full_url = (build-url $base "/sapi/v1/algo/futures/newOrderTwap" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel Algo Order(TRADE)
@@ -5566,6 +5765,7 @@ export def "sapi-algo-futures-order delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --algoId: int # Eg. 14511 (format: int64)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -5577,7 +5777,7 @@ export def "sapi-algo-futures-order delete" [
   let full_url = (build-url $base "/sapi/v1/algo/futures/order" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Current Algo Open Orders (USER_DATA)
@@ -5591,6 +5791,7 @@ export def "sapi-algo-futures-open-orders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -5601,7 +5802,7 @@ export def "sapi-algo-futures-open-orders get" [
   let full_url = (build-url $base "/sapi/v1/algo/futures/openOrders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Historical Algo Orders (USER_DATA)
@@ -5615,6 +5816,7 @@ export def "sapi-algo-futures-historical-orders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --side: string@side-completer # e.g. SELL
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -5631,7 +5833,7 @@ export def "sapi-algo-futures-historical-orders get" [
   let full_url = (build-url $base "/sapi/v1/algo/futures/historicalOrders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Sub Orders (USER_DATA)
@@ -5645,6 +5847,7 @@ export def "sapi-algo-futures-sub-orders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --algoId: int # format: int64
   --page: int # Default 1 (format: int32, e.g. 1)
   --pageSize: string # MIN 1, MAX 100; Default 100
@@ -5658,7 +5861,7 @@ export def "sapi-algo-futures-sub-orders get" [
   let full_url = (build-url $base "/sapi/v1/algo/futures/subOrders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Time-Weighted Average Price (Twap) New Order
@@ -5672,6 +5875,7 @@ export def "sapi-algo-spot-new-order-twap post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --side: string@side-completer # e.g. SELL
   --quantity: float # format: double, e.g. 1.0
@@ -5688,7 +5892,7 @@ export def "sapi-algo-spot-new-order-twap post" [
   let full_url = (build-url $base "/sapi/v1/algo/spot/newOrderTwap" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel Algo Order
@@ -5702,6 +5906,7 @@ export def "sapi-algo-spot-order delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --algoId: int # format: int64, e.g. 1
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -5713,7 +5918,7 @@ export def "sapi-algo-spot-order delete" [
   let full_url = (build-url $base "/sapi/v1/algo/spot/order" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Current Algo Open Orders
@@ -5727,6 +5932,7 @@ export def "sapi-algo-spot-open-orders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -5737,7 +5943,7 @@ export def "sapi-algo-spot-open-orders get" [
   let full_url = (build-url $base "/sapi/v1/algo/spot/openOrders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Historical Algo Orders
@@ -5751,6 +5957,7 @@ export def "sapi-algo-spot-historical-orders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbol: string # Trading symbol, e.g. BNBUSDT (e.g. BNBUSDT)
   --side: string@side-completer # e.g. SELL
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -5767,7 +5974,7 @@ export def "sapi-algo-spot-historical-orders get" [
   let full_url = (build-url $base "/sapi/v1/algo/spot/historicalOrders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Sub Orders
@@ -5781,6 +5988,7 @@ export def "sapi-algo-spot-sub-orders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --algoId: int # format: int64
   --page: int # Default 1 (format: int32, e.g. 1)
   --pageSize: string # MIN 1, MAX 100; Default 100
@@ -5794,7 +6002,7 @@ export def "sapi-algo-spot-sub-orders get" [
   let full_url = (build-url $base "/sapi/v1/algo/spot/subOrders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Portfolio Margin Account (USER_DATA)
@@ -5808,6 +6016,7 @@ export def "sapi-portfolio-account get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -5818,7 +6027,7 @@ export def "sapi-portfolio-account get" [
   let full_url = (build-url $base "/sapi/v1/portfolio/account" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Portfolio Margin Collateral Rate (MARKET_DATA)
@@ -5832,13 +6041,14 @@ export def "sapi-portfolio-collateral-rate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<asset: string, collateralRate: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sapi/v1/portfolio/collateralRate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Portfolio Margin Pro Tiered Collateral Rate(USER_DATA)
@@ -5852,6 +6062,7 @@ export def "sapi-portfolio-collateral-rate get-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -5862,7 +6073,7 @@ export def "sapi-portfolio-collateral-rate get-1" [
   let full_url = (build-url $base "/sapi/v2/portfolio/collateralRate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Portfolio Margin Bankruptcy Loan Amount (USER_DATA)
@@ -5876,6 +6087,7 @@ export def "sapi-portfolio-pm-loan get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -5886,7 +6098,7 @@ export def "sapi-portfolio-pm-loan get" [
   let full_url = (build-url $base "/sapi/v1/portfolio/pmLoan" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Portfolio Margin Bankruptcy Loan Repay (USER_DATA)
@@ -5900,6 +6112,7 @@ export def "sapi-portfolio-repay post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # e.g. SPOT
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -5911,7 +6124,7 @@ export def "sapi-portfolio-repay post" [
   let full_url = (build-url $base "/sapi/v1/portfolio/repay" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Classic Portfolio Margin Negative Balance Interest History (USER_DATA)
@@ -5925,6 +6138,7 @@ export def "sapi-portfolio-interest-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BTC
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
@@ -5939,7 +6153,7 @@ export def "sapi-portfolio-interest-history get" [
   let full_url = (build-url $base "/sapi/v1/portfolio/interest-history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Portfolio Margin Asset Index Price (MARKET_DATA)
@@ -5953,6 +6167,7 @@ export def "sapi-portfolio-asset-index-price get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BTC
 ]: nothing -> table<asset: string, assetIndexPrice: string, time: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
@@ -5961,7 +6176,7 @@ export def "sapi-portfolio-asset-index-price get" [
   let full_url = (build-url $base "/sapi/v1/portfolio/asset-index-price" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fund Auto-collection (USER_DATA)
@@ -5975,6 +6190,7 @@ export def "sapi-portfolio-auto-collection post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -5985,7 +6201,7 @@ export def "sapi-portfolio-auto-collection post" [
   let full_url = (build-url $base "/sapi/v1/portfolio/auto-collection" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # BNB Transfer (USER_DATA)
@@ -5999,6 +6215,7 @@ export def "sapi-portfolio-bnb-transfer post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --transferSide: string@transferSide-completer # e.g. TO_UM
   --amount: float # format: double, e.g. 1.01
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -6011,7 +6228,7 @@ export def "sapi-portfolio-bnb-transfer post" [
   let full_url = (build-url $base "/sapi/v1/portfolio/bnb-transfer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change Auto-repay-futures Status (USER_DATA)
@@ -6025,6 +6242,7 @@ export def "sapi-portfolio-repay-futures-switch post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoRepay: oneof<nothing, bool> # e.g. true
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -6036,7 +6254,7 @@ export def "sapi-portfolio-repay-futures-switch post" [
   let full_url = (build-url $base "/sapi/v1/portfolio/repay-futures-switch" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Auto-repay-futures Status (USER_DATA)
@@ -6050,6 +6268,7 @@ export def "sapi-portfolio-repay-futures-switch get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -6060,7 +6279,7 @@ export def "sapi-portfolio-repay-futures-switch get" [
   let full_url = (build-url $base "/sapi/v1/portfolio/repay-futures-switch" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Repay futures Negative Balance (USER_DATA)
@@ -6074,6 +6293,7 @@ export def "sapi-portfolio-repay-futures-negative-balance post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -6084,7 +6304,7 @@ export def "sapi-portfolio-repay-futures-negative-balance post" [
   let full_url = (build-url $base "/sapi/v1/portfolio/repay-futures-negative-balance" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Portfolio Margin Asset Leverage (USER_DATA)
@@ -6098,13 +6318,14 @@ export def "sapi-portfolio-margin-asset-leverage get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<asset: string, collateralRate: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sapi/v1/portfolio/margin-asset-leverage")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fund Collection by Asset (USER_DATA)
@@ -6118,6 +6339,7 @@ export def "sapi-portfolio-asset-collection post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BTC
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -6129,7 +6351,7 @@ export def "sapi-portfolio-asset-collection post" [
   let full_url = (build-url $base "/sapi/v1/portfolio/asset-collection" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # BLVT Info (MARKET_DATA)
@@ -6143,6 +6365,7 @@ export def "sapi-blvt-token-info get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tokenName: string # BTCDOWN, BTCUP
 ]: nothing -> table<tokenName: string, description: string, underlying: string, tokenIssued: string, basket: string, currentBaskets: list<record>, nav: string, realLeverage: string, fundingRate: string, dailyManagementFee: string, purchaseFeePct: string, dailyPurchaseLimit: string, redeemFeePct: string, dailyRedeemLimit: string, timestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-mbx-apikey"))
@@ -6151,7 +6374,7 @@ export def "sapi-blvt-token-info get" [
   let full_url = (build-url $base "/sapi/v1/blvt/tokenInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Subscribe BLVT (USER_DATA)
@@ -6165,6 +6388,7 @@ export def "sapi-blvt-subscribe post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tokenName: string # BTCDOWN, BTCUP
   --cost: float # Spot balance (format: double)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -6177,7 +6401,7 @@ export def "sapi-blvt-subscribe post" [
   let full_url = (build-url $base "/sapi/v1/blvt/subscribe" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Subscription Record (USER_DATA)
@@ -6191,6 +6415,7 @@ export def "sapi-blvt-subscribe-record get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tokenName: string # BTCDOWN, BTCUP
   --id: int # format: int64
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -6206,7 +6431,7 @@ export def "sapi-blvt-subscribe-record get" [
   let full_url = (build-url $base "/sapi/v1/blvt/subscribe/record" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Redeem BLVT (USER_DATA)
@@ -6220,6 +6445,7 @@ export def "sapi-blvt-redeem post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tokenName: string # BTCDOWN, BTCUP
   --amount: float # format: double, e.g. 1.01
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -6232,7 +6458,7 @@ export def "sapi-blvt-redeem post" [
   let full_url = (build-url $base "/sapi/v1/blvt/redeem" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Redemption Record (USER_DATA)
@@ -6246,6 +6472,7 @@ export def "sapi-blvt-redeem-record get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tokenName: string # BTCDOWN, BTCUP
   --id: int # format: int64
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -6261,7 +6488,7 @@ export def "sapi-blvt-redeem-record get" [
   let full_url = (build-url $base "/sapi/v1/blvt/redeem/record" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # BLVT User Limit Info (USER_DATA)
@@ -6275,6 +6502,7 @@ export def "sapi-blvt-user-limit get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tokenName: string # BTCDOWN, BTCUP
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -6286,7 +6514,7 @@ export def "sapi-blvt-user-limit get" [
   let full_url = (build-url $base "/sapi/v1/blvt/userLimit" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get C2C Trade History (USER_DATA)
@@ -6300,6 +6528,7 @@ export def "sapi-c2c-order-match-list-user-order-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tradeType: string@tradeType-completer
   --startTimestamp: int # UTC timestamp in ms (format: int64)
   --endTimestamp: int # UTC timestamp in ms (format: int64)
@@ -6315,7 +6544,7 @@ export def "sapi-c2c-order-match-list-user-order-history get" [
   let full_url = (build-url $base "/sapi/v1/c2c/orderMatch/listUserOrderHistory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get VIP Loan Ongoing Orders (USER_DATA)
@@ -6329,6 +6558,7 @@ export def "sapi-loan-vip-ongoing-orders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orderId: int # Order id (format: int64)
   --collateralAccountId: int # format: int64
   --loanCoin: string # Coin loaned (e.g. BUSD)
@@ -6345,7 +6575,7 @@ export def "sapi-loan-vip-ongoing-orders get" [
   let full_url = (build-url $base "/sapi/v1/loan/vip/ongoing/orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # VIP Loan Repay (TRADE)
@@ -6359,6 +6589,7 @@ export def "sapi-loan-vip-repay post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orderId: int # Order id (format: int64)
   --amount: float # format: double, e.g. 1.01
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -6371,7 +6602,7 @@ export def "sapi-loan-vip-repay post" [
   let full_url = (build-url $base "/sapi/v1/loan/vip/repay" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get VIP Loan Repayment History (USER_DATA)
@@ -6385,6 +6616,7 @@ export def "sapi-loan-vip-repay-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orderId: int # Order id (format: int64)
   --loanCoin: string # Coin loaned (e.g. BUSD)
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -6401,7 +6633,7 @@ export def "sapi-loan-vip-repay-history get" [
   let full_url = (build-url $base "/sapi/v1/loan/vip/repay/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check Locked Value of VIP Collateral Account (USER_DATA)
@@ -6415,6 +6647,7 @@ export def "sapi-loan-vip-collateral-account get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orderId: int # Order id (format: int64)
   --collateralAccountId: int # format: int64
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -6427,7 +6660,7 @@ export def "sapi-loan-vip-collateral-account get" [
   let full_url = (build-url $base "/sapi/v1/loan/vip/collateral/account" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # VIP Loan Borrow
@@ -6441,6 +6674,7 @@ export def "sapi-loan-vip-borrow post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --loanAccountId: int # format: int64
   --loanCoin: string # Coin loaned (e.g. BUSD)
   --loanAmount: float # format: float
@@ -6458,7 +6692,7 @@ export def "sapi-loan-vip-borrow post" [
   let full_url = (build-url $base "/sapi/v1/loan/vip/borrow" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Loanable Assets Data
@@ -6472,6 +6706,7 @@ export def "sapi-loan-vip-loanable-data get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --loanCoin: string # Coin loaned (e.g. BUSD)
   --vipLevel: int # Defaults to user's vip level (format: int32, e.g. 1)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -6484,7 +6719,7 @@ export def "sapi-loan-vip-loanable-data get" [
   let full_url = (build-url $base "/sapi/v1/loan/vip/loanable/data" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Collateral Asset Data (USER_DATA)
@@ -6498,6 +6733,7 @@ export def "sapi-loan-vip-collateral-data get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --collateralCoin: string # Coin used as collateral (e.g. BNB)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -6509,7 +6745,7 @@ export def "sapi-loan-vip-collateral-data get" [
   let full_url = (build-url $base "/sapi/v1/loan/vip/collateral/data" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Application Status (USER_DATA)
@@ -6523,6 +6759,7 @@ export def "sapi-loan-vip-request-data get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --current: int # Current querying page. Start from 1. Default:1 (format: int32, e.g. 1)
   --limit: int # Default 500; max 1000. (format: int32, e.g. 5)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -6535,7 +6772,7 @@ export def "sapi-loan-vip-request-data get" [
   let full_url = (build-url $base "/sapi/v1/loan/vip/request/data" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Borrow Interest Rate (USER_DATA)
@@ -6549,6 +6786,7 @@ export def "sapi-loan-vip-request-interest-rate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --loanCoin: string # Max 10 assets, Multiple split by "," (e.g. BUSD)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -6560,7 +6798,7 @@ export def "sapi-loan-vip-request-interest-rate get" [
   let full_url = (build-url $base "/sapi/v1/loan/vip/request/interestRate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # VIP Loan Renew
@@ -6574,6 +6812,7 @@ export def "sapi-loan-vip-renew post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orderId: int # Order id (format: int64)
   --loanTerm: int # e.g. 30
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -6586,7 +6825,7 @@ export def "sapi-loan-vip-renew post" [
   let full_url = (build-url $base "/sapi/v1/loan/vip/renew" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Crypto Loans Income History (USER_DATA)
@@ -6600,6 +6839,7 @@ export def "sapi-loan-income get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BNB
   --type: string@type-completer-8 # All types will be returned by default.   * `borrowIn`   * `collateralSpent`   * `repayAmount`   * `collateralReturn` - Collateral return after repayment   * `addCollateral`   * `removeCollateral`   * `collateralReturnAfterLiquidation`
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -6615,7 +6855,7 @@ export def "sapi-loan-income get" [
   let full_url = (build-url $base "/sapi/v1/loan/income" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Crypto Loan Borrow (TRADE)
@@ -6629,6 +6869,7 @@ export def "sapi-loan-borrow post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --loanCoin: string # Coin loaned (e.g. BUSD)
   --loanAmount: float # Loan amount (format: float, e.g. 100.1)
   --collateralCoin: string # Coin used as collateral (e.g. BNB)
@@ -6644,7 +6885,7 @@ export def "sapi-loan-borrow post" [
   let full_url = (build-url $base "/sapi/v1/loan/borrow" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Crypto Loans Borrow History (USER_DATA)
@@ -6658,6 +6899,7 @@ export def "sapi-loan-borrow-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orderId: int # orderId in POST /sapi/v1/loan/borrow (format: int64, e.g. 10)
   --loanCoin: string # Coin loaned (e.g. BUSD)
   --collateralCoin: string # Coin used as collateral (e.g. BNB)
@@ -6675,7 +6917,7 @@ export def "sapi-loan-borrow-history get" [
   let full_url = (build-url $base "/sapi/v1/loan/borrow/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Loan Ongoing Orders (USER_DATA)
@@ -6689,6 +6931,7 @@ export def "sapi-loan-ongoing-orders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orderId: int # orderId in POST /sapi/v1/loan/borrow (format: int64, e.g. 10)
   --loanCoin: string # Coin loaned (e.g. BUSD)
   --collateralCoin: string # Coin used as collateral (e.g. BNB)
@@ -6704,7 +6947,7 @@ export def "sapi-loan-ongoing-orders get" [
   let full_url = (build-url $base "/sapi/v1/loan/ongoing/orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Crypto Loan Repay (TRADE)
@@ -6718,6 +6961,7 @@ export def "sapi-loan-repay post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orderId: int # Order ID (format: int64, e.g. 123456789)
   --amount: float # Repayment Amount (format: double, e.g. 100.5)
   --type: int # Default: 1. 1 for 'repay with borrowed coin'; 2 for 'repay with collateral'. (format: int32, e.g. 1)
@@ -6732,7 +6976,7 @@ export def "sapi-loan-repay post" [
   let full_url = (build-url $base "/sapi/v1/loan/repay" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Loan Repayment History (USER_DATA)
@@ -6746,6 +6990,7 @@ export def "sapi-loan-repay-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orderId: int # Order ID (format: int64, e.g. 10)
   --loanCoin: string # Coin loaned (e.g. BUSD)
   --collateralCoin: string # Coin used as collateral (e.g. BNB)
@@ -6763,7 +7008,7 @@ export def "sapi-loan-repay-history get" [
   let full_url = (build-url $base "/sapi/v1/loan/repay/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Crypto Loan Adjust LTV (TRADE)
@@ -6777,6 +7022,7 @@ export def "sapi-loan-adjust-ltv post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orderId: int # Order ID (format: int64, e.g. 123456789)
   --amount: float # Amount (format: double, e.g. 100.5)
   --direction: string@direction-completer # 'ADDITIONAL', 'REDUCED' (e.g. ADDITIONAL)
@@ -6790,7 +7036,7 @@ export def "sapi-loan-adjust-ltv post" [
   let full_url = (build-url $base "/sapi/v1/loan/adjust/ltv" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Loan LTV Adjustment History (USER_DATA)
@@ -6804,6 +7050,7 @@ export def "sapi-loan-ltv-adjustment-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orderId: int # Order ID (format: int64, e.g. 10)
   --loanCoin: string # Coin loaned (e.g. BUSD)
   --collateralCoin: string # Coin used as collateral (e.g. BNB)
@@ -6821,7 +7068,7 @@ export def "sapi-loan-ltv-adjustment-history get" [
   let full_url = (build-url $base "/sapi/v1/loan/ltv/adjustment/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Loanable Assets Data (USER_DATA)
@@ -6835,6 +7082,7 @@ export def "sapi-loan-loanable-data get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --loanCoin: string # Coin loaned (e.g. BUSD)
   --vipLevel: int # Defaults to user's vip level (format: int32, e.g. 1)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -6847,7 +7095,7 @@ export def "sapi-loan-loanable-data get" [
   let full_url = (build-url $base "/sapi/v1/loan/loanable/data" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Collateral Assets Data (USER_DATA)
@@ -6861,6 +7109,7 @@ export def "sapi-loan-collateral-data get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --collateralCoin: string # Coin used as collateral (e.g. BNB)
   --vipLevel: int # Defaults to user's vip level (format: int32, e.g. 1)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -6873,7 +7122,7 @@ export def "sapi-loan-collateral-data get" [
   let full_url = (build-url $base "/sapi/v1/loan/collateral/data" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check Collateral Repay Rate (USER_DATA)
@@ -6887,6 +7136,7 @@ export def "sapi-loan-repay-collateral-rate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --loanCoin: string # Coin loaned (e.g. BUSD)
   --collateralCoin: string # Coin used as collateral (e.g. BNB)
   --repayAmount: float # repay amount of loanCoin (format: float)
@@ -6900,7 +7150,7 @@ export def "sapi-loan-repay-collateral-rate get" [
   let full_url = (build-url $base "/sapi/v1/loan/repay/collateral/rate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Crypto Loan Customize Margin Call (TRADE)
@@ -6914,6 +7164,7 @@ export def "sapi-loan-customize-margin-call post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orderId: int # Mandatory when collateralCoin is empty. Send either orderId or collateralCoin, if both parameters are sent, take orderId only. (format: int64)
   --collateralCoin: string # Coin used as collateral (e.g. BNB)
   --marginCall: float # format: float
@@ -6927,7 +7178,7 @@ export def "sapi-loan-customize-margin-call post" [
   let full_url = (build-url $base "/sapi/v1/loan/customize/margin_call" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Borrow - Flexible Loan Borrow (TRADE)
@@ -6941,6 +7192,7 @@ export def "sapi-loan-flexible-borrow post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --loanCoin: string # Coin loaned (e.g. BUSD)
   --loanAmount: float # Loan amount (format: float, e.g. 100.1)
   --collateralCoin: string # Coin used as collateral (e.g. BNB)
@@ -6955,7 +7207,7 @@ export def "sapi-loan-flexible-borrow post" [
   let full_url = (build-url $base "/sapi/v2/loan/flexible/borrow" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Borrow - Get Flexible Loan Ongoing Orders (USER_DATA)
@@ -6969,6 +7221,7 @@ export def "sapi-loan-flexible-ongoing-orders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --loanCoin: string # Coin loaned (e.g. BUSD)
   --collateralCoin: string # Coin used as collateral (e.g. BNB)
   --current: int # Current querying page. Start from 1. Default:1 (format: int32, e.g. 1)
@@ -6983,7 +7236,7 @@ export def "sapi-loan-flexible-ongoing-orders get" [
   let full_url = (build-url $base "/sapi/v2/loan/flexible/ongoing/orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Borrow - Get Flexible Loan Borrow History (USER_DATA)
@@ -6997,6 +7250,7 @@ export def "sapi-loan-flexible-borrow-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --loanCoin: string # Coin loaned (e.g. BUSD)
   --collateralCoin: string # Coin used as collateral (e.g. BNB)
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -7013,7 +7267,7 @@ export def "sapi-loan-flexible-borrow-history get" [
   let full_url = (build-url $base "/sapi/v2/loan/flexible/borrow/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Repay - Flexible Loan Repay (TRADE)
@@ -7027,6 +7281,7 @@ export def "sapi-loan-flexible-repay post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --loanCoin: string # Coin loaned (e.g. BUSD)
   --collateralCoin: string # Coin used as collateral (e.g. BNB)
   --repayAmount: float # repay amount of loanCoin (format: float)
@@ -7042,7 +7297,7 @@ export def "sapi-loan-flexible-repay post" [
   let full_url = (build-url $base "/sapi/v2/loan/flexible/repay" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Repay - Get Flexible Loan Repayment History (USER_DATA)
@@ -7056,6 +7311,7 @@ export def "sapi-loan-flexible-repay-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --loanCoin: string # Coin loaned (e.g. BUSD)
   --collateralCoin: string # Coin used as collateral (e.g. BNB)
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -7072,7 +7328,7 @@ export def "sapi-loan-flexible-repay-history get" [
   let full_url = (build-url $base "/sapi/v2/loan/flexible/repay/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adjust LTV - Flexible Loan Adjust LTV (TRADE)
@@ -7086,6 +7342,7 @@ export def "sapi-loan-flexible-adjust-ltv post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --loanCoin: string # Coin loaned (e.g. BUSD)
   --collateralCoin: string # Coin used as collateral (e.g. BNB)
   --adjustmentAmount: float # format: float
@@ -7100,7 +7357,7 @@ export def "sapi-loan-flexible-adjust-ltv post" [
   let full_url = (build-url $base "/sapi/v2/loan/flexible/adjust/ltv" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adjust LTV - Get Flexible Loan LTV Adjustment History (USER_DATA)
@@ -7114,6 +7371,7 @@ export def "sapi-loan-flexible-ltv-adjustment-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --loanCoin: string # Coin loaned (e.g. BUSD)
   --collateralCoin: string # Coin used as collateral (e.g. BNB)
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -7130,7 +7388,7 @@ export def "sapi-loan-flexible-ltv-adjustment-history get" [
   let full_url = (build-url $base "/sapi/v2/loan/flexible/ltv/adjustment/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Flexible Loan Assets Data (USER_DATA)
@@ -7144,6 +7402,7 @@ export def "sapi-loan-flexible-loanable-data get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --loanCoin: string # Coin loaned (e.g. BUSD)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -7155,7 +7414,7 @@ export def "sapi-loan-flexible-loanable-data get" [
   let full_url = (build-url $base "/sapi/v2/loan/flexible/loanable/data" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Flexible Loan Collateral Assets Data (USER_DATA)
@@ -7169,6 +7428,7 @@ export def "sapi-loan-flexible-collateral-data get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --collateralCoin: string # Coin used as collateral (e.g. BNB)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -7180,7 +7440,7 @@ export def "sapi-loan-flexible-collateral-data get" [
   let full_url = (build-url $base "/sapi/v2/loan/flexible/collateral/data" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Pay Trade History (USER_DATA)
@@ -7194,6 +7454,7 @@ export def "sapi-pay-transactions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
   --limit: int # default 100, max 100 (format: int32, e.g. 100)
@@ -7207,7 +7468,7 @@ export def "sapi-pay-transactions get" [
   let full_url = (build-url $base "/sapi/v1/pay/transactions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List All Convert Pairs
@@ -7221,6 +7482,7 @@ export def "sapi-convert-exchange-info get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromAsset: string # User spends coin (e.g. BTC)
   --toAsset: string # User receives coin (e.g. USDT)
 ]: nothing -> table<fromAsset: string, toAsset: string, fromAssetMinAmount: string, fromAssetMaxAmount: string, toAssetMinAmount: string, toAssetMaxAmount: string> {
@@ -7230,7 +7492,7 @@ export def "sapi-convert-exchange-info get" [
   let full_url = (build-url $base "/sapi/v1/convert/exchangeInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query order quantity precision per asset (USER_DATA)
@@ -7244,6 +7506,7 @@ export def "sapi-convert-asset-info get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -7254,7 +7517,7 @@ export def "sapi-convert-asset-info get" [
   let full_url = (build-url $base "/sapi/v1/convert/assetInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send quote request (USER_DATA)
@@ -7268,6 +7531,7 @@ export def "sapi-convert-get-quote post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromAsset: string # e.g. BTC
   --toAsset: string # e.g. USDT
   --fromAmount: float # When specified, it is the amount you will be debited after the conversion (format: float, e.g. 1.0)
@@ -7284,7 +7548,7 @@ export def "sapi-convert-get-quote post" [
   let full_url = (build-url $base "/sapi/v1/convert/getQuote" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Accept Quote (TRADE)
@@ -7298,6 +7562,7 @@ export def "sapi-convert-accept-quote post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --quoteId: string # e.g. 1000
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -7309,7 +7574,7 @@ export def "sapi-convert-accept-quote post" [
   let full_url = (build-url $base "/sapi/v1/convert/acceptQuote" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Order status (USER_DATA)
@@ -7323,6 +7588,7 @@ export def "sapi-convert-order-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orderId: string # e.g. 1000
   --quoteId: string # e.g. 1000
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -7335,7 +7601,7 @@ export def "sapi-convert-order-status get" [
   let full_url = (build-url $base "/sapi/v1/convert/orderStatus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Place limit order (USER_DATA)
@@ -7349,6 +7615,7 @@ export def "sapi-convert-limit-place-order post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --baseAsset: string # e.g. BUSD
   --quoteAsset: string # e.g. USDT
   --limitPrice: float # Symbol limit price (from baseAsset to quoteAsset) (format: double)
@@ -7367,7 +7634,7 @@ export def "sapi-convert-limit-place-order post" [
   let full_url = (build-url $base "/sapi/v1/convert/limit/placeOrder" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel limit order (USER_DATA)
@@ -7381,6 +7648,7 @@ export def "sapi-convert-limit-cancel-order post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orderId: int # format: int64, e.g. 1603680255057330400
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -7392,7 +7660,7 @@ export def "sapi-convert-limit-cancel-order post" [
   let full_url = (build-url $base "/sapi/v1/convert/limit/cancelOrder" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query limit open orders (USER_DATA)
@@ -7406,6 +7674,7 @@ export def "sapi-convert-limit-query-open-orders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -7416,7 +7685,7 @@ export def "sapi-convert-limit-query-open-orders get" [
   let full_url = (build-url $base "/sapi/v1/convert/limit/queryOpenOrders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Convert Trade History (USER_DATA)
@@ -7430,6 +7699,7 @@ export def "sapi-convert-trade-flow get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startTime: int # UTC timestamp in ms (format: int64, e.g. 1624248872184)
   --endTime: int # UTC timestamp in ms (format: int64, e.g. 1624248872185)
   --limit: int # default 100, max 1000 (format: int32, e.g. 100)
@@ -7443,7 +7713,7 @@ export def "sapi-convert-trade-flow get" [
   let full_url = (build-url $base "/sapi/v1/convert/tradeFlow" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Spot Rebate History Records (USER_DATA)
@@ -7457,6 +7727,7 @@ export def "sapi-rebate-tax-query get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
   --page: int # default 1 (format: int32, e.g. 1)
@@ -7470,7 +7741,7 @@ export def "sapi-rebate-tax-query get" [
   let full_url = (build-url $base "/sapi/v1/rebate/taxQuery" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get NFT Transaction History (USER_DATA)
@@ -7484,6 +7755,7 @@ export def "sapi-nft-history-transactions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orderType: int # 0: purchase order, 1: sell order, 2: royalty income, 3: primary market order, 4: mint fee (format: int32, e.g. 1)
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
@@ -7499,7 +7771,7 @@ export def "sapi-nft-history-transactions get" [
   let full_url = (build-url $base "/sapi/v1/nft/history/transactions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get NFT Deposit History(USER_DATA)
@@ -7513,6 +7785,7 @@ export def "sapi-nft-history-deposit get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
   --limit: int # Default 50, Max 50 (format: int32, e.g. 50)
@@ -7527,7 +7800,7 @@ export def "sapi-nft-history-deposit get" [
   let full_url = (build-url $base "/sapi/v1/nft/history/deposit" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get NFT Withdraw History (USER_DATA)
@@ -7541,6 +7814,7 @@ export def "sapi-nft-history-withdraw get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
   --limit: int # Default 50, Max 50 (format: int32, e.g. 50)
@@ -7555,7 +7829,7 @@ export def "sapi-nft-history-withdraw get" [
   let full_url = (build-url $base "/sapi/v1/nft/history/withdraw" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get NFT Asset (USER_DATA)
@@ -7569,6 +7843,7 @@ export def "sapi-nft-user-get-asset get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Default 50, Max 50 (format: int32, e.g. 50)
   --page: int # Default 1 (format: int32, e.g. 1)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -7581,7 +7856,7 @@ export def "sapi-nft-user-get-asset get" [
   let full_url = (build-url $base "/sapi/v1/nft/user/getAsset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Binance Code (USER_DATA)
@@ -7595,6 +7870,7 @@ export def "sapi-giftcard-create-code post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # The coin type contained in the Binance Code
   --amount: float # The amount of the coin (format: double)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -7607,7 +7883,7 @@ export def "sapi-giftcard-create-code post" [
   let full_url = (build-url $base "/sapi/v1/giftcard/createCode" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Redeem a Binance Code (USER_DATA)
@@ -7621,6 +7897,7 @@ export def "sapi-giftcard-redeem-code post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --code: string # Binance Code
   --externalUid: string # Each external unique ID represents a unique user on the partner platform. The function helps you to identify the redemption behavior of different users, such as redemption frequency and amount. It also helps risk and limit control of a single account, such as daily limit on redemption volume, frequency, and incorrect number of entries. This will also prevent a single user account reach the partner's daily redemption limits. We strongly recommend you to use this feature and transfer us the User ID of your users if you have different users redeeming Binance codes on your platform. To protect user data privacy, you may choose to transfer the user id in any desired format (max. 400 characters).
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -7633,7 +7910,7 @@ export def "sapi-giftcard-redeem-code post" [
   let full_url = (build-url $base "/sapi/v1/giftcard/redeemCode" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Verify a Binance Code (USER_DATA)
@@ -7647,6 +7924,7 @@ export def "sapi-giftcard-verify get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --referenceNo: string # reference number
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -7658,7 +7936,7 @@ export def "sapi-giftcard-verify get" [
   let full_url = (build-url $base "/sapi/v1/giftcard/verify" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch RSA Public Key (USER_DATA)
@@ -7672,6 +7950,7 @@ export def "sapi-giftcard-cryptography-rsa-public-key get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -7682,7 +7961,7 @@ export def "sapi-giftcard-cryptography-rsa-public-key get" [
   let full_url = (build-url $base "/sapi/v1/giftcard/cryptography/rsa-public-key" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Buy a Binance Code (TRADE)
@@ -7696,6 +7975,7 @@ export def "sapi-giftcard-buy-code post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --baseToken: string # The token you want to pay, example BUSD
   --faceToken: string # The token you want to buy, example BNB. If faceToken = baseToken, it's the same as createCode endpoint.
   --baseTokenAmount: float # The base token asset quantity, example  1.002 (format: double)
@@ -7709,7 +7989,7 @@ export def "sapi-giftcard-buy-code post" [
   let full_url = (build-url $base "/sapi/v1/giftcard/buyCode" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch Token Limit (USER_DATA)
@@ -7723,6 +8003,7 @@ export def "sapi-giftcard-buy-code-token-limit get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --baseToken: string # The token you want to pay, example BUSD
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -7734,7 +8015,7 @@ export def "sapi-giftcard-buy-code-token-limit get" [
   let full_url = (build-url $base "/sapi/v1/giftcard/buyCode/token-limit" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get target asset list (USER_DATA)
@@ -7748,6 +8029,7 @@ export def "sapi-lending-auto-invest-target-asset-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --targetAsset: string
   --size: int # Default:10 Max:100 (format: int32, e.g. 100)
   --current: int # Current querying page. Start from 1. Default:1 (format: int32, e.g. 1)
@@ -7761,7 +8043,7 @@ export def "sapi-lending-auto-invest-target-asset-list get" [
   let full_url = (build-url $base "/sapi/v1/lending/auto-invest/target-asset/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get target asset ROI data (USER_DATA)
@@ -7775,6 +8057,7 @@ export def "sapi-lending-auto-invest-target-asset-roi-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --targetAsset: string # e.g. BTC
   --hisRoiType: string # e.g. FIVE_YEAR
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -7787,7 +8070,7 @@ export def "sapi-lending-auto-invest-target-asset-roi-list get" [
   let full_url = (build-url $base "/sapi/v1/lending/auto-invest/target-asset/roi/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query all source asset and target asset (USER_DATA)
@@ -7801,6 +8084,7 @@ export def "sapi-lending-auto-invest-all-asset get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -7811,7 +8095,7 @@ export def "sapi-lending-auto-invest-all-asset get" [
   let full_url = (build-url $base "/sapi/v1/lending/auto-invest/all/asset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query source asset list (USER_DATA)
@@ -7825,6 +8109,7 @@ export def "sapi-lending-auto-invest-source-asset-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --targetAsset: string # e.g. BTC
   --indexId: int # format: int64, e.g. 1
   --usageType: string # e.g. RECURRING
@@ -7839,7 +8124,7 @@ export def "sapi-lending-auto-invest-source-asset-list get" [
   let full_url = (build-url $base "/sapi/v1/lending/auto-invest/source-asset/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Investment plan creation (USER_DATA)
@@ -7853,6 +8138,7 @@ export def "sapi-lending-auto-invest-plan-add post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sourceType: string@sourceType-completer # e.g. MAIN_SITE
   --requestId: string
   --planType: string@planType-completer # e.g. SINGLE
@@ -7875,7 +8161,7 @@ export def "sapi-lending-auto-invest-plan-add post" [
   let full_url = (build-url $base "/sapi/v1/lending/auto-invest/plan/add" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Investment plan adjustment
@@ -7889,6 +8175,7 @@ export def "sapi-lending-auto-invest-plan-edit post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --planId: int
   --subscriptionAmount: float # format: float
   --subscriptionCycle: string@subscriptionCycle-completer
@@ -7908,7 +8195,7 @@ export def "sapi-lending-auto-invest-plan-edit post" [
   let full_url = (build-url $base "/sapi/v1/lending/auto-invest/plan/edit" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change Plan Status
@@ -7922,6 +8209,7 @@ export def "sapi-lending-auto-invest-plan-edit-status post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --planId: int
   --status: string@status-completer-1
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -7934,7 +8222,7 @@ export def "sapi-lending-auto-invest-plan-edit-status post" [
   let full_url = (build-url $base "/sapi/v1/lending/auto-invest/plan/edit-status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get list of plans
@@ -7948,6 +8236,7 @@ export def "sapi-lending-auto-invest-plan-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --planType: string
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -7959,7 +8248,7 @@ export def "sapi-lending-auto-invest-plan-list get" [
   let full_url = (build-url $base "/sapi/v1/lending/auto-invest/plan/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query holding details of the plan
@@ -7973,6 +8262,7 @@ export def "sapi-lending-auto-invest-plan-id get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --planId: int # format: int64
   --requestId: string
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -7985,7 +8275,7 @@ export def "sapi-lending-auto-invest-plan-id get" [
   let full_url = (build-url $base "/sapi/v1/lending/auto-invest/plan/id" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query subscription transaction history
@@ -7999,6 +8289,7 @@ export def "sapi-lending-auto-invest-history-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --planId: int # format: int64
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
@@ -8016,7 +8307,7 @@ export def "sapi-lending-auto-invest-history-list get" [
   let full_url = (build-url $base "/sapi/v1/lending/auto-invest/history/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Index Details(USER_DATA)
@@ -8030,6 +8321,7 @@ export def "sapi-lending-auto-invest-index-info get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --indexId: int # format: int64
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -8041,7 +8333,7 @@ export def "sapi-lending-auto-invest-index-info get" [
   let full_url = (build-url $base "/sapi/v1/lending/auto-invest/index/info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query Index Linked Plan Position Details(USER_DATA)
@@ -8055,6 +8347,7 @@ export def "sapi-lending-auto-invest-index-user-summary get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --indexId: int # format: int64
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -8066,7 +8359,7 @@ export def "sapi-lending-auto-invest-index-user-summary get" [
   let full_url = (build-url $base "/sapi/v1/lending/auto-invest/index/user-summary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # One Time Transaction(TRADE)
@@ -8080,6 +8373,7 @@ export def "sapi-lending-auto-invest-one-off post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sourceType: string # e.g. MAIN_SITE
   --requestId: string # e.g. TR12354859
   --subscriptionAmount: float # format: float, e.g. 10.1
@@ -8098,7 +8392,7 @@ export def "sapi-lending-auto-invest-one-off post" [
   let full_url = (build-url $base "/sapi/v1/lending/auto-invest/one-off" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query One-Time Transaction Status (USER_DATA)
@@ -8112,6 +8406,7 @@ export def "sapi-lending-auto-invest-one-off-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --transactionId: int # format: int64, e.g. 12345
   --requestId: string # e.g. TR12354859
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -8124,7 +8419,7 @@ export def "sapi-lending-auto-invest-one-off-status get" [
   let full_url = (build-url $base "/sapi/v1/lending/auto-invest/one-off/status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Index Linked Plan Redemption (TRADE)
@@ -8138,6 +8433,7 @@ export def "sapi-lending-auto-invest-redeem post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --indexId: int # PORTFOLIO plan's Id (format: int64, e.g. 123456)
   --requestId: string # sourceType + unique, transactionId and requestId cannot be empty at the same time (e.g. TR12354859)
   --redemptionPercentage: int # user redeem percentage,10/20/100. (e.g. 10)
@@ -8151,7 +8447,7 @@ export def "sapi-lending-auto-invest-redeem post" [
   let full_url = (build-url $base "/sapi/v1/lending/auto-invest/redeem" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Index Linked Plan Redemption History (USER_DATA)
@@ -8165,6 +8461,7 @@ export def "sapi-lending-auto-invest-redeem-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --requestId: int # format: int64, e.g. 12345
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
@@ -8181,7 +8478,7 @@ export def "sapi-lending-auto-invest-redeem-history get" [
   let full_url = (build-url $base "/sapi/v1/lending/auto-invest/redeem/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Index Linked Plan Rebalance Details (USER_DATA)
@@ -8195,6 +8492,7 @@ export def "sapi-lending-auto-invest-rebalance-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
   --current: int # Current querying page. Start from 1. Default:1 (format: int32, e.g. 1)
@@ -8209,7 +8507,7 @@ export def "sapi-lending-auto-invest-rebalance-history get" [
   let full_url = (build-url $base "/sapi/v1/lending/auto-invest/rebalance/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Subscribe ETH Staking V2(TRADE)
@@ -8223,6 +8521,7 @@ export def "sapi-eth-staking-eth-stake post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: float # Amount in ETH, limit 4 decimals (format: double)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -8234,7 +8533,7 @@ export def "sapi-eth-staking-eth-stake post" [
   let full_url = (build-url $base "/sapi/v2/eth-staking/eth/stake" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Redeem ETH (TRADE)
@@ -8248,6 +8547,7 @@ export def "sapi-eth-staking-eth-redeem post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # WBETH or BETH, default to BETH
   --amount: float # Amount in BETH, limit 8 decimals (format: double)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -8260,7 +8560,7 @@ export def "sapi-eth-staking-eth-redeem post" [
   let full_url = (build-url $base "/sapi/v1/eth-staking/eth/redeem" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get ETH staking history (USER_DATA)
@@ -8274,6 +8574,7 @@ export def "sapi-eth-staking-eth-history-staking-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
   --current: int # Current querying page. Start from 1. Default:1 (format: int32, e.g. 1)
@@ -8288,7 +8589,7 @@ export def "sapi-eth-staking-eth-history-staking-history get" [
   let full_url = (build-url $base "/sapi/v1/eth-staking/eth/history/stakingHistory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get ETH redemption history (USER_DATA)
@@ -8302,6 +8603,7 @@ export def "sapi-eth-staking-eth-history-redemption-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
   --current: int # Current querying page. Start from 1. Default:1 (format: int32, e.g. 1)
@@ -8316,7 +8618,7 @@ export def "sapi-eth-staking-eth-history-redemption-history get" [
   let full_url = (build-url $base "/sapi/v1/eth-staking/eth/history/redemptionHistory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get BETH rewards distribution history(USER_DATA)
@@ -8330,6 +8632,7 @@ export def "sapi-eth-staking-eth-history-rewards-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
   --current: int # Current querying page. Start from 1. Default:1 (format: int32, e.g. 1)
@@ -8344,7 +8647,7 @@ export def "sapi-eth-staking-eth-history-rewards-history get" [
   let full_url = (build-url $base "/sapi/v1/eth-staking/eth/history/rewardsHistory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get current ETH staking quota (USER_DATA)
@@ -8358,6 +8661,7 @@ export def "sapi-eth-staking-eth-quota get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -8368,7 +8672,7 @@ export def "sapi-eth-staking-eth-quota get" [
   let full_url = (build-url $base "/sapi/v1/eth-staking/eth/quota" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get WBETH Rate History (USER_DATA)
@@ -8382,6 +8686,7 @@ export def "sapi-eth-staking-eth-history-rate-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
   --current: int # Current querying page. Start from 1. Default:1 (format: int32, e.g. 1)
@@ -8396,7 +8701,7 @@ export def "sapi-eth-staking-eth-history-rate-history get" [
   let full_url = (build-url $base "/sapi/v1/eth-staking/eth/history/rateHistory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ETH Staking account V2(USER_DATA)
@@ -8410,6 +8715,7 @@ export def "sapi-eth-staking-account get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -8420,7 +8726,7 @@ export def "sapi-eth-staking-account get" [
   let full_url = (build-url $base "/sapi/v2/eth-staking/account" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Wrap BETH(TRADE)
@@ -8434,6 +8740,7 @@ export def "sapi-eth-staking-wbeth-wrap post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: float # Amount in BETH, limit 4 decimals (format: double)
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -8445,7 +8752,7 @@ export def "sapi-eth-staking-wbeth-wrap post" [
   let full_url = (build-url $base "/sapi/v1/eth-staking/wbeth/wrap" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get WBETH wrap history (USER_DATA)
@@ -8459,6 +8766,7 @@ export def "sapi-eth-staking-wbeth-history-wrap-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
   --current: int # Current querying page. Start from 1. Default:1 (format: int32, e.g. 1)
@@ -8473,7 +8781,7 @@ export def "sapi-eth-staking-wbeth-history-wrap-history get" [
   let full_url = (build-url $base "/sapi/v1/eth-staking/wbeth/history/wrapHistory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get WBETH unwrap history (USER_DATA)
@@ -8487,6 +8795,7 @@ export def "sapi-eth-staking-wbeth-history-unwrap-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
   --current: int # Current querying page. Start from 1. Default:1 (format: int32, e.g. 1)
@@ -8501,7 +8810,7 @@ export def "sapi-eth-staking-wbeth-history-unwrap-history get" [
   let full_url = (build-url $base "/sapi/v1/eth-staking/wbeth/history/unwrapHistory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get WBETH rewards history(USER_DATA)
@@ -8515,6 +8824,7 @@ export def "sapi-eth-staking-eth-history-wbeth-rewards-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
   --current: int # Current querying page. Start from 1. Default:1 (format: int32, e.g. 1)
@@ -8529,7 +8839,7 @@ export def "sapi-eth-staking-eth-history-wbeth-rewards-history get" [
   let full_url = (build-url $base "/sapi/v1/eth-staking/eth/history/wbethRewardsHistory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Futures Lead Trader Status(TRADE)
@@ -8543,6 +8853,7 @@ export def "sapi-copy-trading-futures-user-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -8553,7 +8864,7 @@ export def "sapi-copy-trading-futures-user-status get" [
   let full_url = (build-url $base "/sapi/v1/copyTrading/futures/userStatus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Futures Lead Trading Symbol Whitelist(USER_DATA)
@@ -8567,6 +8878,7 @@ export def "sapi-copy-trading-futures-lead-symbol get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -8577,7 +8889,7 @@ export def "sapi-copy-trading-futures-lead-symbol get" [
   let full_url = (build-url $base "/sapi/v1/copyTrading/futures/leadSymbol" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Simple Earn Flexible Product List (USER_DATA)
@@ -8591,6 +8903,7 @@ export def "sapi-simple-earn-flexible-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BTC
   --current: int # Current querying page. Start from 1. Default:1 (format: int32, e.g. 1)
   --size: int # Default:10 Max:100 (format: int32, e.g. 100)
@@ -8604,7 +8917,7 @@ export def "sapi-simple-earn-flexible-list get" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/flexible/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Simple Earn Locked Product List (USER_DATA)
@@ -8618,6 +8931,7 @@ export def "sapi-simple-earn-locked-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string # e.g. BNB
   --current: int # Current querying page. Start from 1. Default:1 (format: int32, e.g. 1)
   --size: int # Default:10 Max:100 (format: int32, e.g. 100)
@@ -8631,7 +8945,7 @@ export def "sapi-simple-earn-locked-list get" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/locked/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Subscribe Flexible Product (TRADE)
@@ -8645,6 +8959,7 @@ export def "sapi-simple-earn-flexible-subscribe post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --productId: string
   --amount: float # format: double
   --autoSubscribe: oneof<nothing, bool> # true or false, default true.
@@ -8659,7 +8974,7 @@ export def "sapi-simple-earn-flexible-subscribe post" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/flexible/subscribe" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Subscribe Locked Product (TRADE)
@@ -8673,6 +8988,7 @@ export def "sapi-simple-earn-locked-subscribe post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string
   --amount: float # format: double
   --autoSubscribe: oneof<nothing, bool> # true or false, default true.
@@ -8688,7 +9004,7 @@ export def "sapi-simple-earn-locked-subscribe post" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/locked/subscribe" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Redeem Flexible Product (TRADE)
@@ -8702,6 +9018,7 @@ export def "sapi-simple-earn-flexible-redeem post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --productId: string
   --redeemAll: oneof<nothing, bool> # true or false, default to false
   --amount: float # if redeemAll is false, amount is mandatory (format: double)
@@ -8716,7 +9033,7 @@ export def "sapi-simple-earn-flexible-redeem post" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/flexible/redeem" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Redeem Locked Product (TRADE)
@@ -8730,6 +9047,7 @@ export def "sapi-simple-earn-locked-redeem post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --positionId: string # 1234
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -8741,7 +9059,7 @@ export def "sapi-simple-earn-locked-redeem post" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/locked/redeem" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Flexible Product Position (USER_DATA)
@@ -8755,6 +9073,7 @@ export def "sapi-simple-earn-flexible-position get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string
   --productId: string
   --current: int # Current querying page. Start from 1. Default:1 (format: int32, e.g. 1)
@@ -8769,7 +9088,7 @@ export def "sapi-simple-earn-flexible-position get" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/flexible/position" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Locked Product Position (USER_DATA)
@@ -8783,6 +9102,7 @@ export def "sapi-simple-earn-locked-position get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset: string
   --positionId: string
   --projectId: string
@@ -8798,7 +9118,7 @@ export def "sapi-simple-earn-locked-position get" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/locked/position" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Simple Account (USER_DATA)
@@ -8812,6 +9132,7 @@ export def "sapi-simple-earn-account get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -8822,7 +9143,7 @@ export def "sapi-simple-earn-account get" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/account" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Flexible Subscription Record (USER_DATA)
@@ -8836,6 +9157,7 @@ export def "sapi-simple-earn-flexible-history-subscription-record get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --productId: string
   --purchaseId: string
   --asset: string
@@ -8853,7 +9175,7 @@ export def "sapi-simple-earn-flexible-history-subscription-record get" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/flexible/history/subscriptionRecord" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Locked Subscription Record (USER_DATA)
@@ -8867,6 +9189,7 @@ export def "sapi-simple-earn-locked-history-subscription-record get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --purchaseId: string
   --asset: string
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -8883,7 +9206,7 @@ export def "sapi-simple-earn-locked-history-subscription-record get" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/locked/history/subscriptionRecord" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Flexible Redemption Record (USER_DATA)
@@ -8897,6 +9220,7 @@ export def "sapi-simple-earn-flexible-history-redemption-record get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --productId: string
   --redeemId: string
   --asset: string
@@ -8911,7 +9235,7 @@ export def "sapi-simple-earn-flexible-history-redemption-record get" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/flexible/history/redemptionRecord" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Locked Redemption Record (USER_DATA)
@@ -8925,6 +9249,7 @@ export def "sapi-simple-earn-locked-history-redemption-record get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --positionId: string
   --redeemId: string
   --asset: string
@@ -8942,7 +9267,7 @@ export def "sapi-simple-earn-locked-history-redemption-record get" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/locked/history/redemptionRecord" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Flexible Rewards History (USER_DATA)
@@ -8956,6 +9281,7 @@ export def "sapi-simple-earn-flexible-history-rewards-record get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --productId: string
   --asset: string
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -8968,7 +9294,7 @@ export def "sapi-simple-earn-flexible-history-rewards-record get" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/flexible/history/rewardsRecord" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Locked Rewards History (USER_DATA)
@@ -8982,6 +9308,7 @@ export def "sapi-simple-earn-locked-history-rewards-record get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --positionId: string
   --asset: string
   --startTime: int # UTC timestamp in ms (format: int64)
@@ -8997,7 +9324,7 @@ export def "sapi-simple-earn-locked-history-rewards-record get" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/locked/history/rewardsRecord" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set Flexible Auto Subscribe (USER_DATA)
@@ -9011,6 +9338,7 @@ export def "sapi-simple-earn-flexible-set-auto-subscribe post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --productId: string
   --autoSubscribe: oneof<nothing, bool> # true or false
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -9023,7 +9351,7 @@ export def "sapi-simple-earn-flexible-set-auto-subscribe post" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/flexible/setAutoSubscribe" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set Locked Auto Subscribe (USER_DATA)
@@ -9037,6 +9365,7 @@ export def "sapi-simple-earn-locked-set-auto-subscribe post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --positionId: string
   --autoSubscribe: oneof<nothing, bool> # true or false
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -9049,7 +9378,7 @@ export def "sapi-simple-earn-locked-set-auto-subscribe post" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/locked/setAutoSubscribe" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Flexible Personal Left Quota (USER_DATA)
@@ -9063,6 +9392,7 @@ export def "sapi-simple-earn-flexible-personal-left-quota get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --productId: string
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -9074,7 +9404,7 @@ export def "sapi-simple-earn-flexible-personal-left-quota get" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/flexible/personalLeftQuota" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Locked Personal Left Quota (USER_DATA)
@@ -9088,6 +9418,7 @@ export def "sapi-simple-earn-locked-personal-left-quota get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
@@ -9099,7 +9430,7 @@ export def "sapi-simple-earn-locked-personal-left-quota get" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/locked/personalLeftQuota" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Flexible Subscription Preview (USER_DATA)
@@ -9113,6 +9444,7 @@ export def "sapi-simple-earn-flexible-subscription-preview get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --productId: string
   --amount: float # format: double
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -9125,7 +9457,7 @@ export def "sapi-simple-earn-flexible-subscription-preview get" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/flexible/subscriptionPreview" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Locked Subscription Preview (USER_DATA)
@@ -9139,6 +9471,7 @@ export def "sapi-simple-earn-locked-subscription-preview get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string
   --amount: float # format: double
   --autoSubscribe: oneof<nothing, bool> # true or false, default true.
@@ -9152,7 +9485,7 @@ export def "sapi-simple-earn-locked-subscription-preview get" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/locked/subscriptionPreview" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set Locked Product Redeem Option(USER_DATA)
@@ -9166,6 +9499,7 @@ export def "sapi-simple-earn-locked-set-redeem-option get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --positionId: string
   --redeemTo: string@redeemTo-completer # SPOT,FLEXIBLE, default FLEXIBLE
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -9178,7 +9512,7 @@ export def "sapi-simple-earn-locked-set-redeem-option get" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/locked/setRedeemOption" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Rate History (USER_DATA)
@@ -9192,6 +9526,7 @@ export def "sapi-simple-earn-flexible-history-rate-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --productId: string
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
@@ -9207,7 +9542,7 @@ export def "sapi-simple-earn-flexible-history-rate-history get" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/flexible/history/rateHistory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Collateral Record (USER_DATA)
@@ -9221,6 +9556,7 @@ export def "sapi-simple-earn-flexible-history-collateral-record get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --productId: string
   --startTime: int # UTC timestamp in ms (format: int64)
   --endTime: int # UTC timestamp in ms (format: int64)
@@ -9236,7 +9572,7 @@ export def "sapi-simple-earn-flexible-history-collateral-record get" [
   let full_url = (build-url $base "/sapi/v1/simple-earn/flexible/history/collateralRecord" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Dual Investment product list(USER_DATA)
@@ -9250,6 +9586,7 @@ export def "sapi-dci-product-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --optionType: string@optionType-completer # Input CALL or PUT
   --exercisedCoin: string # Target exercised asset, e.g.: if you subscribe to a high sell product (call option), you should input:   - optionType: CALL,   - exercisedCoin: USDT,   - investCoin: BNB;  if you subscribe to a low buy product (put option), you should input:   - optionType: PUT,   - exercisedCoin: BNB,   - investCoin: USDT;
   --investCoin: string # Asset used for subscribing, e.g.: if you subscribe to a high sell product (call option), you should input:   - optionType: CALL,   - exercisedCoin: USDT,   - investCoin: BNB;  if you subscribe to a low buy product (put option), you should input:   - optionType: PUT,   - exercisedCoin: BNB,   - investCoin: USDT;
@@ -9265,7 +9602,7 @@ export def "sapi-dci-product-list get" [
   let full_url = (build-url $base "/sapi/v1/dci/product/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Subscribe Dual Investment products(USER_DATA)
@@ -9279,6 +9616,7 @@ export def "sapi-dci-product-subscribe post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # get id from /sapi/v1/dci/product/list
   --orderId: string # get orderId from /sapi/v1/dci/product/list
   --depositAmount: float # format: double
@@ -9293,7 +9631,7 @@ export def "sapi-dci-product-subscribe post" [
   let full_url = (build-url $base "/sapi/v1/dci/product/subscribe" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Dual Investment positions(USER_DATA)
@@ -9307,6 +9645,7 @@ export def "sapi-dci-product-positions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-2 # - PENDING: Products are purchasing, will give results later; - PURCHASE_SUCCESS: purchase successfully; - SETTLED: Products are finish settling; - PURCHASE_FAIL: fail to purchase; - REFUNDING: refund ongoing; - REFUND_SUCCESS: refund to spot account successfully; - SETTLING: Products are settling. If don't fill this field, will response all the position status.
   --pageSize: string # MIN 1, MAX 100; Default 100
   --pageIndex: int # Page number, default is first page, start form 1 (format: int32)
@@ -9320,7 +9659,7 @@ export def "sapi-dci-product-positions get" [
   let full_url = (build-url $base "/sapi/v1/dci/product/positions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check Dual Investment accounts(USER_DATA)
@@ -9334,6 +9673,7 @@ export def "sapi-dci-product-accounts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
   --timestamp: int # UTC timestamp in ms (format: int64)
   --signature: string # Signature
@@ -9344,7 +9684,7 @@ export def "sapi-dci-product-accounts get" [
   let full_url = (build-url $base "/sapi/v1/dci/product/accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change Auto-Compound status(USER_DATA)
@@ -9358,6 +9698,7 @@ export def "sapi-dci-product-auto-compound-edit-status post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --positionId: int # Get positionId from /sapi/v1/dci/product/positions (format: int64)
   --autoCompoundPlan: string@autoCompoundPlan-completer # NONE: switch off the plan, STANDARD: standard plan, ADVANCED: advanced plan;
   --recvWindow: int # The value cannot be greater than 60000 (format: int64, e.g. 5000)
@@ -9370,5 +9711,5 @@ export def "sapi-dci-product-auto-compound-edit-status post" [
   let full_url = (build-url $base "/sapi/v1/dci/product/auto_compound/edit-status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

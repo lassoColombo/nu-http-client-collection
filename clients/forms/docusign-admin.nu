@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "organizations GetListV2" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -100,6 +101,7 @@ export def "organizations GetListV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --mode: string # Specifies how to select the organizations. Valid values:  - `org_admin`: Returns organizations for which the authenticated user is an admin. - `account_membership`: Returns organizations that contain an account of which the authenticated user is a member  Default value: `org_admin`
 ]: nothing -> record<organizations: table<id: string, name: string, description: string, default_account_id: string, default_permission_profile_id: int, created_on: string, created_by: string, last_modified_on: string, last_modified_by: string, accounts: list, users: list, reserved_domains: list, identity_providers: list, links: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -108,7 +110,7 @@ export def "organizations GetListV2" [
   let full_url = (build-url $base "/v2/organizations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes membership data for a user on an account.
@@ -124,6 +126,7 @@ export def "data-redaction-accounts-user RedactIndividualMembershipData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # The ID of the user whose data you want to delete. (format: uuid, e.g. 00000000-0000-0000-0000-000000000000)
 ]: any -> record<user_id: string, status: string, membership_results: table<account_id: string, status: string>> {
   let input = $in
@@ -134,7 +137,7 @@ export def "data-redaction-accounts-user RedactIndividualMembershipData" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns the list of permission profiles in an account.
@@ -151,13 +154,14 @@ export def "organizations-accounts-permissions GetPermissionProfilesV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<permissions: table<id: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/accounts/($accountId)/permissions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the list of groups in an account.
@@ -174,6 +178,7 @@ export def "organizations-accounts-groups GetGroupsV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # Index of first item to include in the response. The default value is 0. (format: int32)
   --take: int # Page size of the response. The default value is 20. (format: int32)
   --end: int # Index of the last item to include in the response. Ignored if `take` parameter is specified. (format: int32)
@@ -184,7 +189,7 @@ export def "organizations-accounts-groups GetGroupsV2" [
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/accounts/($accountId)/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of pending and completed export requests.
@@ -200,13 +205,14 @@ export def "organizations-exports-user-list Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<exports: table<id: string, type: string, requestor: record, created: string, last_modified: string, completed: string, expires: string, status: string, selected_accounts: list, selected_domains: list, metadata_url: string, percent_completed: int, number_rows: int, size_bytes: int, results: list, success: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/exports/user_list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a user list export request.
@@ -224,6 +230,7 @@ export def "organizations-exports-user-list Insert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string # The type of export requested. One of:  - `organization_domain_users_export`: All users of the reserved domains. - `organization_external_memberships_export`: Users whose email address domain is *not* linked to the organization.  - `organization_memberships_export`: Every user in every account in the organization. Users in multiple accounts will appear more than once. - `organization_account_settings_export`: This value only applies to requests to export account settings.
   --accounts: list # item shape: {account_id?: string}
   --domains: list # item shape: {domain?: string}
@@ -236,7 +243,7 @@ export def "organizations-exports-user-list Insert" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns a list of pending and completed account settings export request.
@@ -252,13 +259,14 @@ export def "organizations-exports-account-settings GetAccountCompare" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<exports: table<id: string, type: string, requestor: record, created: string, last_modified: string, completed: string, expires: string, status: string, selected_accounts: list, selected_domains: list, metadata_url: string, percent_completed: int, number_rows: int, size_bytes: int, results: list, success: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/exports/account_settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a  new account settings export request.
@@ -275,6 +283,7 @@ export def "organizations-exports-account-settings AccountCompare" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accounts: list # item shape: {account_id: string}
 ]: any -> record<id: string, type: string, requestor: record<name: string, id: string, type: string, email: string>, created: string, last_modified: string, completed: string, expires: string, status: string, selected_accounts: table<account_id: string>, selected_domains: table<domain: string>, metadata_url: string, percent_completed: int, number_rows: int, size_bytes: int, results: table<id: string, site_id: int, url: string, number_rows: int, size_bytes: int, error_details: record>, success: bool> {
   let input = $in
@@ -285,7 +294,7 @@ export def "organizations-exports-account-settings AccountCompare" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns the results for single user list export request.
@@ -302,13 +311,14 @@ export def "organizations-exports-user-list GetByExportId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, requestor: record<name: string, id: string, type: string, email: string>, created: string, last_modified: string, completed: string, expires: string, status: string, selected_accounts: table<account_id: string>, selected_domains: table<domain: string>, metadata_url: string, percent_completed: int, number_rows: int, size_bytes: int, results: table<id: string, site_id: int, url: string, number_rows: int, size_bytes: int, error_details: record>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/exports/user_list/($exportId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a single user list export request.
@@ -325,13 +335,14 @@ export def "organizations-exports-user-list DeleteByExportId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/exports/user_list/($exportId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the results for a single account settings export request.
@@ -348,13 +359,14 @@ export def "organizations-exports-account-settings GetAccountSettingsExportByExp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, requestor: record<name: string, id: string, type: string, email: string>, created: string, last_modified: string, completed: string, expires: string, status: string, selected_accounts: table<account_id: string>, selected_domains: table<domain: string>, metadata_url: string, percent_completed: int, number_rows: int, size_bytes: int, results: table<id: string, site_id: int, url: string, number_rows: int, size_bytes: int, error_details: record>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/exports/account_settings/($exportId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a single account settings export request.
@@ -371,13 +383,14 @@ export def "organizations-exports-account-settings DeleteByAccountSettingsExport
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/exports/account_settings/($exportId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the details and metadata for Bulk Account Settings Import requests in the organization.
@@ -393,13 +406,14 @@ export def "organizations-imports-account-settings Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<created: string, last_modified: string, completed: string, expires: string, percent_completed: int, number_processed_accounts: int, number_unprocessed_accounts: int, results: list<record>, success: bool, skipped_settings_by_account: record, id: string, organization_id: string, status: string, type: string, requestor: record<id: string, type: string, name: string, email: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/imports/account_settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new account settings import request.
@@ -415,6 +429,7 @@ export def "organizations-imports-account-settings Post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   filecsv: path # CSV file.
 ]: any -> record<created: string, last_modified: string, completed: string, expires: string, percent_completed: int, number_processed_accounts: int, number_unprocessed_accounts: int, results: table<id: string, site_id: int, url: string, number_processed_accounts: int, error_details: record, processing_issues_by_account: list, number_unprocessed_accounts: int>, success: bool, skipped_settings_by_account: record, id: string, organization_id: string, status: string, type: string, requestor: record<id: string, type: string, name: string, email: string>> {
   let input = $in
@@ -426,7 +441,7 @@ export def "organizations-imports-account-settings Post" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let body = if ($filecsv | is-not-empty) { $body | upsert file.csv (open -r $filecsv) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Returns the details/metadata for a Bulk Account Settings Import request.
@@ -443,13 +458,14 @@ export def "organizations-imports-account-settings GetById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created: string, last_modified: string, completed: string, expires: string, percent_completed: int, number_processed_accounts: int, number_unprocessed_accounts: int, results: table<id: string, site_id: int, url: string, number_processed_accounts: int, error_details: record, processing_issues_by_account: list, number_unprocessed_accounts: int>, success: bool, skipped_settings_by_account: record, id: string, organization_id: string, status: string, type: string, requestor: record<id: string, type: string, name: string, email: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/imports/account_settings/($importId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a Bulk Account Settings Import request.
@@ -466,13 +482,14 @@ export def "organizations-imports-account-settings DeleteById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/imports/account_settings/($importId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a request to import new users into an account.
@@ -488,6 +505,7 @@ export def "organizations-imports-bulk-users-add Insert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   filecsv: path # CSV file.
 ]: any -> record<id: string, type: string, requestor: record<name: string, id: string, type: string, email: string>, created: string, last_modified: string, status: string, user_count: int, processed_user_count: int, added_user_count: int, updated_user_count: int, closed_user_count: int, no_action_required_user_count: int, error_count: int, warning_count: int, invalid_column_headers: string, imports_not_found_or_not_available_for_accounts: string, imports_failed_for_accounts: string, imports_timed_out_for_accounts: string, imports_not_found_or_not_available_for_sites: string, imports_failed_for_sites: string, imports_timed_out_for_sites: string, file_level_error_rollups: table<error_type: string, count: int>, user_level_error_rollups: table<error_type: string, count: int>, user_level_warning_rollups: table<warning_type: string, count: int>, has_csv_results: bool, results_uri: string> {
   let input = $in
@@ -499,7 +517,7 @@ export def "organizations-imports-bulk-users-add Insert" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let body = if ($filecsv | is-not-empty) { $body | upsert file.csv (open -r $filecsv) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Import request for adding a user to a single account within the organization.
@@ -516,6 +534,7 @@ export def "organizations-accounts-imports-bulk-users-add Insert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   filecsv: path # CSV file.
 ]: any -> record<id: string, type: string, requestor: record<name: string, id: string, type: string, email: string>, created: string, last_modified: string, status: string, user_count: int, processed_user_count: int, added_user_count: int, updated_user_count: int, closed_user_count: int, no_action_required_user_count: int, error_count: int, warning_count: int, invalid_column_headers: string, imports_not_found_or_not_available_for_accounts: string, imports_failed_for_accounts: string, imports_timed_out_for_accounts: string, imports_not_found_or_not_available_for_sites: string, imports_failed_for_sites: string, imports_timed_out_for_sites: string, file_level_error_rollups: table<error_type: string, count: int>, user_level_error_rollups: table<error_type: string, count: int>, user_level_warning_rollups: table<warning_type: string, count: int>, has_csv_results: bool, results_uri: string> {
   let input = $in
@@ -527,7 +546,7 @@ export def "organizations-accounts-imports-bulk-users-add Insert" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let body = if ($filecsv | is-not-empty) { $body | upsert file.csv (open -r $filecsv) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Bulk updates information for existing users.
@@ -543,6 +562,7 @@ export def "organizations-imports-bulk-users-update Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   filecsv: path # CSV file.
 ]: any -> record<id: string, type: string, requestor: record<name: string, id: string, type: string, email: string>, created: string, last_modified: string, status: string, user_count: int, processed_user_count: int, added_user_count: int, updated_user_count: int, closed_user_count: int, no_action_required_user_count: int, error_count: int, warning_count: int, invalid_column_headers: string, imports_not_found_or_not_available_for_accounts: string, imports_failed_for_accounts: string, imports_timed_out_for_accounts: string, imports_not_found_or_not_available_for_sites: string, imports_failed_for_sites: string, imports_timed_out_for_sites: string, file_level_error_rollups: table<error_type: string, count: int>, user_level_error_rollups: table<error_type: string, count: int>, user_level_warning_rollups: table<warning_type: string, count: int>, has_csv_results: bool, results_uri: string> {
   let input = $in
@@ -554,7 +574,7 @@ export def "organizations-imports-bulk-users-update Update" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let body = if ($filecsv | is-not-empty) { $body | upsert file.csv (open -r $filecsv) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Import request for updating users for a single account within the organization.
@@ -571,6 +591,7 @@ export def "organizations-accounts-imports-bulk-users-update Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   filecsv: path # CSV file.
 ]: any -> record<id: string, type: string, requestor: record<name: string, id: string, type: string, email: string>, created: string, last_modified: string, status: string, user_count: int, processed_user_count: int, added_user_count: int, updated_user_count: int, closed_user_count: int, no_action_required_user_count: int, error_count: int, warning_count: int, invalid_column_headers: string, imports_not_found_or_not_available_for_accounts: string, imports_failed_for_accounts: string, imports_timed_out_for_accounts: string, imports_not_found_or_not_available_for_sites: string, imports_failed_for_sites: string, imports_timed_out_for_sites: string, file_level_error_rollups: table<error_type: string, count: int>, user_level_error_rollups: table<error_type: string, count: int>, user_level_warning_rollups: table<warning_type: string, count: int>, has_csv_results: bool, results_uri: string> {
   let input = $in
@@ -582,7 +603,7 @@ export def "organizations-accounts-imports-bulk-users-update Update" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let body = if ($filecsv | is-not-empty) { $body | upsert file.csv (open -r $filecsv) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Creates a request to close the accounts of existing users.
@@ -598,6 +619,7 @@ export def "organizations-imports-bulk-users-close Close" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   filecsv: path # CSV file.
 ]: any -> record<id: string, type: string, requestor: record<name: string, id: string, type: string, email: string>, created: string, last_modified: string, status: string, user_count: int, processed_user_count: int, added_user_count: int, updated_user_count: int, closed_user_count: int, no_action_required_user_count: int, error_count: int, warning_count: int, invalid_column_headers: string, imports_not_found_or_not_available_for_accounts: string, imports_failed_for_accounts: string, imports_timed_out_for_accounts: string, imports_not_found_or_not_available_for_sites: string, imports_failed_for_sites: string, imports_timed_out_for_sites: string, file_level_error_rollups: table<error_type: string, count: int>, user_level_error_rollups: table<error_type: string, count: int>, user_level_warning_rollups: table<warning_type: string, count: int>, has_csv_results: bool, results_uri: string> {
   let input = $in
@@ -609,7 +631,7 @@ export def "organizations-imports-bulk-users-close Close" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let body = if ($filecsv | is-not-empty) { $body | upsert file.csv (open -r $filecsv) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Closes external memberships.
@@ -625,13 +647,14 @@ export def "organizations-imports-bulk-users-close-external CloseExternal" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, requestor: record<name: string, id: string, type: string, email: string>, created: string, last_modified: string, status: string, user_count: int, processed_user_count: int, added_user_count: int, updated_user_count: int, closed_user_count: int, no_action_required_user_count: int, error_count: int, warning_count: int, invalid_column_headers: string, imports_not_found_or_not_available_for_accounts: string, imports_failed_for_accounts: string, imports_timed_out_for_accounts: string, imports_not_found_or_not_available_for_sites: string, imports_failed_for_sites: string, imports_timed_out_for_sites: string, file_level_error_rollups: table<error_type: string, count: int>, user_level_error_rollups: table<error_type: string, count: int>, user_level_warning_rollups: table<warning_type: string, count: int>, has_csv_results: bool, results_uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/imports/bulk_users/close_external")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of all of the user import requests.
@@ -647,13 +670,14 @@ export def "organizations-imports-bulk-users Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<imports: table<id: string, type: string, requestor: record, created: string, last_modified: string, status: string, user_count: int, processed_user_count: int, added_user_count: int, updated_user_count: int, closed_user_count: int, no_action_required_user_count: int, error_count: int, warning_count: int, invalid_column_headers: string, imports_not_found_or_not_available_for_accounts: string, imports_failed_for_accounts: string, imports_timed_out_for_accounts: string, imports_not_found_or_not_available_for_sites: string, imports_failed_for_sites: string, imports_timed_out_for_sites: string, file_level_error_rollups: list, user_level_error_rollups: list, user_level_warning_rollups: list, has_csv_results: bool, results_uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/imports/bulk_users")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the details of a single user import request.
@@ -670,13 +694,14 @@ export def "organizations-imports-bulk-users GetById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, requestor: record<name: string, id: string, type: string, email: string>, created: string, last_modified: string, status: string, user_count: int, processed_user_count: int, added_user_count: int, updated_user_count: int, closed_user_count: int, no_action_required_user_count: int, error_count: int, warning_count: int, invalid_column_headers: string, imports_not_found_or_not_available_for_accounts: string, imports_failed_for_accounts: string, imports_timed_out_for_accounts: string, imports_not_found_or_not_available_for_sites: string, imports_failed_for_sites: string, imports_timed_out_for_sites: string, file_level_error_rollups: table<error_type: string, count: int>, user_level_error_rollups: table<error_type: string, count: int>, user_level_warning_rollups: table<warning_type: string, count: int>, has_csv_results: bool, results_uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/imports/bulk_users/($importId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a specific user import request.
@@ -693,13 +718,14 @@ export def "organizations-imports-bulk-users DeleteById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/imports/bulk_users/($importId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Given the ID of a user import request, return the CSV file that was imported.
@@ -716,13 +742,14 @@ export def "organizations-imports-bulk-users-results-csv GetCSVResults" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/imports/bulk_users/($importId)/results_csv")
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the list of identity providers for an organization.
@@ -738,13 +765,14 @@ export def "organizations-identity-providers GetIdentityProviders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<identity_providers: table<id: string, friendly_name: string, auto_provision_users: bool, type: string, saml_20: record, links: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/identity_providers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes data for one or more of a user's account memberships.
@@ -761,6 +789,7 @@ export def "data-redaction-organizations-user RedactIndividualUserData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # The ID of the user whose data you want to delete. (format: uuid, e.g. 00000000-0000-0000-0000-000000000000)
   --memberships: list # A list of accounts from which you want to delete the user's data. At least one account is required. — item shape: {account_id?: string}
 ]: any -> record<user_id: string, status: string, membership_results: table<account_id: string, status: string>> {
@@ -772,7 +801,7 @@ export def "data-redaction-organizations-user RedactIndividualUserData" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns the list of reserved domains for the organization.
@@ -788,13 +817,14 @@ export def "organizations-reserved-domains GetReservedDomains" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<reserved_domains: table<id: string, status: string, host_name: string, txt_token: string, identity_provider_id: string, settings: list, links: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/reserved_domains")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a user's information.
@@ -811,6 +841,7 @@ export def "organizations-users-profiles UpdateV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --apply-license-override: oneof<nothing, bool>
   --users: list # A list of users whose information you want to change. — item shape: {id: string, site_id: int, user_name?: string, first_name?: string, last_name?: string, email?: string, default_account_id?: string, language_culture?: string, selected_languages?: string, federated_status?: string, force_password_change?: bool, memberships?: list, device_verification_enabled?: bool}
   --auto-activate-memberships-on-reactivation: oneof<nothing, bool>
@@ -824,7 +855,7 @@ export def "organizations-users-profiles UpdateV2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates a user's email address.
@@ -841,6 +872,7 @@ export def "organizations-users-email-addresses UpdateEmailAddressesV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --users: list # A list of users whose email address to change. — item shape: {id: string, site_id: int, email: string}
 ]: any -> record<success: bool, users: table<id: string, site_id: int, email: string, error_details: record>> {
   let input = $in
@@ -851,7 +883,7 @@ export def "organizations-users-email-addresses UpdateEmailAddressesV2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Closes a user's memberships.
@@ -869,6 +901,7 @@ export def "organizations-users-accounts CloseMembershipsV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   accounts: list # A list of accounts to close for a user. — item shape: {id: string}
 ]: any -> record<success: bool, accounts: table<id: string, error_details: record>> {
   let input = $in
@@ -879,7 +912,7 @@ export def "organizations-users-accounts CloseMembershipsV2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns information about the users in an organization.
@@ -895,6 +928,7 @@ export def "organizations-users GetV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # Index of first item to include in the response. The default value is 0. (format: int32)
   --take: int # Page size of the response. The default value is 20. (format: int32)
   --end: int # Index of the last item to include in the response. Ignored if `take` parameter is specified. (format: int32)
@@ -914,7 +948,7 @@ export def "organizations-users GetV2" [
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new eSignature user.
@@ -931,6 +965,7 @@ export def "organizations-users AddV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   accounts: list # A list of accounts the user will belong to. — item shape: {id: string, permission_profile?: record, groups?: list, company_name?: string, job_title?: string}
   --user-name: string # The full name of the user.
   --first-name: string # The user's first name.
@@ -951,7 +986,7 @@ export def "organizations-users AddV2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Activates user memberships.
@@ -969,6 +1004,7 @@ export def "organizations-users-memberships ActivateMembershipV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   site_id: int # format: int32
 ]: any -> record<status: string> {
   let input = $in
@@ -979,7 +1015,7 @@ export def "organizations-users-memberships ActivateMembershipV2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns historical information about users with a specific email address.
@@ -995,6 +1031,7 @@ export def "organizations-users-profile GetProfileV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # The email address associated with the users you want to retrieve.  **Note:** This property is required.
   --include-license: oneof<nothing, bool>
 ]: nothing -> record<users: table<id: string, site_id: int, site_name: string, user_name: string, first_name: string, last_name: string, user_status: string, default_account_id: string, default_account_name: string, language_culture: string, selected_languages: string, federated_status: string, is_organization_admin: bool, created_on: string, last_login: string, memberships: list, identities: list, device_verification_enabled: bool, require_two_step_verification: bool, allow_two_step_verification_snooze: bool, allow_extend_org_admin_rights_to_self: bool, is_managed_by_scim: bool>> {
@@ -1004,7 +1041,7 @@ export def "organizations-users-profile GetProfileV2" [
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/users/profile" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete user identities for a specified identity provider.
@@ -1022,6 +1059,7 @@ export def "organizations-users-identities DeleteIdentitiesV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   identities: list # A list of identities. — item shape: {id?: string}
 ]: any -> record<success: bool, identities: table<id: string, provider_id: string, user_id: string, immutable_id: string, error_details: record>> {
   let input = $in
@@ -1032,7 +1070,7 @@ export def "organizations-users-identities DeleteIdentitiesV2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds users to an account.
@@ -1051,6 +1089,7 @@ export def "organizations-accounts-users PostAccountUsersV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --permission-profile: record # A permission profile. — shape: {id: int, name?: string}
   --groups: list # The new user's requested groups. — item shape: {id: int, name?: string, type?: string}
   --user-name: string # The full name of the user.
@@ -1073,7 +1112,7 @@ export def "organizations-accounts-users PostAccountUsersV2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns a list of DSGroups.
@@ -1090,6 +1129,7 @@ export def "v21-organizations-accounts-dsgroups V2-by-organizationId-accountId-b
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Start page of DSGroups. (format: int32)
   --page-size: int # Page size of DSGroups. (format: int32)
 ]: nothing -> record<page: int, page_size: int, total_count: int, account_id: string, ds_groups: table<ds_group_id: string, account_id: string, source_product_name: string, group_id: string, group_name: string, description: string, is_admin: bool, last_modified_on: string, user_count: int, external_account_id: int, account_name: string, is_managed_by_scim: bool>> {
@@ -1099,7 +1139,7 @@ export def "v21-organizations-accounts-dsgroups V2-by-organizationId-accountId-b
   let full_url = (build-url $base $"/v2.1/organizations/($organizationId)/accounts/($accountId)/dsgroups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new DSGroup.
@@ -1116,6 +1156,7 @@ export def "v21-organizations-accounts-dsgroups V2-by-organizationId-accountId-b
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   group_name: string
   --description: string
 ]: any -> record<ds_group_id: string, account_id: string, source_product_name: string, group_id: string, group_name: string, description: string, is_admin: bool, last_modified_on: string, user_count: int, external_account_id: int, account_name: string, is_managed_by_scim: bool> {
@@ -1127,7 +1168,7 @@ export def "v21-organizations-accounts-dsgroups V2-by-organizationId-accountId-b
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns details about a single DSGroup.
@@ -1145,13 +1186,14 @@ export def "v21-organizations-accounts-dsgroups V2-by-organizationId-accountId-d
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ds_group_id: string, account_id: string, source_product_name: string, group_id: string, group_name: string, description: string, is_admin: bool, last_modified_on: string, user_count: int, external_account_id: int, account_name: string, is_managed_by_scim: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2.1/organizations/($organizationId)/accounts/($accountId)/dsgroups/($dsGroupId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a DSGroup.
@@ -1169,13 +1211,14 @@ export def "v21-organizations-accounts-dsgroups V2-by-organizationId-accountId-d
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2.1/organizations/($organizationId)/accounts/($accountId)/dsgroups/($dsGroupId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of users in a DSGroup.
@@ -1193,6 +1236,7 @@ export def "v21-organizations-accounts-dsgroups-users V2-by-organizationId-accou
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Start page of DSGroups.  (format: int32)
   --page-size: int # Page size of DSGroups. (format: int32)
 ]: nothing -> record<group: record<ds_group_id: string, account_id: string, source_product_name: string, group_id: string, group_name: string, description: string, is_admin: bool, last_modified_on: string, user_count: int, external_account_id: int, account_name: string, is_managed_by_scim: bool>, group_users: record<page: int, page_size: int, total_count: int, users: list<record>>> {
@@ -1202,7 +1246,7 @@ export def "v21-organizations-accounts-dsgroups-users V2-by-organizationId-accou
   let full_url = (build-url $base $"/v2.1/organizations/($organizationId)/accounts/($accountId)/dsgroups/($dsGroupId)/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a list of users to a DSGroup.
@@ -1220,6 +1264,7 @@ export def "v21-organizations-accounts-dsgroups-users V2-by-organizationId-accou
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   user_ids: list
 ]: any -> record<group: record<ds_group_id: string, account_id: string, source_product_name: string, group_id: string, group_name: string, description: string, is_admin: bool, last_modified_on: string, user_count: int, external_account_id: int, account_name: string, is_managed_by_scim: bool>, group_users: record<is_success: bool, TotalCount: int, users: list<record>>> {
   let input = $in
@@ -1230,7 +1275,7 @@ export def "v21-organizations-accounts-dsgroups-users V2-by-organizationId-accou
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Removes a list of users from a DSGroup.
@@ -1248,6 +1293,7 @@ export def "v21-organizations-accounts-dsgroups-users V2-by-organizationId-accou
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-ids: list # An array of IDs corresponding to users to remove from the group.
   --user-emails: list # An array of emails associated with users to remove from the group. **Note:** If `user_ids` is also specified, this parameter will be ignored.
 ]: any -> record<is_success: bool, failed_users: table<user_id: string, account_id: string, user_name: string, first_name: string, last_name: string, middle_name: string, status: string, error_details: record>> {
@@ -1259,7 +1305,7 @@ export def "v21-organizations-accounts-dsgroups-users V2-by-organizationId-accou
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets products associated with the account and the available permission profiles.
@@ -1276,13 +1322,14 @@ export def "v21-organizations-accounts-products-permission-profiles GetProductPe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<product_permission_profiles: table<product_id: string, product_name: string, permission_profiles: list, error_message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2.1/organizations/($organizationId)/accounts/($accountId)/products/permission_profiles")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a user's product permission profiles by user ID.
@@ -1300,13 +1347,14 @@ export def "v21-organizations-accounts-products-users-permission-profiles GetUse
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<product_permission_profiles: table<product_id: string, product_name: string, permission_profiles: list, error_message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2.1/organizations/($organizationId)/accounts/($accountId)/products/users/($userId)/permission_profiles")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assigns permission profiles for a user by user ID.
@@ -1325,6 +1373,7 @@ export def "v21-organizations-accounts-products-users-permission-profiles PostUs
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   product_permission_profiles: list # A list of one or more products and their respective permissions. — item shape: {product_id: string, permission_profile_id: string}
 ]: any -> record<user_id: string, account_id: string, product_permission_profiles: table<product_id: string, product_name: string, permission_profiles: list, error_message: string>> {
   let input = $in
@@ -1335,7 +1384,7 @@ export def "v21-organizations-accounts-products-users-permission-profiles PostUs
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or updates a multi-product user.
@@ -1354,6 +1403,7 @@ export def "v21-organizations-accounts-users PostAccountUsersV2-by-organizationI
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   product_permission_profiles: list # A list of one or more products and their respective permissions. — item shape: {product_id: string, permission_profile_id: string}
   --ds-groups: list # item shape: {ds_group_id: string}
   --user-name: string # The full name of the user.
@@ -1375,7 +1425,7 @@ export def "v21-organizations-accounts-users PostAccountUsersV2-by-organizationI
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the DS profile for a user specified by email address.
@@ -1391,6 +1441,7 @@ export def "v21-organizations-users-dsprofile GetDSProfiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # The email address of the user.  **Note:** This property is required.
   --qp-sort: oneof<nothing, bool> # When **true,** sorts the results in ascending order by account name.
   --include-license: oneof<nothing, bool>
@@ -1401,7 +1452,7 @@ export def "v21-organizations-users-dsprofile GetDSProfiles" [
   let full_url = (build-url $base $"/v2.1/organizations/($organizationId)/users/dsprofile" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the DS profile for a user specified by ID.
@@ -1418,6 +1469,7 @@ export def "v21-organizations-users-dsprofile GetDSProfileByUserId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: oneof<nothing, bool> # When **true,** sorts the results in ascending order by account name.
   --include-license: oneof<nothing, bool>
 ]: nothing -> record<users: table<id: string, site_id: int, site_name: string, user_name: string, first_name: string, last_name: string, user_status: string, default_account_id: string, default_account_name: string, language_culture: string, selected_languages: string, federated_status: string, is_organization_admin: bool, created_on: string, last_login: string, memberships: list, identities: list, device_verification_enabled: bool, require_two_step_verification: bool, allow_two_step_verification_snooze: bool, allow_extend_org_admin_rights_to_self: bool, is_managed_by_scim: bool>> {
@@ -1427,7 +1479,7 @@ export def "v21-organizations-users-dsprofile GetDSProfileByUserId" [
   let full_url = (build-url $base $"/v2.1/organizations/($organizationId)/users/($userId)/dsprofile" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revokes a user's access to one or more products.
@@ -1444,6 +1496,7 @@ export def "v21-organizations-accounts-products-users RemoveUserProducts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-email: string # The user's email address.
   --user-id: string # The user's unique ID. (format: uuid, e.g. 00000000-0000-0000-0000-000000000000)
   product_ids: list # A list of IDs corresponding to the products for which the user's access will be revoked.  For example:  `["230546a7-xxxx-xxxx-xxxx-af205d5494ad", "984800b7-xxxx-xxxx-xxxx-kt374a5922lk"]`
@@ -1456,7 +1509,7 @@ export def "v21-organizations-accounts-products-users RemoveUserProducts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves a user's product permission profiles by email address.
@@ -1473,6 +1526,7 @@ export def "v21-organizations-accounts-products-permission-profiles-users GetUse
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # The email address of the user.  **Note:** This property is required.
 ]: nothing -> record<user_id: string, account_id: string, product_permission_profiles: table<product_id: string, product_name: string, permission_profiles: list, error_message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1481,7 +1535,7 @@ export def "v21-organizations-accounts-products-permission-profiles-users GetUse
   let full_url = (build-url $base $"/v2.1/organizations/($organizationId)/accounts/($accountId)/products/permission_profiles/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assigns permission profiles for a user by email address.
@@ -1499,6 +1553,7 @@ export def "v21-organizations-accounts-products-permission-profiles-users PostUs
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The email address associated with the user whose permissions you want to update. This property is required.
   product_permission_profiles: list # A list of one or more products and their associated permissions. — item shape: {product_id: string, permission_profile_id: string}
 ]: any -> record<user_id: string, account_id: string, product_permission_profiles: table<product_id: string, product_name: string, permission_profiles: list, error_message: string>> {
@@ -1510,7 +1565,7 @@ export def "v21-organizations-accounts-products-permission-profiles-users PostUs
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get asset group accounts for an organization.
@@ -1526,6 +1581,7 @@ export def "organizations-asset-groups-accounts GetAssetGroupAccountsByOrg" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --compliant: oneof<nothing, bool> # When **true,** only compliant accounts are returned and account responses do not include the `compliant` field. The default value is **false.**
 ]: nothing -> record<assetGroupAccounts: table<assetGroupId: string, assetGroupName: string, accountId: string, accountName: string, externalAccountId: int, compliant: bool, siteId: int, siteName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1534,7 +1590,7 @@ export def "organizations-asset-groups-accounts GetAssetGroupAccountsByOrg" [
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/assetGroups/accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Clone an existing Docusign account.
@@ -1552,6 +1608,7 @@ export def "organizations-asset-groups-account-clone CloneAssetGroupAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   sourceAccount: record # shape: {id: string}
   targetAccount: record # An object describing the target cloned account. — shape: {id?: string, name?: string, region?: string, countryCode?: string, site?: string, admin?: record}
   --cloneProcessingFailureDetails: record
@@ -1564,7 +1621,7 @@ export def "organizations-asset-groups-account-clone CloneAssetGroupAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets all asset group account clones for an organization.
@@ -1580,6 +1637,7 @@ export def "organizations-asset-groups-account-clones GetAssetGroupAccountClones
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since-updated-date: string # Use this parameter to retrieve only account clones that were created on or after a specified date. (format: date-time)
   --include-details: oneof<nothing, bool> # When **true,** include additional details for the asset group account clones. The default value is **false.**
 ]: nothing -> record<assetGroupWorks: table<sourceAccount: record, targetAccount: record, assetGroupWorkId: string, assetGroupId: string, assetGroupWorkType: string, status: string, cloneRequestId: string, orderId: string, attempts: int, createdDate: string, createdByName: string, createdByEmail: string, message: string, cloneProcessingFailureDetails: record>> {
@@ -1589,7 +1647,7 @@ export def "organizations-asset-groups-account-clones GetAssetGroupAccountClones
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/assetGroups/accountClones" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets information about a single cloned account.
@@ -1607,6 +1665,7 @@ export def "organizations-asset-groups-account-clones GetAssetGroupAccountClone"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-details: oneof<nothing, bool> # When **true,** include additional details about the cloned account. The default value is **false.**
 ]: nothing -> record<sourceAccount: record<id: string, externalAccountId: int, site: string, name: string>, targetAccount: record<id: string, name: string, region: string, countryCode: string, site: string, admin: record<email: string, firstName: string, lastName: string, locale: string>>, assetGroupWorkId: string, assetGroupId: string, assetGroupWorkType: string, status: string, cloneRequestId: string, orderId: string, attempts: int, createdDate: string, createdByName: string, createdByEmail: string, message: string, cloneProcessingFailureDetails: record<error: string, errorDescription: string, isSystemError: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1615,7 +1674,7 @@ export def "organizations-asset-groups-account-clones GetAssetGroupAccountClone"
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/assetGroups/($assetGroupId)/accountClones/($assetGroupWorkId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get information about plan items within an organization.
@@ -1631,13 +1690,14 @@ export def "organizations-plan-items GetOrganizationPlanItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<plan_id: string, plan_name: string, associated_accounts_count: int, asset_group_name: string, asset_group_id: string, subscription_name: string, subscription_id: string, modules: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/planItems")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new Docusign account using the plan and modules specified in request body.
@@ -1655,6 +1715,7 @@ export def "organizations-asset-groups-account-create CreateSubAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscriptionDetails: record # shape: {id?: string, planId?: string, modules?: list}
   --targetAccount: record # shape: {id?: string, address?: record, admin?: record, name?: string, countryCode?: string, region?: string, site?: string}
 ]: any -> record<AssetGroupWork: record<AssetGroupWorkId: string, AssetGroupId: string, AssetGroupWorkType: string, Status: string, OrderId: string, TargetAccountId: string, SourceAccountId: string, SourceAccountExternalId: int, SourceAccountName: string, SourceAccountSite: string, CloneRequestId: string, CloneAccountDetails: record<Name: string, CountryCode: string, Region: string, Site: string, Address: record, AdminUser: record, BillingProfileType: int>, CreateSubAccountDetails: record<SubscriptionDetails: record, Name: string, CountryCode: string, Region: string, Site: string, Address: record, AdminUser: record, BillingProfileType: int>, Attempts: int, RetryOn: string, Message: string, CreatedByName: string, CreatedByEmail: string, ErrorDetails: record<ErrorCode: string, PublicErrorCode: string, ErrorDescription: string, IsSystemError: bool>, OldAssetGroupSubscriptionId: string, NewAssetGroupSubscriptionId: string, SourceSystem: string, SourceId: string, CreatedBy: string, CreatedByType: int, CreatedDate: string, UpdatedBy: string, UpdatedByType: int, UpdatedDate: string, UpdateHistory: list<record>>, Message: string, Success: bool> {
@@ -1666,7 +1727,7 @@ export def "organizations-asset-groups-account-create CreateSubAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all ongoing account creation processes for an Organization.
@@ -1682,6 +1743,7 @@ export def "organizations-sub-accounts-created GetSubAccountCreateProcessesByOrg
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since-updated-date: string # Specifies that the request will only return information for accounts that were created after the date passed in the format YYYY-MM-DD. (format: date-time)
   --include-details: oneof<nothing, bool> # When `true`, include additional details about the account creation process. The default value is `false`.
 ]: nothing -> record<assetGroupWorks: table<targetAccount: record, subscriptionDetails: record, assetGroupWorkId: string, assetGroupId: string, assetGroupWorkType: string, status: string, orderId: string, attempts: int, createdDate: string, createdByName: string, createdByEmail: string, message: string, createAccountProcessingFailureDetails: record>> {
@@ -1691,7 +1753,7 @@ export def "organizations-sub-accounts-created GetSubAccountCreateProcessesByOrg
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/subAccountsCreated" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a single account creation process.
@@ -1709,6 +1771,7 @@ export def "organizations-asset-group-sub-account-created GetSubAccountCreatePro
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-details: oneof<nothing, bool> # When true, include details for the asset group account clone.
 ]: nothing -> record<targetAccount: record<id: string, name: string, region: string, countryCode: string, site: string, admin: record<email: string, firstName: string, lastName: string, locale: string>>, subscriptionDetails: record<id: string, planId: string, planName: string, modules: list<record>>, assetGroupWorkId: string, assetGroupId: string, assetGroupWorkType: string, status: string, orderId: string, attempts: int, createdDate: string, createdByName: string, createdByEmail: string, message: string, createAccountProcessingFailureDetails: record<error: string, errorDescription: string, isSystemError: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1717,7 +1780,7 @@ export def "organizations-asset-group-sub-account-created GetSubAccountCreatePro
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/assetGroup/($assetGroupId)/subAccountCreated/($assetGroupWorkId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v2/organizations/{organizationId}/connect
@@ -1732,6 +1795,7 @@ export def "organizations-connect GetOrganizationConnectConfigs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sortBy: string
   --siteId: int # The site ID of the account.  (format: int32)
   --accountId: string # The account ID GUID. (format: uuid)
@@ -1744,7 +1808,7 @@ export def "organizations-connect GetOrganizationConnectConfigs" [
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/connect" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v2/organizations/{organizationId}/connect
@@ -1760,6 +1824,7 @@ export def "organizations-connect CreateOrganizationConnectConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --connectId: string # format: uuid, e.g. 00000000-0000-0000-0000-000000000000
   --configurationType: string
   --allowEnvelopePublish: string
@@ -1785,7 +1850,7 @@ export def "organizations-connect CreateOrganizationConnectConfig" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /v2/organizations/{organizationId}/connect/{connectId}
@@ -1801,13 +1866,14 @@ export def "organizations-connect GetOrganizationConnectConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<connectId: string, configurationType: string, allowEnvelopePublish: string, urlToPublishTo: string, deliveryMode: string, events: list<string>, associatedFilterSelection: string, accountIds: list<string>, userIds: list<string>, groupIds: list<string>, name: string, signMessageWithX509Certificate: string, includeOAuth: string, includeHMAC: string, pausePublish: string, eventData: record<version: string, includeData: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/connect/($connectId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE /v2/organizations/{organizationId}/connect/{connectId}
@@ -1823,13 +1889,14 @@ export def "organizations-connect DeleteOrganizationConnectConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/connect/($connectId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /v2/organizations/{organizationId}/connect/{connectId}
@@ -1846,6 +1913,7 @@ export def "organizations-connect UpdateOrganizationConnectConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-connectId: string # format: uuid, e.g. 00000000-0000-0000-0000-000000000000
   --configurationType: string
   --allowEnvelopePublish: string
@@ -1871,7 +1939,7 @@ export def "organizations-connect UpdateOrganizationConnectConfig" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /v2/organizations/{organizationId}/connect/oauth
@@ -1886,13 +1954,14 @@ export def "organizations-connect-oauth DeleteOrganizationConnectOAuthConfigurat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/connect/oauth")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v2/organizations/{organizationId}/connect/oauth
@@ -1907,13 +1976,14 @@ export def "organizations-connect-oauth GetOrganizationConnectOAuthConfiguration
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/connect/oauth")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v2/organizations/{organizationId}/connect/oauth
@@ -1928,6 +1998,7 @@ export def "organizations-connect-oauth PostOrganizationConnectOAuthConfiguratio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --authorizationServerUrl: string # format: uri
   --clientId: string
   --clientSecret: string
@@ -1942,7 +2013,7 @@ export def "organizations-connect-oauth PostOrganizationConnectOAuthConfiguratio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT /v2/organizations/{organizationId}/connect/oauth
@@ -1957,6 +2028,7 @@ export def "organizations-connect-oauth PutOrganizationConnectOAuthConfiguration
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --authorizationServerUrl: string # format: uri
   --clientId: string
   --clientSecret: string
@@ -1971,7 +2043,7 @@ export def "organizations-connect-oauth PutOrganizationConnectOAuthConfiguration
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /v2/organizations/{organizationId}/connect/secret
@@ -1986,13 +2058,14 @@ export def "organizations-connect-secret GetConnectHmacSecrets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<secrets: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/connect/secret")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v2/organizations/{organizationId}/connect/secret
@@ -2007,13 +2080,14 @@ export def "organizations-connect-secret PostConnectHmacSecret" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<secrets: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/connect/secret")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE /v2/organizations/{organizationId}/connect/secret/{keyId}
@@ -2029,11 +2103,12 @@ export def "organizations-connect-secret DeleteConnectHmacSecret" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<secrets: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($organizationId)/connect/secret/($keyId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -83,7 +84,7 @@ def chain-completer-1 [] { ["0x1" "0x106a" "0x13882" "0x14a34" "0x15b32" "0x15b3
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "nft get-by-address" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -117,6 +118,7 @@ export def "nft get-by-address" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --format: string@format-completer # The format of the token ID (default: decimal, e.g. decimal)
   --limit: int # The desired page size of the result.
@@ -133,7 +135,7 @@ export def "nft get-by-address" [
   let full_url = (build-url $base $"/($address)/nft" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Metadata for NFTs
@@ -149,6 +151,7 @@ export def "nft-get-multiple-nf-ts post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   tokens: list # The tokens to be fetched (max 25 tokens) (e.g. [{token_address: 0xa4991609c508b6d4fb7156426db0bd49fe298bd8, token_id: 12}, {token_address: 0x3c64dc415ebb4690d1df2b6216148c8de6dd29f7, token_id: 1}, {token_address: 0x3c64dc415ebb4690d1df2b6216148c8de6dd29f7, token_id: 200}]) — item shape: {token_address?: string, token_id?: string}
   --normalizeMetadata: oneof<nothing, bool> # Should normalized metadata be returned? (e.g. false)
@@ -163,7 +166,7 @@ export def "nft-get-multiple-nf-ts post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get NFT Transfers by wallet address
@@ -179,6 +182,7 @@ export def "nft-transfers get-by-address" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --contract-addresses: list # List of contract addresses of transfers
   --format: string@format-completer # The format of the token ID (default: decimal, e.g. decimal)
@@ -197,7 +201,7 @@ export def "nft-transfers get-by-address" [
   let full_url = (build-url $base $"/($address)/nft/transfers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get NFT collections by wallet address
@@ -213,6 +217,7 @@ export def "nft-collections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --include-prices: oneof<nothing, bool> # Should NFT last sale prices be included in the result? (default: false)
   --limit: int # The desired page size of the result.
@@ -226,7 +231,7 @@ export def "nft-collections get" [
   let full_url = (build-url $base $"/($address)/nft/collections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get NFTs by contract address
@@ -242,6 +247,7 @@ export def "nft get-by-address-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --format: string@format-completer # The format of the token ID (default: decimal, e.g. decimal)
   --limit: int # The desired page size of the result.
@@ -258,7 +264,7 @@ export def "nft get-by-address-1" [
   let full_url = (build-url $base $"/nft/($address)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get unique wallet addresses owning NFTs from a contract.
@@ -274,6 +280,7 @@ export def "nft-unique-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --limit: int # The desired page size of the result.
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
@@ -284,7 +291,7 @@ export def "nft-unique-owners get" [
   let full_url = (build-url $base $"/nft/($address)/unique-owners" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get NFT owners by contract address
@@ -300,6 +307,7 @@ export def "nft-owners list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --format: string@format-completer # The format of the token ID (default: decimal, e.g. decimal)
   --limit: int # The desired page size of the result.
@@ -313,7 +321,7 @@ export def "nft-owners list" [
   let full_url = (build-url $base $"/nft/($address)/owners" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get NFT transfers by contract address
@@ -329,6 +337,7 @@ export def "nft-transfers get-by-address-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --from-block: int # The minimum block number from where to get the transfers * Provide the param 'from_block' or 'from_date' * If 'from_date' and 'from_block' are provided, 'from_block' will be used.
   --to-block: int # The maximum block number from where to get the transfers. * Provide the param 'to_block' or 'to_date' * If 'to_date' and 'to_block' are provided, 'to_block' will be used.
@@ -346,7 +355,7 @@ export def "nft-transfers get-by-address-1" [
   let full_url = (build-url $base $"/nft/($address)/transfers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get NFTs by traits
@@ -362,6 +371,7 @@ export def "nft-nfts-by-traits post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --limit: int # The desired page size of the result. (default: 100)
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
@@ -379,7 +389,7 @@ export def "nft-nfts-by-traits post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get NFT traits by collection
@@ -395,6 +405,7 @@ export def "nft-traits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
 ]: nothing -> record<traits: table<trait_type: string, values: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -403,7 +414,7 @@ export def "nft-traits get" [
   let full_url = (build-url $base $"/nft/($address)/traits" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get NFT traits by collection paginate
@@ -419,6 +430,7 @@ export def "nft-traits-paginate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
   --limit: int # The desired page size of the result.
@@ -430,7 +442,7 @@ export def "nft-traits-paginate get" [
   let full_url = (build-url $base $"/nft/($address)/traits/paginate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resync NFT Trait
@@ -446,6 +458,7 @@ export def "nft-traits-resync resyncNFTRarity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -454,7 +467,7 @@ export def "nft-traits-resync resyncNFTRarity" [
   let full_url = (build-url $base $"/nft/($address)/traits/resync" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get NFT trades by collection
@@ -470,6 +483,7 @@ export def "nft-trades list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --from-block: int # The minimum block number from which to get the transfers * Provide the param 'from_block' or 'from_date' * If 'from_date' and 'from_block' are provided, 'from_block' will be used.
   --to-block: string # The block number to get the trades from
@@ -486,7 +500,7 @@ export def "nft-trades list" [
   let full_url = (build-url $base $"/nft/($address)/trades" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get NFT trades by token
@@ -503,6 +517,7 @@ export def "nft-trades get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --from-block: int # The minimum block number from which to get the transfers * Provide the param 'from_block' or 'from_date' * If 'from_date' and 'from_block' are provided, 'from_block' will be used.
   --to-block: string # The block number to get the trades from
@@ -518,7 +533,7 @@ export def "nft-trades get" [
   let full_url = (build-url $base $"/nft/($address)/($token_id)/trades" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get NFT trades by wallet address
@@ -534,6 +549,7 @@ export def "wallets-nfts-trades get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --from-block: int # The minimum block number from which to get the transfers * Provide the param 'from_block' or 'from_date' * If 'from_date' and 'from_block' are provided, 'from_block' will be used.
   --to-block: string # The block number to get the trades from
@@ -549,7 +565,7 @@ export def "wallets-nfts-trades get" [
   let full_url = (build-url $base $"/wallets/($address)/nfts/trades" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get NFT collection metadata
@@ -565,6 +581,7 @@ export def "nft-metadata get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --include-prices: oneof<nothing, bool> # Should NFT last sale prices be included in the result? (default: false)
 ]: nothing -> record<token_address: string, name: string, synced_at: string, symbol: string, contract_type: string, possible_spam: bool, verified_collection: bool, collection_logo: string, collection_banner_image: string, collection_category: string, project_url: string, wiki_url: string, discord_url: string, telegram_url: string, twitter_username: string, instagram_username: string, floor_price: string, floor_price_usd: string, floor_price_currency: string, last_sale: record<transaction_hash: string, block_timestamp: string, buyer_address: string, seller_address: string, price: string, price_formatted: string, usd_price_at_sale: string, current_usd_value: string, token_address: string, token_id: string, payment_token: record<token_name: string, token_symbol: string, token_logo: string, token_decimals: string, token_address: string>>> {
@@ -574,7 +591,7 @@ export def "nft-metadata get" [
   let full_url = (build-url $base $"/nft/($address)/metadata" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get metadata for multiple NFT contracts
@@ -589,6 +606,7 @@ export def "nft-metadata post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --include-prices: oneof<nothing, bool> # Should NFT last sale prices be included in the result? (default: false)
   addresses: list
@@ -602,7 +620,7 @@ export def "nft-metadata post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get NFT metadata
@@ -619,6 +637,7 @@ export def "nft get-by-address-token_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --format: string@format-completer # The format of the token ID (default: decimal, e.g. decimal)
   --normalizeMetadata: oneof<nothing, bool> # Should normalized metadata be returned? (default: true)
@@ -631,7 +650,7 @@ export def "nft get-by-address-token_id" [
   let full_url = (build-url $base $"/nft/($address)/($token_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get NFT transfers by token ID
@@ -648,6 +667,7 @@ export def "nft-transfers get-by-address-token_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --format: string@format-completer # The format of the token ID (default: decimal, e.g. decimal)
   --include-prices: oneof<nothing, bool> # Should NFT last sale prices be included in the result? (default: false)
@@ -661,7 +681,7 @@ export def "nft-transfers get-by-address-token_id" [
   let full_url = (build-url $base $"/nft/($address)/($token_id)/transfers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get NFT owners by token ID
@@ -678,6 +698,7 @@ export def "nft-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --format: string@format-completer # The format of the token ID (default: decimal, e.g. decimal)
   --limit: int # The desired page size of the result.
@@ -691,7 +712,7 @@ export def "nft-owners get" [
   let full_url = (build-url $base $"/nft/($address)/($token_id)/owners" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resync NFT Contract
@@ -707,6 +728,7 @@ export def "nft-sync syncNFTContract" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -715,7 +737,7 @@ export def "nft-sync syncNFTContract" [
   let full_url = (build-url $base $"/nft/($address)/sync" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resync NFT metadata
@@ -732,6 +754,7 @@ export def "nft-metadata-resync reSyncMetadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --flag: string@flag-completer # The type of resync to operate (default: uri, e.g. uri)
   --mode: string@mode-completer # To define the behaviour of the endpoint (default: async, e.g. sync)
@@ -742,7 +765,7 @@ export def "nft-metadata-resync reSyncMetadata" [
   let full_url = (build-url $base $"/nft/($address)/($token_id)/metadata/resync" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get NFT sale prices by collection
@@ -758,6 +781,7 @@ export def "nft-price list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --days: int # The number of days to look back to find the lowest price If not provided 7 days will be the default and 365 is the maximum
 ]: nothing -> record<last_sale: record<transaction_hash: string, block_timestamp: string, buyer_address: string, seller_address: string, price: string, price_formatted: string, usd_price_at_sale: string, current_usd_value: string, token_id: string, payment_token: record<token_name: string, token_symbol: string, token_logo: string, token_decimals: string, token_address: string>>, lowest_sale: record<transaction_hash: string, block_timestamp: string, buyer_address: string, seller_address: string, price: string, price_formatted: string, usd_price_at_sale: string, current_usd_value: string, token_id: string, payment_token: record<token_name: string, token_symbol: string, token_logo: string, token_decimals: string, token_address: string>>, highest_sale: record<transaction_hash: string, block_timestamp: string, buyer_address: string, seller_address: string, price: string, price_formatted: string, usd_price_at_sale: string, current_usd_value: string, token_id: string, payment_token: record<token_name: string, token_symbol: string, token_logo: string, token_decimals: string, token_address: string>>, average_sale: record<price: string, price_formatted: string, current_usd_value: string>, total_trades: float, message: string> {
@@ -767,7 +791,7 @@ export def "nft-price list" [
   let full_url = (build-url $base $"/nft/($address)/price" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get NFT sale prices by token
@@ -784,6 +808,7 @@ export def "nft-price get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --days: int # The number of days to look back to find the lowest price If not provided 7 days will be the default and 365 is the maximum
 ]: nothing -> record<last_sale: record<transaction_hash: string, block_timestamp: string, buyer_address: string, seller_address: string, price: string, price_formatted: string, usd_price_at_sale: string, current_usd_value: string, token_id: string, payment_token: record<token_name: string, token_symbol: string, token_logo: string, token_decimals: string, token_address: string>>, lowest_sale: record<transaction_hash: string, block_timestamp: string, buyer_address: string, seller_address: string, price: string, price_formatted: string, usd_price_at_sale: string, current_usd_value: string, token_id: string, payment_token: record<token_name: string, token_symbol: string, token_logo: string, token_decimals: string, token_address: string>>, highest_sale: record<transaction_hash: string, block_timestamp: string, buyer_address: string, seller_address: string, price: string, price_formatted: string, usd_price_at_sale: string, current_usd_value: string, token_id: string, payment_token: record<token_name: string, token_symbol: string, token_logo: string, token_decimals: string, token_address: string>>, average_sale: record<price: string, price_formatted: string, current_usd_value: string>, total_trades: float, message: string> {
@@ -793,7 +818,7 @@ export def "nft-price get" [
   let full_url = (build-url $base $"/nft/($address)/($token_id)/price" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get ERC20 token price
@@ -809,6 +834,7 @@ export def "erc20-price get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --exchange: string # The factory name or address of the token exchange
   --to-block: int # The block number from which the token price should be checked
@@ -821,7 +847,7 @@ export def "erc20-price get" [
   let full_url = (build-url $base $"/erc20/($address)/price" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get swap transactions by token address
@@ -837,6 +863,7 @@ export def "erc20-swaps get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
   --limit: int # The desired page size of the result.
@@ -853,7 +880,7 @@ export def "erc20-swaps get" [
   let full_url = (build-url $base $"/erc20/($address)/swaps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a holders summary by token address
@@ -869,6 +896,7 @@ export def "erc20-holders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
 ]: nothing -> record<totalHolders: float, holderSupply: record<top10: record<supply: string, supplyPercent: float>, top25: record<supply: string, supplyPercent: float>, top50: record<supply: string, supplyPercent: float>, top100: record<supply: string, supplyPercent: float>, top250: record<supply: string, supplyPercent: float>, top500: record<supply: string, supplyPercent: float>>, holderChange: record<5min: record<change: float, changePercent: float>, 1h: record<change: float, changePercent: float>, 6h: record<change: float, changePercent: float>, 24h: record<change: float, changePercent: float>, 3d: record<change: float, changePercent: float>, 7d: record<change: float, changePercent: float>, 30d: record<change: float, changePercent: float>>, holdersByAcquisition: record<swap: float, transfer: float, airdrop: float>, holderDistribution: record<whales: int, sharks: int, dolphins: int, fish: int, octopus: int, crabs: int, shrimps: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -877,7 +905,7 @@ export def "erc20-holders get" [
   let full_url = (build-url $base $"/erc20/($tokenAddress)/holders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get timeseries holders data
@@ -893,6 +921,7 @@ export def "erc20-holders-historical get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --fromDate: string # The starting date (format in seconds or datestring accepted by momentjs)  (e.g. 2025-01-01T10:00:00)
   --toDate: string # The ending date (format in seconds or datestring accepted by momentjs)  (e.g. 2025-02-01T11:00:00)
@@ -906,7 +935,7 @@ export def "erc20-holders-historical get" [
   let full_url = (build-url $base $"/erc20/($tokenAddress)/holders/historical" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Multiple ERC20 token prices
@@ -922,6 +951,7 @@ export def "erc20-prices post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --max-token-inactivity: float # Exclude tokens inactive for more than the given amount of days
   --min-pair-side-liquidity-usd: float # Exclude tokens with liquidity less than the specified amount in USD. This parameter refers to the liquidity on a single side of the pair.
@@ -936,7 +966,7 @@ export def "erc20-prices post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get ERC20 token owners by contract
@@ -952,6 +982,7 @@ export def "erc20-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --limit: int # The desired page size of the result.
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
@@ -963,7 +994,7 @@ export def "erc20-owners get" [
   let full_url = (build-url $base $"/erc20/($token_address)/owners" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get ERC20 token balances by wallet
@@ -979,6 +1010,7 @@ export def "erc20 get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --to-block: float # The block number up to which the balances will be checked.
   --token-addresses: list # The addresses to get balances for (optional)
@@ -990,7 +1022,7 @@ export def "erc20 get" [
   let full_url = (build-url $base $"/($address)/erc20" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get ERC20 token transfers by wallet address
@@ -1006,6 +1038,7 @@ export def "erc20-transfers get-by-address" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --from-block: int # The minimum block number from which to get the transactions * Provide the param 'from_block' or 'from_date' * If 'from_date' and 'from_block' are provided, 'from_block' will be used.
   --to-block: int # The maximum block number from which to get the transactions. * Provide the param 'to_block' or 'to_date' * If 'to_date' and 'to_block' are provided, 'to_block' will be used.
@@ -1022,7 +1055,7 @@ export def "erc20-transfers get-by-address" [
   let full_url = (build-url $base $"/($address)/erc20/transfers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get ERC20 token metadata by contract
@@ -1037,6 +1070,7 @@ export def "erc20-metadata get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --addresses: list # The addresses to get metadata for
 ]: nothing -> table<address: string, address_label: string, name: string, symbol: string, decimals: string, logo: string, logo_hash: string, thumbnail: string, total_supply: string, total_supply_formatted: string, implementations: list<record>, fully_diluted_valuation: string, block_number: string, validated: float, created_at: string, possible_spam: bool, verified_contract: bool, categories: list<string>, links: record<bitbucket: string, discord: string, facebook: string, github: string, instagram: string, linkedin: string, medium: string, reddit: string, telegram: string, tiktok: string, twitter: string, website: string, youtube: string>, circulating_supply: string, market_cap: string> {
@@ -1046,7 +1080,7 @@ export def "erc20-metadata get" [
   let full_url = (build-url $base "/erc20/metadata" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get ERC20 token categories
@@ -1061,13 +1095,14 @@ export def "tokens-categories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<categories: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tokens/categories")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get ERC20 token transfers by contract address
@@ -1083,6 +1118,7 @@ export def "erc20-transfers get-by-address-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --from-block: int # The minimum block number from which to get the transfers * Provide the param 'from_block' or 'from_date' * If 'from_date' and 'from_block' are provided, 'from_block' will be used.
   --to-block: int # The maximum block number from which to get the transfers. * Provide the param 'to_block' or 'to_date' * If 'to_date' and 'to_block' are provided, 'to_block' will be used.
@@ -1098,7 +1134,7 @@ export def "erc20-transfers get-by-address-1" [
   let full_url = (build-url $base $"/erc20/($address)/transfers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get native balance by wallet
@@ -1114,6 +1150,7 @@ export def "balance get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --to-block: float # The block number up to which the balances will be checked.
 ]: nothing -> record<balance: string> {
@@ -1123,7 +1160,7 @@ export def "balance get" [
   let full_url = (build-url $base $"/($address)/balance" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get native balance for a set of wallets
@@ -1138,6 +1175,7 @@ export def "wallets-balances get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --to-block: float # The block number on which the balances should be checked
   --wallet-addresses: list # The addresses to get metadata for
@@ -1148,7 +1186,7 @@ export def "wallets-balances get" [
   let full_url = (build-url $base "/wallets/balances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get ERC20 approvals by wallet
@@ -1164,6 +1202,7 @@ export def "wallets-approvals get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --limit: int # The desired page size of the result.
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
@@ -1174,7 +1213,7 @@ export def "wallets-approvals get" [
   let full_url = (build-url $base $"/wallets/($address)/approvals" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the complete decoded transaction history of a wallet
@@ -1190,6 +1229,7 @@ export def "wallets-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --from-block: int # The minimum block number from which to get the transactions * Provide the param 'from_block' or 'from_date' * If 'from_date' and 'from_block' are provided, 'from_block' will be used.
   --to-block: int # The maximum block number from which to get the transactions. * Provide the param 'to_block' or 'to_date' * If 'to_date' and 'to_block' are provided, 'to_block' will be used.
@@ -1207,7 +1247,7 @@ export def "wallets-history get" [
   let full_url = (build-url $base $"/wallets/($address)/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get token balances with prices by wallet address
@@ -1223,6 +1263,7 @@ export def "wallets-tokens get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --to-block: float # The block number up to which the balances will be checked.
   --token-addresses: list # The addresses to get balances for (optional)
@@ -1240,7 +1281,7 @@ export def "wallets-tokens get" [
   let full_url = (build-url $base $"/wallets/($address)/tokens" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get wallet net worth
@@ -1256,6 +1297,7 @@ export def "wallets-net-worth get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chains: list # The chains to query
   --exclude-spam: oneof<nothing, bool> # Exclude spam tokens from the result (default: false, e.g. true)
   --exclude-unverified-contracts: oneof<nothing, bool> # Exclude unverified contracts from the result (default: false, e.g. true)
@@ -1268,7 +1310,7 @@ export def "wallets-net-worth get" [
   let full_url = (build-url $base $"/wallets/($address)/net-worth" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get native transactions by wallet
@@ -1284,6 +1326,7 @@ export def "transaction get-by-address" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --from-block: int # The minimum block number from which to get the transactions * Provide the param 'from_block' or 'from_date' * If 'from_date' and 'from_block' are provided, 'from_block' will be used.
   --to-block: int # The maximum block number from which to get the transactions. * Provide the param 'to_block' or 'to_date' * If 'to_date' and 'to_block' are provided, 'to_block' will be used.
@@ -1300,7 +1343,7 @@ export def "transaction get-by-address" [
   let full_url = (build-url $base $"/($address)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get decoded transactions by wallet
@@ -1316,6 +1359,7 @@ export def "verbose get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --from-block: int # The minimum block number from which to get the transactions * Provide the param 'from_block' or 'from_date' * If 'from_date' and 'from_block' are provided, 'from_block' will be used.
   --to-block: int # The maximum block number from which to get the transactions. * Provide the param 'to_block' or 'to_date' * If 'to_date' and 'to_block' are provided, 'to_block' will be used.
@@ -1332,7 +1376,7 @@ export def "verbose get" [
   let full_url = (build-url $base $"/($address)/verbose" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get transaction by hash
@@ -1348,6 +1392,7 @@ export def "transaction get-by-transaction_hash" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --include: string@include-completer # If the result should contain the internal transactions. (default: , e.g. )
 ]: nothing -> record<hash: string, nonce: string, transaction_index: string, from_address_entity: string, from_address_entity_logo: string, from_address: string, from_address_label: string, to_address_entity: string, to_address_entity_logo: string, to_address: string, to_address_label: string, value: string, gas: string, gas_price: string, input: string, receipt_cumulative_gas_used: string, receipt_gas_used: string, receipt_contract_address: string, receipt_root: string, receipt_status: string, block_timestamp: string, block_number: string, block_hash: string, logs: table<log_index: string, transaction_hash: string, transaction_index: string, address: string, data: string, topic0: string, topic1: string, topic2: string, topic3: string, block_timestamp: string, block_number: string, block_hash: string>, internal_transactions: table<transaction_hash: string, block_number: string, block_hash: string, type: string, from: string, to: string, value: string, gas: string, gas_used: string, input: string, output: string, error: string>> {
@@ -1357,7 +1402,7 @@ export def "transaction get-by-transaction_hash" [
   let full_url = (build-url $base $"/transaction/($transaction_hash)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get decoded transaction by hash
@@ -1373,6 +1418,7 @@ export def "transaction-verbose get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --include: string@include-completer # If the result should contain the internal transactions. (default: , e.g. )
 ]: nothing -> record<hash: string, nonce: string, transaction_index: string, from_address_entity: string, from_address_entity_logo: string, from_address: string, from_address_label: string, to_address_entity: string, to_address_entity_logo: string, to_address: string, to_address_label: string, value: string, gas: string, gas_price: string, input: string, receipt_cumulative_gas_used: string, receipt_gas_used: string, receipt_contract_address: string, receipt_root: string, receipt_status: string, transaction_fee: string, block_timestamp: string, block_number: string, block_hash: string, logs: table<log_index: string, transaction_hash: string, transaction_index: string, address: string, data: string, topic0: string, topic1: string, topic2: string, topic3: string, block_timestamp: string, block_number: string, block_hash: string, decoded_event: record>, decoded_call: record<signature: string, label: string, type: string, params: list<record>>> {
@@ -1382,7 +1428,7 @@ export def "transaction-verbose get" [
   let full_url = (build-url $base $"/transaction/($transaction_hash)/verbose" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get block by hash
@@ -1398,6 +1444,7 @@ export def "block get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --include: string@include-completer # If the result should contain the internal transactions. (default: , e.g. )
 ]: nothing -> record<timestamp: string, number: string, hash: string, parent_hash: string, nonce: string, sha3_uncles: string, logs_bloom: string, transactions_root: string, state_root: string, receipts_root: string, miner: string, difficulty: string, total_difficulty: string, size: string, extra_data: string, gas_limit: string, gas_used: string, transaction_count: string, transactions: table<hash: string, nonce: string, transaction_index: string, from_address_entity: string, from_address_entity_logo: string, from_address: string, from_address_label: string, to_address_entity: string, to_address_entity_logo: string, to_address: string, to_address_label: string, value: string, gas: string, gas_price: string, input: string, receipt_cumulative_gas_used: string, receipt_gas_used: string, receipt_contract_address: string, receipt_root: string, receipt_status: string, block_timestamp: string, block_number: string, block_hash: string, logs: list, internal_transactions: list>> {
@@ -1407,7 +1454,7 @@ export def "block get" [
   let full_url = (build-url $base $"/block/($block_number_or_hash)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get latest block number
@@ -1423,13 +1470,14 @@ export def "latest-block-number get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/latestBlockNumber/($chain)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get block by date
@@ -1444,6 +1492,7 @@ export def "date-to-block get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --date: string # Unix date in milliseconds or a datestring (format in seconds or datestring accepted by momentjs)
 ]: nothing -> record<date: string, block: float, timestamp: float, block_timestamp: string, hash: string, parent_hash: string> {
@@ -1453,7 +1502,7 @@ export def "date-to-block get" [
   let full_url = (build-url $base "/dateToBlock" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Run contract function
@@ -1469,6 +1518,7 @@ export def "function runContractFunction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --function-name: string # The function name of the contract
   abi: list # The contract ABI (e.g. [])
@@ -1483,7 +1533,7 @@ export def "function runContractFunction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get API version
@@ -1498,13 +1548,14 @@ export def "web3-version web3ApiVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/web3/version")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get weights of endpoints
@@ -1519,13 +1570,14 @@ export def "info-endpoint-weights endpointWeights" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<endpoint: string, path: string, rateLimitCost: string, price: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/info/endpointWeights")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ENS lookup by address
@@ -1541,13 +1593,14 @@ export def "resolve-reverse resolveAddress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/resolve/($address)/reverse")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resolve Unstoppable domain
@@ -1563,6 +1616,7 @@ export def "resolve resolveDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --currency: string@currency-completer # The currency to query (default: eth, e.g. eth)
 ]: nothing -> record<address: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1571,7 +1625,7 @@ export def "resolve resolveDomain" [
   let full_url = (build-url $base $"/resolve/($domain)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resolve Address to Unstoppable domain
@@ -1587,6 +1641,7 @@ export def "resolve-domain resolveAddressToDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --currency: string@currency-completer # The currency to query (default: eth, e.g. eth)
 ]: nothing -> record<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1595,7 +1650,7 @@ export def "resolve-domain resolveAddressToDomain" [
   let full_url = (build-url $base $"/resolve/($address)/domain" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ENS lookup by domain
@@ -1611,13 +1666,14 @@ export def "resolve-ens resolveENSDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<address: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/resolve/ens/($domain)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Review contracts
@@ -1633,6 +1689,7 @@ export def "contracts-review reviewContracts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   contracts: list # The contracts to be reported (e.g. [{contract_address: 0xa4991609c508b6d4fb7156426db0bd49fe298bd8, report_type: spam, contract_type: ERC20, reason: The contract contains shady code}]) — item shape: {contract_address: string, reason: string, report_type: "spam"|"not_spam", contract_type: "ERC20"|"NFT"}
 ]: any -> record<message: string> {
@@ -1645,7 +1702,7 @@ export def "contracts-review reviewContracts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the DeFi summary of a wallet
@@ -1661,6 +1718,7 @@ export def "wallets-defi-summary get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
 ]: nothing -> record<active_protocols: float, total_positions: float, total_usd_value: float, total_unclaimed_usd_value: float, protocols: table<total_usd_value: float, total_unclaimed_usd_value: float, positions: float>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1669,7 +1727,7 @@ export def "wallets-defi-summary get" [
   let full_url = (build-url $base $"/wallets/($address)/defi/summary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get detailed DeFi positions by protocol for a wallet
@@ -1686,6 +1744,7 @@ export def "wallets-defi-positions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
 ]: nothing -> record<protocol_name: string, protocol_id: string, protocol_url: string, protocol_logo: string, total_usd_value: float, total_unclaimed_usd_value: float, positions: table<label: string, tokens: list, address: string, balance_usd: float, total_unclaimed_usd_value: float, position_details: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1694,7 +1753,7 @@ export def "wallets-defi-positions get" [
   let full_url = (build-url $base $"/wallets/($address)/defi/($protocol)/positions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get DeFi positions of a wallet
@@ -1710,6 +1769,7 @@ export def "wallets-defi-positions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
 ]: nothing -> table<protocol_name: string, protocol_id: string, protocol_url: string, protocol_logo: string, position: record<label: string, tokens: list, address: string, balance_usd: float, total_unclaimed_usd_value: float, position_details: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1718,7 +1778,7 @@ export def "wallets-defi-positions list" [
   let full_url = (build-url $base $"/wallets/($address)/defi/positions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get active chains by wallet address
@@ -1734,6 +1794,7 @@ export def "wallets-chains get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chains: list # The chains to query
 ]: nothing -> record<address: string, active_chains: table<chain: string, chain_id: string, first_transaction: record, last_transaction: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1742,7 +1803,7 @@ export def "wallets-chains get" [
   let full_url = (build-url $base $"/wallets/($address)/chains" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get summary stats by wallet address
@@ -1758,6 +1819,7 @@ export def "wallets-stats get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
 ]: nothing -> record<nfts: string, collections: string, transactions: record<total: string>, nft_transfers: record<total: string>, token_transfers: record<total: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1766,7 +1828,7 @@ export def "wallets-stats get" [
   let full_url = (build-url $base $"/wallets/($address)/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get summary stats by NFT collection
@@ -1782,6 +1844,7 @@ export def "nft-stats get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
 ]: nothing -> record<total_tokens: string, owners: record<current: string>, transfers: record<total: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1790,7 +1853,7 @@ export def "nft-stats get" [
   let full_url = (build-url $base $"/nft/($address)/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get NFT floor price by contract
@@ -1806,6 +1869,7 @@ export def "nft-floor-price list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
 ]: nothing -> record<address: string, floor_price: string, floor_price_usd: string, currency: string, marketplace: record<name: string, logo: string>, last_updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1814,7 +1878,7 @@ export def "nft-floor-price list" [
   let full_url = (build-url $base $"/nft/($address)/floor-price" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get NFT floor price by token
@@ -1831,6 +1895,7 @@ export def "nft-floor-price get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
 ]: nothing -> record<address: string, token_id: string, floor_price: string, floor_price_usd: string, currency: string, marketplace: record<name: string, logo: string>, last_updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1839,7 +1904,7 @@ export def "nft-floor-price get" [
   let full_url = (build-url $base $"/nft/($address)/($token_id)/floor-price" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get historical NFT floor price by contract
@@ -1855,6 +1920,7 @@ export def "nft-floor-price-historical get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --interval: string@interval-completer # The duration to query (default: 1d, e.g. 1d)
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
@@ -1865,7 +1931,7 @@ export def "nft-floor-price-historical get" [
   let full_url = (build-url $base $"/nft/($address)/floor-price/historical" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get profit and loss summary by wallet address
@@ -1881,6 +1947,7 @@ export def "wallets-profitability-summary get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --days: string # Timeframe in days for the profitability summary. Options include 'all', '7', '30', '60', '90' default is 'all'.
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
 ]: nothing -> record<total_count_of_trades: float, total_trade_volume: string, total_realized_profit_usd: string, total_realized_profit_percentage: float, total_buys: float, total_sells: float, total_sold_volume_usd: string, total_bought_volume_usd: string> {
@@ -1890,7 +1957,7 @@ export def "wallets-profitability-summary get" [
   let full_url = (build-url $base $"/wallets/($address)/profitability/summary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get detailed profit and loss by wallet address
@@ -1906,6 +1973,7 @@ export def "wallets-profitability get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --days: string # Timeframe in days for which profitability is calculated, Options include 'all', '7', '30', '60', '90' default is 'all'.
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --token-addresses: list # The token addresses list to filter the result with
@@ -1916,7 +1984,7 @@ export def "wallets-profitability get" [
   let full_url = (build-url $base $"/wallets/($address)/profitability" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get top traders for a given ERC20 token
@@ -1932,6 +2000,7 @@ export def "erc20-top-gainers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --days: string # Timeframe in days for which profitability is calculated, Options include 'all', '7', '30' default is 'all'.
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
 ]: nothing -> record<name: string, symbol: string, decimals: int, logo: string, possible_spam: bool, result: table<avg_buy_price_usd: string, avg_cost_of_quantity_sold: string, avg_sell_price_usd: string, count_of_trades: float, realized_profit_percentage: float, realized_profit_usd: string, total_sold_usd: string, total_tokens_bought: string, total_tokens_sold: string, total_usd_invested: string, address: string>> {
@@ -1941,7 +2010,7 @@ export def "erc20-top-gainers get" [
   let full_url = (build-url $base $"/erc20/($address)/top-gainers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for tokens based on contract address, pair address, token name or token symbol.
@@ -1956,6 +2025,7 @@ export def "tokens-search searchTokens" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chains: string # The chains to query
   --qp-query: string # The query to search (e.g. pepe)
   --limit: float # The desired page size of the result.
@@ -1969,7 +2039,7 @@ export def "tokens-search searchTokens" [
   let full_url = (build-url $base "/tokens/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search Entities, Organizations or Wallets
@@ -1984,6 +2054,7 @@ export def "entities-search searchEntities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # The search query (e.g. Doge)
   --limit: int # The desired page size of the result.
 ]: nothing -> record<page: int, page_size: int, result: record<entities: list<record>, addresses: list<record>, categories: list<record>>> {
@@ -1993,7 +2064,7 @@ export def "entities-search searchEntities" [
   let full_url = (build-url $base "/entities/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Entity Details By Id
@@ -2009,13 +2080,14 @@ export def "entities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<addresses: table<additional_labels: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/entities/($entityId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Entity Categories
@@ -2030,6 +2102,7 @@ export def "entities-categories list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The desired page size of the result.
 ]: nothing -> record<page: int, page_size: int, result: table<total_entities: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2038,7 +2111,7 @@ export def "entities-categories list" [
   let full_url = (build-url $base "/entities/categories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Entities By Category
@@ -2054,6 +2127,7 @@ export def "entities-categories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The desired page size of the result.
 ]: nothing -> record<page: int, page_size: int, result: table<total_addresses: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2062,7 +2136,7 @@ export def "entities-categories get" [
   let full_url = (build-url $base $"/entities/categories/($categoryId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get OHLCV by pair address
@@ -2078,6 +2152,7 @@ export def "pairs-ohlcv get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --timeframe: string@timeframe-completer # The timeframe (default: 1h, e.g. 1h)
   --currency: string@currency-completer-1 # The currency (default: usd, e.g. usd)
@@ -2092,7 +2167,7 @@ export def "pairs-ohlcv get" [
   let full_url = (build-url $base $"/pairs/($address)/ohlcv" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get stats by pair address
@@ -2108,6 +2183,7 @@ export def "pairs-stats get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
 ]: nothing -> record<tokenAddress: string, tokenName: string, tokenSymbol: string, tokenLogo: string, pairCreated: string, pairLabel: string, pairAddress: string, exchange: string, exchangeAddress: string, exchangeLogo: string, exchangeUrl: string, currentUsdPrice: string, currentNativePrice: string, totalLiquidityUsd: string, pricePercentChange: record<5min: float, 1h: float, 4h: float, 24h: float>, liquidityPercentChange: record<5min: float, 1h: float, 4h: float, 24h: float>, buys: record<5min: float, 1h: float, 4h: float, 24h: float>, sells: record<5min: float, 1h: float, 4h: float, 24h: float>, totalVolume: record<5min: float, 1h: float, 4h: float, 24h: float>, buyVolume: record<5min: float, 1h: float, 4h: float, 24h: float>, sellVolume: record<5min: float, 1h: float, 4h: float, 24h: float>, buyers: record<5min: float, 1h: float, 4h: float, 24h: float>, sellers: record<5min: float, 1h: float, 4h: float, 24h: float>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2116,7 +2192,7 @@ export def "pairs-stats get" [
   let full_url = (build-url $base $"/pairs/($address)/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get token pairs by address
@@ -2132,6 +2208,7 @@ export def "erc20-pairs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --limit: int # The number of results to return
   --cursor: string # The cursor returned in the previous response (used for getting the next page)
@@ -2142,7 +2219,7 @@ export def "erc20-pairs get" [
   let full_url = (build-url $base $"/erc20/($token_address)/pairs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get swap transactions by wallet address
@@ -2158,6 +2235,7 @@ export def "wallets-swaps get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --tokenAddress: string # The token address to get transaction for (optional)
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
@@ -2175,7 +2253,7 @@ export def "wallets-swaps get" [
   let full_url = (build-url $base $"/wallets/($address)/swaps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get wallet insight metrics
@@ -2191,6 +2269,7 @@ export def "wallets-insight get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chains: list # The chains to query. If not provided, aggregates across all supported chains. (e.g. [0x1, 0x89])
   --includeChainBreakdown: oneof<nothing, bool> # When true, includes a per-chain breakdown array in the response with both native and USD values. (default: false)
 ]: nothing -> record<address: string, addressType: string, walletAgeDays: int, firstActivityAt: record<chain: string, blockNumber: string, blockTimestamp: string, transactionHash: string, type: string, direction: string>, lastActivityAt: record<chain: string, blockNumber: string, blockTimestamp: string, transactionHash: string, type: string, direction: string>, firstInitiatedAt: record<chain: string, blockNumber: string, blockTimestamp: string, transactionHash: string, type: string, direction: string>, lastInitiatedAt: record<chain: string, blockNumber: string, blockTimestamp: string, transactionHash: string, type: string, direction: string>, activeDays: int, activeChains: int, mostActiveChain: string, transactionsInitiated: int, transactionsInvolved: int, nativeTransfers: record<sent: int, received: int, total: int>, erc20Transfers: record<sent: int, received: int, total: int>, nftTransfers: record<sent: int, received: int, total: int>, uniqueCounterparties: record<sentTo: int, receivedFrom: int>, swapVolumeUsd: float, totalGasSpentUsd: string, avgGasPerTransactionUsd: string, nativeVolumeSentUsd: string, nativeVolumeReceivedUsd: string, nativeNetFlowUsd: string, uniqueTokensInteracted: int, contractsCreated: int, largestNativeTransferInUsd: string, largestNativeTransferOutUsd: string, chainBreakdown: table<chain: string, walletAgeDays: int, firstActivityAt: record, lastActivityAt: record, firstInitiatedAt: record, lastInitiatedAt: record, activeDays: int, transactionsInitiated: int, transactionsInvolved: int, nativeTransfers: record, erc20Transfers: record, nftTransfers: record, uniqueCounterparties: record, swapVolumeUsd: float, totalGasSpentNative: string, totalGasSpentUsd: string, avgGasPerTransactionNative: string, avgGasPerTransactionUsd: string, nativeVolumeSent: string, nativeVolumeSentUsd: string, nativeVolumeReceived: string, nativeVolumeReceivedUsd: string, nativeNetFlow: string, nativeNetFlowUsd: string, uniqueTokensInteracted: int, contractsCreated: int, largestNativeTransferIn: string, largestNativeTransferInUsd: string, largestNativeTransferOut: string, largestNativeTransferOutUsd: string>> {
@@ -2200,7 +2279,7 @@ export def "wallets-insight get" [
   let full_url = (build-url $base $"/wallets/($address)/insight" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get swap transactions by pair address
@@ -2216,6 +2295,7 @@ export def "pairs-swaps get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
   --limit: int # The desired page size of the result.
@@ -2232,7 +2312,7 @@ export def "pairs-swaps get" [
   let full_url = (build-url $base $"/pairs/($address)/swaps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve timeseries trading stats by token addresses
@@ -2248,6 +2328,7 @@ export def "tokens-analytics-timeseries post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timeframe: string@timeframe-completer-1 # The timeframe to query (default: 1d, e.g. 1d)
   tokens: list # The tokens to be fetched (e.g. [{chain: 0x1, tokenAddress: 0xdac17f958d2ee523a2206206994597c13d831ec7}, {chain: solana, tokenAddress: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v}]) — item shape: {chain: "eth"|"0x1"|"sepolia"|"0xaa36a7"|"polygon"|"0x89"|"bsc"|"0x38"|"bsc testnet"|"0x61"|"avalanche"|"0xa86a"|"cronos"|"0x19"|"arbitrum"|"0xa4b1"|"chiliz"|"0x15b38"|"chiliz testnet"|"0x15b32"|"gnosis"|"0x64"|"gnosis testnet"|"0x27d8"|"base"|"0x2105"|"base sepolia"|"0x14a34"|"optimism"|"0xa"|"polygon amoy"|"0x13882"|"linea"|"0xe708"|"moonbeam"|"0x504"|"moonriver"|"0x505"|"moonbase"|"0x507"|"linea sepolia"|"0xe705"|"flow"|"0x2eb"|"flow-testnet"|"0x221"|"ronin"|"0x7e4"|"ronin-testnet"|"0x31769"|"lisk"|"0x46f"|"lisk-sepolia"|"0x106a"|"pulse"|"0x171"|"sei-testnet"|"0x530"|"sei"|"0x531"|"monad"|"0x8f", tokenAddress: string}
 ]: any -> record<result: table<chainId: string, tokenAddress: string, timeseries: list>> {
@@ -2260,7 +2341,7 @@ export def "tokens-analytics-timeseries post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get trending tokens
@@ -2275,6 +2356,7 @@ export def "tokens-trending get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer-1 # The chain to query (default: eth, e.g. eth)
   --limit: int # The desired page size of the result.
 ]: nothing -> table<chainId: string, tokenAddress: string, name: string, symbol: string, uniqueName: string, decimals: int, logo: string, usdPrice: float, createdAt: int, marketCap: int, liquidityUsd: int, holders: int, pricePercentChange: record<1h: float, 4h: float, 12h: float, 24h: float>, totalVolume: record<1h: int, 4h: int, 12h: int, 24h: int>, transactions: record<1h: int, 4h: int, 12h: int, 24h: int>, buyTransactions: record<1h: int, 4h: int, 12h: int, 24h: int>, sellTransactions: record<1h: int, 4h: int, 12h: int, 24h: int>, buyers: record<1h: int, 4h: int, 12h: int, 24h: int>, sellers: record<1h: int, 4h: int, 12h: int, 24h: int>> {
@@ -2284,7 +2366,7 @@ export def "tokens-trending get" [
   let full_url = (build-url $base "/tokens/trending" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get token analytics by token address
@@ -2300,6 +2382,7 @@ export def "tokens-analytics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer-1 # The chain to query (default: eth, e.g. eth)
 ]: nothing -> record<chainId: string, categoryId: string, totalBuyVolume: record<5m: float, 1h: float, 6h: float, 24h: float>, totalSellVolume: record<5m: float, 1h: float, 6h: float, 24h: float>, totalBuyers: record<5m: float, 1h: float, 6h: float, 24h: float>, totalSellers: record<5m: float, 1h: float, 6h: float, 24h: float>, totalBuys: record<5m: float, 1h: float, 6h: float, 24h: float>, totalSells: record<5m: float, 1h: float, 6h: float, 24h: float>, uniqueWallets: record<5m: float, 1h: float, 6h: float, 24h: float>, pricePercentChange: record<5m: float, 1h: float, 6h: float, 24h: float>, usdPrice: string, totalLiquidity: string, totalFullyDilutedValuation: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2308,7 +2391,7 @@ export def "tokens-analytics get" [
   let full_url = (build-url $base $"/tokens/($tokenAddress)/analytics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get token score by token address
@@ -2324,6 +2407,7 @@ export def "tokens-score get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer-1 # The chain to query (default: eth, e.g. eth)
 ]: nothing -> record<tokenAddress: string, chainId: string, score: int, updatedAt: string, metrics: record<usdPrice: float, liquidityUsd: float, volumeUsd: record<10m: float, 30m: float, 1h: float, 4h: float, 12h: float, 1d: float, 7d: float, 30d: float>, transactions: record<10m: float, 30m: float, 1h: float, 4h: float, 12h: float, 1d: float, 7d: float, 30d: float>, supply: record<total: float, top10Percent: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2332,7 +2416,7 @@ export def "tokens-score get" [
   let full_url = (build-url $base $"/tokens/($tokenAddress)/score" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get historical token score by token address
@@ -2348,6 +2432,7 @@ export def "tokens-score-historical get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --chain: string@chain-completer-1 # The chain to query (default: eth, e.g. eth)
   --timeframe: string@timeframe-completer-1 # The timeframe to query (default: 1d, e.g. 1d)
 ]: nothing -> record<chainId: string, tokenAddress: string, timeseries: table<timestamp: string, score: float>> {
@@ -2357,7 +2442,7 @@ export def "tokens-score-historical get" [
   let full_url = (build-url $base $"/tokens/($tokenAddress)/score/historical" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get token analytics for a list of token addresses
@@ -2373,6 +2458,7 @@ export def "tokens-analytics post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   tokens: list # The tokens to be fetched (e.g. [{chain: 0x1, tokenAddress: 0xdac17f958d2ee523a2206206994597c13d831ec7}, {chain: solana, tokenAddress: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v}]) — item shape: {chain: "eth"|"0x1"|"sepolia"|"0xaa36a7"|"polygon"|"0x89"|"bsc"|"0x38"|"bsc testnet"|"0x61"|"avalanche"|"0xa86a"|"cronos"|"0x19"|"arbitrum"|"0xa4b1"|"chiliz"|"0x15b38"|"chiliz testnet"|"0x15b32"|"gnosis"|"0x64"|"gnosis testnet"|"0x27d8"|"base"|"0x2105"|"base sepolia"|"0x14a34"|"optimism"|"0xa"|"polygon amoy"|"0x13882"|"linea"|"0xe708"|"moonbeam"|"0x504"|"moonriver"|"0x505"|"moonbase"|"0x507"|"linea sepolia"|"0xe705"|"flow"|"0x2eb"|"flow-testnet"|"0x221"|"ronin"|"0x7e4"|"ronin-testnet"|"0x31769"|"lisk"|"0x46f"|"lisk-sepolia"|"0x106a"|"pulse"|"0x171"|"sei-testnet"|"0x530"|"sei"|"0x531"|"monad"|"0x8f", tokenAddress: string}
 ]: any -> record<categories: table<chainId: string, categoryId: string, totalBuyVolume: record, totalSellVolume: record, totalBuyers: record, totalSellers: record, totalBuys: record, totalSells: record, uniqueWallets: record, pricePercentChange: record, usdPrice: string, totalLiquidity: string, totalFullyDilutedValuation: string>> {
   let input = $in
@@ -2383,5 +2469,5 @@ export def "tokens-analytics post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

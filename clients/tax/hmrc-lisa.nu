@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -76,7 +77,7 @@ def withdrawalReason-completer [] { ["Regular withdrawal" "Superseded withdrawal
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "lifetime-isa-manager get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -110,6 +111,7 @@ export def "lifetime-isa-manager get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the [version](/api-documentation/docs/reference-guide#versioning) of the API to be used.
   --Authorization: string # An [OAuth 2.0 Bearer Token](/api-documentation/docs/authorisation/user-restricted-endpoints) with appropriate scope. (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
 ]: nothing -> record<lisaManagerReferenceNumber: string, _links: record> {
@@ -120,7 +122,7 @@ export def "lifetime-isa-manager get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a LISA investor
@@ -136,6 +138,7 @@ export def "lifetime-isa-manager-investors createLisaInvestor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the [version](/api-documentation/docs/reference-guide#versioning) of the API to be used.
   --Content-Type: string@Content-Type-completer # Specifies the format of the request body, which must be JSON.
   --Authorization: string # An [OAuth 2.0 Bearer Token](/api-documentation/docs/authorisation/user-restricted-endpoints) with appropriate scope. (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
@@ -154,7 +157,7 @@ export def "lifetime-isa-manager-investors createLisaInvestor" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create or transfer a LISA account
@@ -171,6 +174,7 @@ export def "lifetime-isa-manager-accounts createOrTransferLisaAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the [version](/api-documentation/docs/reference-guide#versioning) of the API to be used.
   --Content-Type: string@Content-Type-completer # Specifies the format of the request body, which must be JSON.
   --Authorization: string # An [OAuth 2.0 Bearer Token](/api-documentation/docs/authorisation/user-restricted-endpoints) with appropriate scope. (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
@@ -190,7 +194,7 @@ export def "lifetime-isa-manager-accounts createOrTransferLisaAccount" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reinstate a LISA account
@@ -206,6 +210,7 @@ export def "lifetime-isa-manager-accounts-reinstate-account reinstateLisaAccount
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the [version](/api-documentation/docs/reference-guide#versioning) of the API to be used.
   --Content-Type: string@Content-Type-completer # Specifies the format of the request body, which must be JSON.
   --Authorization: string # An [OAuth 2.0 Bearer Token](/api-documentation/docs/authorisation/user-restricted-endpoints) with appropriate scope. (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
@@ -221,7 +226,7 @@ export def "lifetime-isa-manager-accounts-reinstate-account reinstateLisaAccount
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get account details
@@ -238,6 +243,7 @@ export def "lifetime-isa-manager-accounts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the [version](/api-documentation/docs/reference-guide#versioning) of the API to be used.
   --Authorization: string # An [OAuth 2.0 Bearer Token](/api-documentation/docs/authorisation/user-restricted-endpoints) with appropriate scope. (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
 ]: nothing -> record<investorId: string, accountId: string, creationReason: string, firstSubscriptionDate: string, accountStatus: string, subscriptionStatus: string, accountClosureReason: string, closureDate: string, transferAccount: record<transferredFromAccountId: string, transferredFromLMRN: string, transferInDate: string>> {
@@ -248,7 +254,7 @@ export def "lifetime-isa-manager-accounts get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Close an existing LISA account
@@ -265,6 +271,7 @@ export def "lifetime-isa-manager-accounts-close-account closeExistingLisaAccount
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the [version](/api-documentation/docs/reference-guide#versioning) of the API to be used.
   --Content-Type: string@Content-Type-completer # Specifies the format of the request body, which must be JSON.
   --Authorization: string # An [OAuth 2.0 Bearer Token](/api-documentation/docs/authorisation/user-restricted-endpoints) with appropriate scope. (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
@@ -281,7 +288,7 @@ export def "lifetime-isa-manager-accounts-close-account closeExistingLisaAccount
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Modify date of first subscription of a LISA account
@@ -298,6 +305,7 @@ export def "lifetime-isa-manager-accounts-update-subscription modifyDateOfFirstS
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the [version](/api-documentation/docs/reference-guide#versioning) of the API to be used.
   --Content-Type: string@Content-Type-completer # Specifies the format of the request body, which must be JSON.
   --Authorization: string # An [OAuth 2.0 Bearer Token](/api-documentation/docs/authorisation/user-restricted-endpoints) with appropriate scope. (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
@@ -313,7 +321,7 @@ export def "lifetime-isa-manager-accounts-update-subscription modifyDateOfFirstS
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Report a death or terminal illness
@@ -330,6 +338,7 @@ export def "lifetime-isa-manager-accounts-events reportDeathOrTerminalIllness" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the [version](/api-documentation/docs/reference-guide#versioning) of the API to be used.
   --Content-Type: string@Content-Type-completer # Specifies the format of the request body, which must be JSON.
   --Authorization: string # An [OAuth 2.0 Bearer Token](/api-documentation/docs/authorisation/user-restricted-endpoints) with appropriate scope. (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
@@ -346,7 +355,7 @@ export def "lifetime-isa-manager-accounts-events reportDeathOrTerminalIllness" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send an annual return of information
@@ -364,6 +373,7 @@ export def "lifetime-isa-manager-accounts-events-annual-returns sendAnnualReturn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the [version](/api-documentation/docs/reference-guide#versioning) of the API to be used.
   --Content-Type: string@Content-Type-completer # Specifies the format of the request body, which must be JSON.
   --Authorization: string # An [OAuth 2.0 Bearer Token](/api-documentation/docs/authorisation/user-restricted-endpoints) with appropriate scope. (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
@@ -386,7 +396,7 @@ export def "lifetime-isa-manager-accounts-events-annual-returns sendAnnualReturn
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Request the release of funds to buy a property
@@ -405,6 +415,7 @@ export def "lifetime-isa-manager-accounts-events-fund-releases requestReleaseOfF
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the [version](/api-documentation/docs/reference-guide#versioning) of the API to be used.
   --Content-Type: string@Content-Type-completer # Specifies the format of the request body, which must be JSON.
   --Authorization: string # An [OAuth 2.0 Bearer Token](/api-documentation/docs/authorisation/user-restricted-endpoints) with appropriate scope. (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
@@ -424,7 +435,7 @@ export def "lifetime-isa-manager-accounts-events-fund-releases requestReleaseOfF
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Request a property purchase extension
@@ -442,6 +453,7 @@ export def "lifetime-isa-manager-accounts-events-purchase-extensions requestProp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the [version](/api-documentation/docs/reference-guide#versioning) of the API to be used.
   --Content-Type: string@Content-Type-completer # Specifies the format of the request body, which must be JSON.
   --Authorization: string # An [OAuth 2.0 Bearer Token](/api-documentation/docs/authorisation/user-restricted-endpoints) with appropriate scope. (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
@@ -460,7 +472,7 @@ export def "lifetime-isa-manager-accounts-events-purchase-extensions requestProp
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Report the outcome of a property purchase
@@ -478,6 +490,7 @@ export def "lifetime-isa-manager-accounts-events-purchase-outcomes reportOutcome
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the [version](/api-documentation/docs/reference-guide#versioning) of the API to be used.
   --Content-Type: string@Content-Type-completer # Specifies the format of the request body, which must be JSON.
   --Authorization: string # An [OAuth 2.0 Bearer Token](/api-documentation/docs/authorisation/user-restricted-endpoints) with appropriate scope. (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
@@ -497,7 +510,7 @@ export def "lifetime-isa-manager-accounts-events-purchase-outcomes reportOutcome
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # View a life event
@@ -515,6 +528,7 @@ export def "lifetime-isa-manager-accounts-events viewLifeEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the [version](/api-documentation/docs/reference-guide#versioning) of the API to be used.
   --Authorization: string # An [OAuth 2.0 Bearer Token](/api-documentation/docs/authorisation/user-restricted-endpoints) with appropriate scope. (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
 ]: nothing -> table<lifeEventId: string, eventType: string, eventDate: string, lisaManagerName: string, taxYear: int, marketValueCash: int, marketValueStocksAndShares: int, annualSubsCash: int, annualSubsStocksAndShares: int, withdrawalAmount: float, conveyancerReference: string, propertyDetails: record<nameOrNumber: string, postalCode: string>, fundReleaseId: string, propertyPurchaseValue: float, propertyPurchaseResult: string, supersede: record<originalLifeEventId: string, originalEventDate: string>, supersededBy: string> {
@@ -525,7 +539,7 @@ export def "lifetime-isa-manager-accounts-events viewLifeEvent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Report a withdrawal charge
@@ -543,6 +557,7 @@ export def "lifetime-isa-manager-accounts-withdrawal-charges reportWithdrawalCha
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the [version](/api-documentation/docs/reference-guide#versioning) of the API to be used.
   --Content-Type: string@Content-Type-completer # Specifies the format of the request body, which must be JSON.
   --Authorization: string # An [OAuth 2.0 Bearer Token](/api-documentation/docs/authorisation/user-restricted-endpoints) with appropriate scope. (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
@@ -566,7 +581,7 @@ export def "lifetime-isa-manager-accounts-withdrawal-charges reportWithdrawalCha
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get details of a withdrawal charge
@@ -584,6 +599,7 @@ export def "lifetime-isa-manager-accounts-withdrawal-charges get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the [version](/api-documentation/docs/reference-guide#versioning) of the API to be used.
   --Authorization: string # An [OAuth 2.0 Bearer Token](/api-documentation/docs/authorisation/user-restricted-endpoints) with appropriate scope. (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
 ]: nothing -> record<claimPeriodStartDate: string, claimPeriodEndDate: string, automaticRecoveryAmount: float, withdrawalAmount: float, withdrawalChargeAmount: float, withdrawalChargeAmountYTD: float, fundsDeductedDuringWithdrawal: bool, withdrawalReason: string, supersededBy: string, supersede: record<originalTransactionId: string, originalWithdrawalChargeAmount: float, transactionResult: float, reason: string>> {
@@ -594,7 +610,7 @@ export def "lifetime-isa-manager-accounts-withdrawal-charges get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Request a bonus payment
@@ -615,6 +631,7 @@ export def "lifetime-isa-manager-accounts-transactions requestBonusPayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the [version](/api-documentation/docs/reference-guide#versioning) of the API to be used.
   --Content-Type: string@Content-Type-completer # Specifies the format of the request body, which must be JSON.
   --Authorization: string # An [OAuth 2.0 Bearer Token](/api-documentation/docs/authorisation/user-restricted-endpoints) with appropriate scope. (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
@@ -636,7 +653,7 @@ export def "lifetime-isa-manager-accounts-transactions requestBonusPayment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get details of a bonus request
@@ -654,6 +671,7 @@ export def "lifetime-isa-manager-accounts-transactions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the [version](/api-documentation/docs/reference-guide#versioning) of the API to be used.
   --Authorization: string # An [OAuth 2.0 Bearer Token](/api-documentation/docs/authorisation/user-restricted-endpoints) with appropriate scope. (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
 ]: nothing -> record<lifeEventId: string, periodStartDate: string, periodEndDate: string, htbTransfer: record<htbTransferInForPeriod: float, htbTransferTotalYTD: float>, inboundPayments: record<newSubsForPeriod: float, newSubsYTD: float, totalSubsForPeriod: float, totalSubsYTD: float>, bonuses: record<bonusDueForPeriod: float, totalBonusDueYTD: float, bonusPaidYTD: float, claimReason: string>, supersededBy: string, supersede: record<automaticRecoveryAmount: float, originalTransactionId: string, originalBonusDueForPeriod: float, transactionResult: float, reason: string>> {
@@ -664,7 +682,7 @@ export def "lifetime-isa-manager-accounts-transactions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the payment details for a bonus claim or withdrawal charge
@@ -682,6 +700,7 @@ export def "lifetime-isa-manager-accounts-transactions-payments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the [version](/api-documentation/docs/reference-guide#versioning) of the API to be used.
   --Authorization: string # An [OAuth 2.0 Bearer Token](/api-documentation/docs/authorisation/user-restricted-endpoints) with appropriate scope. (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
 ]: nothing -> record<transactionId: string, transactionType: string, paymentDate: string, paymentDueDate: string, paymentStatus: string, paymentReference: string, paymentAmount: float, supersededBy: string> {
@@ -692,7 +711,7 @@ export def "lifetime-isa-manager-accounts-transactions-payments get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of all payments and debts in a date range
@@ -708,6 +727,7 @@ export def "lifetime-isa-manager-payments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDate: string # The first date in the claim period you want to search. This must be the 6th day of the month. This cannot be before 6 April 2017. (e.g. 2017-05-06)
   --endDate: string # The last date of the claim period you want to search. This must be the 5th day of the month. This cannot be in the future, before the startDate, or more than a year after the startDate. It must be at least one month after the startDate. (e.g. 2017-06-05)
   --Accept: string@Accept-completer # Specifies the response format and the [version](/api-documentation/docs/reference-guide#versioning) of the API to be used.
@@ -721,5 +741,5 @@ export def "lifetime-isa-manager-payments get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

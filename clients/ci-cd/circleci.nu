@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -70,7 +71,7 @@ def Content-Type-completer [] { ["application/json"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "me get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -102,13 +103,14 @@ export def "me get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<admin: bool, all_emails: list<string>, analytics_id: string, avatar_url: string, basic_email_prefs: string, bitbucket: int, bitbucket_authorized: bool, containers: int, created_at: string, days_left_in_trial: int, dev_admin: bool, enrolled_betas: list<string>, github_id: int, github_oauth_scopes: list<string>, gravatar_id: int, heroku_api_key: string, in_beta_program: bool, login: string, name: string, organization_prefs: record, parallelism: int, plan: string, projects: record, pusher_id: string, selected_email: string, sign_in_count: int, trial_end: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Build summary for each of the last 30 builds for a single git repo.
@@ -124,6 +126,7 @@ export def "project list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of builds to return. Maximum 100, defaults to 30.  (default: 30)
   --offset: int # The API returns builds starting from this offset, defaults to 0.  (default: 0)
   --filter: string@filter-completer # Restricts which builds are returned. Set to "completed", "successful", "failed", "running", or defaults to no filter.
@@ -134,7 +137,7 @@ export def "project list" [
   let full_url = (build-url $base $"/project/($username)/($project)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Triggers a new build, returns a summary of the build.
@@ -150,6 +153,7 @@ export def "project post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --build-parameters: record # Additional environment variables to inject into the build environment. A map of names to values.
   --parallel: string # The number of containers to use to run the build. Default is null and the project default is used.
   --revision: string # The specific revision to build. Default is null and the head of the branch is used. Cannot be used with tag parameter.
@@ -163,7 +167,7 @@ export def "project post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Clears the cache for a project.
@@ -179,13 +183,14 @@ export def "project-build-cache delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/project/($username)/($project)/build-cache")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists checkout keys.
@@ -201,13 +206,14 @@ export def "project-checkout-key list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<fingerprint: string, preferred: bool, public_key: string, time: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/project/($username)/($project)/checkout-key")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new checkout key. Only usable with a user API token.
@@ -223,6 +229,7 @@ export def "project-checkout-key post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -232,7 +239,7 @@ export def "project-checkout-key post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a checkout key.
@@ -249,13 +256,14 @@ export def "project-checkout-key delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/project/($username)/($project)/checkout-key/($fingerprint)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a checkout key.
@@ -272,13 +280,14 @@ export def "project-checkout-key get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/project/($username)/($project)/checkout-key/($fingerprint)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists the environment variables for :project
@@ -294,13 +303,14 @@ export def "project-envvar list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/project/($username)/($project)/envvar")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new environment variable
@@ -316,13 +326,14 @@ export def "project-envvar post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/project/($username)/($project)/envvar")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the environment variable named ':name'
@@ -339,13 +350,14 @@ export def "project-envvar delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/project/($username)/($project)/envvar/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the hidden value of environment variable :name
@@ -362,13 +374,14 @@ export def "project-envvar get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/project/($username)/($project)/envvar/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an ssh key used to access external systems that require SSH key-based authentication
@@ -384,6 +397,7 @@ export def "project-ssh-key post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Type: string@Content-Type-completer
   --hostname: string
   --private-key: string
@@ -398,7 +412,7 @@ export def "project-ssh-key post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Triggers a new build, returns a summary of the build. Optional build parameters can be set using an experimental API.  Note: For more about build parameters, read about [using parameterized builds](https://circleci.com/docs/parameterized-builds/)
@@ -415,6 +429,7 @@ export def "project-tree post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --build-parameters: record # Additional environment variables to inject into the build environment. A map of names to values.
   --parallel: string # The number of containers to use to run the build. Default is null and the project default is used.
   --revision: string # The specific revision to build. Default is null and the head of the branch is used. Cannot be used with tag parameter.
@@ -427,7 +442,7 @@ export def "project-tree post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Full details for a single build. The response includes all of the fields from the build summary. This is also the payload for the [notification webhooks](/docs/configuration/#notify), in which case this object is the value to a key named 'payload'.
@@ -444,13 +459,14 @@ export def "project get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<all_commit_details: table<author_date: string, author_email: string, author_login: string, author_name: string, body: string, commit: string, commit_url: string, committer_date: string, committer_email: string, committer_login: string, committer_name: string, subject: string>, compare: string, job_name: string, node: any, previous_successful_build: record<build_num: int, build_time_millis: int, status: string>, retries: bool, ssh_enabled: bool, timedout: bool, usage_queued_at: string, user: record<admin: bool, all_emails: list<string>, analytics_id: string, avatar_url: string, basic_email_prefs: string, bitbucket: int, bitbucket_authorized: bool, containers: int, created_at: string, days_left_in_trial: int, dev_admin: bool, enrolled_betas: list<string>, github_id: int, github_oauth_scopes: list<string>, gravatar_id: int, heroku_api_key: string, in_beta_program: bool, login: string, name: string, organization_prefs: record, parallelism: int, plan: string, projects: record, pusher_id: string, selected_email: string, sign_in_count: int, trial_end: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/project/($username)/($project)/($build_num)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List the artifacts produced by a given build.
@@ -467,13 +483,14 @@ export def "project-artifacts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<node_index: int, path: string, pretty_path: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/project/($username)/($project)/($build_num)/artifacts")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancels the build, returns a summary of the build.
@@ -490,13 +507,14 @@ export def "project-cancel post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<body: string, branch: string, build_time_millis: int, build_url: string, committer_email: string, committer_name: string, dont_build: string, lifecycle: string, previous: record<build_num: int, build_time_millis: int, status: string>, queued_at: string, reponame: string, retry_of: int, start_time: string, stop_time: string, subject: string, username: string, vcs_url: string, why: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/project/($username)/($project)/($build_num)/cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retries the build, returns a summary of the new build.
@@ -513,13 +531,14 @@ export def "project-retry post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<body: string, branch: string, build_time_millis: int, build_url: string, committer_email: string, committer_name: string, dont_build: string, lifecycle: string, previous: record<build_num: int, build_time_millis: int, status: string>, queued_at: string, reponame: string, retry_of: int, start_time: string, stop_time: string, subject: string, username: string, vcs_url: string, why: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/project/($username)/($project)/($build_num)/retry")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provides test metadata for a build Note: [Learn how to set up your builds to collect test metadata](https://circleci.com/docs/test-metadata/)
@@ -536,13 +555,14 @@ export def "project-tests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<tests: table<classname: string, file: string, message: string, name: string, result: string, run_time: float, source: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/project/($username)/($project)/($build_num)/tests")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List of all the projects you're following on CircleCI, with build information organized by branch.
@@ -556,13 +576,14 @@ export def "projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<aws: record<keypair: string>, branches: record, campfire_notify_prefs: string, campfire_room: string, campfire_subdomain: string, campfire_token: string, compile: string, default_branch: string, dependencies: string, extra: string, feature_flags: record<build_fork_prs: bool, fleet: bool, junit: bool, oss: bool, osx: bool, set_github_status: bool, trusty_beta: bool>, flowdock_api_token: string, followed: bool, has_usable_key: bool, heroku_deploy_user: string, hipchat_api_token: string, hipchat_notify: string, hipchat_notify_prefs: string, hipchat_room: string, irc_channel: string, irc_keyword: string, irc_notify_prefs: string, irc_password: string, irc_server: string, irc_username: string, language: string, oss: bool, parallel: int, reponame: string, scopes: list<string>, setup: string, slack_api_token: string, slack_channel: string, slack_channel_override: string, slack_notify_prefs: string, slack_subdomain: string, slack_webhook_url: string, ssh_keys: list<string>, test: string, username: string, vcs_type: string, vcs_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/projects")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Build summary for each of the last 30 recent builds, ordered by build_num.
@@ -576,6 +597,7 @@ export def "recent-builds get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of builds to return. Maximum 100, defaults to 30.  (default: 30)
   --offset: int # The API returns builds starting from this offset, defaults to 0.  (default: 0)
 ]: nothing -> table<body: string, branch: string, build_time_millis: int, build_url: string, committer_email: string, committer_name: string, dont_build: string, lifecycle: string, previous: record<build_num: int, build_time_millis: int, status: string>, queued_at: string, reponame: string, retry_of: int, start_time: string, stop_time: string, subject: string, username: string, vcs_url: string, why: string> {
@@ -585,7 +607,7 @@ export def "recent-builds get" [
   let full_url = (build-url $base "/recent-builds" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds your Heroku API key to CircleCI, takes apikey as form param name.
@@ -599,11 +621,12 @@ export def "user-heroku-key post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/heroku-key")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

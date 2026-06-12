@@ -46,10 +46,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -75,7 +76,7 @@ def new-state-completer [] { ["failed" "success"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "config config" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -108,6 +109,7 @@ export def "config config" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<sections: table<name: string, options: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -115,7 +117,7 @@ export def "config config" [
   let full_url = (build-url $base "/config")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List connections
@@ -130,6 +132,7 @@ export def "connections connections" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order.  *New in version 2.1.0*
@@ -140,7 +143,7 @@ export def "connections connections" [
   let full_url = (build-url $base "/connections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a connection
@@ -155,6 +158,7 @@ export def "connections connection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --conn-type: string # The connection type.
   --connection-id: string # The connection ID.
   --description: string # The description of the connection. (nullable)
@@ -173,7 +177,7 @@ export def "connections connection" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Test a connection
@@ -188,6 +192,7 @@ export def "connections-test connection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --conn-type: string # The connection type.
   --connection-id: string # The connection ID.
   --description: string # The description of the connection. (nullable)
@@ -206,7 +211,7 @@ export def "connections-test connection" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a connection
@@ -222,13 +227,14 @@ export def "connections connection-by-connection_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/connections/($connection_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a connection
@@ -244,13 +250,14 @@ export def "connections connection-by-connection_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<conn_type: string, connection_id: string, description: string, host: string, login: string, port: int, schema: string, extra: string, password: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/connections/($connection_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a connection
@@ -266,6 +273,7 @@ export def "connections connection-by-connection_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --update-mask: list # The fields to update on the resource. If absent or empty, all modifiable fields are updated. A comma-separated list of fully qualified names of fields.
   --conn-type: string # The connection type.
   --body-connection-id: string # The connection ID.
@@ -286,7 +294,7 @@ export def "connections connection-by-connection_id-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a source code
@@ -302,6 +310,7 @@ export def "dag-sources source" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<content: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -309,7 +318,7 @@ export def "dag-sources source" [
   let full_url = (build-url $base $"/dagSources/($file_token)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List dag warnings
@@ -324,6 +333,7 @@ export def "dag-warnings warnings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dag-id: string # If set, only return DAG warnings with this dag_id.
   --warning-type: string # If set, only return DAG warnings with this type.
   --limit: int # The numbers of items to return. (default: 100)
@@ -336,7 +346,7 @@ export def "dag-warnings warnings" [
   let full_url = (build-url $base "/dagWarnings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List DAGs
@@ -351,6 +361,7 @@ export def "dags dags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order.  *New in version 2.1.0*
@@ -364,7 +375,7 @@ export def "dags dags" [
   let full_url = (build-url $base "/dags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update DAGs
@@ -380,6 +391,7 @@ export def "dags dags-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --tags: list # List of tags to filter results.  *New in version 2.2.0* — item shape: {name?: string}
@@ -397,7 +409,7 @@ export def "dags dags-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a DAG
@@ -413,13 +425,14 @@ export def "dags dag-by-dag_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dags/($dag_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get basic information about a DAG
@@ -435,13 +448,14 @@ export def "dags dag-by-dag_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list<string>, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: table<name: string>, timetable_description: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dags/($dag_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a DAG
@@ -458,6 +472,7 @@ export def "dags dag-by-dag_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --update-mask: list # The fields to update on the resource. If absent or empty, all modifiable fields are updated. A comma-separated list of fully qualified names of fields.
   --is-paused: oneof<nothing, bool> # Whether the DAG is paused. (nullable)
 ]: any -> record<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list<string>, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: table<name: string>, timetable_description: string> {
@@ -470,7 +485,7 @@ export def "dags dag-by-dag_id-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Clear a set of task instances
@@ -486,8 +501,9 @@ export def "dags-clear-task-instances instances" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dag-run-id: string # The DagRun ID for this task instance (nullable)
-  --dry-run: oneof<nothing, bool> # If set, don't actually run this operation. The response will contain a list of task instances planned to be cleaned, but not modified in any way.  (default: true)
+  --body-dry-run: oneof<nothing, bool> # If set, don't actually run this operation. The response will contain a list of task instances planned to be cleaned, but not modified in any way.  (default: true)
   --end-date: string # The maximum execution date to clear. (format: datetime)
   --include-downstream: oneof<nothing, bool> # If set to true, downstream tasks are also affected. (default: false)
   --include-future: oneof<nothing, bool> # If set to True, also tasks from future DAG Runs are affected. (default: false)
@@ -505,11 +521,11 @@ export def "dags-clear-task-instances instances" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dags/($dag_id)/clearTaskInstances")
-  let body = {dag_run_id: $dag_run_id, dry_run: $dry_run, end_date: $end_date, include_downstream: $include_downstream, include_future: $include_future, include_parentdag: $include_parentdag, include_past: $include_past, include_subdags: $include_subdags, include_upstream: $include_upstream, only_failed: $only_failed, only_running: $only_running, reset_dag_runs: $reset_dag_runs, start_date: $start_date, task_ids: $task_ids} | compact
+  let body = {dag_run_id: $dag_run_id, dry_run: $body_dry_run, end_date: $end_date, include_downstream: $include_downstream, include_future: $include_future, include_parentdag: $include_parentdag, include_past: $include_past, include_subdags: $include_subdags, include_upstream: $include_upstream, only_failed: $only_failed, only_running: $only_running, reset_dag_runs: $reset_dag_runs, start_date: $start_date, task_ids: $task_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List DAG runs
@@ -525,6 +541,7 @@ export def "dags-dag-runs runs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --execution-date-gte: string # Returns objects greater or equal to the specified date.  This can be combined with execution_date_lte parameter to receive only the selected period.  (format: date-time)
@@ -542,7 +559,7 @@ export def "dags-dag-runs runs" [
   let full_url = (build-url $base $"/dags/($dag_id)/dagRuns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Trigger a new DAG run
@@ -559,6 +576,7 @@ export def "dags-dag-runs run-by-dag_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --conf: record # JSON object describing additional configuration parameters.  The value of this field can be set only when creating the object. If you try to modify the field of an existing object, the request fails with an BAD_REQUEST error.
   --dag-run-id: string # Run ID.  The value of this field can be set only when creating the object. If you try to modify the field of an existing object, the request fails with an BAD_REQUEST error.  If not provided, a value will be generated based on execution_date.  If the specified dag_run_id is in use, the creation request fails with an ALREADY_EXISTS error.  This together with DAG_ID are a unique key.  (nullable)
   --execution-date: string # The execution date. This is the same as logical_date, kept for backwards compatibility. If both this field and logical_date are provided but with different values, the request will fail with an BAD_REQUEST error.  *Changed in version 2.2.0*&#58; Field becomes nullable.  *Deprecated since version 2.2.0*&#58; Use 'logical_date' instead.  (DEPRECATED, nullable, format: date-time)
@@ -574,7 +592,7 @@ export def "dags-dag-runs run-by-dag_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a DAG run
@@ -591,13 +609,14 @@ export def "dags-dag-runs run-by-dag_id-dag_run_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a DAG run
@@ -614,13 +633,14 @@ export def "dags-dag-runs run-by-dag_id-dag_run_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Modify a DAG run
@@ -637,6 +657,7 @@ export def "dags-dag-runs state" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string@state-completer-1 # The state to set this DagRun
 ]: any -> record<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string> {
   let input = $in
@@ -647,7 +668,7 @@ export def "dags-dag-runs state" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Clear a DAG run
@@ -664,17 +685,18 @@ export def "dags-dag-runs-clear run" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dry-run: oneof<nothing, bool> # If set, don't actually run this operation. The response will contain a list of task instances planned to be cleaned, but not modified in any way.  (default: true)
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body-dry-run: oneof<nothing, bool> # If set, don't actually run this operation. The response will contain a list of task instances planned to be cleaned, but not modified in any way.  (default: true)
 ]: any -> record<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/clear")
-  let body = {dry_run: $dry_run} | compact
+  let body = {dry_run: $body_dry_run} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update the DagRun note.
@@ -691,6 +713,7 @@ export def "dags-dag-runs-set-note note" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --note: string # Custom notes left by users for this Dag Run.
 ]: any -> record<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string> {
   let input = $in
@@ -701,7 +724,7 @@ export def "dags-dag-runs-set-note note" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List task instances
@@ -718,6 +741,7 @@ export def "dags-dag-runs-task-instances instances" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
 ]: nothing -> record {
@@ -727,7 +751,7 @@ export def "dags-dag-runs-task-instances instances" [
   let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/taskInstances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a task instance
@@ -745,13 +769,14 @@ export def "dags-dag-runs-task-instances instance-by-dag_id-dag_run_id-task_id" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record<dag_id: string, description: string, email_sent: bool, execution_date: string, notification_sent: bool, task_id: string, timestamp: string>, start_date: string, state: string, task_id: string, trigger: record<classpath: string, created_date: string, id: int, kwargs: string, triggerer_id: int>, triggerer_job: record<dag_id: string, end_date: string, executor_class: string, hostname: string, id: int, job_type: string, latest_heartbeat: string, start_date: string, state: string, unixname: string>, try_number: int, unixname: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/taskInstances/($task_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the state of a task instance
@@ -769,18 +794,19 @@ export def "dags-dag-runs-task-instances instance-by-dag_id-dag_run_id-task_id-1
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dry-run: oneof<nothing, bool> # If set, don't actually run this operation. The response will contain the task instance planned to be affected, but won't be modified in any way.  (default: false)
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body-dry-run: oneof<nothing, bool> # If set, don't actually run this operation. The response will contain the task instance planned to be affected, but won't be modified in any way.  (default: false)
   --new-state: string@new-state-completer # Expected new state.
 ]: any -> record<dag_id: string, dag_run_id: string, execution_date: string, task_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/taskInstances/($task_id)")
-  let body = {dry_run: $dry_run, new_state: $new_state} | compact
+  let body = {dry_run: $body_dry_run, new_state: $new_state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List extra links
@@ -798,13 +824,14 @@ export def "dags-dag-runs-task-instances-links links" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<extra_links: table<class_ref: record, href: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/taskInstances/($task_id)/links")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List mapped task instances
@@ -822,6 +849,7 @@ export def "dags-dag-runs-task-instances-list-mapped instances" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --execution-date-gte: string # Returns objects greater or equal to the specified date.  This can be combined with execution_date_lte parameter to receive only the selected period.  (format: date-time)
@@ -843,7 +871,7 @@ export def "dags-dag-runs-task-instances-list-mapped instances" [
   let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/taskInstances/($task_id)/listMapped" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get logs
@@ -862,6 +890,7 @@ export def "dags-dag-runs-task-instances-logs log" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --full-content: oneof<nothing, bool> # A full content will be returned. By default, only the first fragment will be returned.
   --map-index: int # Filter on map index for mapped task.
@@ -873,7 +902,7 @@ export def "dags-dag-runs-task-instances-logs log" [
   let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/taskInstances/($task_id)/logs/($task_try_number)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the TaskInstance note.
@@ -891,6 +920,7 @@ export def "dags-dag-runs-task-instances-set-note note-by-dag_id-dag_run_id-task
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   note: string # The custom note to set for this Task Instance.
 ]: any -> record<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record<dag_id: string, description: string, email_sent: bool, execution_date: string, notification_sent: bool, task_id: string, timestamp: string>, start_date: string, state: string, task_id: string, trigger: record<classpath: string, created_date: string, id: int, kwargs: string, triggerer_id: int>, triggerer_job: record<dag_id: string, end_date: string, executor_class: string, hostname: string, id: int, job_type: string, latest_heartbeat: string, start_date: string, state: string, unixname: string>, try_number: int, unixname: string> {
   let input = $in
@@ -901,7 +931,7 @@ export def "dags-dag-runs-task-instances-set-note note-by-dag_id-dag_run_id-task
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List XCom entries
@@ -919,6 +949,7 @@ export def "dags-dag-runs-task-instances-xcom-entries entries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
 ]: nothing -> record {
@@ -928,7 +959,7 @@ export def "dags-dag-runs-task-instances-xcom-entries entries" [
   let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/taskInstances/($task_id)/xcomEntries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an XCom entry
@@ -947,6 +978,7 @@ export def "dags-dag-runs-task-instances-xcom-entries entry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --deserialize: oneof<nothing, bool> # Whether to deserialize an XCom value when using a custom XCom backend.  The XCom API endpoint calls `orm_deserialize_value` by default since an XCom may contain value that is potentially expensive to deserialize in the web server. Setting this to true overrides the consideration, and calls `deserialize_value` instead.  This parameter is not meaningful when using the default XCom backend.  *New in version 2.4.0*  (default: false)
 ]: nothing -> record<dag_id: string, execution_date: string, key: string, task_id: string, timestamp: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -955,7 +987,7 @@ export def "dags-dag-runs-task-instances-xcom-entries entry" [
   let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/taskInstances/($task_id)/xcomEntries/($xcom_key)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a mapped task instance
@@ -974,13 +1006,14 @@ export def "dags-dag-runs-task-instances instance-by-dag_id-dag_run_id-task_id-m
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record<dag_id: string, description: string, email_sent: bool, execution_date: string, notification_sent: bool, task_id: string, timestamp: string>, start_date: string, state: string, task_id: string, trigger: record<classpath: string, created_date: string, id: int, kwargs: string, triggerer_id: int>, triggerer_job: record<dag_id: string, end_date: string, executor_class: string, hostname: string, id: int, job_type: string, latest_heartbeat: string, start_date: string, state: string, unixname: string>, try_number: int, unixname: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/taskInstances/($task_id)/($map_index)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the state of a mapped task instance
@@ -999,18 +1032,19 @@ export def "dags-dag-runs-task-instances instance-by-dag_id-dag_run_id-task_id-m
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dry-run: oneof<nothing, bool> # If set, don't actually run this operation. The response will contain the task instance planned to be affected, but won't be modified in any way.  (default: false)
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --body-dry-run: oneof<nothing, bool> # If set, don't actually run this operation. The response will contain the task instance planned to be affected, but won't be modified in any way.  (default: false)
   --new-state: string@new-state-completer # Expected new state.
 ]: any -> record<dag_id: string, dag_run_id: string, execution_date: string, task_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/taskInstances/($task_id)/($map_index)")
-  let body = {dry_run: $dry_run, new_state: $new_state} | compact
+  let body = {dry_run: $body_dry_run, new_state: $new_state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update the TaskInstance note.
@@ -1029,6 +1063,7 @@ export def "dags-dag-runs-task-instances-set-note note-by-dag_id-dag_run_id-task
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   note: string # The custom note to set for this Task Instance.
 ]: any -> record<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record<dag_id: string, description: string, email_sent: bool, execution_date: string, notification_sent: bool, task_id: string, timestamp: string>, start_date: string, state: string, task_id: string, trigger: record<classpath: string, created_date: string, id: int, kwargs: string, triggerer_id: int>, triggerer_job: record<dag_id: string, end_date: string, executor_class: string, hostname: string, id: int, job_type: string, latest_heartbeat: string, start_date: string, state: string, unixname: string>, try_number: int, unixname: string> {
   let input = $in
@@ -1039,7 +1074,7 @@ export def "dags-dag-runs-task-instances-set-note note-by-dag_id-dag_run_id-task
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get dataset events for a DAG run
@@ -1056,13 +1091,14 @@ export def "dags-dag-runs-upstream-dataset-events events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/upstreamDatasetEvents")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a simplified representation of DAG
@@ -1078,13 +1114,14 @@ export def "dags-details details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list<string>, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: table<name: string>, timetable_description: string, catchup: bool, concurrency: float, dag_run_timeout: record<__type: string, days: int, microseconds: int, seconds: int>, doc_md: string, end_date: string, is_paused_upon_creation: bool, last_parsed: string, orientation: string, params: record, render_template_as_native_obj: bool, start_date: string, template_search_path: list<string>, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dags/($dag_id)/details")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tasks for DAG
@@ -1100,6 +1137,7 @@ export def "dags-tasks tasks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order.  *New in version 2.1.0*
 ]: nothing -> record<tasks: table<class_ref: record, depends_on_past: bool, downstream_task_ids: list, end_date: string, execution_timeout: record, extra_links: list, is_mapped: bool, owner: string, pool: string, pool_slots: float, priority_weight: float, queue: string, retries: float, retry_delay: record, retry_exponential_backoff: bool, start_date: string, sub_dag: record, task_id: string, template_fields: list, trigger_rule: string, ui_color: string, ui_fgcolor: string, wait_for_downstream: bool, weight_rule: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1108,7 +1146,7 @@ export def "dags-tasks tasks" [
   let full_url = (build-url $base $"/dags/($dag_id)/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get simplified representation of a task
@@ -1125,13 +1163,14 @@ export def "dags-tasks task" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<class_ref: record<class_name: string, module_path: string>, depends_on_past: bool, downstream_task_ids: list<string>, end_date: string, execution_timeout: record<__type: string, days: int, microseconds: int, seconds: int>, extra_links: table<class_ref: record>, is_mapped: bool, owner: string, pool: string, pool_slots: float, priority_weight: float, queue: string, retries: float, retry_delay: record<__type: string, days: int, microseconds: int, seconds: int>, retry_exponential_backoff: bool, start_date: string, sub_dag: record<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list<string>, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: list<record>, timetable_description: string>, task_id: string, template_fields: list<string>, trigger_rule: string, ui_color: string, ui_fgcolor: string, wait_for_downstream: bool, weight_rule: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dags/($dag_id)/tasks/($task_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set a state of task instances
@@ -1147,8 +1186,9 @@ export def "dags-update-task-instances-state state" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dag-run-id: string # The task instance's DAG run ID. Either set this or execution_date but not both.  *New in version 2.3.0*
-  --dry-run: oneof<nothing, bool> # If set, don't actually run this operation. The response will contain a list of task instances planned to be affected, but won't be modified in any way.  (default: true)
+  --body-dry-run: oneof<nothing, bool> # If set, don't actually run this operation. The response will contain a list of task instances planned to be affected, but won't be modified in any way.  (default: true)
   --execution-date: string # The execution date. Either set this or dag_run_id but not both. (format: datetime)
   --include-downstream: oneof<nothing, bool> # If set to true, downstream tasks are also affected.
   --include-future: oneof<nothing, bool> # If set to True, also tasks from future DAG Runs are affected.
@@ -1161,11 +1201,11 @@ export def "dags-update-task-instances-state state" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dags/($dag_id)/updateTaskInstancesState")
-  let body = {dag_run_id: $dag_run_id, dry_run: $dry_run, execution_date: $execution_date, include_downstream: $include_downstream, include_future: $include_future, include_past: $include_past, include_upstream: $include_upstream, new_state: $new_state, task_id: $task_id} | compact
+  let body = {dag_run_id: $dag_run_id, dry_run: $body_dry_run, execution_date: $execution_date, include_downstream: $include_downstream, include_future: $include_future, include_past: $include_past, include_upstream: $include_upstream, new_state: $new_state, task_id: $task_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List DAG runs (batch)
@@ -1180,6 +1220,7 @@ export def "dags-dag-runs-list batch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dag-ids: list # Return objects with specific DAG IDs. The value can be repeated to retrieve multiple matching values (OR condition).
   --end-date-gte: string # Returns objects greater or equal the specified date.  This can be combined with end_date_lte parameter to receive only the selected period.  (format: date-time)
   --end-date-lte: string # Returns objects less than or equal to the specified date.  This can be combined with end_date_gte parameter to receive only the selected period.  (format: date-time)
@@ -1200,7 +1241,7 @@ export def "dags-dag-runs-list batch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List task instances (batch)
@@ -1215,6 +1256,7 @@ export def "dags-dag-runs-task-instances-list batch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dag-ids: list # Return objects with specific DAG IDs. The value can be repeated to retrieve multiple matching values (OR condition).
   --duration-gte: float # Returns objects greater than or equal to the specified values.  This can be combined with duration_lte parameter to receive only the selected period.
   --duration-lte: float # Returns objects less than or equal to the specified values.  This can be combined with duration_gte parameter to receive only the selected range.
@@ -1236,7 +1278,7 @@ export def "dags-dag-runs-task-instances-list batch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List datasets
@@ -1251,6 +1293,7 @@ export def "datasets datasets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order.  *New in version 2.1.0*
@@ -1262,7 +1305,7 @@ export def "datasets datasets" [
   let full_url = (build-url $base "/datasets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get dataset events
@@ -1277,6 +1320,7 @@ export def "datasets-events events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order.  *New in version 2.1.0*
@@ -1292,7 +1336,7 @@ export def "datasets-events events" [
   let full_url = (build-url $base "/datasets/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a dataset
@@ -1308,13 +1352,14 @@ export def "datasets dataset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<consuming_dags: table<created_at: string, dag_id: string, updated_at: string>, created_at: string, extra: record, id: int, producing_tasks: table<created_at: string, dag_id: string, task_id: string, updated_at: string>, updated_at: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/datasets/($uri)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List log entries
@@ -1329,6 +1374,7 @@ export def "event-logs logs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order.  *New in version 2.1.0*
@@ -1339,7 +1385,7 @@ export def "event-logs logs" [
   let full_url = (build-url $base "/eventLogs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a log entry
@@ -1355,13 +1401,14 @@ export def "event-logs log" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<dag_id: string, event: string, event_log_id: int, execution_date: string, extra: string, owner: string, task_id: string, when: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/eventLogs/($event_log_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get instance status
@@ -1376,13 +1423,14 @@ export def "health health" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<metadatabase: record<status: string>, scheduler: record<latest_scheduler_heartbeat: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/health")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List import errors
@@ -1397,6 +1445,7 @@ export def "import-errors errors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order.  *New in version 2.1.0*
@@ -1407,7 +1456,7 @@ export def "import-errors errors" [
   let full_url = (build-url $base "/importErrors" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an import error
@@ -1423,13 +1472,14 @@ export def "import-errors error" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<filename: string, import_error_id: int, stack_trace: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/importErrors/($import_error_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List permissions
@@ -1444,6 +1494,7 @@ export def "permissions permissions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
 ]: nothing -> record {
@@ -1453,7 +1504,7 @@ export def "permissions permissions" [
   let full_url = (build-url $base "/permissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of loaded plugins
@@ -1468,6 +1519,7 @@ export def "plugins plugins" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
 ]: nothing -> record {
@@ -1477,7 +1529,7 @@ export def "plugins plugins" [
   let full_url = (build-url $base "/plugins" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List pools
@@ -1492,6 +1544,7 @@ export def "pools pools" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order.  *New in version 2.1.0*
@@ -1502,7 +1555,7 @@ export def "pools pools" [
   let full_url = (build-url $base "/pools" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a pool
@@ -1517,6 +1570,7 @@ export def "pools pool" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the pool.  *New in version 2.3.0*  (nullable)
   --name: string # The name of pool.
   --slots: int # The maximum number of slots that can be assigned to tasks. One job may occupy one or more slots.
@@ -1529,7 +1583,7 @@ export def "pools pool" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a pool
@@ -1545,13 +1599,14 @@ export def "pools pool-by-pool_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pools/($pool_name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a pool
@@ -1567,13 +1622,14 @@ export def "pools pool-by-pool_name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, name: string, occupied_slots: int, open_slots: int, queued_slots: int, slots: int, used_slots: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pools/($pool_name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a pool
@@ -1589,6 +1645,7 @@ export def "pools pool-by-pool_name-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --update-mask: list # The fields to update on the resource. If absent or empty, all modifiable fields are updated. A comma-separated list of fully qualified names of fields.
   --description: string # The description of the pool.  *New in version 2.3.0*  (nullable)
   --name: string # The name of pool.
@@ -1603,7 +1660,7 @@ export def "pools pool-by-pool_name-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List providers
@@ -1618,13 +1675,14 @@ export def "providers providers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<providers: table<description: string, package_name: string, version: string>, total_entries: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/providers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List roles
@@ -1639,6 +1697,7 @@ export def "roles roles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order.  *New in version 2.1.0*
@@ -1649,7 +1708,7 @@ export def "roles roles" [
   let full_url = (build-url $base "/roles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a role
@@ -1665,6 +1724,7 @@ export def "roles role" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --actions: list # item shape: {action?: record, resource?: record}
   --name: string # The name of the role  *Changed in version 2.3.0*&#58; A minimum character length requirement ('minLength') is added.
 ]: any -> record<actions: table<action: record, resource: record>, name: string> {
@@ -1676,7 +1736,7 @@ export def "roles role" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a role
@@ -1692,13 +1752,14 @@ export def "roles role-by-role_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/roles/($role_name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a role
@@ -1714,13 +1775,14 @@ export def "roles role-by-role_name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<actions: table<action: record, resource: record>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/roles/($role_name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a role
@@ -1737,6 +1799,7 @@ export def "roles role-by-role_name-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --update-mask: list # The fields to update on the resource. If absent or empty, all modifiable fields are updated. A comma-separated list of fully qualified names of fields.
   --actions: list # item shape: {action?: record, resource?: record}
   --name: string # The name of the role  *Changed in version 2.3.0*&#58; A minimum character length requirement ('minLength') is added.
@@ -1750,7 +1813,7 @@ export def "roles role-by-role_name-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List users
@@ -1765,6 +1828,7 @@ export def "users users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order.  *New in version 2.1.0*
@@ -1775,7 +1839,7 @@ export def "users users" [
   let full_url = (build-url $base "/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a user
@@ -1791,6 +1855,7 @@ export def "users user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # The user's email.  *Changed in version 2.2.0*&#58; A minimum character length requirement ('minLength') is added.
   --first-name: string # The user's first name.  *Changed in version 2.4.0*&#58; The requirement for this to be non-empty was removed.
   --last-name: string # The user's last name.  *Changed in version 2.4.0*&#58; The requirement for this to be non-empty was removed.
@@ -1806,7 +1871,7 @@ export def "users user" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a user
@@ -1822,13 +1887,14 @@ export def "users user-by-username" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($username)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user
@@ -1844,13 +1910,14 @@ export def "users user-by-username-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<active: bool, changed_on: string, created_on: string, email: string, failed_login_count: int, first_name: string, last_login: string, last_name: string, login_count: int, roles: table<name: string>, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($username)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user
@@ -1867,6 +1934,7 @@ export def "users user-by-username-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --update-mask: list # The fields to update on the resource. If absent or empty, all modifiable fields are updated. A comma-separated list of fully qualified names of fields.
   --email: string # The user's email.  *Changed in version 2.2.0*&#58; A minimum character length requirement ('minLength') is added.
   --first-name: string # The user's first name.  *Changed in version 2.4.0*&#58; The requirement for this to be non-empty was removed.
@@ -1884,7 +1952,7 @@ export def "users user-by-username-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List variables
@@ -1899,6 +1967,7 @@ export def "variables variables" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The numbers of items to return. (default: 100)
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order.  *New in version 2.1.0*
@@ -1909,7 +1978,7 @@ export def "variables variables" [
   let full_url = (build-url $base "/variables" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a variable
@@ -1924,6 +1993,7 @@ export def "variables variables-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the variable.  *New in version 2.4.0*  (nullable)
   --key: string
   --value: string
@@ -1936,7 +2006,7 @@ export def "variables variables-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a variable
@@ -1952,13 +2022,14 @@ export def "variables variable-by-variable_key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/variables/($variable_key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a variable
@@ -1974,13 +2045,14 @@ export def "variables variable-by-variable_key-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/variables/($variable_key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a variable
@@ -1996,6 +2068,7 @@ export def "variables variable-by-variable_key-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --update-mask: list # The fields to update on the resource. If absent or empty, all modifiable fields are updated. A comma-separated list of fully qualified names of fields.
   --description: string # The description of the variable.  *New in version 2.4.0*  (nullable)
   --key: string
@@ -2010,7 +2083,7 @@ export def "variables variable-by-variable_key-2" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get version information
@@ -2025,11 +2098,12 @@ export def "version version" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<git_version: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/version")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

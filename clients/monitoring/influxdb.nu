@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -87,7 +88,7 @@ def type-completer-1 [] { ["basic" "system"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "signin PostSignin" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -120,6 +121,7 @@ export def "signin PostSignin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -129,7 +131,7 @@ export def "signin PostSignin" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Expire a user session
@@ -144,6 +146,7 @@ export def "signout PostSignout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -153,7 +156,7 @@ export def "signout PostSignout" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the status of the instance
@@ -168,13 +171,14 @@ export def "ping GetPing" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ping")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the status of the instance
@@ -189,13 +193,14 @@ export def "ping HeadPing" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ping")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all top level routes
@@ -210,6 +215,7 @@ export def "routes GetRoutes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<authorizations: string, buckets: string, dashboards: string, external: record<statusFeed: string>, variables: string, me: string, flags: string, orgs: string, query: record<self: string, ast: string, analyze: string, suggestions: string>, setup: string, signin: string, signout: string, sources: string, system: record<metrics: string, debug: string, health: string>, tasks: string, telegrafs: string, users: string, write: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -219,7 +225,7 @@ export def "routes GetRoutes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List database retention policy mappings
@@ -234,6 +240,7 @@ export def "dbrps GetDBRPs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orgID: string # An organization ID. Only returns DBRP mappings for the specified organization.
   --org: string # An organization name. Only returns DBRP mappings for the specified organization.
   --id: string # A DBPR mapping ID. Only returns the specified DBRP mapping.
@@ -251,7 +258,7 @@ export def "dbrps GetDBRPs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a database retention policy mapping
@@ -266,6 +273,7 @@ export def "dbrps PostDBRP" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --org: string # An organization name. Identifies the [organization](https://docs.influxdata.com/influxdb/cloud/reference/glossary/#organization) that owns the mapping.
   --orgID: string # An organization ID. Identifies the [organization](https://docs.influxdata.com/influxdb/cloud/reference/glossary/#organization) that owns the mapping.
@@ -284,7 +292,7 @@ export def "dbrps PostDBRP" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a database retention policy mapping
@@ -300,6 +308,7 @@ export def "dbrps GetDBRPsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orgID: string # An organization ID. Specifies the organization that owns the DBRP mapping.
   --org: string # An organization name. Specifies the organization that owns the DBRP mapping.
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
@@ -312,7 +321,7 @@ export def "dbrps GetDBRPsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a database retention policy mapping
@@ -328,6 +337,7 @@ export def "dbrps PatchDBRPID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orgID: string # An organization ID. Specifies the organization that owns the DBRP mapping.
   --org: string # An organization name. Specifies the organization that owns the DBRP mapping.
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
@@ -345,7 +355,7 @@ export def "dbrps PatchDBRPID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a database retention policy
@@ -361,6 +371,7 @@ export def "dbrps DeleteDBRPID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orgID: string # An organization ID. Specifies the organization that owns the DBRP mapping.
   --org: string # An organization name. Specifies the organization that owns the DBRP mapping.
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
@@ -373,7 +384,7 @@ export def "dbrps DeleteDBRPID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all Telegraf plugins
@@ -388,6 +399,7 @@ export def "telegraf-plugins GetTelegrafPlugins" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string # The type of plugin desired.
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<version: string, os: string, plugins: table<type: string, name: string, description: string, config: string>> {
@@ -399,7 +411,7 @@ export def "telegraf-plugins GetTelegrafPlugins" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all Telegraf configurations
@@ -414,6 +426,7 @@ export def "telegrafs GetTelegrafs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orgID: string # The organization ID the Telegraf config belongs to.
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<configurations: list<record>> {
@@ -425,7 +438,7 @@ export def "telegrafs GetTelegrafs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Telegraf configuration
@@ -442,6 +455,7 @@ export def "telegrafs PostTelegrafs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --name: string
   --description: string
@@ -460,7 +474,7 @@ export def "telegrafs PostTelegrafs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a Telegraf configuration
@@ -476,6 +490,7 @@ export def "telegrafs GetTelegrafsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --Accept: string@Accept-completer
@@ -487,7 +502,7 @@ export def "telegrafs GetTelegrafsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/toml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Telegraf configuration
@@ -505,6 +520,7 @@ export def "telegrafs PutTelegrafsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --name: string
   --description: string
@@ -523,7 +539,7 @@ export def "telegrafs PutTelegrafsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Telegraf configuration
@@ -539,6 +555,7 @@ export def "telegrafs DeleteTelegrafsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -548,7 +565,7 @@ export def "telegrafs DeleteTelegrafsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all labels for a Telegraf config
@@ -564,6 +581,7 @@ export def "telegrafs-labels GetTelegrafsIDLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<labels: table<id: string, orgID: string, name: string, properties: record>, links: record<next: string, self: string, prev: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -573,7 +591,7 @@ export def "telegrafs-labels GetTelegrafsIDLabels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a label to a Telegraf config
@@ -589,6 +607,7 @@ export def "telegrafs-labels PostTelegrafsIDLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   labelID: string # A label ID. Specifies the label to attach.
 ]: any -> record<label: record<id: string, orgID: string, name: string, properties: record>, links: record<next: string, self: string, prev: string>> {
@@ -602,7 +621,7 @@ export def "telegrafs-labels PostTelegrafsIDLabels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a label from a Telegraf config
@@ -619,6 +638,7 @@ export def "telegrafs-labels DeleteTelegrafsIDLabelsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -628,7 +648,7 @@ export def "telegrafs-labels DeleteTelegrafsIDLabelsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all users with member privileges for a Telegraf config
@@ -644,6 +664,7 @@ export def "telegrafs-members GetTelegrafsIDMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, name: string, status: string, links: record, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -653,7 +674,7 @@ export def "telegrafs-members GetTelegrafsIDMembers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a member to a Telegraf config
@@ -669,6 +690,7 @@ export def "telegrafs-members PostTelegrafsIDMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   id: string # The ID of the user to add to the resource.
   --name: string # The name of the user to add to the resource.
@@ -683,7 +705,7 @@ export def "telegrafs-members PostTelegrafsIDMembers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a member from a Telegraf config
@@ -700,6 +722,7 @@ export def "telegrafs-members DeleteTelegrafsIDMembersID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -709,7 +732,7 @@ export def "telegrafs-members DeleteTelegrafsIDMembersID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all owners of a Telegraf configuration
@@ -725,6 +748,7 @@ export def "telegrafs-owners GetTelegrafsIDOwners" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, name: string, status: string, links: record, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -734,7 +758,7 @@ export def "telegrafs-owners GetTelegrafsIDOwners" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an owner to a Telegraf configuration
@@ -750,6 +774,7 @@ export def "telegrafs-owners PostTelegrafsIDOwners" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   id: string # The ID of the user to add to the resource.
   --name: string # The name of the user to add to the resource.
@@ -764,7 +789,7 @@ export def "telegrafs-owners PostTelegrafsIDOwners" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove an owner from a Telegraf config
@@ -781,6 +806,7 @@ export def "telegrafs-owners DeleteTelegrafsIDOwnersID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -790,7 +816,7 @@ export def "telegrafs-owners DeleteTelegrafsIDOwnersID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all labels for a variable
@@ -806,6 +832,7 @@ export def "variables-labels GetVariablesIDLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<labels: table<id: string, orgID: string, name: string, properties: record>, links: record<next: string, self: string, prev: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -815,7 +842,7 @@ export def "variables-labels GetVariablesIDLabels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a label to a variable
@@ -831,6 +858,7 @@ export def "variables-labels PostVariablesIDLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   labelID: string # A label ID. Specifies the label to attach.
 ]: any -> record<label: record<id: string, orgID: string, name: string, properties: record>, links: record<next: string, self: string, prev: string>> {
@@ -844,7 +872,7 @@ export def "variables-labels PostVariablesIDLabels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a label from a variable
@@ -861,6 +889,7 @@ export def "variables-labels DeleteVariablesIDLabelsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -870,7 +899,7 @@ export def "variables-labels DeleteVariablesIDLabelsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Write data
@@ -885,6 +914,7 @@ export def "write PostWrite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --org: string # An organization name or ID.  #### InfluxDB Cloud  - Doesn't use the `org` parameter or `orgID` parameter. - Writes data to the bucket in the organization   associated with the authorization (API token).  #### InfluxDB OSS  - Requires either the `org` parameter or the `orgID` parameter. - If you pass both `orgID` and `org`, they must both be valid. - Writes data to the bucket in the specified organization.
   --orgID: string # An organization ID.  #### InfluxDB Cloud  - Doesn't use the `org` parameter or `orgID` parameter. - Writes data to the bucket in the organization   associated with the authorization (API token).  #### InfluxDB OSS  - Requires either the `org` parameter or the `orgID` parameter. - If you pass both `orgID` and `org`, they must both be valid. - Writes data to the bucket in the specified organization.
   --bucket: string # A bucket name or ID. InfluxDB writes all points in the batch to the specified bucket.
@@ -906,7 +936,7 @@ export def "write PostWrite" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "text/plain" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
 }
 
 # Delete data
@@ -921,6 +951,7 @@ export def "delete PostDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --org: string # An organization name or ID.  #### InfluxDB Cloud  - Doesn't use the `org` parameter or `orgID` parameter. - Deletes data from the bucket in the organization   associated with the authorization (API token).  #### InfluxDB OSS  - Requires either the `org` parameter or the `orgID` parameter. - Deletes data from the bucket in the specified organization. - If you pass both `orgID` and `org`, they must both be valid.
   --bucket: string # A bucket name or ID. Specifies the bucket to delete data from. If you pass both `bucket` and `bucketID`, `bucketID` takes precedence.
   --orgID: string # An organization ID.  #### InfluxDB Cloud  - Doesn't use the `org` parameter or `orgID` parameter. - Deletes data from the bucket in the organization   associated with the authorization (API token).  #### InfluxDB OSS  - Requires either the `org` parameter or the `orgID` parameter. - Deletes data from the bucket in the specified organization. - If you pass both `orgID` and `org`, they must both be valid.
@@ -941,7 +972,7 @@ export def "delete PostDelete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a label
@@ -956,6 +987,7 @@ export def "labels PostLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   orgID: string
   name: string
   --properties: record # Key-value pairs associated with this label.  To remove a property, send an update with an empty value (`""`) for the key.  (e.g. {color: ffb3b3, description: this is a description})
@@ -968,7 +1000,7 @@ export def "labels PostLabels" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all labels
@@ -983,6 +1015,7 @@ export def "labels GetLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orgID: string # The organization ID.
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<labels: table<id: string, orgID: string, name: string, properties: record>, links: record<next: string, self: string, prev: string>> {
@@ -994,7 +1027,7 @@ export def "labels GetLabels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a label
@@ -1010,6 +1043,7 @@ export def "labels GetLabelsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<label: record<id: string, orgID: string, name: string, properties: record>, links: record<next: string, self: string, prev: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1019,7 +1053,7 @@ export def "labels GetLabelsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a label
@@ -1035,6 +1069,7 @@ export def "labels PatchLabelsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --name: string
   --properties: record # e.g. {color: ffb3b3, description: this is a description}
@@ -1049,7 +1084,7 @@ export def "labels PatchLabelsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a label
@@ -1065,6 +1100,7 @@ export def "labels DeleteLabelsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1074,7 +1110,7 @@ export def "labels DeleteLabelsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a dashboard
@@ -1090,6 +1126,7 @@ export def "dashboards GetDashboardsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer # If `properties`, includes the cell view properties in the response.
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> any {
@@ -1101,7 +1138,7 @@ export def "dashboards GetDashboardsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a dashboard
@@ -1118,6 +1155,7 @@ export def "dashboards PatchDashboardsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --name: string # optional, when provided will replace the name
   --description: string # optional, when provided will replace the description
@@ -1133,7 +1171,7 @@ export def "dashboards PatchDashboardsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a dashboard
@@ -1149,6 +1187,7 @@ export def "dashboards DeleteDashboardsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1158,7 +1197,7 @@ export def "dashboards DeleteDashboardsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace cells in a dashboard
@@ -1174,6 +1213,7 @@ export def "dashboards-cells PutDashboardsIDCells" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --body: record
 ]: any -> record {
@@ -1186,7 +1226,7 @@ export def "dashboards-cells PutDashboardsIDCells" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a dashboard cell
@@ -1202,6 +1242,7 @@ export def "dashboards-cells PostDashboardsIDCells" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --name: string
   --x: int # format: int32
@@ -1220,7 +1261,7 @@ export def "dashboards-cells PostDashboardsIDCells" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update the non-positional information related to a cell
@@ -1237,6 +1278,7 @@ export def "dashboards-cells PatchDashboardsIDCellsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --x: int # format: int32
   --y: int # format: int32
@@ -1253,7 +1295,7 @@ export def "dashboards-cells PatchDashboardsIDCellsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a dashboard cell
@@ -1270,6 +1312,7 @@ export def "dashboards-cells DeleteDashboardsIDCellsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1279,7 +1322,7 @@ export def "dashboards-cells DeleteDashboardsIDCellsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the view for a cell
@@ -1296,6 +1339,7 @@ export def "dashboards-cells-view GetDashboardsIDCellsIDView" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<links: record<self: string>, id: string, name: string, properties: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1305,7 +1349,7 @@ export def "dashboards-cells-view GetDashboardsIDCellsIDView" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the view for a cell
@@ -1323,6 +1367,7 @@ export def "dashboards-cells-view PatchDashboardsIDCellsIDView" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   name: string
   properties: any
@@ -1337,7 +1382,7 @@ export def "dashboards-cells-view PatchDashboardsIDCellsIDView" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all labels for a dashboard
@@ -1353,6 +1398,7 @@ export def "dashboards-labels GetDashboardsIDLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<labels: table<id: string, orgID: string, name: string, properties: record>, links: record<next: string, self: string, prev: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1362,7 +1408,7 @@ export def "dashboards-labels GetDashboardsIDLabels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a label to a dashboard
@@ -1378,6 +1424,7 @@ export def "dashboards-labels PostDashboardsIDLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   labelID: string # A label ID. Specifies the label to attach.
 ]: any -> record<label: record<id: string, orgID: string, name: string, properties: record>, links: record<next: string, self: string, prev: string>> {
@@ -1391,7 +1438,7 @@ export def "dashboards-labels PostDashboardsIDLabels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a label from a dashboard
@@ -1408,6 +1455,7 @@ export def "dashboards-labels DeleteDashboardsIDLabelsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1417,7 +1465,7 @@ export def "dashboards-labels DeleteDashboardsIDLabelsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all dashboard members
@@ -1433,6 +1481,7 @@ export def "dashboards-members GetDashboardsIDMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, name: string, status: string, links: record, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1442,7 +1491,7 @@ export def "dashboards-members GetDashboardsIDMembers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a member to a dashboard
@@ -1458,6 +1507,7 @@ export def "dashboards-members PostDashboardsIDMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   id: string # The ID of the user to add to the resource.
   --name: string # The name of the user to add to the resource.
@@ -1472,7 +1522,7 @@ export def "dashboards-members PostDashboardsIDMembers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a member from a dashboard
@@ -1489,6 +1539,7 @@ export def "dashboards-members DeleteDashboardsIDMembersID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1498,7 +1549,7 @@ export def "dashboards-members DeleteDashboardsIDMembersID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all dashboard owners
@@ -1514,6 +1565,7 @@ export def "dashboards-owners GetDashboardsIDOwners" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, name: string, status: string, links: record, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1523,7 +1575,7 @@ export def "dashboards-owners GetDashboardsIDOwners" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an owner to a dashboard
@@ -1539,6 +1591,7 @@ export def "dashboards-owners PostDashboardsIDOwners" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   id: string # The ID of the user to add to the resource.
   --name: string # The name of the user to add to the resource.
@@ -1553,7 +1606,7 @@ export def "dashboards-owners PostDashboardsIDOwners" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove an owner from a dashboard
@@ -1570,6 +1623,7 @@ export def "dashboards-owners DeleteDashboardsIDOwnersID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1579,7 +1633,7 @@ export def "dashboards-owners DeleteDashboardsIDOwnersID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate a query Abstract Syntax Tree (AST)
@@ -1594,6 +1648,7 @@ export def "query-ast PostQueryAst" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --Content-Type: string@Content-Type-completer-1
   --body-query: string # The Flux query script to be analyzed.
@@ -1608,7 +1663,7 @@ export def "query-ast PostQueryAst" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Flux query suggestions
@@ -1623,6 +1678,7 @@ export def "query-suggestions GetQuerySuggestions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<funcs: table<name: string, params: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1632,7 +1688,7 @@ export def "query-suggestions GetQuerySuggestions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a query suggestion for a branching suggestion
@@ -1648,6 +1704,7 @@ export def "query-suggestions GetQuerySuggestionsName" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<name: string, params: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1657,7 +1714,7 @@ export def "query-suggestions GetQuerySuggestionsName" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Analyze a Flux query
@@ -1674,6 +1731,7 @@ export def "query-analyze PostQueryAnalyze" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --Content-Type: string@Content-Type-completer-1
   --extern: record # Represents a source from a single file — shape: {type?: string, name?: string, package?: record, imports?: list, body?: list}
@@ -1693,7 +1751,7 @@ export def "query-analyze PostQueryAnalyze" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Query data
@@ -1710,6 +1768,7 @@ export def "query PostQuery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --org: string # An organization name or ID.  #### InfluxDB Cloud  - Doesn't use the `org` parameter or `orgID` parameter. - Queries the bucket in the organization associated with the authorization (API token).  #### InfluxDB OSS  - Requires either the `org` parameter or `orgID` parameter. - Queries the bucket in the specified organization.
   --orgID: string # An organization ID.  #### InfluxDB Cloud  - Doesn't use the `org` parameter or `orgID` parameter. - Queries the bucket in the organization associated with the authorization (API token).  #### InfluxDB OSS  - Requires either the `org` parameter or `orgID` parameter. - Queries the bucket in the specified organization.
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
@@ -1733,7 +1792,7 @@ export def "query PostQuery" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List buckets
@@ -1748,6 +1807,7 @@ export def "buckets GetBuckets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The offset for pagination. The number of records to skip.  For more information about pagination parameters, see [Pagination](https://docs.influxdata.com/influxdb/cloud/api/#tag/Pagination).
   --limit: int # Limits the number of records returned. Default is `20`.  (default: 20)
   --after: string # A resource ID to seek from. Returns records created after the specified record; results don't include the specified record.  Use `after` instead of the `offset` parameter. For more information about pagination parameters, see [Pagination](https://docs.influxdata.com/influxdb/cloud/api/#tag/Pagination).
@@ -1765,7 +1825,7 @@ export def "buckets GetBuckets" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a bucket
@@ -1781,6 +1841,7 @@ export def "buckets PostBuckets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   orgID: string # The organization ID. Specifies the organization that owns the bucket.
   name: string # The bucket name.
@@ -1799,7 +1860,7 @@ export def "buckets PostBuckets" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a bucket
@@ -1815,6 +1876,7 @@ export def "buckets GetBucketsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<links: record<labels: string, members: string, org: string, owners: string, self: string, write: string>, id: string, type: string, name: string, description: string, orgID: string, rp: string, schemaType: string, createdAt: string, updatedAt: string, retentionRules: table<type: string, everySeconds: int, shardGroupDurationSeconds: int>, labels: table<id: string, orgID: string, name: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1824,7 +1886,7 @@ export def "buckets GetBucketsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a bucket
@@ -1841,6 +1903,7 @@ export def "buckets PatchBucketsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --name: string # The name of the bucket.
   --description: string # A description of the bucket.
@@ -1856,7 +1919,7 @@ export def "buckets PatchBucketsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a bucket
@@ -1872,6 +1935,7 @@ export def "buckets DeleteBucketsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1881,7 +1945,7 @@ export def "buckets DeleteBucketsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all labels for a bucket
@@ -1897,6 +1961,7 @@ export def "buckets-labels GetBucketsIDLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<labels: table<id: string, orgID: string, name: string, properties: record>, links: record<next: string, self: string, prev: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1906,7 +1971,7 @@ export def "buckets-labels GetBucketsIDLabels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a label to a bucket
@@ -1922,6 +1987,7 @@ export def "buckets-labels PostBucketsIDLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   labelID: string # A label ID. Specifies the label to attach.
 ]: any -> record<label: record<id: string, orgID: string, name: string, properties: record>, links: record<next: string, self: string, prev: string>> {
@@ -1935,7 +2001,7 @@ export def "buckets-labels PostBucketsIDLabels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a label from a bucket
@@ -1952,6 +2018,7 @@ export def "buckets-labels DeleteBucketsIDLabelsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1961,7 +2028,7 @@ export def "buckets-labels DeleteBucketsIDLabelsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all users with member privileges for a bucket
@@ -1977,6 +2044,7 @@ export def "buckets-members GetBucketsIDMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, name: string, status: string, links: record, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1986,7 +2054,7 @@ export def "buckets-members GetBucketsIDMembers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a member to a bucket
@@ -2002,6 +2070,7 @@ export def "buckets-members PostBucketsIDMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   id: string # The ID of the user to add to the resource.
   --name: string # The name of the user to add to the resource.
@@ -2016,7 +2085,7 @@ export def "buckets-members PostBucketsIDMembers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a member from a bucket
@@ -2033,6 +2102,7 @@ export def "buckets-members DeleteBucketsIDMembersID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2042,7 +2112,7 @@ export def "buckets-members DeleteBucketsIDMembersID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all owners of a bucket
@@ -2058,6 +2128,7 @@ export def "buckets-owners GetBucketsIDOwners" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, name: string, status: string, links: record, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2067,7 +2138,7 @@ export def "buckets-owners GetBucketsIDOwners" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an owner to a bucket
@@ -2083,6 +2154,7 @@ export def "buckets-owners PostBucketsIDOwners" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   id: string # The ID of the user to add to the resource.
   --name: string # The name of the user to add to the resource.
@@ -2097,7 +2169,7 @@ export def "buckets-owners PostBucketsIDOwners" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove an owner from a bucket
@@ -2114,6 +2186,7 @@ export def "buckets-owners DeleteBucketsIDOwnersID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2123,7 +2196,7 @@ export def "buckets-owners DeleteBucketsIDOwnersID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List organizations
@@ -2138,6 +2211,7 @@ export def "orgs GetOrgs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The offset for pagination. The number of records to skip.  For more information about pagination parameters, see [Pagination](https://docs.influxdata.com/influxdb/cloud/api/#tag/Pagination).
   --limit: int # Limits the number of records returned. Default is `20`.  (default: 20)
   --descending: oneof<nothing, bool> # default: false
@@ -2154,7 +2228,7 @@ export def "orgs GetOrgs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an organization
@@ -2169,6 +2243,7 @@ export def "orgs PostOrgs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   name: string # The name of the organization.
   --description: string # The description of the organization.
@@ -2183,7 +2258,7 @@ export def "orgs PostOrgs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve an organization
@@ -2199,6 +2274,7 @@ export def "orgs GetOrgsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<links: record<self: string, members: string, owners: string, labels: string, secrets: string, buckets: string, tasks: string, dashboards: string>, id: string, name: string, defaultStorageType: string, description: string, createdAt: string, updatedAt: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2208,7 +2284,7 @@ export def "orgs GetOrgsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an organization
@@ -2224,6 +2300,7 @@ export def "orgs PatchOrgsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --name: string # The name of the organization.
   --description: string # The description of the organization.
@@ -2238,7 +2315,7 @@ export def "orgs PatchOrgsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an organization
@@ -2254,6 +2331,7 @@ export def "orgs DeleteOrgsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2263,7 +2341,7 @@ export def "orgs DeleteOrgsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all secret keys for an organization
@@ -2279,6 +2357,7 @@ export def "orgs-secrets GetOrgsIDSecrets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<secrets: list<string>, links: record<self: string, org: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2288,7 +2367,7 @@ export def "orgs-secrets GetOrgsIDSecrets" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update secrets in an organization
@@ -2304,6 +2383,7 @@ export def "orgs-secrets PatchOrgsIDSecrets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --body: record
 ]: any -> record<code: string, message: string, op: string, err: string> {
@@ -2316,7 +2396,7 @@ export def "orgs-secrets PatchOrgsIDSecrets" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all members of an organization
@@ -2332,6 +2412,7 @@ export def "orgs-members GetOrgsIDMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, name: string, status: string, links: record, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2341,7 +2422,7 @@ export def "orgs-members GetOrgsIDMembers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a member to an organization
@@ -2357,6 +2438,7 @@ export def "orgs-members PostOrgsIDMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   id: string # The ID of the user to add to the resource.
   --name: string # The name of the user to add to the resource.
@@ -2371,7 +2453,7 @@ export def "orgs-members PostOrgsIDMembers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a member from an organization
@@ -2388,6 +2470,7 @@ export def "orgs-members DeleteOrgsIDMembersID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2397,7 +2480,7 @@ export def "orgs-members DeleteOrgsIDMembersID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all owners of an organization
@@ -2413,6 +2496,7 @@ export def "orgs-owners GetOrgsIDOwners" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, name: string, status: string, links: record, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2422,7 +2506,7 @@ export def "orgs-owners GetOrgsIDOwners" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an owner to an organization
@@ -2438,6 +2522,7 @@ export def "orgs-owners PostOrgsIDOwners" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   id: string # The ID of the user to add to the resource.
   --name: string # The name of the user to add to the resource.
@@ -2452,7 +2537,7 @@ export def "orgs-owners PostOrgsIDOwners" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove an owner from an organization
@@ -2469,6 +2554,7 @@ export def "orgs-owners DeleteOrgsIDOwnersID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2478,7 +2564,7 @@ export def "orgs-owners DeleteOrgsIDOwnersID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete secrets from an organization
@@ -2496,6 +2582,7 @@ export def "orgs-secrets-delete PostOrgsIDSecrets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --secrets: list
 ]: any -> record<code: string, message: string, op: string, err: string> {
@@ -2509,7 +2596,7 @@ export def "orgs-secrets-delete PostOrgsIDSecrets" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a secret from an organization
@@ -2526,6 +2613,7 @@ export def "orgs-secrets DeleteOrgsIDSecretsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2535,7 +2623,7 @@ export def "orgs-secrets DeleteOrgsIDSecretsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all known resources
@@ -2550,6 +2638,7 @@ export def "resources GetResources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2559,7 +2648,7 @@ export def "resources GetResources" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List installed stacks
@@ -2574,6 +2663,7 @@ export def "stacks ListStacks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orgID: string # An organization ID. Only returns stacks owned by the specified [organization](https://docs.influxdata.com/influxdb/cloud/reference/glossary/#organization).  #### InfluxDB Cloud  - Doesn't require this parameter;   InfluxDB only returns resources allowed by the API token.
   --name: string # A stack name. Finds stack `events` with this name and returns the stacks.  Repeatable. To filter for more than one stack name, repeat this parameter with each name--for example:  - `INFLUX_URL/api/v2/stacks?&orgID=INFLUX_ORG_ID&name=project-stack-0&name=project-stack-1`
   --stackID: string # A stack ID. Only returns the specified stack.  Repeatable. To filter for more than one stack ID, repeat this parameter with each ID--for example:  - `INFLUX_URL/api/v2/stacks?&orgID=INFLUX_ORG_ID&stackID=09bd87cd33be3000&stackID=09bef35081fe3000`
@@ -2584,7 +2674,7 @@ export def "stacks ListStacks" [
   let full_url = (build-url $base "/stacks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a stack
@@ -2599,6 +2689,7 @@ export def "stacks CreateStack" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orgID: string
   --name: string
   --description: string
@@ -2612,7 +2703,7 @@ export def "stacks CreateStack" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a stack
@@ -2628,13 +2719,14 @@ export def "stacks ReadStack" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, orgID: string, createdAt: string, events: table<eventType: string, name: string, description: string, sources: list, resources: list, urls: list, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/stacks/($stack_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a stack
@@ -2651,6 +2743,7 @@ export def "stacks UpdateStack" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # nullable
   --description: string # nullable
   --templateURLs: list # nullable
@@ -2664,7 +2757,7 @@ export def "stacks UpdateStack" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a stack and associated resources
@@ -2680,6 +2773,7 @@ export def "stacks DeleteStack" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orgID: string # The identifier of the organization.
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2688,7 +2782,7 @@ export def "stacks DeleteStack" [
   let full_url = (build-url $base $"/stacks/($stack_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Uninstall a stack
@@ -2704,13 +2798,14 @@ export def "stacks-uninstall UninstallStack" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, orgID: string, createdAt: string, events: table<eventType: string, name: string, description: string, sources: list, resources: list, urls: list, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/stacks/($stack_id)/uninstall")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Apply or dry-run a template
@@ -2728,6 +2823,7 @@ export def "templates-apply ApplyTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dryRun: oneof<nothing, bool> # Only applies a dry run of the templates passed in the request.  - Validates the template and generates a resource diff and summary. - Doesn't install templates or make changes to the InfluxDB instance.
   --orgID: string # Organization ID. InfluxDB applies templates to this organization. The organization owns all resources created by the template.  To find your organization, see how to [view organizations](https://docs.influxdata.com/influxdb/cloud/organizations/view-orgs/).
   --stackID: string # ID of the stack to update.  To apply templates to an existing stack in the organization, use the `stackID` parameter. If you apply templates without providing a stack ID, InfluxDB initializes a new stack with all new resources.  To find a stack ID, use the InfluxDB [`/api/v2/stacks` API endpoint](#operation/ListStacks) to list stacks.  #### Related guides  - [Stacks](https://docs.influxdata.com/influxdb/cloud/influxdb-templates/stacks/) - [View stacks](https://docs.influxdata.com/influxdb/cloud/influxdb-templates/stacks/view/)
@@ -2746,7 +2842,7 @@ export def "templates-apply ApplyTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Export a new template
@@ -2763,6 +2859,7 @@ export def "templates-export ExportTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --stackID: string
   --orgIDs: list # item shape: {orgID?: string, resourceFilters?: record}
@@ -2776,7 +2873,7 @@ export def "templates-export ExportTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List runs for a task
@@ -2792,6 +2889,7 @@ export def "tasks-runs GetTasksIDRuns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --after: string # A task run ID. Only returns runs created after this run.
   --limit: int # Limits the number of task runs returned. Default is `100`.  (default: 100)
   --afterTime: string # A timestamp ([RFC3339 date/time format](https://docs.influxdata.com/influxdb/cloud/reference/glossary/#rfc3339-timestamp)). Only returns runs scheduled after this time.  (format: date-time)
@@ -2806,7 +2904,7 @@ export def "tasks-runs GetTasksIDRuns" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start a task run, overriding the schedule
@@ -2822,6 +2920,7 @@ export def "tasks-runs PostTasksIDRuns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --scheduledFor: string # The time [RFC3339 date/time format](https://docs.influxdata.com/influxdb/cloud/reference/glossary/#rfc3339-timestamp) used for the run's `now` option. Default is the server _now_ time.  (nullable, format: date-time)
 ]: any -> record<id: string, taskID: string, status: string, scheduledFor: string, log: table<time: string, message: string, runID: string>, flux: string, startedAt: string, finishedAt: string, requestedAt: string, links: record<self: string, task: string, retry: string>> {
@@ -2835,7 +2934,7 @@ export def "tasks-runs PostTasksIDRuns" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a run for a task.
@@ -2852,6 +2951,7 @@ export def "tasks-runs GetTasksIDRunsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<id: string, taskID: string, status: string, scheduledFor: string, log: table<time: string, message: string, runID: string>, flux: string, startedAt: string, finishedAt: string, requestedAt: string, links: record<self: string, task: string, retry: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2861,7 +2961,7 @@ export def "tasks-runs GetTasksIDRunsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel a running task
@@ -2878,6 +2978,7 @@ export def "tasks-runs DeleteTasksIDRunsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2887,7 +2988,7 @@ export def "tasks-runs DeleteTasksIDRunsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retry a task run
@@ -2904,6 +3005,7 @@ export def "tasks-runs-retry PostTasksIDRunsIDRetry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --body: record
 ]: any -> record<id: string, taskID: string, status: string, scheduledFor: string, log: table<time: string, message: string, runID: string>, flux: string, startedAt: string, finishedAt: string, requestedAt: string, links: record<self: string, task: string, retry: string>> {
@@ -2916,7 +3018,7 @@ export def "tasks-runs-retry PostTasksIDRunsIDRetry" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json; charset=utf-8" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json; charset=utf-8" $body
 }
 
 # Retrieve all logs for a task
@@ -2932,6 +3034,7 @@ export def "tasks-logs GetTasksIDLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<events: table<time: string, message: string, runID: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2941,7 +3044,7 @@ export def "tasks-logs GetTasksIDLogs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve all logs for a run
@@ -2958,6 +3061,7 @@ export def "tasks-runs-logs GetTasksIDRunsIDLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<events: table<time: string, message: string, runID: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2967,7 +3071,7 @@ export def "tasks-runs-logs GetTasksIDRunsIDLogs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List labels for a task
@@ -2983,6 +3087,7 @@ export def "tasks-labels GetTasksIDLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<labels: table<id: string, orgID: string, name: string, properties: record>, links: record<next: string, self: string, prev: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2992,7 +3097,7 @@ export def "tasks-labels GetTasksIDLabels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a label to a task
@@ -3008,6 +3113,7 @@ export def "tasks-labels PostTasksIDLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   labelID: string # A label ID. Specifies the label to attach.
 ]: any -> record<label: record<id: string, orgID: string, name: string, properties: record>, links: record<next: string, self: string, prev: string>> {
@@ -3021,7 +3127,7 @@ export def "tasks-labels PostTasksIDLabels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a label from a task
@@ -3038,6 +3144,7 @@ export def "tasks-labels DeleteTasksIDLabelsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3047,7 +3154,7 @@ export def "tasks-labels DeleteTasksIDLabelsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve feature flags
@@ -3062,6 +3169,7 @@ export def "flags GetFlags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3071,7 +3179,7 @@ export def "flags GetFlags" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the currently authenticated user
@@ -3086,6 +3194,7 @@ export def "me GetMe" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<id: string, name: string, status: string, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3095,7 +3204,7 @@ export def "me GetMe" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a password
@@ -3110,6 +3219,7 @@ export def "me-password PutMePassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --influxdb-oss-session: string # The user session cookie for the [user](https://docs.influxdata.com/influxdb/cloud/reference/glossary/#user) signed in with [Basic authentication credentials](#section/Authentication/BasicAuthentication).  #### Related guides  - [Manage users]({{% INFLUXDB_DOCS_URL%}}/users/)  (e.g. influxdb-oss-session=19aaaZZZGOvP2GGryXVT2qYftlFKu3bIopurM6AGFow1yF1abhtOlbHfsc-d8gozZFC_6WxmlQIAwLMW5xs523w==)
   password: string
@@ -3126,7 +3236,7 @@ export def "me-password PutMePassword" [
   let auth = if ($cookie_str | is-not-empty) { $auth | update headers ($auth.headers | merge {Cookie: $cookie_str}) } else { $auth }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all task members
@@ -3144,6 +3254,7 @@ export def "tasks-members GetTasksIDMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, name: string, status: string, links: record, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3153,7 +3264,7 @@ export def "tasks-members GetTasksIDMembers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a member to a task
@@ -3171,6 +3282,7 @@ export def "tasks-members PostTasksIDMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   id: string # The ID of the user to add to the resource.
   --name: string # The name of the user to add to the resource.
@@ -3185,7 +3297,7 @@ export def "tasks-members PostTasksIDMembers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a member from a task
@@ -3204,6 +3316,7 @@ export def "tasks-members DeleteTasksIDMembersID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3213,7 +3326,7 @@ export def "tasks-members DeleteTasksIDMembersID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all owners of a task
@@ -3231,6 +3344,7 @@ export def "tasks-owners GetTasksIDOwners" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<links: record<self: string>, users: table<id: string, name: string, status: string, links: record, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3240,7 +3354,7 @@ export def "tasks-owners GetTasksIDOwners" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an owner for a task
@@ -3258,6 +3372,7 @@ export def "tasks-owners PostTasksIDOwners" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   id: string # The ID of the user to add to the resource.
   --name: string # The name of the user to add to the resource.
@@ -3272,7 +3387,7 @@ export def "tasks-owners PostTasksIDOwners" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove an owner from a task
@@ -3291,6 +3406,7 @@ export def "tasks-owners DeleteTasksIDOwnersID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3300,7 +3416,7 @@ export def "tasks-owners DeleteTasksIDOwnersID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a password
@@ -3316,6 +3432,7 @@ export def "users-password PostUsersIDPassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   password: string
 ]: any -> any {
@@ -3329,7 +3446,7 @@ export def "users-password PostUsersIDPassword" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a password
@@ -3345,6 +3462,7 @@ export def "users-password PutUsersIDPassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   password: string
 ]: any -> any {
@@ -3358,7 +3476,7 @@ export def "users-password PutUsersIDPassword" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all checks
@@ -3373,6 +3491,7 @@ export def "checks GetChecks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The offset for pagination. The number of records to skip.  For more information about pagination parameters, see [Pagination](https://docs.influxdata.com/influxdb/cloud/api/#tag/Pagination).
   --limit: int # Limits the number of records returned. Default is `20`.  (default: 20)
   --orgID: string # Only show checks that belong to a specific organization ID.
@@ -3386,7 +3505,7 @@ export def "checks GetChecks" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add new check
@@ -3401,6 +3520,7 @@ export def "checks CreateCheck" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record {
   let input = $in
@@ -3410,7 +3530,7 @@ export def "checks CreateCheck" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a check
@@ -3426,6 +3546,7 @@ export def "checks GetChecksID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3435,7 +3556,7 @@ export def "checks GetChecksID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a check
@@ -3451,6 +3572,7 @@ export def "checks PutChecksID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --body: record
 ]: any -> record {
@@ -3463,7 +3585,7 @@ export def "checks PutChecksID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a check
@@ -3479,6 +3601,7 @@ export def "checks PatchChecksID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --name: string
   --description: string
@@ -3494,7 +3617,7 @@ export def "checks PatchChecksID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a check
@@ -3510,6 +3633,7 @@ export def "checks DeleteChecksID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3519,7 +3643,7 @@ export def "checks DeleteChecksID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all labels for a check
@@ -3535,6 +3659,7 @@ export def "checks-labels GetChecksIDLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<labels: table<id: string, orgID: string, name: string, properties: record>, links: record<next: string, self: string, prev: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3544,7 +3669,7 @@ export def "checks-labels GetChecksIDLabels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a label to a check
@@ -3560,6 +3685,7 @@ export def "checks-labels PostChecksIDLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   labelID: string # A label ID. Specifies the label to attach.
 ]: any -> record<label: record<id: string, orgID: string, name: string, properties: record>, links: record<next: string, self: string, prev: string>> {
@@ -3573,7 +3699,7 @@ export def "checks-labels PostChecksIDLabels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete label from a check
@@ -3590,6 +3716,7 @@ export def "checks-labels DeleteChecksIDLabelsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3599,7 +3726,7 @@ export def "checks-labels DeleteChecksIDLabelsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all notification rules
@@ -3614,6 +3741,7 @@ export def "notification-rules GetNotificationRules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The offset for pagination. The number of records to skip.  For more information about pagination parameters, see [Pagination](https://docs.influxdata.com/influxdb/cloud/api/#tag/Pagination).
   --limit: int # Limits the number of records returned. Default is `20`.  (default: 20)
   --orgID: string # Only show notification rules that belong to a specific organization ID.
@@ -3629,7 +3757,7 @@ export def "notification-rules GetNotificationRules" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a notification rule
@@ -3644,6 +3772,7 @@ export def "notification-rules CreateNotificationRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record {
   let input = $in
@@ -3653,7 +3782,7 @@ export def "notification-rules CreateNotificationRule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a check query
@@ -3669,6 +3798,7 @@ export def "checks-query GetChecksIDQuery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<flux: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3678,7 +3808,7 @@ export def "checks-query GetChecksIDQuery" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a notification rule
@@ -3694,6 +3824,7 @@ export def "notification-rules GetNotificationRulesID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3703,7 +3834,7 @@ export def "notification-rules GetNotificationRulesID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a notification rule
@@ -3719,6 +3850,7 @@ export def "notification-rules PutNotificationRulesID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --body: record
 ]: any -> record {
@@ -3731,7 +3863,7 @@ export def "notification-rules PutNotificationRulesID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a notification rule
@@ -3747,6 +3879,7 @@ export def "notification-rules PatchNotificationRulesID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --name: string
   --description: string
@@ -3762,7 +3895,7 @@ export def "notification-rules PatchNotificationRulesID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a notification rule
@@ -3778,6 +3911,7 @@ export def "notification-rules DeleteNotificationRulesID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3787,7 +3921,7 @@ export def "notification-rules DeleteNotificationRulesID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all labels for a notification rule
@@ -3803,6 +3937,7 @@ export def "notification-rules-labels GetNotificationRulesIDLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<labels: table<id: string, orgID: string, name: string, properties: record>, links: record<next: string, self: string, prev: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3812,7 +3947,7 @@ export def "notification-rules-labels GetNotificationRulesIDLabels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a label to a notification rule
@@ -3828,6 +3963,7 @@ export def "notification-rules-labels PostNotificationRuleIDLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   labelID: string # A label ID. Specifies the label to attach.
 ]: any -> record<label: record<id: string, orgID: string, name: string, properties: record>, links: record<next: string, self: string, prev: string>> {
@@ -3841,7 +3977,7 @@ export def "notification-rules-labels PostNotificationRuleIDLabels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete label from a notification rule
@@ -3858,6 +3994,7 @@ export def "notification-rules-labels DeleteNotificationRulesIDLabelsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3867,7 +4004,7 @@ export def "notification-rules-labels DeleteNotificationRulesIDLabelsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a notification rule query
@@ -3883,6 +4020,7 @@ export def "notification-rules-query GetNotificationRulesIDQuery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<flux: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3892,7 +4030,7 @@ export def "notification-rules-query GetNotificationRulesIDQuery" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all notification endpoints
@@ -3907,6 +4045,7 @@ export def "notification-endpoints GetNotificationEndpoints" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The offset for pagination. The number of records to skip.  For more information about pagination parameters, see [Pagination](https://docs.influxdata.com/influxdb/cloud/api/#tag/Pagination).
   --limit: int # Limits the number of records returned. Default is `20`.  (default: 20)
   --orgID: string # Only show notification endpoints that belong to specific organization ID.
@@ -3920,7 +4059,7 @@ export def "notification-endpoints GetNotificationEndpoints" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a notification endpoint
@@ -3935,6 +4074,7 @@ export def "notification-endpoints CreateNotificationEndpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record {
   let input = $in
@@ -3944,7 +4084,7 @@ export def "notification-endpoints CreateNotificationEndpoint" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a notification endpoint
@@ -3960,6 +4100,7 @@ export def "notification-endpoints GetNotificationEndpointsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3969,7 +4110,7 @@ export def "notification-endpoints GetNotificationEndpointsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a notification endpoint
@@ -3985,6 +4126,7 @@ export def "notification-endpoints PutNotificationEndpointsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --body: record
 ]: any -> record {
@@ -3997,7 +4139,7 @@ export def "notification-endpoints PutNotificationEndpointsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a notification endpoint
@@ -4013,6 +4155,7 @@ export def "notification-endpoints PatchNotificationEndpointsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --name: string
   --description: string
@@ -4028,7 +4171,7 @@ export def "notification-endpoints PatchNotificationEndpointsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a notification endpoint
@@ -4044,6 +4187,7 @@ export def "notification-endpoints DeleteNotificationEndpointsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4053,7 +4197,7 @@ export def "notification-endpoints DeleteNotificationEndpointsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all labels for a notification endpoint
@@ -4069,6 +4213,7 @@ export def "notification-endpoints-labels GetNotificationEndpointsIDLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<labels: table<id: string, orgID: string, name: string, properties: record>, links: record<next: string, self: string, prev: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4078,7 +4223,7 @@ export def "notification-endpoints-labels GetNotificationEndpointsIDLabels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a label to a notification endpoint
@@ -4094,6 +4239,7 @@ export def "notification-endpoints-labels PostNotificationEndpointIDLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   labelID: string # A label ID. Specifies the label to attach.
 ]: any -> record<label: record<id: string, orgID: string, name: string, properties: record>, links: record<next: string, self: string, prev: string>> {
@@ -4107,7 +4253,7 @@ export def "notification-endpoints-labels PostNotificationEndpointIDLabels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a label from a notification endpoint
@@ -4124,6 +4270,7 @@ export def "notification-endpoints-labels DeleteNotificationEndpointsIDLabelsID"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<code: string, message: string, op: string, err: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4133,7 +4280,7 @@ export def "notification-endpoints-labels DeleteNotificationEndpointsIDLabelsID"
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List authorizations
@@ -4148,6 +4295,7 @@ export def "authorizations GetAuthorizations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userID: string # A user ID. Only returns authorizations scoped to the specified [user](https://docs.influxdata.com/influxdb/cloud/reference/glossary/#user).
   --user: string # A user name. Only returns authorizations scoped to the specified [user](https://docs.influxdata.com/influxdb/cloud/reference/glossary/#user).
   --orgID: string # An organization ID. Only returns authorizations that belong to the specified [organization](https://docs.influxdata.com/influxdb/cloud/reference/glossary/#organization).
@@ -4163,7 +4311,7 @@ export def "authorizations GetAuthorizations" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an authorization
@@ -4179,6 +4327,7 @@ export def "authorizations PostAuthorizations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --status: string@status-completer # Status of the token. If `inactive`, InfluxDB rejects requests that use the token. (default: active)
   --description: string # A description of the token.
@@ -4196,7 +4345,7 @@ export def "authorizations PostAuthorizations" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve an authorization
@@ -4213,6 +4362,7 @@ export def "authorizations GetAuthorizationsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<status: string, description: string, createdAt: string, updatedAt: string, orgID: string, permissions: table<action: string, resource: record>, id: string, token: string, userID: string, user: string, org: string, links: record<self: string, user: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4222,7 +4372,7 @@ export def "authorizations GetAuthorizationsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an API token to be active or inactive
@@ -4238,6 +4388,7 @@ export def "authorizations PatchAuthorizationsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --status: string@status-completer # Status of the token. If `inactive`, InfluxDB rejects requests that use the token. (default: active)
   --description: string # A description of the token.
@@ -4252,7 +4403,7 @@ export def "authorizations PatchAuthorizationsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an authorization
@@ -4268,6 +4419,7 @@ export def "authorizations DeleteAuthorizationsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4277,7 +4429,7 @@ export def "authorizations DeleteAuthorizationsID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List users
@@ -4292,6 +4444,7 @@ export def "users GetUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # A user name. Only lists the specified [user](https://docs.influxdata.com/influxdb/cloud/reference/glossary/#user).
   --id: string # A user id. Only lists the specified [user](https://docs.influxdata.com/influxdb/cloud/reference/glossary/#user).
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
@@ -4304,7 +4457,7 @@ export def "users GetUsers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a user
@@ -4319,6 +4472,7 @@ export def "users PostUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   name: string
   --status: string@status-completer # If inactive the user is inactive. (default: active)
@@ -4335,7 +4489,7 @@ export def "users PostUsers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a user
@@ -4351,6 +4505,7 @@ export def "users GetUsersID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<id: string, name: string, status: string, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4360,7 +4515,7 @@ export def "users GetUsersID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user
@@ -4376,6 +4531,7 @@ export def "users PatchUsersID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   name: string
   --status: string@status-completer # If inactive the user is inactive. (default: active)
@@ -4392,7 +4548,7 @@ export def "users PatchUsersID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a user
@@ -4408,6 +4564,7 @@ export def "users DeleteUsersID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4417,7 +4574,7 @@ export def "users DeleteUsersID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve setup status
@@ -4432,6 +4589,7 @@ export def "setup GetSetup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<allowed: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4441,7 +4599,7 @@ export def "setup GetSetup" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an initial user, organization, and bucket
@@ -4458,6 +4616,7 @@ export def "setup PostSetup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   username: string
   --password: string
@@ -4477,7 +4636,7 @@ export def "setup PostSetup" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new user, organization, and bucket
@@ -4494,6 +4653,7 @@ export def "setup-user PostSetupUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   username: string
   --password: string
   org: string
@@ -4510,7 +4670,7 @@ export def "setup-user PostSetupUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all variables
@@ -4525,6 +4685,7 @@ export def "variables GetVariables" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --org: string # The name of the organization.
   --orgID: string # The organization ID.
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
@@ -4537,7 +4698,7 @@ export def "variables GetVariables" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a variable
@@ -4555,6 +4716,7 @@ export def "variables PostVariables" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   orgID: string
   name: string
@@ -4576,7 +4738,7 @@ export def "variables PostVariables" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a variable
@@ -4592,6 +4754,7 @@ export def "variables GetVariablesID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<links: record<self: string, org: string, labels: string>, id: string, orgID: string, name: string, description: string, selected: list<string>, sort_order: int, labels: table<id: string, orgID: string, name: string, properties: record>, arguments: record, createdAt: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4601,7 +4764,7 @@ export def "variables GetVariablesID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a variable
@@ -4617,6 +4780,7 @@ export def "variables DeleteVariablesID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4626,7 +4790,7 @@ export def "variables DeleteVariablesID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a variable
@@ -4645,6 +4809,7 @@ export def "variables PatchVariablesID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   orgID: string
   name: string
@@ -4666,7 +4831,7 @@ export def "variables PatchVariablesID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Replace a variable
@@ -4685,6 +4850,7 @@ export def "variables PutVariablesID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   orgID: string
   name: string
@@ -4706,7 +4872,7 @@ export def "variables PutVariablesID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List measurement schemas of a bucket
@@ -4722,6 +4888,7 @@ export def "buckets-schema-measurements list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --org: string # An organization name. Specifies the organization that owns the schema.
   --orgID: string # An organization ID. Specifies the organization that owns the schema.
   --name: string # A measurement name. Only returns measurement schemas with the specified name.
@@ -4732,7 +4899,7 @@ export def "buckets-schema-measurements list" [
   let full_url = (build-url $base $"/buckets/($bucketID)/schema/measurements" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a measurement schema for a bucket
@@ -4749,6 +4916,7 @@ export def "buckets-schema-measurements createMeasurementSchema" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --org: string # An organization name. Specifies the organization that owns the schema.
   --orgID: string # An organization ID. Specifies the organization that owns the schema.
   name: string # The [measurement](https://docs.influxdata.com/influxdb/cloud/reference/glossary/#measurement) name.
@@ -4763,7 +4931,7 @@ export def "buckets-schema-measurements createMeasurementSchema" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a measurement schema
@@ -4780,6 +4948,7 @@ export def "buckets-schema-measurements get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --org: string # Organization name. Specifies the organization that owns the schema.
   --orgID: string # Organization ID. Specifies the organization that owns the schema.
 ]: nothing -> record<id: string, orgID: string, bucketID: string, name: string, columns: table<name: string, type: string, dataType: string>, createdAt: string, updatedAt: string> {
@@ -4789,7 +4958,7 @@ export def "buckets-schema-measurements get" [
   let full_url = (build-url $base $"/buckets/($bucketID)/schema/measurements/($measurementID)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a measurement schema
@@ -4807,6 +4976,7 @@ export def "buckets-schema-measurements updateMeasurementSchema" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --org: string # An organization name. Specifies the organization that owns the schema.
   --orgID: string # An organization ID. Specifies the organization that owns the schema.
   columns: list # An ordered collection of column definitions — item shape: {name: string, type: "timestamp"|"tag"|"field", dataType?: "integer"|"float"|"boolean"|"string"|"unsigned"}
@@ -4820,7 +4990,7 @@ export def "buckets-schema-measurements updateMeasurementSchema" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve limits for an organization
@@ -4836,13 +5006,14 @@ export def "orgs-limits GetOrgLimitsID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<links: record<next: string, self: string, prev: string>, limits: record<orgID: string, rate: record<queryTime: int, readKBs: int, concurrentReadRequests: int, writeKBs: int, concurrentWriteRequests: int, cardinality: int, concurrentDeleteRequests: int, deleteRequestsPerSecond: int>, bucket: record<maxBuckets: int, maxRetentionDuration: int>, task: record<maxTasks: int>, dashboard: record<maxDashboards: int>, check: record<maxChecks: int>, notificationRule: record<maxNotifications: int, blockedNotificationRules: string>, notificationEndpoint: record<blockedNotificationEndpoints: string>, stack: record<enabled: bool>, timeout: record<queryUnconditionalTimeoutSeconds: int, queryidleWriteTimeoutSeconds: int>, ioxQuery: record<partitions: int, parquetFiles: int>, features: record<allowDelete: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/orgs/($orgID)/limits")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve usage for an organization
@@ -4858,6 +5029,7 @@ export def "orgs-usage GetOrgUsageID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # Earliest time to include in results. For more information about timestamps, see [Manipulate timestamps with Flux](https://docs.influxdata.com/influxdb/cloud/query-data/flux/manipulate-timestamps/).  (format: unix timestamp)
   --stop: int # Latest time to include in results. For more information about timestamps, see [Manipulate timestamps with Flux](https://docs.influxdata.com/influxdb/cloud/query-data/flux/manipulate-timestamps/).  (format: unix timestamp)
   --qp-raw: oneof<nothing, bool> # return raw usage data (default: false)
@@ -4868,7 +5040,7 @@ export def "orgs-usage GetOrgUsageID" [
   let full_url = (build-url $base $"/orgs/($orgID)/usage" $qp)
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a dashboard
@@ -4883,6 +5055,7 @@ export def "dashboards PostDashboards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   orgID: string # The ID of the organization that owns the dashboard.
   name: string # The user-facing name of the dashboard.
@@ -4898,7 +5071,7 @@ export def "dashboards PostDashboards" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List dashboards
@@ -4913,6 +5086,7 @@ export def "dashboards GetDashboards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The offset for pagination. The number of records to skip.  For more information about pagination parameters, see [Pagination](https://docs.influxdata.com/influxdb/cloud/api/#tag/Pagination).
   --descending: oneof<nothing, bool> # default: false
   --limit: int # The maximum number of [dashboards](https://docs.influxdata.com/influxdb/cloud/reference/glossary/#dashboard) to return. Default is `20`. The minimum is `-1` and the maximum is `100`.  (default: 20)
@@ -4931,7 +5105,7 @@ export def "dashboards GetDashboards" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all tasks
@@ -4946,6 +5120,7 @@ export def "tasks GetTasks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # A [task](https://docs.influxdata.com/influxdb/cloud/reference/glossary/#task) name. Only returns tasks with the specified name. Different tasks may have the same name.
   --after: string # A [task](https://docs.influxdata.com/influxdb/cloud/reference/glossary/#task) ID. Only returns tasks created after the specified task.
   --user: string # A [user](https://docs.influxdata.com/influxdb/cloud/reference/glossary/#user) ID. Only returns tasks owned by the specified user.
@@ -4967,7 +5142,7 @@ export def "tasks GetTasks" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a task
@@ -4982,6 +5157,7 @@ export def "tasks PostTasks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --orgID: string # The ID of the organization that owns the task.
   --org: string # The name of the organization that owns the task.
@@ -5005,7 +5181,7 @@ export def "tasks PostTasks" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a task
@@ -5021,6 +5197,7 @@ export def "tasks GetTasksID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> record<id: string, orgID: string, org: string, name: string, ownerID: string, description: string, status: string, labels: table<id: string, orgID: string, name: string, properties: record>, authorizationID: string, flux: string, every: string, cron: string, offset: string, latestCompleted: string, lastRunStatus: string, lastRunError: string, createdAt: string, updatedAt: string, links: record<self: string, owners: string, members: string, runs: string, logs: string, labels: string>, scriptID: string, scriptParameters: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5030,7 +5207,7 @@ export def "tasks GetTasksID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a task
@@ -5046,6 +5223,7 @@ export def "tasks PatchTasksID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --status: string@status-completer # `inactive` cancels scheduled runs and prevents manual runs of the task.
   --flux: string # Update the Flux script that the task runs.
@@ -5067,7 +5245,7 @@ export def "tasks PatchTasksID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a task
@@ -5083,6 +5261,7 @@ export def "tasks DeleteTasksID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5092,5 +5271,5 @@ export def "tasks DeleteTasksID" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

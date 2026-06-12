@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -118,7 +119,7 @@ def SubtitleMode-completer [] { ["Always" "Default" "None" "OnlyForced" "Smart"]
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "system-activity-log-entries GetLogEntries" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -151,6 +152,7 @@ export def "system-activity-log-entries GetLogEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
@@ -163,7 +165,7 @@ export def "system-activity-log-entries GetLogEntries" [
   let full_url = (build-url $base "/System/ActivityLog/Entries" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all keys.
@@ -178,6 +180,7 @@ export def "auth-keys GetKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Items: table<Id: int, AccessToken: string, DeviceId: string, AppName: string, AppVersion: string, DeviceName: string, UserId: string, IsActive: bool, DateCreated: string, DateRevoked: string, DateLastActivity: string, UserName: string>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -185,7 +188,7 @@ export def "auth-keys GetKeys" [
   let full_url = (build-url $base "/Auth/Keys")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new api key.
@@ -200,6 +203,7 @@ export def "auth-keys CreateKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --app: string # Name of the app using the authentication key.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -208,7 +212,7 @@ export def "auth-keys CreateKey" [
   let full_url = (build-url $base "/Auth/Keys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove an api key.
@@ -224,13 +228,14 @@ export def "auth-keys RevokeKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Auth/Keys/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all artists from a given item, folder, or the entire library.
@@ -245,6 +250,7 @@ export def "artists GetArtists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --minCommunityRating: float # Optional filter by minimum community rating. (format: double)
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
@@ -285,7 +291,7 @@ export def "artists GetArtists" [
   let full_url = (build-url $base "/Artists" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an artist by name.
@@ -301,6 +307,7 @@ export def "artists GetArtistByName" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
 ]: nothing -> record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: table<Name: string, Url: string>, MediaSources: table<Protocol: record, Id: string, Path: string, EncoderPath: string, EncoderProtocol: record, Type: record, Container: string, Size: int, Name: string, IsRemote: bool, ETag: string, RunTimeTicks: int, ReadAtNativeFramerate: bool, IgnoreDts: bool, IgnoreIndex: bool, GenPtsInput: bool, SupportsTranscoding: bool, SupportsDirectStream: bool, SupportsDirectPlay: bool, IsInfiniteStream: bool, UseMostCompatibleTranscodingProfile: bool, RequiresOpening: bool, OpenToken: string, RequiresClosing: bool, LiveStreamId: string, BufferMs: int, RequiresLooping: bool, SupportsProbing: bool, VideoType: record, IsoType: record, Video3DFormat: record, MediaStreams: list, MediaAttachments: list, Formats: list, Bitrate: int, FallbackMaxStreamingBitrate: int, Timestamp: record, RequiredHttpHeaders: record, TranscodingUrl: string, TranscodingSubProtocol: record, TranscodingContainer: string, AnalyzeDurationMs: int, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, HasSegments: bool>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: table<Url: string, Name: string>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: table<Name: string, Id: string, Role: string, Type: record, PrimaryImageTag: string, ImageBlurHashes: record>, Studios: table<Name: string, Id: string>, GenreItems: table<Name: string, Id: string>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: table<Name: string, Id: string>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: table<Name: string, Id: string>, SeasonName: string, MediaStreams: table<Codec: string, CodecTag: string, Language: string, ColorRange: string, ColorSpace: string, ColorTransfer: string, ColorPrimaries: string, DvVersionMajor: int, DvVersionMinor: int, DvProfile: int, DvLevel: int, RpuPresentFlag: int, ElPresentFlag: int, BlPresentFlag: int, DvBlSignalCompatibilityId: int, Rotation: int, Comment: string, TimeBase: string, CodecTimeBase: string, Title: string, Hdr10PlusPresentFlag: bool, VideoRange: record, VideoRangeType: record, VideoDoViTitle: string, AudioSpatialFormat: record, LocalizedUndefined: string, LocalizedDefault: string, LocalizedForced: string, LocalizedExternal: string, LocalizedHearingImpaired: string, DisplayTitle: string, NalLengthSize: string, IsInterlaced: bool, IsAVC: bool, ChannelLayout: string, BitRate: int, BitDepth: int, RefFrames: int, PacketLength: int, Channels: int, SampleRate: int, IsDefault: bool, IsForced: bool, IsHearingImpaired: bool, Height: int, Width: int, AverageFrameRate: float, RealFrameRate: float, ReferenceFrameRate: float, Profile: string, Type: record, AspectRatio: string, Index: int, Score: int, IsExternal: bool, DeliveryMethod: record, DeliveryUrl: string, IsExternalUrl: bool, IsTextSubtitleStream: bool, SupportsExternalStream: bool, Path: string, PixelFormat: string, Level: float, IsAnamorphic: bool>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: table<StartPositionTicks: int, Name: string, ImagePath: string, ImageDateModified: string, ImageTag: string>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list<record>, MediaSources: list<record>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list<record>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list<record>, Studios: list<record>, GenreItems: list<record>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: list<record>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list<record>, SeasonName: string, MediaStreams: list<record>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list<record>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>>> {
@@ -310,7 +317,7 @@ export def "artists GetArtistByName" [
   let full_url = (build-url $base $"/Artists/($name)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all album artists from a given item, folder, or the entire library.
@@ -325,6 +332,7 @@ export def "artists-album-artists GetAlbumArtists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --minCommunityRating: float # Optional filter by minimum community rating. (format: double)
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
@@ -365,7 +373,7 @@ export def "artists-album-artists GetAlbumArtists" [
   let full_url = (build-url $base "/Artists/AlbumArtists" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an audio stream.
@@ -382,6 +390,7 @@ export def "audio-stream GetAudioStream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --container: string # The audio container.
   --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
@@ -438,7 +447,7 @@ export def "audio-stream GetAudioStream" [
   let full_url = (build-url $base $"/Audio/($itemId)/stream" $qp)
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an audio stream.
@@ -455,6 +464,7 @@ export def "audio-stream HeadAudioStream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --container: string # The audio container.
   --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
@@ -511,7 +521,7 @@ export def "audio-stream HeadAudioStream" [
   let full_url = (build-url $base $"/Audio/($itemId)/stream" $qp)
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an audio stream.
@@ -529,6 +539,7 @@ export def "audio-stream-container GetAudioStreamByContainer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
@@ -584,7 +595,7 @@ export def "audio-stream-container GetAudioStreamByContainer" [
   let full_url = (build-url $base $"/Audio/($itemId)/stream.($container)" $qp)
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an audio stream.
@@ -602,6 +613,7 @@ export def "audio-stream-container HeadAudioStreamByContainer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
@@ -657,7 +669,7 @@ export def "audio-stream-container HeadAudioStreamByContainer" [
   let full_url = (build-url $base $"/Audio/($itemId)/stream.($container)" $qp)
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of all currently present backups in the backup directory.
@@ -672,6 +684,7 @@ export def "backup ListBackups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<ServerVersion: string, BackupEngineVersion: string, DateCreated: string, Path: string, Options: record<Metadata: bool, Trickplay: bool, Subtitles: bool, Database: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -679,7 +692,7 @@ export def "backup ListBackups" [
   let full_url = (build-url $base "/Backup")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new Backup.
@@ -694,6 +707,7 @@ export def "backup-create CreateBackup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --Metadata: oneof<nothing, bool> # Gets or sets a value indicating whether the archive contains the Metadata contents.
   --Trickplay: oneof<nothing, bool> # Gets or sets a value indicating whether the archive contains the Trickplay contents.
@@ -708,7 +722,7 @@ export def "backup-create CreateBackup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets the descriptor from an existing archive is present.
@@ -723,6 +737,7 @@ export def "backup-manifest GetBackup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --path: string # The data to start a restore process.
 ]: nothing -> record<ServerVersion: string, BackupEngineVersion: string, DateCreated: string, Path: string, Options: record<Metadata: bool, Trickplay: bool, Subtitles: bool, Database: bool>> {
@@ -732,7 +747,7 @@ export def "backup-manifest GetBackup" [
   let full_url = (build-url $base "/Backup/Manifest" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Restores to a backup by restarting the server and applying the backup.
@@ -747,6 +762,7 @@ export def "backup-restore StartRestoreBackup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ArchiveFileName: string # Gets or Sets the name of the backup archive to restore from. Must be present in MediaBrowser.Common.Configuration.IApplicationPaths.BackupPath.
 ]: any -> any {
   let input = $in
@@ -757,7 +773,7 @@ export def "backup-restore StartRestoreBackup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets branding configuration.
@@ -772,6 +788,7 @@ export def "branding-configuration GetBrandingOptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<LoginDisclaimer: string, CustomCss: string, SplashscreenEnabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -779,7 +796,7 @@ export def "branding-configuration GetBrandingOptions" [
   let full_url = (build-url $base "/Branding/Configuration")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets branding css.
@@ -794,6 +811,7 @@ export def "branding-css GetBrandingCss" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -801,7 +819,7 @@ export def "branding-css GetBrandingCss" [
   let full_url = (build-url $base "/Branding/Css")
   let accept_val = ($accept | default "text/css")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets branding css.
@@ -816,6 +834,7 @@ export def "branding-csscss GetBrandingCss-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -823,7 +842,7 @@ export def "branding-csscss GetBrandingCss-by-" [
   let full_url = (build-url $base "/Branding/Css.css")
   let accept_val = ($accept | default "text/css")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets available channels.
@@ -838,6 +857,7 @@ export def "channels GetChannels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # User Id to filter by. Use System.Guid.Empty to not filter by user. (format: uuid)
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
@@ -852,7 +872,7 @@ export def "channels GetChannels" [
   let full_url = (build-url $base "/Channels" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get channel features.
@@ -868,6 +888,7 @@ export def "channels-features GetChannelFeatures" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Name: string, Id: string, CanSearch: bool, MediaTypes: list<string>, ContentTypes: list<string>, MaxPageSize: int, AutoRefreshLevels: int, DefaultSortFields: list<string>, SupportsSortOrderToggle: bool, SupportsLatestMedia: bool, CanFilter: bool, SupportsContentDownloading: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -875,7 +896,7 @@ export def "channels-features GetChannelFeatures" [
   let full_url = (build-url $base $"/Channels/($channelId)/Features")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get channel items.
@@ -891,6 +912,7 @@ export def "channels-items GetChannelItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --folderId: string # Optional. Folder Id. (format: uuid)
   --userId: string # Optional. User Id. (format: uuid)
@@ -907,7 +929,7 @@ export def "channels-items GetChannelItems" [
   let full_url = (build-url $base $"/Channels/($channelId)/Items" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all channel features.
@@ -922,6 +944,7 @@ export def "channels-features GetAllChannelFeatures" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Name: string, Id: string, CanSearch: bool, MediaTypes: list<string>, ContentTypes: list<string>, MaxPageSize: int, AutoRefreshLevels: int, DefaultSortFields: list<string>, SupportsSortOrderToggle: bool, SupportsLatestMedia: bool, CanFilter: bool, SupportsContentDownloading: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -929,7 +952,7 @@ export def "channels-features GetAllChannelFeatures" [
   let full_url = (build-url $base "/Channels/Features")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets latest channel items.
@@ -944,6 +967,7 @@ export def "channels-items-latest GetLatestChannelItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. User Id. (format: uuid)
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
@@ -958,7 +982,7 @@ export def "channels-items-latest GetLatestChannelItems" [
   let full_url = (build-url $base "/Channels/Items/Latest" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload a document.
@@ -973,6 +997,7 @@ export def "client-log-document LogFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body: record
 ]: any -> record<FileName: string> {
@@ -983,7 +1008,7 @@ export def "client-log-document LogFile" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "text/plain" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
 }
 
 # Creates a new collection.
@@ -998,6 +1023,7 @@ export def "collections CreateCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --name: string # The name of the collection.
   --ids: list # Item Ids to add to the collection.
@@ -1010,7 +1036,7 @@ export def "collections CreateCollection" [
   let full_url = (build-url $base "/Collections" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds items to a collection.
@@ -1026,6 +1052,7 @@ export def "collections-items AddToCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Item ids, comma delimited.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1034,7 +1061,7 @@ export def "collections-items AddToCollection" [
   let full_url = (build-url $base $"/Collections/($collectionId)/Items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Removes items from a collection.
@@ -1050,6 +1077,7 @@ export def "collections-items RemoveFromCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Item ids, comma delimited.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1058,7 +1086,7 @@ export def "collections-items RemoveFromCollection" [
   let full_url = (build-url $base $"/Collections/($collectionId)/Items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets application configuration.
@@ -1073,6 +1101,7 @@ export def "system-configuration GetConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<LogFileRetentionDays: int, IsStartupWizardCompleted: bool, CachePath: string, PreviousVersion: string, PreviousVersionStr: string, EnableMetrics: bool, EnableNormalizedItemByNameIds: bool, IsPortAuthorized: bool, QuickConnectAvailable: bool, EnableCaseSensitiveItemIds: bool, DisableLiveTvChannelUserDataName: bool, MetadataPath: string, PreferredMetadataLanguage: string, MetadataCountryCode: string, SortReplaceCharacters: list<string>, SortRemoveCharacters: list<string>, SortRemoveWords: list<string>, MinResumePct: int, MaxResumePct: int, MinResumeDurationSeconds: int, MinAudiobookResume: int, MaxAudiobookResume: int, InactiveSessionThreshold: int, LibraryMonitorDelay: int, LibraryUpdateDuration: int, CacheSize: int, ImageSavingConvention: record, MetadataOptions: table<ItemType: string, DisabledMetadataSavers: list, LocalMetadataReaderOrder: list, DisabledMetadataFetchers: list, MetadataFetcherOrder: list, DisabledImageFetchers: list, ImageFetcherOrder: list>, SkipDeserializationForBasicTypes: bool, ServerName: string, UICulture: string, SaveMetadataHidden: bool, ContentTypes: table<Name: string, Value: string>, RemoteClientBitrateLimit: int, EnableFolderView: bool, EnableGroupingMoviesIntoCollections: bool, EnableGroupingShowsIntoCollections: bool, DisplaySpecialsWithinSeasons: bool, CodecsUsed: list<string>, PluginRepositories: table<Name: string, Url: string, Enabled: bool>, EnableExternalContentInSuggestions: bool, ImageExtractionTimeoutMs: int, PathSubstitutions: table<From: string, To: string>, EnableSlowResponseWarning: bool, SlowResponseThresholdMs: int, CorsHosts: list<string>, ActivityLogRetentionDays: int, LibraryScanFanoutConcurrency: int, LibraryMetadataRefreshConcurrency: int, AllowClientLogUpload: bool, DummyChapterDuration: int, ChapterImageResolution: record, ParallelImageEncodingLimit: int, CastReceiverApplications: table<Id: string, Name: string>, TrickplayOptions: record<EnableHwAcceleration: bool, EnableHwEncoding: bool, EnableKeyFrameOnlyExtraction: bool, ScanBehavior: record, ProcessPriority: record, Interval: int, WidthResolutions: list<int>, TileWidth: int, TileHeight: int, Qscale: int, JpegQuality: int, ProcessThreads: int>, EnableLegacyAuthorization: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1080,7 +1109,7 @@ export def "system-configuration GetConfiguration" [
   let full_url = (build-url $base "/System/Configuration")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates application configuration.
@@ -1100,6 +1129,7 @@ export def "system-configuration UpdateConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --LogFileRetentionDays: int # Gets or sets the number of days we should retain log files. (format: int32)
   --IsStartupWizardCompleted: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is first run.
   --CachePath: string # Gets or sets the cache path. (nullable)
@@ -1165,7 +1195,7 @@ export def "system-configuration UpdateConfiguration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets a named configuration.
@@ -1181,13 +1211,14 @@ export def "system-configuration GetNamedConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/System/Configuration/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates named configuration.
@@ -1203,6 +1234,7 @@ export def "system-configuration UpdateNamedConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -1212,7 +1244,7 @@ export def "system-configuration UpdateNamedConfiguration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates branding configuration.
@@ -1227,6 +1259,7 @@ export def "system-configuration-branding UpdateBrandingConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --LoginDisclaimer: string # Gets or sets the login disclaimer. (nullable)
   --CustomCss: string # Gets or sets the custom CSS. (nullable)
   --SplashscreenEnabled: oneof<nothing, bool> # Gets or sets a value indicating whether to enable the splashscreen.
@@ -1239,7 +1272,7 @@ export def "system-configuration-branding UpdateBrandingConfiguration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets a default MetadataOptions object.
@@ -1254,6 +1287,7 @@ export def "system-configuration-metadata-options-default GetDefaultMetadataOpti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<ItemType: string, DisabledMetadataSavers: list<string>, LocalMetadataReaderOrder: list<string>, DisabledMetadataFetchers: list<string>, MetadataFetcherOrder: list<string>, DisabledImageFetchers: list<string>, ImageFetcherOrder: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1261,7 +1295,7 @@ export def "system-configuration-metadata-options-default GetDefaultMetadataOpti
   let full_url = (build-url $base "/System/Configuration/MetadataOptions/Default")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a dashboard configuration page.
@@ -1276,6 +1310,7 @@ export def "web-configuration-page GetDashboardConfigurationPage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --name: string # The name of the page.
 ]: nothing -> any {
@@ -1285,7 +1320,7 @@ export def "web-configuration-page GetDashboardConfigurationPage" [
   let full_url = (build-url $base "/web/ConfigurationPage" $qp)
   let accept_val = ($accept | default "text/html")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the configuration pages.
@@ -1300,6 +1335,7 @@ export def "web-configuration-pages GetConfigurationPages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --enableInMainMenu: oneof<nothing, bool> # Whether to enable in the main menu.
 ]: nothing -> table<Name: string, EnableInMainMenu: bool, MenuSection: string, MenuIcon: string, DisplayName: string, PluginId: string> {
@@ -1309,7 +1345,7 @@ export def "web-configuration-pages GetConfigurationPages" [
   let full_url = (build-url $base "/web/ConfigurationPages" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Devices.
@@ -1324,6 +1360,7 @@ export def "devices GetDevices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Gets or sets the user identifier. (format: uuid)
 ]: nothing -> record<Items: table<Name: string, CustomName: string, AccessToken: string, Id: string, LastUserName: string, AppName: string, AppVersion: string, LastUserId: string, DateLastActivity: string, Capabilities: record, IconUrl: string>, TotalRecordCount: int, StartIndex: int> {
@@ -1333,7 +1370,7 @@ export def "devices GetDevices" [
   let full_url = (build-url $base "/Devices" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a device.
@@ -1348,6 +1385,7 @@ export def "devices DeleteDevice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Device Id.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1356,7 +1394,7 @@ export def "devices DeleteDevice" [
   let full_url = (build-url $base "/Devices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get info for a device.
@@ -1371,6 +1409,7 @@ export def "devices-info GetDeviceInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --id: string # Device Id.
 ]: nothing -> record<Name: string, CustomName: string, AccessToken: string, Id: string, LastUserName: string, AppName: string, AppVersion: string, LastUserId: string, DateLastActivity: string, Capabilities: record<PlayableMediaTypes: list<string>, SupportedCommands: list<string>, SupportsMediaControl: bool, SupportsPersistentIdentifier: bool, DeviceProfile: record<Name: string, Id: string, MaxStreamingBitrate: int, MaxStaticBitrate: int, MusicStreamingTranscodingBitrate: int, MaxStaticMusicBitrate: int, DirectPlayProfiles: list, TranscodingProfiles: list, ContainerProfiles: list, CodecProfiles: list, SubtitleProfiles: list>, AppStoreUrl: string, IconUrl: string>, IconUrl: string> {
@@ -1380,7 +1419,7 @@ export def "devices-info GetDeviceInfo" [
   let full_url = (build-url $base "/Devices/Info" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get options for a device.
@@ -1395,6 +1434,7 @@ export def "devices-options GetDeviceOptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --id: string # Device Id.
 ]: nothing -> record<Id: int, DeviceId: string, CustomName: string> {
@@ -1404,7 +1444,7 @@ export def "devices-options GetDeviceOptions" [
   let full_url = (build-url $base "/Devices/Options" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update device options.
@@ -1419,6 +1459,7 @@ export def "devices-options UpdateDeviceOptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Device Id.
   --Id: int # Gets or sets the id. (format: int32)
   --DeviceId: string # Gets or sets the device id. (nullable)
@@ -1433,7 +1474,7 @@ export def "devices-options UpdateDeviceOptions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Display Preferences.
@@ -1449,6 +1490,7 @@ export def "display-preferences GetDisplayPreferences" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # User id. (format: uuid)
   --client: string # Client.
@@ -1459,7 +1501,7 @@ export def "display-preferences GetDisplayPreferences" [
   let full_url = (build-url $base $"/DisplayPreferences/($displayPreferencesId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Display Preferences.
@@ -1475,6 +1517,7 @@ export def "display-preferences UpdateDisplayPreferences" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # User Id. (format: uuid)
   --client: string # Client.
   --Id: string # Gets or sets the user id. (nullable)
@@ -1501,7 +1544,7 @@ export def "display-preferences UpdateDisplayPreferences" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets a video stream using HTTP live streaming.
@@ -1521,6 +1564,7 @@ export def "audio-hls1 GetHlsAudioSegment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --runtimeTicks: int # The position of the requested segment in ticks. (format: int64)
   --actualSegmentLengthTicks: int # The length of the requested segment in ticks. (format: int64)
   --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
@@ -1579,7 +1623,7 @@ export def "audio-hls1 GetHlsAudioSegment" [
   let full_url = (build-url $base $"/Audio/($itemId)/hls1/($playlistId)/($segmentId).($container)" $qp)
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an audio stream using HTTP live streaming.
@@ -1596,6 +1640,7 @@ export def "audio-mainm3u8 GetVariantHlsAudioPlaylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
@@ -1652,7 +1697,7 @@ export def "audio-mainm3u8 GetVariantHlsAudioPlaylist" [
   let full_url = (build-url $base $"/Audio/($itemId)/main.m3u8" $qp)
   let accept_val = "application/x-mpegURL"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an audio hls playlist stream.
@@ -1669,6 +1714,7 @@ export def "audio-masterm3u8 GetMasterHlsAudioPlaylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
@@ -1726,7 +1772,7 @@ export def "audio-masterm3u8 GetMasterHlsAudioPlaylist" [
   let full_url = (build-url $base $"/Audio/($itemId)/master.m3u8" $qp)
   let accept_val = "application/x-mpegURL"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an audio hls playlist stream.
@@ -1743,6 +1789,7 @@ export def "audio-masterm3u8 HeadMasterHlsAudioPlaylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
@@ -1800,7 +1847,7 @@ export def "audio-masterm3u8 HeadMasterHlsAudioPlaylist" [
   let full_url = (build-url $base $"/Audio/($itemId)/master.m3u8" $qp)
   let accept_val = "application/x-mpegURL"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a video stream using HTTP live streaming.
@@ -1820,6 +1867,7 @@ export def "videos-hls1 GetHlsVideoSegment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --runtimeTicks: int # The position of the requested segment in ticks. (format: int64)
   --actualSegmentLengthTicks: int # The length of the requested segment in ticks. (format: int64)
   --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
@@ -1880,7 +1928,7 @@ export def "videos-hls1 GetHlsVideoSegment" [
   let full_url = (build-url $base $"/Videos/($itemId)/hls1/($playlistId)/($segmentId).($container)" $qp)
   let accept_val = "video/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a hls live stream.
@@ -1897,6 +1945,7 @@ export def "videos-livem3u8 GetLiveHlsStream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --container: string # The audio container.
   --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
@@ -1957,7 +2006,7 @@ export def "videos-livem3u8 GetLiveHlsStream" [
   let full_url = (build-url $base $"/Videos/($itemId)/live.m3u8" $qp)
   let accept_val = "application/x-mpegURL"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a video stream using HTTP live streaming.
@@ -1974,6 +2023,7 @@ export def "videos-mainm3u8 GetVariantHlsVideoPlaylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
@@ -2032,7 +2082,7 @@ export def "videos-mainm3u8 GetVariantHlsVideoPlaylist" [
   let full_url = (build-url $base $"/Videos/($itemId)/main.m3u8" $qp)
   let accept_val = "application/x-mpegURL"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a video hls playlist stream.
@@ -2049,6 +2099,7 @@ export def "videos-masterm3u8 GetMasterHlsVideoPlaylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
@@ -2109,7 +2160,7 @@ export def "videos-masterm3u8 GetMasterHlsVideoPlaylist" [
   let full_url = (build-url $base $"/Videos/($itemId)/master.m3u8" $qp)
   let accept_val = "application/x-mpegURL"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a video hls playlist stream.
@@ -2126,6 +2177,7 @@ export def "videos-masterm3u8 HeadMasterHlsVideoPlaylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
@@ -2186,7 +2238,7 @@ export def "videos-masterm3u8 HeadMasterHlsVideoPlaylist" [
   let full_url = (build-url $base $"/Videos/($itemId)/master.m3u8" $qp)
   let accept_val = "application/x-mpegURL"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Default directory browser.
@@ -2201,6 +2253,7 @@ export def "environment-default-directory-browser GetDefaultDirectoryBrowser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Path: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2208,7 +2261,7 @@ export def "environment-default-directory-browser GetDefaultDirectoryBrowser" [
   let full_url = (build-url $base "/Environment/DefaultDirectoryBrowser")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the contents of a given directory in the file system.
@@ -2223,6 +2276,7 @@ export def "environment-directory-contents GetDirectoryContents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --path: string # The path.
   --includeFiles: oneof<nothing, bool> # An optional filter to include or exclude files from the results. true/false. (default: false)
@@ -2234,7 +2288,7 @@ export def "environment-directory-contents GetDirectoryContents" [
   let full_url = (build-url $base "/Environment/DirectoryContents" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets available drives from the server's file system.
@@ -2249,6 +2303,7 @@ export def "environment-drives GetDrives" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Name: string, Path: string, Type: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2256,7 +2311,7 @@ export def "environment-drives GetDrives" [
   let full_url = (build-url $base "/Environment/Drives")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets network paths.
@@ -2273,6 +2328,7 @@ export def "environment-network-shares GetNetworkShares" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Name: string, Path: string, Type: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2280,7 +2336,7 @@ export def "environment-network-shares GetNetworkShares" [
   let full_url = (build-url $base "/Environment/NetworkShares")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the parent path of a given path.
@@ -2295,6 +2351,7 @@ export def "environment-parent-path GetParentPath" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --path: string # The path.
 ]: nothing -> string {
@@ -2304,7 +2361,7 @@ export def "environment-parent-path GetParentPath" [
   let full_url = (build-url $base "/Environment/ParentPath" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Validates path.
@@ -2319,6 +2376,7 @@ export def "environment-validate-path ValidatePath" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ValidateWritable: oneof<nothing, bool> # Gets or sets a value indicating whether validate if path is writable.
   --Path: string # Gets or sets the path. (nullable)
   --IsFile: oneof<nothing, bool> # Gets or sets is path file. (nullable)
@@ -2331,7 +2389,7 @@ export def "environment-validate-path ValidatePath" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets legacy query filters.
@@ -2346,6 +2404,7 @@ export def "items-filters GetQueryFiltersLegacy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. User id. (format: uuid)
   --parentId: string # Optional. Parent id. (format: uuid)
@@ -2358,7 +2417,7 @@ export def "items-filters GetQueryFiltersLegacy" [
   let full_url = (build-url $base "/Items/Filters" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets query filters.
@@ -2373,6 +2432,7 @@ export def "items-filters2 GetQueryFilters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. User id. (format: uuid)
   --parentId: string # Optional. Specify this to localize the search to a specific item or folder. Omit to use the root. (format: uuid)
@@ -2391,7 +2451,7 @@ export def "items-filters2 GetQueryFilters" [
   let full_url = (build-url $base "/Items/Filters2" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all genres from a given item, folder, or the entire library.
@@ -2406,6 +2466,7 @@ export def "genres GetGenres" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
@@ -2432,7 +2493,7 @@ export def "genres GetGenres" [
   let full_url = (build-url $base "/Genres" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a genre, by name.
@@ -2448,6 +2509,7 @@ export def "genres GetGenre" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # The user id. (format: uuid)
 ]: nothing -> record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: table<Name: string, Url: string>, MediaSources: table<Protocol: record, Id: string, Path: string, EncoderPath: string, EncoderProtocol: record, Type: record, Container: string, Size: int, Name: string, IsRemote: bool, ETag: string, RunTimeTicks: int, ReadAtNativeFramerate: bool, IgnoreDts: bool, IgnoreIndex: bool, GenPtsInput: bool, SupportsTranscoding: bool, SupportsDirectStream: bool, SupportsDirectPlay: bool, IsInfiniteStream: bool, UseMostCompatibleTranscodingProfile: bool, RequiresOpening: bool, OpenToken: string, RequiresClosing: bool, LiveStreamId: string, BufferMs: int, RequiresLooping: bool, SupportsProbing: bool, VideoType: record, IsoType: record, Video3DFormat: record, MediaStreams: list, MediaAttachments: list, Formats: list, Bitrate: int, FallbackMaxStreamingBitrate: int, Timestamp: record, RequiredHttpHeaders: record, TranscodingUrl: string, TranscodingSubProtocol: record, TranscodingContainer: string, AnalyzeDurationMs: int, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, HasSegments: bool>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: table<Url: string, Name: string>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: table<Name: string, Id: string, Role: string, Type: record, PrimaryImageTag: string, ImageBlurHashes: record>, Studios: table<Name: string, Id: string>, GenreItems: table<Name: string, Id: string>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: table<Name: string, Id: string>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: table<Name: string, Id: string>, SeasonName: string, MediaStreams: table<Codec: string, CodecTag: string, Language: string, ColorRange: string, ColorSpace: string, ColorTransfer: string, ColorPrimaries: string, DvVersionMajor: int, DvVersionMinor: int, DvProfile: int, DvLevel: int, RpuPresentFlag: int, ElPresentFlag: int, BlPresentFlag: int, DvBlSignalCompatibilityId: int, Rotation: int, Comment: string, TimeBase: string, CodecTimeBase: string, Title: string, Hdr10PlusPresentFlag: bool, VideoRange: record, VideoRangeType: record, VideoDoViTitle: string, AudioSpatialFormat: record, LocalizedUndefined: string, LocalizedDefault: string, LocalizedForced: string, LocalizedExternal: string, LocalizedHearingImpaired: string, DisplayTitle: string, NalLengthSize: string, IsInterlaced: bool, IsAVC: bool, ChannelLayout: string, BitRate: int, BitDepth: int, RefFrames: int, PacketLength: int, Channels: int, SampleRate: int, IsDefault: bool, IsForced: bool, IsHearingImpaired: bool, Height: int, Width: int, AverageFrameRate: float, RealFrameRate: float, ReferenceFrameRate: float, Profile: string, Type: record, AspectRatio: string, Index: int, Score: int, IsExternal: bool, DeliveryMethod: record, DeliveryUrl: string, IsExternalUrl: bool, IsTextSubtitleStream: bool, SupportsExternalStream: bool, Path: string, PixelFormat: string, Level: float, IsAnamorphic: bool>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: table<StartPositionTicks: int, Name: string, ImagePath: string, ImageDateModified: string, ImageTag: string>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list<record>, MediaSources: list<record>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list<record>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list<record>, Studios: list<record>, GenreItems: list<record>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: list<record>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list<record>, SeasonName: string, MediaStreams: list<record>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list<record>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>>> {
@@ -2457,7 +2519,7 @@ export def "genres GetGenre" [
   let full_url = (build-url $base $"/Genres/($genreName)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the specified audio segment for an audio item.
@@ -2474,13 +2536,14 @@ export def "audio-hls-streamaac GetHlsAudioSegmentLegacyAac" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Audio/($itemId)/hls/($segmentId)/stream.aac")
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the specified audio segment for an audio item.
@@ -2497,13 +2560,14 @@ export def "audio-hls-streammp3 GetHlsAudioSegmentLegacyMp3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Audio/($itemId)/hls/($segmentId)/stream.mp3")
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a hls video segment.
@@ -2522,13 +2586,14 @@ export def "videos-hls GetHlsVideoSegmentLegacy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Videos/($itemId)/hls/($playlistId)/($segmentId).($segmentContainer)")
   let accept_val = "video/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a hls video playlist.
@@ -2545,13 +2610,14 @@ export def "videos-hls-streamm3u8 GetHlsPlaylistLegacy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Videos/($itemId)/hls/($playlistId)/stream.m3u8")
   let accept_val = "application/x-mpegURL"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stops an active encoding.
@@ -2566,6 +2632,7 @@ export def "videos-active-encodings StopEncodingProcess" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --deviceId: string # The device id of the client requesting. Used to stop encoding processes when needed.
   --playSessionId: string # The play session id.
 ]: nothing -> any {
@@ -2575,7 +2642,7 @@ export def "videos-active-encodings StopEncodingProcess" [
   let full_url = (build-url $base "/Videos/ActiveEncodings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get artist image by name.
@@ -2593,6 +2660,7 @@ export def "artists-images GetArtistImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Optional. Supply the cache tag from the item object to receive strong caching headers.
   --format: string@format-completer # Determines the output format of the image - original,gif,jpg,png.
   --maxWidth: int # The maximum image width to return. (format: int32)
@@ -2614,7 +2682,7 @@ export def "artists-images GetArtistImage" [
   let full_url = (build-url $base $"/Artists/($name)/Images/($imageType)/($imageIndex)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get artist image by name.
@@ -2632,6 +2700,7 @@ export def "artists-images HeadArtistImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Optional. Supply the cache tag from the item object to receive strong caching headers.
   --format: string@format-completer # Determines the output format of the image - original,gif,jpg,png.
   --maxWidth: int # The maximum image width to return. (format: int32)
@@ -2653,7 +2722,7 @@ export def "artists-images HeadArtistImage" [
   let full_url = (build-url $base $"/Artists/($name)/Images/($imageType)/($imageIndex)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generates or gets the splashscreen.
@@ -2668,6 +2737,7 @@ export def "branding-splashscreen GetSplashscreen" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Supply the cache tag from the item object to receive strong caching headers.
   --format: string@format-completer # Determines the output format of the image - original,gif,jpg,png.
 ]: nothing -> any {
@@ -2677,7 +2747,7 @@ export def "branding-splashscreen GetSplashscreen" [
   let full_url = (build-url $base "/Branding/Splashscreen" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Uploads a custom splashscreen. The body is expected to the image contents base64 encoded.
@@ -2692,6 +2762,7 @@ export def "branding-splashscreen UploadCustomSplashscreen" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -2701,7 +2772,7 @@ export def "branding-splashscreen UploadCustomSplashscreen" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "image/*" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "image/*" $body
 }
 
 # Delete a custom splashscreen.
@@ -2716,13 +2787,14 @@ export def "branding-splashscreen DeleteCustomSplashscreen" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Branding/Splashscreen")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get genre image by name.
@@ -2739,6 +2811,7 @@ export def "genres-images GetGenreImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Optional. Supply the cache tag from the item object to receive strong caching headers.
   --format: string@format-completer # Determines the output format of the image - original,gif,jpg,png.
   --maxWidth: int # The maximum image width to return. (format: int32)
@@ -2761,7 +2834,7 @@ export def "genres-images GetGenreImage" [
   let full_url = (build-url $base $"/Genres/($name)/Images/($imageType)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get genre image by name.
@@ -2778,6 +2851,7 @@ export def "genres-images HeadGenreImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Optional. Supply the cache tag from the item object to receive strong caching headers.
   --format: string@format-completer # Determines the output format of the image - original,gif,jpg,png.
   --maxWidth: int # The maximum image width to return. (format: int32)
@@ -2800,7 +2874,7 @@ export def "genres-images HeadGenreImage" [
   let full_url = (build-url $base $"/Genres/($name)/Images/($imageType)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get genre image by name.
@@ -2818,6 +2892,7 @@ export def "genres-images GetGenreImageByIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Optional. Supply the cache tag from the item object to receive strong caching headers.
   --format: string@format-completer # Determines the output format of the image - original,gif,jpg,png.
   --maxWidth: int # The maximum image width to return. (format: int32)
@@ -2839,7 +2914,7 @@ export def "genres-images GetGenreImageByIndex" [
   let full_url = (build-url $base $"/Genres/($name)/Images/($imageType)/($imageIndex)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get genre image by name.
@@ -2857,6 +2932,7 @@ export def "genres-images HeadGenreImageByIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Optional. Supply the cache tag from the item object to receive strong caching headers.
   --format: string@format-completer # Determines the output format of the image - original,gif,jpg,png.
   --maxWidth: int # The maximum image width to return. (format: int32)
@@ -2878,7 +2954,7 @@ export def "genres-images HeadGenreImageByIndex" [
   let full_url = (build-url $base $"/Genres/($name)/Images/($imageType)/($imageIndex)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get item image infos.
@@ -2894,6 +2970,7 @@ export def "items-images GetItemImageInfos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<ImageType: record, ImageIndex: int, ImageTag: string, Path: string, BlurHash: string, Height: int, Width: int, Size: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2901,7 +2978,7 @@ export def "items-images GetItemImageInfos" [
   let full_url = (build-url $base $"/Items/($itemId)/Images")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an item's image.
@@ -2918,6 +2995,7 @@ export def "items-images DeleteItemImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --imageIndex: int # The image index. (format: int32)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2926,7 +3004,7 @@ export def "items-images DeleteItemImage" [
   let full_url = (build-url $base $"/Items/($itemId)/Images/($imageType)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set item image.
@@ -2943,6 +3021,7 @@ export def "items-images SetItemImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -2952,7 +3031,7 @@ export def "items-images SetItemImage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "image/*" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "image/*" $body
 }
 
 # Gets the item's image.
@@ -2969,6 +3048,7 @@ export def "items-images GetItemImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxWidth: int # The maximum image width to return. (format: int32)
   --maxHeight: int # The maximum image height to return. (format: int32)
   --width: int # The fixed image width to return. (format: int32)
@@ -2991,7 +3071,7 @@ export def "items-images GetItemImage" [
   let full_url = (build-url $base $"/Items/($itemId)/Images/($imageType)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the item's image.
@@ -3008,6 +3088,7 @@ export def "items-images HeadItemImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxWidth: int # The maximum image width to return. (format: int32)
   --maxHeight: int # The maximum image height to return. (format: int32)
   --width: int # The fixed image width to return. (format: int32)
@@ -3030,7 +3111,7 @@ export def "items-images HeadItemImage" [
   let full_url = (build-url $base $"/Items/($itemId)/Images/($imageType)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an item's image.
@@ -3048,13 +3129,14 @@ export def "items-images DeleteItemImageByIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Items/($itemId)/Images/($imageType)/($imageIndex)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set item image.
@@ -3072,6 +3154,7 @@ export def "items-images SetItemImageByIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -3081,7 +3164,7 @@ export def "items-images SetItemImageByIndex" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "image/*" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "image/*" $body
 }
 
 # Gets the item's image.
@@ -3099,6 +3182,7 @@ export def "items-images GetItemImageByIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxWidth: int # The maximum image width to return. (format: int32)
   --maxHeight: int # The maximum image height to return. (format: int32)
   --width: int # The fixed image width to return. (format: int32)
@@ -3120,7 +3204,7 @@ export def "items-images GetItemImageByIndex" [
   let full_url = (build-url $base $"/Items/($itemId)/Images/($imageType)/($imageIndex)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the item's image.
@@ -3138,6 +3222,7 @@ export def "items-images HeadItemImageByIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxWidth: int # The maximum image width to return. (format: int32)
   --maxHeight: int # The maximum image height to return. (format: int32)
   --width: int # The fixed image width to return. (format: int32)
@@ -3159,7 +3244,7 @@ export def "items-images HeadItemImageByIndex" [
   let full_url = (build-url $base $"/Items/($itemId)/Images/($imageType)/($imageIndex)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the item's image.
@@ -3183,6 +3268,7 @@ export def "items-images GetItemImage2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --width: int # The fixed image width to return. (format: int32)
   --height: int # The fixed image height to return. (format: int32)
   --quality: int # Optional. Quality setting, from 0-100. Defaults to 90 and should suffice in most cases. (format: int32)
@@ -3198,7 +3284,7 @@ export def "items-images GetItemImage2" [
   let full_url = (build-url $base $"/Items/($itemId)/Images/($imageType)/($imageIndex)/($tag)/($format)/($maxWidth)/($maxHeight)/($percentPlayed)/($unplayedCount)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the item's image.
@@ -3222,6 +3308,7 @@ export def "items-images HeadItemImage2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --width: int # The fixed image width to return. (format: int32)
   --height: int # The fixed image height to return. (format: int32)
   --quality: int # Optional. Quality setting, from 0-100. Defaults to 90 and should suffice in most cases. (format: int32)
@@ -3237,7 +3324,7 @@ export def "items-images HeadItemImage2" [
   let full_url = (build-url $base $"/Items/($itemId)/Images/($imageType)/($imageIndex)/($tag)/($format)/($maxWidth)/($maxHeight)/($percentPlayed)/($unplayedCount)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the index for an item image.
@@ -3255,6 +3342,7 @@ export def "items-images-index UpdateItemImageIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --newIndex: int # New image index. (format: int32)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3263,7 +3351,7 @@ export def "items-images-index UpdateItemImageIndex" [
   let full_url = (build-url $base $"/Items/($itemId)/Images/($imageType)/($imageIndex)/Index" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get music genre image by name.
@@ -3280,6 +3368,7 @@ export def "music-genres-images GetMusicGenreImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Optional. Supply the cache tag from the item object to receive strong caching headers.
   --format: string@format-completer # Determines the output format of the image - original,gif,jpg,png.
   --maxWidth: int # The maximum image width to return. (format: int32)
@@ -3302,7 +3391,7 @@ export def "music-genres-images GetMusicGenreImage" [
   let full_url = (build-url $base $"/MusicGenres/($name)/Images/($imageType)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get music genre image by name.
@@ -3319,6 +3408,7 @@ export def "music-genres-images HeadMusicGenreImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Optional. Supply the cache tag from the item object to receive strong caching headers.
   --format: string@format-completer # Determines the output format of the image - original,gif,jpg,png.
   --maxWidth: int # The maximum image width to return. (format: int32)
@@ -3341,7 +3431,7 @@ export def "music-genres-images HeadMusicGenreImage" [
   let full_url = (build-url $base $"/MusicGenres/($name)/Images/($imageType)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get music genre image by name.
@@ -3359,6 +3449,7 @@ export def "music-genres-images GetMusicGenreImageByIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Optional. Supply the cache tag from the item object to receive strong caching headers.
   --format: string@format-completer # Determines the output format of the image - original,gif,jpg,png.
   --maxWidth: int # The maximum image width to return. (format: int32)
@@ -3380,7 +3471,7 @@ export def "music-genres-images GetMusicGenreImageByIndex" [
   let full_url = (build-url $base $"/MusicGenres/($name)/Images/($imageType)/($imageIndex)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get music genre image by name.
@@ -3398,6 +3489,7 @@ export def "music-genres-images HeadMusicGenreImageByIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Optional. Supply the cache tag from the item object to receive strong caching headers.
   --format: string@format-completer # Determines the output format of the image - original,gif,jpg,png.
   --maxWidth: int # The maximum image width to return. (format: int32)
@@ -3419,7 +3511,7 @@ export def "music-genres-images HeadMusicGenreImageByIndex" [
   let full_url = (build-url $base $"/MusicGenres/($name)/Images/($imageType)/($imageIndex)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get person image by name.
@@ -3436,6 +3528,7 @@ export def "persons-images GetPersonImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Optional. Supply the cache tag from the item object to receive strong caching headers.
   --format: string@format-completer # Determines the output format of the image - original,gif,jpg,png.
   --maxWidth: int # The maximum image width to return. (format: int32)
@@ -3458,7 +3551,7 @@ export def "persons-images GetPersonImage" [
   let full_url = (build-url $base $"/Persons/($name)/Images/($imageType)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get person image by name.
@@ -3475,6 +3568,7 @@ export def "persons-images HeadPersonImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Optional. Supply the cache tag from the item object to receive strong caching headers.
   --format: string@format-completer # Determines the output format of the image - original,gif,jpg,png.
   --maxWidth: int # The maximum image width to return. (format: int32)
@@ -3497,7 +3591,7 @@ export def "persons-images HeadPersonImage" [
   let full_url = (build-url $base $"/Persons/($name)/Images/($imageType)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get person image by name.
@@ -3515,6 +3609,7 @@ export def "persons-images GetPersonImageByIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Optional. Supply the cache tag from the item object to receive strong caching headers.
   --format: string@format-completer # Determines the output format of the image - original,gif,jpg,png.
   --maxWidth: int # The maximum image width to return. (format: int32)
@@ -3536,7 +3631,7 @@ export def "persons-images GetPersonImageByIndex" [
   let full_url = (build-url $base $"/Persons/($name)/Images/($imageType)/($imageIndex)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get person image by name.
@@ -3554,6 +3649,7 @@ export def "persons-images HeadPersonImageByIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Optional. Supply the cache tag from the item object to receive strong caching headers.
   --format: string@format-completer # Determines the output format of the image - original,gif,jpg,png.
   --maxWidth: int # The maximum image width to return. (format: int32)
@@ -3575,7 +3671,7 @@ export def "persons-images HeadPersonImageByIndex" [
   let full_url = (build-url $base $"/Persons/($name)/Images/($imageType)/($imageIndex)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get studio image by name.
@@ -3592,6 +3688,7 @@ export def "studios-images GetStudioImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Optional. Supply the cache tag from the item object to receive strong caching headers.
   --format: string@format-completer # Determines the output format of the image - original,gif,jpg,png.
   --maxWidth: int # The maximum image width to return. (format: int32)
@@ -3614,7 +3711,7 @@ export def "studios-images GetStudioImage" [
   let full_url = (build-url $base $"/Studios/($name)/Images/($imageType)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get studio image by name.
@@ -3631,6 +3728,7 @@ export def "studios-images HeadStudioImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Optional. Supply the cache tag from the item object to receive strong caching headers.
   --format: string@format-completer # Determines the output format of the image - original,gif,jpg,png.
   --maxWidth: int # The maximum image width to return. (format: int32)
@@ -3653,7 +3751,7 @@ export def "studios-images HeadStudioImage" [
   let full_url = (build-url $base $"/Studios/($name)/Images/($imageType)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get studio image by name.
@@ -3671,6 +3769,7 @@ export def "studios-images GetStudioImageByIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Optional. Supply the cache tag from the item object to receive strong caching headers.
   --format: string@format-completer # Determines the output format of the image - original,gif,jpg,png.
   --maxWidth: int # The maximum image width to return. (format: int32)
@@ -3692,7 +3791,7 @@ export def "studios-images GetStudioImageByIndex" [
   let full_url = (build-url $base $"/Studios/($name)/Images/($imageType)/($imageIndex)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get studio image by name.
@@ -3710,6 +3809,7 @@ export def "studios-images HeadStudioImageByIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Optional. Supply the cache tag from the item object to receive strong caching headers.
   --format: string@format-completer # Determines the output format of the image - original,gif,jpg,png.
   --maxWidth: int # The maximum image width to return. (format: int32)
@@ -3731,7 +3831,7 @@ export def "studios-images HeadStudioImageByIndex" [
   let full_url = (build-url $base $"/Studios/($name)/Images/($imageType)/($imageIndex)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sets the user image.
@@ -3746,6 +3846,7 @@ export def "user-image PostUserImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # User Id. (format: uuid)
   --body: record
 ]: any -> any {
@@ -3757,7 +3858,7 @@ export def "user-image PostUserImage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "image/*" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "image/*" $body
 }
 
 # Delete the user's image.
@@ -3772,6 +3873,7 @@ export def "user-image DeleteUserImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # User Id. (format: uuid)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3780,7 +3882,7 @@ export def "user-image DeleteUserImage" [
   let full_url = (build-url $base "/UserImage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user profile image.
@@ -3795,6 +3897,7 @@ export def "user-image GetUserImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # User id. (format: uuid)
   --tag: string # Optional. Supply the cache tag from the item object to receive strong caching headers.
   --format: string@format-completer # Determines the output format of the image - original,gif,jpg,png.
@@ -3805,7 +3908,7 @@ export def "user-image GetUserImage" [
   let full_url = (build-url $base "/UserImage" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user profile image.
@@ -3820,6 +3923,7 @@ export def "user-image HeadUserImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # User id. (format: uuid)
   --tag: string # Optional. Supply the cache tag from the item object to receive strong caching headers.
   --format: string@format-completer # Determines the output format of the image - original,gif,jpg,png.
@@ -3830,7 +3934,7 @@ export def "user-image HeadUserImage" [
   let full_url = (build-url $base "/UserImage" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates an instant playlist based on a given album.
@@ -3846,6 +3950,7 @@ export def "albums-instant-mix GetInstantMixFromAlbum" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
@@ -3861,7 +3966,7 @@ export def "albums-instant-mix GetInstantMixFromAlbum" [
   let full_url = (build-url $base $"/Albums/($itemId)/InstantMix" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates an instant playlist based on a given artist.
@@ -3877,6 +3982,7 @@ export def "artists-instant-mix GetInstantMixFromArtists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
@@ -3892,7 +3998,7 @@ export def "artists-instant-mix GetInstantMixFromArtists" [
   let full_url = (build-url $base $"/Artists/($itemId)/InstantMix" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates an instant playlist based on a given artist.
@@ -3909,6 +4015,7 @@ export def "artists-instant-mix GetInstantMixFromArtists2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --id: string # The item id. (format: uuid)
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
@@ -3925,7 +4032,7 @@ export def "artists-instant-mix GetInstantMixFromArtists2" [
   let full_url = (build-url $base "/Artists/InstantMix" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates an instant playlist based on a given item.
@@ -3941,6 +4048,7 @@ export def "items-instant-mix GetInstantMixFromItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
@@ -3956,7 +4064,7 @@ export def "items-instant-mix GetInstantMixFromItem" [
   let full_url = (build-url $base $"/Items/($itemId)/InstantMix" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates an instant playlist based on a given genre.
@@ -3972,6 +4080,7 @@ export def "music-genres-instant-mix GetInstantMixFromMusicGenreByName" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
@@ -3987,7 +4096,7 @@ export def "music-genres-instant-mix GetInstantMixFromMusicGenreByName" [
   let full_url = (build-url $base $"/MusicGenres/($name)/InstantMix" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates an instant playlist based on a given genre.
@@ -4002,6 +4111,7 @@ export def "music-genres-instant-mix GetInstantMixFromMusicGenreById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --id: string # The item id. (format: uuid)
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
@@ -4018,7 +4128,7 @@ export def "music-genres-instant-mix GetInstantMixFromMusicGenreById" [
   let full_url = (build-url $base "/MusicGenres/InstantMix" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates an instant playlist based on a given playlist.
@@ -4034,6 +4144,7 @@ export def "playlists-instant-mix GetInstantMixFromPlaylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
@@ -4049,7 +4160,7 @@ export def "playlists-instant-mix GetInstantMixFromPlaylist" [
   let full_url = (build-url $base $"/Playlists/($itemId)/InstantMix" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates an instant playlist based on a given song.
@@ -4065,6 +4176,7 @@ export def "songs-instant-mix GetInstantMixFromSong" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
@@ -4080,7 +4192,7 @@ export def "songs-instant-mix GetInstantMixFromSong" [
   let full_url = (build-url $base $"/Songs/($itemId)/InstantMix" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the item's external id info.
@@ -4096,6 +4208,7 @@ export def "items-external-id-infos GetExternalIdInfos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Name: string, Key: string, Type: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4103,7 +4216,7 @@ export def "items-external-id-infos GetExternalIdInfos" [
   let full_url = (build-url $base $"/Items/($itemId)/ExternalIdInfos")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Applies search criteria to an item and refreshes metadata.
@@ -4120,6 +4233,7 @@ export def "items-remote-search-apply ApplySearchCriteria" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --replaceAllImages: oneof<nothing, bool> # Optional. Whether or not to replace all images. Default: True. (default: true)
   --Name: string # Gets or sets the name. (nullable)
   --ProviderIds: record # Gets or sets the provider ids. (nullable)
@@ -4143,7 +4257,7 @@ export def "items-remote-search-apply ApplySearchCriteria" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get book remote search.
@@ -4158,6 +4272,7 @@ export def "items-remote-search-book GetBookRemoteSearchResults" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --SearchInfo: any # nullable
   --ItemId: string # format: uuid
@@ -4172,7 +4287,7 @@ export def "items-remote-search-book GetBookRemoteSearchResults" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get box set remote search.
@@ -4187,6 +4302,7 @@ export def "items-remote-search-box-set GetBoxSetRemoteSearchResults" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --SearchInfo: any # nullable
   --ItemId: string # format: uuid
@@ -4201,7 +4317,7 @@ export def "items-remote-search-box-set GetBoxSetRemoteSearchResults" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get movie remote search.
@@ -4216,6 +4332,7 @@ export def "items-remote-search-movie GetMovieRemoteSearchResults" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --SearchInfo: any # nullable
   --ItemId: string # format: uuid
@@ -4230,7 +4347,7 @@ export def "items-remote-search-movie GetMovieRemoteSearchResults" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get music album remote search.
@@ -4245,6 +4362,7 @@ export def "items-remote-search-music-album GetMusicAlbumRemoteSearchResults" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --SearchInfo: any # nullable
   --ItemId: string # format: uuid
@@ -4259,7 +4377,7 @@ export def "items-remote-search-music-album GetMusicAlbumRemoteSearchResults" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get music artist remote search.
@@ -4274,6 +4392,7 @@ export def "items-remote-search-music-artist GetMusicArtistRemoteSearchResults" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --SearchInfo: any # nullable
   --ItemId: string # format: uuid
@@ -4288,7 +4407,7 @@ export def "items-remote-search-music-artist GetMusicArtistRemoteSearchResults" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get music video remote search.
@@ -4303,6 +4422,7 @@ export def "items-remote-search-music-video GetMusicVideoRemoteSearchResults" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --SearchInfo: any # nullable
   --ItemId: string # format: uuid
@@ -4317,7 +4437,7 @@ export def "items-remote-search-music-video GetMusicVideoRemoteSearchResults" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get person remote search.
@@ -4332,6 +4452,7 @@ export def "items-remote-search-person GetPersonRemoteSearchResults" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --SearchInfo: any # nullable
   --ItemId: string # format: uuid
@@ -4346,7 +4467,7 @@ export def "items-remote-search-person GetPersonRemoteSearchResults" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get series remote search.
@@ -4361,6 +4482,7 @@ export def "items-remote-search-series GetSeriesRemoteSearchResults" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --SearchInfo: any # nullable
   --ItemId: string # format: uuid
@@ -4375,7 +4497,7 @@ export def "items-remote-search-series GetSeriesRemoteSearchResults" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get trailer remote search.
@@ -4390,6 +4512,7 @@ export def "items-remote-search-trailer GetTrailerRemoteSearchResults" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --SearchInfo: any # nullable
   --ItemId: string # format: uuid
@@ -4404,7 +4527,7 @@ export def "items-remote-search-trailer GetTrailerRemoteSearchResults" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Refreshes metadata for an item.
@@ -4420,6 +4543,7 @@ export def "items-refresh RefreshItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --metadataRefreshMode: string@metadataRefreshMode-completer # (Optional) Specifies the metadata refresh mode. (default: None)
   --imageRefreshMode: string@imageRefreshMode-completer # (Optional) Specifies the image refresh mode. (default: None)
   --replaceAllMetadata: oneof<nothing, bool> # (Optional) Determines if metadata should be replaced. Only applicable if mode is FullRefresh. (default: false)
@@ -4432,7 +4556,7 @@ export def "items-refresh RefreshItem" [
   let full_url = (build-url $base $"/Items/($itemId)/Refresh" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets items based on a query.
@@ -4447,6 +4571,7 @@ export def "items GetItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # The user id supplied as query parameter; this is required when not using an API key. (format: uuid)
   --maxOfficialRating: string # Optional filter by maximum official rating (PG, PG-13, TV-MA, etc).
@@ -4541,7 +4666,7 @@ export def "items GetItems" [
   let full_url = (build-url $base "/Items" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes items from the library and filesystem.
@@ -4556,6 +4681,7 @@ export def "items DeleteItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # The item ids.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4564,7 +4690,7 @@ export def "items DeleteItems" [
   let full_url = (build-url $base "/Items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Item User Data.
@@ -4580,6 +4706,7 @@ export def "user-items-user-data GetItemUserData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # The user id. (format: uuid)
 ]: nothing -> record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string> {
@@ -4589,7 +4716,7 @@ export def "user-items-user-data GetItemUserData" [
   let full_url = (build-url $base $"/UserItems/($itemId)/UserData" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Item User Data.
@@ -4605,6 +4732,7 @@ export def "user-items-user-data UpdateItemUserData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # The user id. (format: uuid)
   --Rating: float # Gets or sets the rating. (nullable, format: double)
@@ -4628,7 +4756,7 @@ export def "user-items-user-data UpdateItemUserData" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets items based on a query.
@@ -4643,6 +4771,7 @@ export def "user-items-resume GetResumeItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # The user id. (format: uuid)
   --startIndex: int # The start index. (format: int32)
@@ -4666,7 +4795,7 @@ export def "user-items-resume GetResumeItems" [
   let full_url = (build-url $base "/UserItems/Resume" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates an item.
@@ -4693,6 +4822,7 @@ export def "items UpdateItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Name: string # Gets or sets the name. (nullable)
   --OriginalTitle: string # nullable
   --ServerId: string # Gets or sets the server identifier. (nullable)
@@ -4855,7 +4985,7 @@ export def "items UpdateItem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes an item from the library and filesystem.
@@ -4871,13 +5001,14 @@ export def "items DeleteItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Items/($itemId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an item from a user's library.
@@ -4893,6 +5024,7 @@ export def "items GetItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # User id. (format: uuid)
 ]: nothing -> record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: table<Name: string, Url: string>, MediaSources: table<Protocol: record, Id: string, Path: string, EncoderPath: string, EncoderProtocol: record, Type: record, Container: string, Size: int, Name: string, IsRemote: bool, ETag: string, RunTimeTicks: int, ReadAtNativeFramerate: bool, IgnoreDts: bool, IgnoreIndex: bool, GenPtsInput: bool, SupportsTranscoding: bool, SupportsDirectStream: bool, SupportsDirectPlay: bool, IsInfiniteStream: bool, UseMostCompatibleTranscodingProfile: bool, RequiresOpening: bool, OpenToken: string, RequiresClosing: bool, LiveStreamId: string, BufferMs: int, RequiresLooping: bool, SupportsProbing: bool, VideoType: record, IsoType: record, Video3DFormat: record, MediaStreams: list, MediaAttachments: list, Formats: list, Bitrate: int, FallbackMaxStreamingBitrate: int, Timestamp: record, RequiredHttpHeaders: record, TranscodingUrl: string, TranscodingSubProtocol: record, TranscodingContainer: string, AnalyzeDurationMs: int, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, HasSegments: bool>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: table<Url: string, Name: string>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: table<Name: string, Id: string, Role: string, Type: record, PrimaryImageTag: string, ImageBlurHashes: record>, Studios: table<Name: string, Id: string>, GenreItems: table<Name: string, Id: string>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: table<Name: string, Id: string>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: table<Name: string, Id: string>, SeasonName: string, MediaStreams: table<Codec: string, CodecTag: string, Language: string, ColorRange: string, ColorSpace: string, ColorTransfer: string, ColorPrimaries: string, DvVersionMajor: int, DvVersionMinor: int, DvProfile: int, DvLevel: int, RpuPresentFlag: int, ElPresentFlag: int, BlPresentFlag: int, DvBlSignalCompatibilityId: int, Rotation: int, Comment: string, TimeBase: string, CodecTimeBase: string, Title: string, Hdr10PlusPresentFlag: bool, VideoRange: record, VideoRangeType: record, VideoDoViTitle: string, AudioSpatialFormat: record, LocalizedUndefined: string, LocalizedDefault: string, LocalizedForced: string, LocalizedExternal: string, LocalizedHearingImpaired: string, DisplayTitle: string, NalLengthSize: string, IsInterlaced: bool, IsAVC: bool, ChannelLayout: string, BitRate: int, BitDepth: int, RefFrames: int, PacketLength: int, Channels: int, SampleRate: int, IsDefault: bool, IsForced: bool, IsHearingImpaired: bool, Height: int, Width: int, AverageFrameRate: float, RealFrameRate: float, ReferenceFrameRate: float, Profile: string, Type: record, AspectRatio: string, Index: int, Score: int, IsExternal: bool, DeliveryMethod: record, DeliveryUrl: string, IsExternalUrl: bool, IsTextSubtitleStream: bool, SupportsExternalStream: bool, Path: string, PixelFormat: string, Level: float, IsAnamorphic: bool>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: table<StartPositionTicks: int, Name: string, ImagePath: string, ImageDateModified: string, ImageTag: string>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list<record>, MediaSources: list<record>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list<record>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list<record>, Studios: list<record>, GenreItems: list<record>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: list<record>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list<record>, SeasonName: string, MediaStreams: list<record>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list<record>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>>> {
@@ -4902,7 +5034,7 @@ export def "items GetItem" [
   let full_url = (build-url $base $"/Items/($itemId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates an item's content type.
@@ -4918,6 +5050,7 @@ export def "items-content-type UpdateItemContentType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contentType: string # The content type of the item.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4926,7 +5059,7 @@ export def "items-content-type UpdateItemContentType" [
   let full_url = (build-url $base $"/Items/($itemId)/ContentType" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets metadata editor info for an item.
@@ -4942,6 +5075,7 @@ export def "items-metadata-editor GetMetadataEditorInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<ParentalRatingOptions: table<Name: string, Value: int, RatingScore: record>, Countries: table<Name: string, DisplayName: string, TwoLetterISORegionName: string, ThreeLetterISORegionName: string>, Cultures: table<Name: string, DisplayName: string, TwoLetterISOLanguageName: string, ThreeLetterISOLanguageName: string, ThreeLetterISOLanguageNames: list>, ExternalIdInfos: table<Name: string, Key: string, Type: record>, ContentType: record, ContentTypeOptions: table<Name: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4949,7 +5083,7 @@ export def "items-metadata-editor GetMetadataEditorInfo" [
   let full_url = (build-url $base $"/Items/($itemId)/MetadataEditor")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets similar items.
@@ -4965,6 +5099,7 @@ export def "albums-similar GetSimilarAlbums" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --excludeArtistIds: list # Exclude artist ids.
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
@@ -4977,7 +5112,7 @@ export def "albums-similar GetSimilarAlbums" [
   let full_url = (build-url $base $"/Albums/($itemId)/Similar" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets similar items.
@@ -4993,6 +5128,7 @@ export def "artists-similar GetSimilarArtists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --excludeArtistIds: list # Exclude artist ids.
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
@@ -5005,7 +5141,7 @@ export def "artists-similar GetSimilarArtists" [
   let full_url = (build-url $base $"/Artists/($itemId)/Similar" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all parents of an item.
@@ -5021,6 +5157,7 @@ export def "items-ancestors GetAncestors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
 ]: nothing -> table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list<record>, MediaSources: list<record>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list<record>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list<record>, Studios: list<record>, GenreItems: list<record>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: list<record>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list<record>, SeasonName: string, MediaStreams: list<record>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list<record>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>> {
@@ -5030,7 +5167,7 @@ export def "items-ancestors GetAncestors" [
   let full_url = (build-url $base $"/Items/($itemId)/Ancestors" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets critic review for an item.
@@ -5048,6 +5185,7 @@ export def "items-critic-reviews GetCriticReviews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5055,7 +5193,7 @@ export def "items-critic-reviews GetCriticReviews" [
   let full_url = (build-url $base $"/Items/($itemId)/CriticReviews")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Downloads item media.
@@ -5071,6 +5209,7 @@ export def "items-download GetDownload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-3 # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5078,7 +5217,7 @@ export def "items-download GetDownload" [
   let full_url = (build-url $base $"/Items/($itemId)/Download")
   let accept_val = ($accept | default "video/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the original file of an item.
@@ -5094,6 +5233,7 @@ export def "items-file GetFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-3 # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5101,7 +5241,7 @@ export def "items-file GetFile" [
   let full_url = (build-url $base $"/Items/($itemId)/File")
   let accept_val = ($accept | default "video/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets similar items.
@@ -5117,6 +5257,7 @@ export def "items-similar GetSimilarItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --excludeArtistIds: list # Exclude artist ids.
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
@@ -5129,7 +5270,7 @@ export def "items-similar GetSimilarItems" [
   let full_url = (build-url $base $"/Items/($itemId)/Similar" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get theme songs and videos for an item.
@@ -5145,6 +5286,7 @@ export def "items-theme-media GetThemeMedia" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
   --inheritFromParent: oneof<nothing, bool> # Optional. Determines whether or not parent items should be searched for theme media. (default: false)
@@ -5157,7 +5299,7 @@ export def "items-theme-media GetThemeMedia" [
   let full_url = (build-url $base $"/Items/($itemId)/ThemeMedia" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get theme songs for an item.
@@ -5173,6 +5315,7 @@ export def "items-theme-songs GetThemeSongs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
   --inheritFromParent: oneof<nothing, bool> # Optional. Determines whether or not parent items should be searched for theme media. (default: false)
@@ -5185,7 +5328,7 @@ export def "items-theme-songs GetThemeSongs" [
   let full_url = (build-url $base $"/Items/($itemId)/ThemeSongs" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get theme videos for an item.
@@ -5201,6 +5344,7 @@ export def "items-theme-videos GetThemeVideos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
   --inheritFromParent: oneof<nothing, bool> # Optional. Determines whether or not parent items should be searched for theme media. (default: false)
@@ -5213,7 +5357,7 @@ export def "items-theme-videos GetThemeVideos" [
   let full_url = (build-url $base $"/Items/($itemId)/ThemeVideos" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get item counts.
@@ -5228,6 +5372,7 @@ export def "items-counts GetItemCounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Get counts from a specific user's library. (format: uuid)
   --isFavorite: oneof<nothing, bool> # Optional. Get counts of favorite items.
@@ -5238,7 +5383,7 @@ export def "items-counts GetItemCounts" [
   let full_url = (build-url $base "/Items/Counts" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the library options info.
@@ -5253,6 +5398,7 @@ export def "libraries-available-options GetLibraryOptionsInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --libraryContentType: string@libraryContentType-completer # Library content type.
   --isNewLibrary: oneof<nothing, bool> # Whether this is a new library. (default: false)
@@ -5263,7 +5409,7 @@ export def "libraries-available-options GetLibraryOptionsInfo" [
   let full_url = (build-url $base "/Libraries/AvailableOptions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reports that new movies have been added by an external source.
@@ -5279,6 +5425,7 @@ export def "library-media-updated PostUpdatedMedia" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Updates: list # Gets or sets the list of updates. — item shape: {Path?: string, UpdateType?: string}
 ]: any -> any {
   let input = $in
@@ -5289,7 +5436,7 @@ export def "library-media-updated PostUpdatedMedia" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets all user media folders.
@@ -5304,6 +5451,7 @@ export def "library-media-folders GetMediaFolders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --isHidden: oneof<nothing, bool> # Optional. Filter by folders that are marked hidden, or not.
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
@@ -5313,7 +5461,7 @@ export def "library-media-folders GetMediaFolders" [
   let full_url = (build-url $base "/Library/MediaFolders" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reports that new movies have been added by an external source.
@@ -5328,6 +5476,7 @@ export def "library-movies-added PostAddedMovies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tmdbId: string # The tmdbId.
   --imdbId: string # The imdbId.
 ]: nothing -> any {
@@ -5337,7 +5486,7 @@ export def "library-movies-added PostAddedMovies" [
   let full_url = (build-url $base "/Library/Movies/Added" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reports that new movies have been added by an external source.
@@ -5352,6 +5501,7 @@ export def "library-movies-updated PostUpdatedMovies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tmdbId: string # The tmdbId.
   --imdbId: string # The imdbId.
 ]: nothing -> any {
@@ -5361,7 +5511,7 @@ export def "library-movies-updated PostUpdatedMovies" [
   let full_url = (build-url $base "/Library/Movies/Updated" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of physical paths from virtual folders.
@@ -5376,6 +5526,7 @@ export def "library-physical-paths GetPhysicalPaths" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5383,7 +5534,7 @@ export def "library-physical-paths GetPhysicalPaths" [
   let full_url = (build-url $base "/Library/PhysicalPaths")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Starts a library scan.
@@ -5398,13 +5549,14 @@ export def "library-refresh RefreshLibrary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Library/Refresh")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reports that new episodes of a series have been added by an external source.
@@ -5419,6 +5571,7 @@ export def "library-series-added PostAddedSeries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tvdbId: string # The tvdbId.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5427,7 +5580,7 @@ export def "library-series-added PostAddedSeries" [
   let full_url = (build-url $base "/Library/Series/Added" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reports that new episodes of a series have been added by an external source.
@@ -5442,6 +5595,7 @@ export def "library-series-updated PostUpdatedSeries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tvdbId: string # The tvdbId.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5450,7 +5604,7 @@ export def "library-series-updated PostUpdatedSeries" [
   let full_url = (build-url $base "/Library/Series/Updated" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets similar items.
@@ -5466,6 +5620,7 @@ export def "movies-similar GetSimilarMovies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --excludeArtistIds: list # Exclude artist ids.
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
@@ -5478,7 +5633,7 @@ export def "movies-similar GetSimilarMovies" [
   let full_url = (build-url $base $"/Movies/($itemId)/Similar" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets similar items.
@@ -5494,6 +5649,7 @@ export def "shows-similar GetSimilarShows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --excludeArtistIds: list # Exclude artist ids.
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
@@ -5506,7 +5662,7 @@ export def "shows-similar GetSimilarShows" [
   let full_url = (build-url $base $"/Shows/($itemId)/Similar" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets similar items.
@@ -5522,6 +5678,7 @@ export def "trailers-similar GetSimilarTrailers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --excludeArtistIds: list # Exclude artist ids.
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
@@ -5534,7 +5691,7 @@ export def "trailers-similar GetSimilarTrailers" [
   let full_url = (build-url $base $"/Trailers/($itemId)/Similar" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all virtual folders.
@@ -5549,6 +5706,7 @@ export def "library-virtual-folders GetVirtualFolders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Name: string, Locations: list<string>, CollectionType: record, LibraryOptions: record<Enabled: bool, EnablePhotos: bool, EnableRealtimeMonitor: bool, EnableLUFSScan: bool, EnableChapterImageExtraction: bool, ExtractChapterImagesDuringLibraryScan: bool, EnableTrickplayImageExtraction: bool, ExtractTrickplayImagesDuringLibraryScan: bool, PathInfos: list, SaveLocalMetadata: bool, EnableInternetProviders: bool, EnableAutomaticSeriesGrouping: bool, EnableEmbeddedTitles: bool, EnableEmbeddedExtrasTitles: bool, EnableEmbeddedEpisodeInfos: bool, AutomaticRefreshIntervalDays: int, PreferredMetadataLanguage: string, MetadataCountryCode: string, SeasonZeroDisplayName: string, MetadataSavers: list, DisabledLocalMetadataReaders: list, LocalMetadataReaderOrder: list, DisabledSubtitleFetchers: list, SubtitleFetcherOrder: list, DisabledMediaSegmentProviders: list, MediaSegmentProviderOrder: list, SkipSubtitlesIfEmbeddedSubtitlesPresent: bool, SkipSubtitlesIfAudioTrackMatches: bool, SubtitleDownloadLanguages: list, RequirePerfectSubtitleMatch: bool, SaveSubtitlesWithMedia: bool, SaveLyricsWithMedia: bool, SaveTrickplayWithMedia: bool, DisabledLyricFetchers: list, LyricFetcherOrder: list, PreferNonstandardArtistsTag: bool, UseCustomTagDelimiters: bool, CustomTagDelimiters: list, DelimiterWhitelist: list, AutomaticallyAddToCollection: bool, AllowEmbeddedSubtitles: record, TypeOptions: list>, ItemId: string, PrimaryImageItemId: string, RefreshProgress: float, RefreshStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5556,7 +5714,7 @@ export def "library-virtual-folders GetVirtualFolders" [
   let full_url = (build-url $base "/Library/VirtualFolders")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a virtual folder.
@@ -5571,6 +5729,7 @@ export def "library-virtual-folders AddVirtualFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the virtual folder.
   --collectionType: string@collectionType-completer # The type of the collection.
   --paths: list # The paths of the virtual folder.
@@ -5586,7 +5745,7 @@ export def "library-virtual-folders AddVirtualFolder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Removes a virtual folder.
@@ -5601,6 +5760,7 @@ export def "library-virtual-folders RemoveVirtualFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the folder.
   --refreshLibrary: oneof<nothing, bool> # Whether to refresh the library. (default: false)
 ]: nothing -> any {
@@ -5610,7 +5770,7 @@ export def "library-virtual-folders RemoveVirtualFolder" [
   let full_url = (build-url $base "/Library/VirtualFolders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update library options.
@@ -5625,6 +5785,7 @@ export def "library-virtual-folders-library-options UpdateLibraryOptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Id: string # Gets or sets the library item id. (format: uuid)
   --LibraryOptions: any # Gets or sets library options. (nullable)
 ]: any -> any {
@@ -5636,7 +5797,7 @@ export def "library-virtual-folders-library-options UpdateLibraryOptions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Renames a virtual folder.
@@ -5651,6 +5812,7 @@ export def "library-virtual-folders-name RenameVirtualFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the virtual folder.
   --newName: string # The new name.
   --refreshLibrary: oneof<nothing, bool> # Whether to refresh the library. (default: false)
@@ -5661,7 +5823,7 @@ export def "library-virtual-folders-name RenameVirtualFolder" [
   let full_url = (build-url $base "/Library/VirtualFolders/Name" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a media path to a library.
@@ -5676,6 +5838,7 @@ export def "library-virtual-folders-paths AddMediaPath" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --refreshLibrary: oneof<nothing, bool> # Whether to refresh the library. (default: false)
   Name: string # Gets or sets the name of the library.
   --Path: string # Gets or sets the path to add. (nullable)
@@ -5690,7 +5853,7 @@ export def "library-virtual-folders-paths AddMediaPath" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a media path.
@@ -5705,6 +5868,7 @@ export def "library-virtual-folders-paths RemoveMediaPath" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the library.
   --path: string # The path to remove.
   --refreshLibrary: oneof<nothing, bool> # Whether to refresh the library. (default: false)
@@ -5715,7 +5879,7 @@ export def "library-virtual-folders-paths RemoveMediaPath" [
   let full_url = (build-url $base "/Library/VirtualFolders/Paths" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a media path.
@@ -5730,6 +5894,7 @@ export def "library-virtual-folders-paths-update UpdateMediaPath" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Name: string # Gets or sets the library name.
   PathInfo: any # Gets or sets library folder path information.
 ]: any -> any {
@@ -5741,7 +5906,7 @@ export def "library-virtual-folders-paths-update UpdateMediaPath" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get channel mapping options.
@@ -5756,6 +5921,7 @@ export def "live-tv-channel-mapping-options GetChannelMappingOptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --providerId: string # Provider id.
 ]: nothing -> record<TunerChannels: table<Name: string, ProviderChannelName: string, ProviderChannelId: string, Id: string>, ProviderChannels: table<Name: string, Id: string>, Mappings: table<Name: string, Value: string>, ProviderName: string> {
@@ -5765,7 +5931,7 @@ export def "live-tv-channel-mapping-options GetChannelMappingOptions" [
   let full_url = (build-url $base "/LiveTv/ChannelMappingOptions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set channel mappings.
@@ -5780,6 +5946,7 @@ export def "live-tv-channel-mappings SetChannelMapping" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   ProviderId: string # Gets or sets the provider id.
   TunerChannelId: string # Gets or sets the tuner channel id.
@@ -5793,7 +5960,7 @@ export def "live-tv-channel-mappings SetChannelMapping" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets available live tv channels.
@@ -5808,6 +5975,7 @@ export def "live-tv-channels GetLiveTvChannels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer # Optional. Filter by channel type.
   --userId: string # Optional. Filter by user and attach user data. (format: uuid)
@@ -5837,7 +6005,7 @@ export def "live-tv-channels GetLiveTvChannels" [
   let full_url = (build-url $base "/LiveTv/Channels" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a live tv channel.
@@ -5853,6 +6021,7 @@ export def "live-tv-channels GetChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Attach user data. (format: uuid)
 ]: nothing -> record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: table<Name: string, Url: string>, MediaSources: table<Protocol: record, Id: string, Path: string, EncoderPath: string, EncoderProtocol: record, Type: record, Container: string, Size: int, Name: string, IsRemote: bool, ETag: string, RunTimeTicks: int, ReadAtNativeFramerate: bool, IgnoreDts: bool, IgnoreIndex: bool, GenPtsInput: bool, SupportsTranscoding: bool, SupportsDirectStream: bool, SupportsDirectPlay: bool, IsInfiniteStream: bool, UseMostCompatibleTranscodingProfile: bool, RequiresOpening: bool, OpenToken: string, RequiresClosing: bool, LiveStreamId: string, BufferMs: int, RequiresLooping: bool, SupportsProbing: bool, VideoType: record, IsoType: record, Video3DFormat: record, MediaStreams: list, MediaAttachments: list, Formats: list, Bitrate: int, FallbackMaxStreamingBitrate: int, Timestamp: record, RequiredHttpHeaders: record, TranscodingUrl: string, TranscodingSubProtocol: record, TranscodingContainer: string, AnalyzeDurationMs: int, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, HasSegments: bool>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: table<Url: string, Name: string>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: table<Name: string, Id: string, Role: string, Type: record, PrimaryImageTag: string, ImageBlurHashes: record>, Studios: table<Name: string, Id: string>, GenreItems: table<Name: string, Id: string>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: table<Name: string, Id: string>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: table<Name: string, Id: string>, SeasonName: string, MediaStreams: table<Codec: string, CodecTag: string, Language: string, ColorRange: string, ColorSpace: string, ColorTransfer: string, ColorPrimaries: string, DvVersionMajor: int, DvVersionMinor: int, DvProfile: int, DvLevel: int, RpuPresentFlag: int, ElPresentFlag: int, BlPresentFlag: int, DvBlSignalCompatibilityId: int, Rotation: int, Comment: string, TimeBase: string, CodecTimeBase: string, Title: string, Hdr10PlusPresentFlag: bool, VideoRange: record, VideoRangeType: record, VideoDoViTitle: string, AudioSpatialFormat: record, LocalizedUndefined: string, LocalizedDefault: string, LocalizedForced: string, LocalizedExternal: string, LocalizedHearingImpaired: string, DisplayTitle: string, NalLengthSize: string, IsInterlaced: bool, IsAVC: bool, ChannelLayout: string, BitRate: int, BitDepth: int, RefFrames: int, PacketLength: int, Channels: int, SampleRate: int, IsDefault: bool, IsForced: bool, IsHearingImpaired: bool, Height: int, Width: int, AverageFrameRate: float, RealFrameRate: float, ReferenceFrameRate: float, Profile: string, Type: record, AspectRatio: string, Index: int, Score: int, IsExternal: bool, DeliveryMethod: record, DeliveryUrl: string, IsExternalUrl: bool, IsTextSubtitleStream: bool, SupportsExternalStream: bool, Path: string, PixelFormat: string, Level: float, IsAnamorphic: bool>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: table<StartPositionTicks: int, Name: string, ImagePath: string, ImageDateModified: string, ImageTag: string>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list<record>, MediaSources: list<record>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list<record>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list<record>, Studios: list<record>, GenreItems: list<record>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: list<record>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list<record>, SeasonName: string, MediaStreams: list<record>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list<record>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>>> {
@@ -5862,7 +6031,7 @@ export def "live-tv-channels GetChannel" [
   let full_url = (build-url $base $"/LiveTv/Channels/($channelId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get guide info.
@@ -5877,6 +6046,7 @@ export def "live-tv-guide-info GetGuideInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<StartDate: string, EndDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5884,7 +6054,7 @@ export def "live-tv-guide-info GetGuideInfo" [
   let full_url = (build-url $base "/LiveTv/GuideInfo")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets available live tv services.
@@ -5899,6 +6069,7 @@ export def "live-tv-info GetLiveTvInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Services: table<Name: string, HomePageUrl: string, Status: record, StatusMessage: string, Version: string, HasUpdateAvailable: bool, IsVisible: bool, Tuners: list>, IsEnabled: bool, EnabledUsers: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5906,7 +6077,7 @@ export def "live-tv-info GetLiveTvInfo" [
   let full_url = (build-url $base "/LiveTv/Info")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a listings provider.
@@ -5922,6 +6093,7 @@ export def "live-tv-listing-providers AddListingProvider" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --pw: string # Password.
   --validateListings: oneof<nothing, bool> # Validate listings. (default: false)
@@ -5954,7 +6126,7 @@ export def "live-tv-listing-providers AddListingProvider" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete listing provider.
@@ -5969,6 +6141,7 @@ export def "live-tv-listing-providers DeleteListingProvider" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Listing provider id.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5977,7 +6150,7 @@ export def "live-tv-listing-providers DeleteListingProvider" [
   let full_url = (build-url $base "/LiveTv/ListingProviders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets default listings provider info.
@@ -5992,6 +6165,7 @@ export def "live-tv-listing-providers-default GetDefaultListingProvider" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Id: string, Type: string, Username: string, Password: string, ListingsId: string, ZipCode: string, Country: string, Path: string, EnabledTuners: list<string>, EnableAllTuners: bool, NewsCategories: list<string>, SportsCategories: list<string>, KidsCategories: list<string>, MovieCategories: list<string>, ChannelMappings: table<Name: string, Value: string>, MoviePrefix: string, PreferredLanguage: string, UserAgent: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5999,7 +6173,7 @@ export def "live-tv-listing-providers-default GetDefaultListingProvider" [
   let full_url = (build-url $base "/LiveTv/ListingProviders/Default")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets available lineups.
@@ -6014,6 +6188,7 @@ export def "live-tv-listing-providers-lineups GetLineups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --id: string # Provider id.
   --type: string # Provider type.
@@ -6026,7 +6201,7 @@ export def "live-tv-listing-providers-lineups GetLineups" [
   let full_url = (build-url $base "/LiveTv/ListingProviders/Lineups" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets available countries.
@@ -6041,13 +6216,14 @@ export def "live-tv-listing-providers-schedules-direct-countries GetSchedulesDir
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/LiveTv/ListingProviders/SchedulesDirect/Countries")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a live tv recording stream.
@@ -6063,13 +6239,14 @@ export def "live-tv-live-recordings-stream GetLiveRecordingFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/LiveTv/LiveRecordings/($recordingId)/stream")
   let accept_val = "video/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a live tv channel stream.
@@ -6086,13 +6263,14 @@ export def "live-tv-live-stream-files-stream-container GetLiveStreamFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/LiveTv/LiveStreamFiles/($streamId)/stream.($container)")
   let accept_val = "video/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets available live tv epgs.
@@ -6107,6 +6285,7 @@ export def "live-tv-programs GetLiveTvPrograms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --channelIds: list # The channels to return guide information for.
   --userId: string # Optional. Filter by user id. (format: uuid)
@@ -6142,7 +6321,7 @@ export def "live-tv-programs GetLiveTvPrograms" [
   let full_url = (build-url $base "/LiveTv/Programs" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets available live tv epgs.
@@ -6157,6 +6336,7 @@ export def "live-tv-programs GetPrograms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --ChannelIds: list # Gets or sets the channels to return guide information for. (nullable)
   --UserId: string # Gets or sets optional. Filter by user id. (nullable, format: uuid)
@@ -6194,7 +6374,7 @@ export def "live-tv-programs GetPrograms" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets a live tv program.
@@ -6210,6 +6390,7 @@ export def "live-tv-programs GetProgram" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Attach user data. (format: uuid)
 ]: nothing -> record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: table<Name: string, Url: string>, MediaSources: table<Protocol: record, Id: string, Path: string, EncoderPath: string, EncoderProtocol: record, Type: record, Container: string, Size: int, Name: string, IsRemote: bool, ETag: string, RunTimeTicks: int, ReadAtNativeFramerate: bool, IgnoreDts: bool, IgnoreIndex: bool, GenPtsInput: bool, SupportsTranscoding: bool, SupportsDirectStream: bool, SupportsDirectPlay: bool, IsInfiniteStream: bool, UseMostCompatibleTranscodingProfile: bool, RequiresOpening: bool, OpenToken: string, RequiresClosing: bool, LiveStreamId: string, BufferMs: int, RequiresLooping: bool, SupportsProbing: bool, VideoType: record, IsoType: record, Video3DFormat: record, MediaStreams: list, MediaAttachments: list, Formats: list, Bitrate: int, FallbackMaxStreamingBitrate: int, Timestamp: record, RequiredHttpHeaders: record, TranscodingUrl: string, TranscodingSubProtocol: record, TranscodingContainer: string, AnalyzeDurationMs: int, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, HasSegments: bool>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: table<Url: string, Name: string>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: table<Name: string, Id: string, Role: string, Type: record, PrimaryImageTag: string, ImageBlurHashes: record>, Studios: table<Name: string, Id: string>, GenreItems: table<Name: string, Id: string>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: table<Name: string, Id: string>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: table<Name: string, Id: string>, SeasonName: string, MediaStreams: table<Codec: string, CodecTag: string, Language: string, ColorRange: string, ColorSpace: string, ColorTransfer: string, ColorPrimaries: string, DvVersionMajor: int, DvVersionMinor: int, DvProfile: int, DvLevel: int, RpuPresentFlag: int, ElPresentFlag: int, BlPresentFlag: int, DvBlSignalCompatibilityId: int, Rotation: int, Comment: string, TimeBase: string, CodecTimeBase: string, Title: string, Hdr10PlusPresentFlag: bool, VideoRange: record, VideoRangeType: record, VideoDoViTitle: string, AudioSpatialFormat: record, LocalizedUndefined: string, LocalizedDefault: string, LocalizedForced: string, LocalizedExternal: string, LocalizedHearingImpaired: string, DisplayTitle: string, NalLengthSize: string, IsInterlaced: bool, IsAVC: bool, ChannelLayout: string, BitRate: int, BitDepth: int, RefFrames: int, PacketLength: int, Channels: int, SampleRate: int, IsDefault: bool, IsForced: bool, IsHearingImpaired: bool, Height: int, Width: int, AverageFrameRate: float, RealFrameRate: float, ReferenceFrameRate: float, Profile: string, Type: record, AspectRatio: string, Index: int, Score: int, IsExternal: bool, DeliveryMethod: record, DeliveryUrl: string, IsExternalUrl: bool, IsTextSubtitleStream: bool, SupportsExternalStream: bool, Path: string, PixelFormat: string, Level: float, IsAnamorphic: bool>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: table<StartPositionTicks: int, Name: string, ImagePath: string, ImageDateModified: string, ImageTag: string>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list<record>, MediaSources: list<record>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list<record>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list<record>, Studios: list<record>, GenreItems: list<record>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: list<record>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list<record>, SeasonName: string, MediaStreams: list<record>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list<record>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>>> {
@@ -6219,7 +6400,7 @@ export def "live-tv-programs GetProgram" [
   let full_url = (build-url $base $"/LiveTv/Programs/($programId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets recommended live tv epgs.
@@ -6234,6 +6415,7 @@ export def "live-tv-programs-recommended GetRecommendedPrograms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. filter by user id. (format: uuid)
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
@@ -6259,7 +6441,7 @@ export def "live-tv-programs-recommended GetRecommendedPrograms" [
   let full_url = (build-url $base "/LiveTv/Programs/Recommended" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets live tv recordings.
@@ -6274,6 +6456,7 @@ export def "live-tv-recordings GetRecordings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --channelId: string # Optional. Filter by channel id.
   --userId: string # Optional. Filter by user and attach user data. (format: uuid)
@@ -6301,7 +6484,7 @@ export def "live-tv-recordings GetRecordings" [
   let full_url = (build-url $base "/LiveTv/Recordings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a live tv recording.
@@ -6317,6 +6500,7 @@ export def "live-tv-recordings GetRecording" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Attach user data. (format: uuid)
 ]: nothing -> record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: table<Name: string, Url: string>, MediaSources: table<Protocol: record, Id: string, Path: string, EncoderPath: string, EncoderProtocol: record, Type: record, Container: string, Size: int, Name: string, IsRemote: bool, ETag: string, RunTimeTicks: int, ReadAtNativeFramerate: bool, IgnoreDts: bool, IgnoreIndex: bool, GenPtsInput: bool, SupportsTranscoding: bool, SupportsDirectStream: bool, SupportsDirectPlay: bool, IsInfiniteStream: bool, UseMostCompatibleTranscodingProfile: bool, RequiresOpening: bool, OpenToken: string, RequiresClosing: bool, LiveStreamId: string, BufferMs: int, RequiresLooping: bool, SupportsProbing: bool, VideoType: record, IsoType: record, Video3DFormat: record, MediaStreams: list, MediaAttachments: list, Formats: list, Bitrate: int, FallbackMaxStreamingBitrate: int, Timestamp: record, RequiredHttpHeaders: record, TranscodingUrl: string, TranscodingSubProtocol: record, TranscodingContainer: string, AnalyzeDurationMs: int, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, HasSegments: bool>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: table<Url: string, Name: string>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: table<Name: string, Id: string, Role: string, Type: record, PrimaryImageTag: string, ImageBlurHashes: record>, Studios: table<Name: string, Id: string>, GenreItems: table<Name: string, Id: string>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: table<Name: string, Id: string>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: table<Name: string, Id: string>, SeasonName: string, MediaStreams: table<Codec: string, CodecTag: string, Language: string, ColorRange: string, ColorSpace: string, ColorTransfer: string, ColorPrimaries: string, DvVersionMajor: int, DvVersionMinor: int, DvProfile: int, DvLevel: int, RpuPresentFlag: int, ElPresentFlag: int, BlPresentFlag: int, DvBlSignalCompatibilityId: int, Rotation: int, Comment: string, TimeBase: string, CodecTimeBase: string, Title: string, Hdr10PlusPresentFlag: bool, VideoRange: record, VideoRangeType: record, VideoDoViTitle: string, AudioSpatialFormat: record, LocalizedUndefined: string, LocalizedDefault: string, LocalizedForced: string, LocalizedExternal: string, LocalizedHearingImpaired: string, DisplayTitle: string, NalLengthSize: string, IsInterlaced: bool, IsAVC: bool, ChannelLayout: string, BitRate: int, BitDepth: int, RefFrames: int, PacketLength: int, Channels: int, SampleRate: int, IsDefault: bool, IsForced: bool, IsHearingImpaired: bool, Height: int, Width: int, AverageFrameRate: float, RealFrameRate: float, ReferenceFrameRate: float, Profile: string, Type: record, AspectRatio: string, Index: int, Score: int, IsExternal: bool, DeliveryMethod: record, DeliveryUrl: string, IsExternalUrl: bool, IsTextSubtitleStream: bool, SupportsExternalStream: bool, Path: string, PixelFormat: string, Level: float, IsAnamorphic: bool>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: table<StartPositionTicks: int, Name: string, ImagePath: string, ImageDateModified: string, ImageTag: string>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list<record>, MediaSources: list<record>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list<record>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list<record>, Studios: list<record>, GenreItems: list<record>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: list<record>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list<record>, SeasonName: string, MediaStreams: list<record>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list<record>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>>> {
@@ -6326,7 +6510,7 @@ export def "live-tv-recordings GetRecording" [
   let full_url = (build-url $base $"/LiveTv/Recordings/($recordingId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a live tv recording.
@@ -6342,13 +6526,14 @@ export def "live-tv-recordings DeleteRecording" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/LiveTv/Recordings/($recordingId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets recording folders.
@@ -6363,6 +6548,7 @@ export def "live-tv-recordings-folders GetRecordingFolders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Filter by user and attach user data. (format: uuid)
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
@@ -6372,7 +6558,7 @@ export def "live-tv-recordings-folders GetRecordingFolders" [
   let full_url = (build-url $base "/LiveTv/Recordings/Folders" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets live tv recording groups.
@@ -6389,6 +6575,7 @@ export def "live-tv-recordings-groups GetRecordingGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Filter by user and attach user data. (format: uuid)
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
@@ -6398,7 +6585,7 @@ export def "live-tv-recordings-groups GetRecordingGroups" [
   let full_url = (build-url $base "/LiveTv/Recordings/Groups" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get recording group.
@@ -6416,13 +6603,14 @@ export def "live-tv-recordings-groups GetRecordingGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/LiveTv/Recordings/Groups/($groupId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets live tv recording series.
@@ -6439,6 +6627,7 @@ export def "live-tv-recordings-series GetRecordingsSeries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --channelId: string # Optional. Filter by channel id.
   --userId: string # Optional. Filter by user and attach user data. (format: uuid)
@@ -6461,7 +6650,7 @@ export def "live-tv-recordings-series GetRecordingsSeries" [
   let full_url = (build-url $base "/LiveTv/Recordings/Series" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets live tv series timers.
@@ -6476,6 +6665,7 @@ export def "live-tv-series-timers GetSeriesTimers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --sortBy: string # Optional. Sort by SortName or Priority.
   --sortOrder: string@sortOrder-completer # Optional. Sort in Ascending or Descending order.
@@ -6486,7 +6676,7 @@ export def "live-tv-series-timers GetSeriesTimers" [
   let full_url = (build-url $base "/LiveTv/SeriesTimers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a live tv series timer.
@@ -6501,6 +6691,7 @@ export def "live-tv-series-timers CreateSeriesTimer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Id: string # Gets or sets the Id of the recording. (nullable)
   --Type: string # nullable
   --ServerId: string # Gets or sets the server identifier. (nullable)
@@ -6545,7 +6736,7 @@ export def "live-tv-series-timers CreateSeriesTimer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets a live tv series timer.
@@ -6561,6 +6752,7 @@ export def "live-tv-series-timers GetSeriesTimer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Id: string, Type: string, ServerId: string, ExternalId: string, ChannelId: string, ExternalChannelId: string, ChannelName: string, ChannelPrimaryImageTag: string, ProgramId: string, ExternalProgramId: string, Name: string, Overview: string, StartDate: string, EndDate: string, ServiceName: string, Priority: int, PrePaddingSeconds: int, PostPaddingSeconds: int, IsPrePaddingRequired: bool, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, IsPostPaddingRequired: bool, KeepUntil: record, RecordAnyTime: bool, SkipEpisodesInLibrary: bool, RecordAnyChannel: bool, KeepUpTo: int, RecordNewOnly: bool, Days: list<string>, DayPattern: record, ImageTags: record, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6568,7 +6760,7 @@ export def "live-tv-series-timers GetSeriesTimer" [
   let full_url = (build-url $base $"/LiveTv/SeriesTimers/($timerId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancels a live tv series timer.
@@ -6584,13 +6776,14 @@ export def "live-tv-series-timers CancelSeriesTimer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/LiveTv/SeriesTimers/($timerId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a live tv series timer.
@@ -6606,6 +6799,7 @@ export def "live-tv-series-timers UpdateSeriesTimer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Id: string # Gets or sets the Id of the recording. (nullable)
   --Type: string # nullable
   --ServerId: string # Gets or sets the server identifier. (nullable)
@@ -6650,7 +6844,7 @@ export def "live-tv-series-timers UpdateSeriesTimer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets the live tv timers.
@@ -6665,6 +6859,7 @@ export def "live-tv-timers GetTimers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --channelId: string # Optional. Filter by channel id.
   --seriesTimerId: string # Optional. Filter by timers belonging to a series timer.
@@ -6677,7 +6872,7 @@ export def "live-tv-timers GetTimers" [
   let full_url = (build-url $base "/LiveTv/Timers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a live tv timer.
@@ -6692,6 +6887,7 @@ export def "live-tv-timers CreateTimer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Id: string # Gets or sets the Id of the recording. (nullable)
   --Type: string # nullable
   --ServerId: string # Gets or sets the server identifier. (nullable)
@@ -6729,7 +6925,7 @@ export def "live-tv-timers CreateTimer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets a timer.
@@ -6745,6 +6941,7 @@ export def "live-tv-timers GetTimer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Id: string, Type: string, ServerId: string, ExternalId: string, ChannelId: string, ExternalChannelId: string, ChannelName: string, ChannelPrimaryImageTag: string, ProgramId: string, ExternalProgramId: string, Name: string, Overview: string, StartDate: string, EndDate: string, ServiceName: string, Priority: int, PrePaddingSeconds: int, PostPaddingSeconds: int, IsPrePaddingRequired: bool, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, IsPostPaddingRequired: bool, KeepUntil: record, Status: record, SeriesTimerId: string, ExternalSeriesTimerId: string, RunTimeTicks: int, ProgramInfo: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list<record>, MediaSources: list<record>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list<record>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list<record>, Studios: list<record>, GenreItems: list<record>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: list<record>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list<record>, SeasonName: string, MediaStreams: list<record>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list<record>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6752,7 +6949,7 @@ export def "live-tv-timers GetTimer" [
   let full_url = (build-url $base $"/LiveTv/Timers/($timerId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancels a live tv timer.
@@ -6768,13 +6965,14 @@ export def "live-tv-timers CancelTimer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/LiveTv/Timers/($timerId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a live tv timer.
@@ -6790,6 +6988,7 @@ export def "live-tv-timers UpdateTimer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Id: string # Gets or sets the Id of the recording. (nullable)
   --Type: string # nullable
   --ServerId: string # Gets or sets the server identifier. (nullable)
@@ -6827,7 +7026,7 @@ export def "live-tv-timers UpdateTimer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets the default values for a new timer.
@@ -6842,6 +7041,7 @@ export def "live-tv-timers-defaults GetDefaultTimer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --programId: string # Optional. To attach default values based on a program.
 ]: nothing -> record<Id: string, Type: string, ServerId: string, ExternalId: string, ChannelId: string, ExternalChannelId: string, ChannelName: string, ChannelPrimaryImageTag: string, ProgramId: string, ExternalProgramId: string, Name: string, Overview: string, StartDate: string, EndDate: string, ServiceName: string, Priority: int, PrePaddingSeconds: int, PostPaddingSeconds: int, IsPrePaddingRequired: bool, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, IsPostPaddingRequired: bool, KeepUntil: record, RecordAnyTime: bool, SkipEpisodesInLibrary: bool, RecordAnyChannel: bool, KeepUpTo: int, RecordNewOnly: bool, Days: list<string>, DayPattern: record, ImageTags: record, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string> {
@@ -6851,7 +7051,7 @@ export def "live-tv-timers-defaults GetDefaultTimer" [
   let full_url = (build-url $base "/LiveTv/Timers/Defaults" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a tuner host.
@@ -6866,6 +7066,7 @@ export def "live-tv-tuner-hosts AddTunerHost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --Id: string # nullable
   --Url: string # nullable
@@ -6892,7 +7093,7 @@ export def "live-tv-tuner-hosts AddTunerHost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a tuner host.
@@ -6907,6 +7108,7 @@ export def "live-tv-tuner-hosts DeleteTunerHost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Tuner host id.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6915,7 +7117,7 @@ export def "live-tv-tuner-hosts DeleteTunerHost" [
   let full_url = (build-url $base "/LiveTv/TunerHosts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tuner host types.
@@ -6930,6 +7132,7 @@ export def "live-tv-tuner-hosts-types GetTunerHostTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Name: string, Id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6937,7 +7140,7 @@ export def "live-tv-tuner-hosts-types GetTunerHostTypes" [
   let full_url = (build-url $base "/LiveTv/TunerHosts/Types")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resets a tv tuner.
@@ -6953,13 +7156,14 @@ export def "live-tv-tuners-reset ResetTuner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/LiveTv/Tuners/($tunerId)/Reset")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Discover tuners.
@@ -6974,6 +7178,7 @@ export def "live-tv-tuners-discover DiscoverTuners" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --newDevicesOnly: oneof<nothing, bool> # Only discover new tuners. (default: false)
 ]: nothing -> table<Id: string, Url: string, Type: string, DeviceId: string, FriendlyName: string, ImportFavoritesOnly: bool, AllowHWTranscoding: bool, AllowFmp4TranscodingContainer: bool, AllowStreamSharing: bool, FallbackMaxStreamingBitrate: int, EnableStreamLooping: bool, Source: string, TunerCount: int, UserAgent: string, IgnoreDts: bool, ReadAtNativeFramerate: bool> {
@@ -6983,7 +7188,7 @@ export def "live-tv-tuners-discover DiscoverTuners" [
   let full_url = (build-url $base "/LiveTv/Tuners/Discover" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Discover tuners.
@@ -6998,6 +7203,7 @@ export def "live-tv-tuners-discvover DiscvoverTuners" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --newDevicesOnly: oneof<nothing, bool> # Only discover new tuners. (default: false)
 ]: nothing -> table<Id: string, Url: string, Type: string, DeviceId: string, FriendlyName: string, ImportFavoritesOnly: bool, AllowHWTranscoding: bool, AllowFmp4TranscodingContainer: bool, AllowStreamSharing: bool, FallbackMaxStreamingBitrate: int, EnableStreamLooping: bool, Source: string, TunerCount: int, UserAgent: string, IgnoreDts: bool, ReadAtNativeFramerate: bool> {
@@ -7007,7 +7213,7 @@ export def "live-tv-tuners-discvover DiscvoverTuners" [
   let full_url = (build-url $base "/LiveTv/Tuners/Discvover" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets known countries.
@@ -7022,6 +7228,7 @@ export def "localization-countries GetCountries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Name: string, DisplayName: string, TwoLetterISORegionName: string, ThreeLetterISORegionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7029,7 +7236,7 @@ export def "localization-countries GetCountries" [
   let full_url = (build-url $base "/Localization/Countries")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets known cultures.
@@ -7044,6 +7251,7 @@ export def "localization-cultures GetCultures" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Name: string, DisplayName: string, TwoLetterISOLanguageName: string, ThreeLetterISOLanguageName: string, ThreeLetterISOLanguageNames: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7051,7 +7259,7 @@ export def "localization-cultures GetCultures" [
   let full_url = (build-url $base "/Localization/Cultures")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets localization options.
@@ -7066,6 +7274,7 @@ export def "localization-options GetLocalizationOptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Name: string, Value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7073,7 +7282,7 @@ export def "localization-options GetLocalizationOptions" [
   let full_url = (build-url $base "/Localization/Options")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets known parental ratings.
@@ -7088,6 +7297,7 @@ export def "localization-parental-ratings GetParentalRatings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Name: string, Value: int, RatingScore: record<score: int, subScore: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7095,7 +7305,7 @@ export def "localization-parental-ratings GetParentalRatings" [
   let full_url = (build-url $base "/Localization/ParentalRatings")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an item's lyrics.
@@ -7111,6 +7321,7 @@ export def "audio-lyrics GetLyrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Metadata: record<Artist: string, Album: string, Title: string, Author: string, Length: int, By: string, Offset: int, Creator: string, Version: string, IsSynced: bool>, Lyrics: table<Text: string, Start: int, Cues: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7118,7 +7329,7 @@ export def "audio-lyrics GetLyrics" [
   let full_url = (build-url $base $"/Audio/($itemId)/Lyrics")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload an external lyric file.
@@ -7134,6 +7345,7 @@ export def "audio-lyrics UploadLyrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --fileName: string # Name of the file being uploaded.
   --body: record
@@ -7146,7 +7358,7 @@ export def "audio-lyrics UploadLyrics" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "text/plain" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "text/plain" $body
 }
 
 # Deletes an external lyric file.
@@ -7162,13 +7374,14 @@ export def "audio-lyrics DeleteLyrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Audio/($itemId)/Lyrics")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search remote lyrics.
@@ -7184,6 +7397,7 @@ export def "audio-remote-search-lyrics SearchRemoteLyrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Id: string, ProviderName: string, Lyrics: record<Metadata: record, Lyrics: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7191,7 +7405,7 @@ export def "audio-remote-search-lyrics SearchRemoteLyrics" [
   let full_url = (build-url $base $"/Audio/($itemId)/RemoteSearch/Lyrics")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Downloads a remote lyric.
@@ -7208,6 +7422,7 @@ export def "audio-remote-search-lyrics DownloadRemoteLyrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Metadata: record<Artist: string, Album: string, Title: string, Author: string, Length: int, By: string, Offset: int, Creator: string, Version: string, IsSynced: bool>, Lyrics: table<Text: string, Start: int, Cues: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7215,7 +7430,7 @@ export def "audio-remote-search-lyrics DownloadRemoteLyrics" [
   let full_url = (build-url $base $"/Audio/($itemId)/RemoteSearch/Lyrics/($lyricId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the remote lyrics.
@@ -7231,6 +7446,7 @@ export def "providers-lyrics GetRemoteLyrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Metadata: record<Artist: string, Album: string, Title: string, Author: string, Length: int, By: string, Offset: int, Creator: string, Version: string, IsSynced: bool>, Lyrics: table<Text: string, Start: int, Cues: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7238,7 +7454,7 @@ export def "providers-lyrics GetRemoteLyrics" [
   let full_url = (build-url $base $"/Providers/Lyrics/($lyricId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets live playback media info for an item.
@@ -7254,6 +7470,7 @@ export def "items-playback-info GetPlaybackInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # The user id. (format: uuid)
 ]: nothing -> record<MediaSources: table<Protocol: record, Id: string, Path: string, EncoderPath: string, EncoderProtocol: record, Type: record, Container: string, Size: int, Name: string, IsRemote: bool, ETag: string, RunTimeTicks: int, ReadAtNativeFramerate: bool, IgnoreDts: bool, IgnoreIndex: bool, GenPtsInput: bool, SupportsTranscoding: bool, SupportsDirectStream: bool, SupportsDirectPlay: bool, IsInfiniteStream: bool, UseMostCompatibleTranscodingProfile: bool, RequiresOpening: bool, OpenToken: string, RequiresClosing: bool, LiveStreamId: string, BufferMs: int, RequiresLooping: bool, SupportsProbing: bool, VideoType: record, IsoType: record, Video3DFormat: record, MediaStreams: list, MediaAttachments: list, Formats: list, Bitrate: int, FallbackMaxStreamingBitrate: int, Timestamp: record, RequiredHttpHeaders: record, TranscodingUrl: string, TranscodingSubProtocol: record, TranscodingContainer: string, AnalyzeDurationMs: int, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, HasSegments: bool>, PlaySessionId: string, ErrorCode: record> {
@@ -7263,7 +7480,7 @@ export def "items-playback-info GetPlaybackInfo" [
   let full_url = (build-url $base $"/Items/($itemId)/PlaybackInfo" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets live playback media info for an item.
@@ -7293,6 +7510,7 @@ export def "items-playback-info GetPostedPlaybackInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # The user id. (DEPRECATED, format: uuid)
   --maxStreamingBitrate: int # The maximum streaming bitrate. (DEPRECATED, format: int32)
@@ -7334,7 +7552,7 @@ export def "items-playback-info GetPostedPlaybackInfo" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Closes a media source.
@@ -7349,6 +7567,7 @@ export def "live-streams-close CloseLiveStream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --liveStreamId: string # The livestream id.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7357,7 +7576,7 @@ export def "live-streams-close CloseLiveStream" [
   let full_url = (build-url $base "/LiveStreams/Close" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Opens a media source.
@@ -7372,6 +7591,7 @@ export def "live-streams-open OpenLiveStream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --openToken: string # The open token.
   --userId: string # The user id. (format: uuid)
@@ -7409,7 +7629,7 @@ export def "live-streams-open OpenLiveStream" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Tests the network with a request with the size of the bitrate.
@@ -7424,6 +7644,7 @@ export def "playback-bitrate-test GetBitrateTestBytes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --size: int # The bitrate. Defaults to 102400. (format: int32, default: 102400)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7432,7 +7653,7 @@ export def "playback-bitrate-test GetBitrateTestBytes" [
   let full_url = (build-url $base "/Playback/BitrateTest" $qp)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all media segments based on an itemId.
@@ -7448,6 +7669,7 @@ export def "media-segments GetItemSegments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --includeSegmentTypes: list # Optional filter of requested segment types.
 ]: nothing -> record<Items: table<Id: string, ItemId: string, Type: record, StartTicks: int, EndTicks: int>, TotalRecordCount: int, StartIndex: int> {
@@ -7457,7 +7679,7 @@ export def "media-segments GetItemSegments" [
   let full_url = (build-url $base $"/MediaSegments/($itemId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets movie recommendations.
@@ -7472,6 +7694,7 @@ export def "movies-recommendations GetMovieRecommendations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
   --parentId: string # Specify this to localize the search to a specific item or folder. Omit to use the root. (format: uuid)
@@ -7485,7 +7708,7 @@ export def "movies-recommendations GetMovieRecommendations" [
   let full_url = (build-url $base "/Movies/Recommendations" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all music genres from a given item, folder, or the entire library.
@@ -7502,6 +7725,7 @@ export def "music-genres GetMusicGenres" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
@@ -7528,7 +7752,7 @@ export def "music-genres GetMusicGenres" [
   let full_url = (build-url $base "/MusicGenres" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a music genre, by name.
@@ -7544,6 +7768,7 @@ export def "music-genres GetMusicGenre" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
 ]: nothing -> record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: table<Name: string, Url: string>, MediaSources: table<Protocol: record, Id: string, Path: string, EncoderPath: string, EncoderProtocol: record, Type: record, Container: string, Size: int, Name: string, IsRemote: bool, ETag: string, RunTimeTicks: int, ReadAtNativeFramerate: bool, IgnoreDts: bool, IgnoreIndex: bool, GenPtsInput: bool, SupportsTranscoding: bool, SupportsDirectStream: bool, SupportsDirectPlay: bool, IsInfiniteStream: bool, UseMostCompatibleTranscodingProfile: bool, RequiresOpening: bool, OpenToken: string, RequiresClosing: bool, LiveStreamId: string, BufferMs: int, RequiresLooping: bool, SupportsProbing: bool, VideoType: record, IsoType: record, Video3DFormat: record, MediaStreams: list, MediaAttachments: list, Formats: list, Bitrate: int, FallbackMaxStreamingBitrate: int, Timestamp: record, RequiredHttpHeaders: record, TranscodingUrl: string, TranscodingSubProtocol: record, TranscodingContainer: string, AnalyzeDurationMs: int, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, HasSegments: bool>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: table<Url: string, Name: string>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: table<Name: string, Id: string, Role: string, Type: record, PrimaryImageTag: string, ImageBlurHashes: record>, Studios: table<Name: string, Id: string>, GenreItems: table<Name: string, Id: string>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: table<Name: string, Id: string>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: table<Name: string, Id: string>, SeasonName: string, MediaStreams: table<Codec: string, CodecTag: string, Language: string, ColorRange: string, ColorSpace: string, ColorTransfer: string, ColorPrimaries: string, DvVersionMajor: int, DvVersionMinor: int, DvProfile: int, DvLevel: int, RpuPresentFlag: int, ElPresentFlag: int, BlPresentFlag: int, DvBlSignalCompatibilityId: int, Rotation: int, Comment: string, TimeBase: string, CodecTimeBase: string, Title: string, Hdr10PlusPresentFlag: bool, VideoRange: record, VideoRangeType: record, VideoDoViTitle: string, AudioSpatialFormat: record, LocalizedUndefined: string, LocalizedDefault: string, LocalizedForced: string, LocalizedExternal: string, LocalizedHearingImpaired: string, DisplayTitle: string, NalLengthSize: string, IsInterlaced: bool, IsAVC: bool, ChannelLayout: string, BitRate: int, BitDepth: int, RefFrames: int, PacketLength: int, Channels: int, SampleRate: int, IsDefault: bool, IsForced: bool, IsHearingImpaired: bool, Height: int, Width: int, AverageFrameRate: float, RealFrameRate: float, ReferenceFrameRate: float, Profile: string, Type: record, AspectRatio: string, Index: int, Score: int, IsExternal: bool, DeliveryMethod: record, DeliveryUrl: string, IsExternalUrl: bool, IsTextSubtitleStream: bool, SupportsExternalStream: bool, Path: string, PixelFormat: string, Level: float, IsAnamorphic: bool>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: table<StartPositionTicks: int, Name: string, ImagePath: string, ImageDateModified: string, ImageTag: string>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list<record>, MediaSources: list<record>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list<record>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list<record>, Studios: list<record>, GenreItems: list<record>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: list<record>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list<record>, SeasonName: string, MediaStreams: list<record>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list<record>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>>> {
@@ -7553,7 +7778,7 @@ export def "music-genres GetMusicGenre" [
   let full_url = (build-url $base $"/MusicGenres/($genreName)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets available packages.
@@ -7568,6 +7793,7 @@ export def "packages GetPackages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<name: string, description: string, overview: string, owner: string, category: string, guid: string, versions: list<record>, imageUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7575,7 +7801,7 @@ export def "packages GetPackages" [
   let full_url = (build-url $base "/Packages")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a package by name or assembly GUID.
@@ -7591,6 +7817,7 @@ export def "packages GetPackageInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --assemblyGuid: string # The GUID of the associated assembly. (format: uuid)
 ]: nothing -> record<name: string, description: string, overview: string, owner: string, category: string, guid: string, versions: table<version: string, VersionNumber: string, changelog: string, targetAbi: string, sourceUrl: string, checksum: string, timestamp: string, repositoryName: string, repositoryUrl: string>, imageUrl: string> {
@@ -7600,7 +7827,7 @@ export def "packages GetPackageInfo" [
   let full_url = (build-url $base $"/Packages/($name)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Installs a package.
@@ -7616,6 +7843,7 @@ export def "packages-installed InstallPackage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --assemblyGuid: string # GUID of the associated assembly. (format: uuid)
   --version: string # Optional version. Defaults to latest version.
   --repositoryUrl: string # Optional. Specify the repository to install from.
@@ -7626,7 +7854,7 @@ export def "packages-installed InstallPackage" [
   let full_url = (build-url $base $"/Packages/Installed/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancels a package installation.
@@ -7642,13 +7870,14 @@ export def "packages-installing CancelPackageInstallation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Packages/Installing/($packageId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all package repositories.
@@ -7663,6 +7892,7 @@ export def "repositories GetRepositories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Name: string, Url: string, Enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7670,7 +7900,7 @@ export def "repositories GetRepositories" [
   let full_url = (build-url $base "/Repositories")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sets the enabled and existing package repositories.
@@ -7685,6 +7915,7 @@ export def "repositories SetRepositories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -7694,7 +7925,7 @@ export def "repositories SetRepositories" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets all persons.
@@ -7709,6 +7940,7 @@ export def "persons GetPersons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Optional. The maximum number of records to return. (format: int32)
   --searchTerm: string # The search term.
@@ -7730,7 +7962,7 @@ export def "persons GetPersons" [
   let full_url = (build-url $base "/Persons" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get person by name.
@@ -7746,6 +7978,7 @@ export def "persons GetPerson" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
 ]: nothing -> record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: table<Name: string, Url: string>, MediaSources: table<Protocol: record, Id: string, Path: string, EncoderPath: string, EncoderProtocol: record, Type: record, Container: string, Size: int, Name: string, IsRemote: bool, ETag: string, RunTimeTicks: int, ReadAtNativeFramerate: bool, IgnoreDts: bool, IgnoreIndex: bool, GenPtsInput: bool, SupportsTranscoding: bool, SupportsDirectStream: bool, SupportsDirectPlay: bool, IsInfiniteStream: bool, UseMostCompatibleTranscodingProfile: bool, RequiresOpening: bool, OpenToken: string, RequiresClosing: bool, LiveStreamId: string, BufferMs: int, RequiresLooping: bool, SupportsProbing: bool, VideoType: record, IsoType: record, Video3DFormat: record, MediaStreams: list, MediaAttachments: list, Formats: list, Bitrate: int, FallbackMaxStreamingBitrate: int, Timestamp: record, RequiredHttpHeaders: record, TranscodingUrl: string, TranscodingSubProtocol: record, TranscodingContainer: string, AnalyzeDurationMs: int, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, HasSegments: bool>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: table<Url: string, Name: string>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: table<Name: string, Id: string, Role: string, Type: record, PrimaryImageTag: string, ImageBlurHashes: record>, Studios: table<Name: string, Id: string>, GenreItems: table<Name: string, Id: string>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: table<Name: string, Id: string>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: table<Name: string, Id: string>, SeasonName: string, MediaStreams: table<Codec: string, CodecTag: string, Language: string, ColorRange: string, ColorSpace: string, ColorTransfer: string, ColorPrimaries: string, DvVersionMajor: int, DvVersionMinor: int, DvProfile: int, DvLevel: int, RpuPresentFlag: int, ElPresentFlag: int, BlPresentFlag: int, DvBlSignalCompatibilityId: int, Rotation: int, Comment: string, TimeBase: string, CodecTimeBase: string, Title: string, Hdr10PlusPresentFlag: bool, VideoRange: record, VideoRangeType: record, VideoDoViTitle: string, AudioSpatialFormat: record, LocalizedUndefined: string, LocalizedDefault: string, LocalizedForced: string, LocalizedExternal: string, LocalizedHearingImpaired: string, DisplayTitle: string, NalLengthSize: string, IsInterlaced: bool, IsAVC: bool, ChannelLayout: string, BitRate: int, BitDepth: int, RefFrames: int, PacketLength: int, Channels: int, SampleRate: int, IsDefault: bool, IsForced: bool, IsHearingImpaired: bool, Height: int, Width: int, AverageFrameRate: float, RealFrameRate: float, ReferenceFrameRate: float, Profile: string, Type: record, AspectRatio: string, Index: int, Score: int, IsExternal: bool, DeliveryMethod: record, DeliveryUrl: string, IsExternalUrl: bool, IsTextSubtitleStream: bool, SupportsExternalStream: bool, Path: string, PixelFormat: string, Level: float, IsAnamorphic: bool>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: table<StartPositionTicks: int, Name: string, ImagePath: string, ImageDateModified: string, ImageTag: string>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list<record>, MediaSources: list<record>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list<record>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list<record>, Studios: list<record>, GenreItems: list<record>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: list<record>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list<record>, SeasonName: string, MediaStreams: list<record>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list<record>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>>> {
@@ -7755,7 +7988,7 @@ export def "persons GetPerson" [
   let full_url = (build-url $base $"/Persons/($name)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new playlist.
@@ -7775,6 +8008,7 @@ export def "playlists CreatePlaylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --name: string # The playlist name. (DEPRECATED)
   --ids: list # The item ids. (DEPRECATED)
@@ -7796,7 +8030,7 @@ export def "playlists CreatePlaylist" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates a playlist.
@@ -7813,6 +8047,7 @@ export def "playlists UpdatePlaylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Name: string # Gets or sets the name of the new playlist. (nullable)
   --Ids: list # Gets or sets item ids of the playlist. (nullable)
   --Users: list # Gets or sets the playlist users. (nullable) — item shape: {UserId?: string, CanEdit?: bool}
@@ -7826,7 +8061,7 @@ export def "playlists UpdatePlaylist" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a playlist.
@@ -7842,6 +8077,7 @@ export def "playlists GetPlaylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<OpenAccess: bool, Shares: table<UserId: string, CanEdit: bool>, ItemIds: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7849,7 +8085,7 @@ export def "playlists GetPlaylist" [
   let full_url = (build-url $base $"/Playlists/($playlistId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds items to a playlist.
@@ -7865,6 +8101,7 @@ export def "playlists-items AddItemToPlaylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Item id, comma delimited.
   --userId: string # The userId. (format: uuid)
 ]: nothing -> any {
@@ -7874,7 +8111,7 @@ export def "playlists-items AddItemToPlaylist" [
   let full_url = (build-url $base $"/Playlists/($playlistId)/Items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Removes items from a playlist.
@@ -7890,6 +8127,7 @@ export def "playlists-items RemoveItemFromPlaylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --entryIds: list # The item ids, comma delimited.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7898,7 +8136,7 @@ export def "playlists-items RemoveItemFromPlaylist" [
   let full_url = (build-url $base $"/Playlists/($playlistId)/Items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the original items of a playlist.
@@ -7914,6 +8152,7 @@ export def "playlists-items GetPlaylistItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # User id. (format: uuid)
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
@@ -7930,7 +8169,7 @@ export def "playlists-items GetPlaylistItems" [
   let full_url = (build-url $base $"/Playlists/($playlistId)/Items" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Moves a playlist item.
@@ -7948,13 +8187,14 @@ export def "playlists-items-move MoveItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Playlists/($playlistId)/Items/($itemId)/Move/($newIndex)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a playlist's users.
@@ -7970,6 +8210,7 @@ export def "playlists-users GetPlaylistUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<UserId: string, CanEdit: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7977,7 +8218,7 @@ export def "playlists-users GetPlaylistUsers" [
   let full_url = (build-url $base $"/Playlists/($playlistId)/Users")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a playlist user.
@@ -7994,6 +8235,7 @@ export def "playlists-users GetPlaylistUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<UserId: string, CanEdit: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8001,7 +8243,7 @@ export def "playlists-users GetPlaylistUser" [
   let full_url = (build-url $base $"/Playlists/($playlistId)/Users/($userId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Modify a user of a playlist's users.
@@ -8018,6 +8260,7 @@ export def "playlists-users UpdatePlaylistUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --CanEdit: oneof<nothing, bool> # Gets or sets a value indicating whether the user can edit the playlist. (nullable)
 ]: any -> any {
   let input = $in
@@ -8028,7 +8271,7 @@ export def "playlists-users UpdatePlaylistUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a user from a playlist's users.
@@ -8045,13 +8288,14 @@ export def "playlists-users RemoveUserFromPlaylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Playlists/($playlistId)/Users/($userId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reports that a session has begun playing an item.
@@ -8069,6 +8313,7 @@ export def "playing-items OnPlaybackStart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --mediaSourceId: string # The id of the MediaSource.
   --audioStreamIndex: int # The audio stream index. (format: int32)
   --subtitleStreamIndex: int # The subtitle stream index. (format: int32)
@@ -8083,7 +8328,7 @@ export def "playing-items OnPlaybackStart" [
   let full_url = (build-url $base $"/PlayingItems/($itemId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reports that a session has stopped playing an item.
@@ -8101,6 +8346,7 @@ export def "playing-items OnPlaybackStopped" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --mediaSourceId: string # The id of the MediaSource.
   --nextMediaType: string # The next media type that will play.
   --positionTicks: int # Optional. The position, in ticks, where playback stopped. 1 tick = 10000 ms. (format: int64)
@@ -8113,7 +8359,7 @@ export def "playing-items OnPlaybackStopped" [
   let full_url = (build-url $base $"/PlayingItems/($itemId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reports a session's playback progress.
@@ -8131,6 +8377,7 @@ export def "playing-items-progress OnPlaybackProgress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --mediaSourceId: string # The id of the MediaSource.
   --positionTicks: int # Optional. The current position, in ticks. 1 tick = 10000 ms. (format: int64)
   --audioStreamIndex: int # The audio stream index. (format: int32)
@@ -8149,7 +8396,7 @@ export def "playing-items-progress OnPlaybackProgress" [
   let full_url = (build-url $base $"/PlayingItems/($itemId)/Progress" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reports playback has started within a session.
@@ -8165,6 +8412,7 @@ export def "sessions-playing ReportPlaybackStart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --CanSeek: oneof<nothing, bool> # Gets or sets a value indicating whether this instance can seek.
   --Item: any # Gets or sets the item. (nullable)
   --ItemId: string # Gets or sets the item identifier. (format: uuid)
@@ -8195,7 +8443,7 @@ export def "sessions-playing ReportPlaybackStart" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Pings a playback session.
@@ -8210,6 +8458,7 @@ export def "sessions-playing-ping PingPlaybackSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --playSessionId: string # Playback session id.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8218,7 +8467,7 @@ export def "sessions-playing-ping PingPlaybackSession" [
   let full_url = (build-url $base "/Sessions/Playing/Ping" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reports playback progress within a session.
@@ -8234,6 +8483,7 @@ export def "sessions-playing-progress ReportPlaybackProgress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --CanSeek: oneof<nothing, bool> # Gets or sets a value indicating whether this instance can seek.
   --Item: any # Gets or sets the item. (nullable)
   --ItemId: string # Gets or sets the item identifier. (format: uuid)
@@ -8264,7 +8514,7 @@ export def "sessions-playing-progress ReportPlaybackProgress" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reports playback has stopped within a session.
@@ -8280,6 +8530,7 @@ export def "sessions-playing-stopped ReportPlaybackStopped" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Item: any # Gets or sets the item. (nullable)
   --ItemId: string # Gets or sets the item identifier. (format: uuid)
   --SessionId: string # Gets or sets the session id. (nullable)
@@ -8300,7 +8551,7 @@ export def "sessions-playing-stopped ReportPlaybackStopped" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Marks an item as played for user.
@@ -8316,6 +8567,7 @@ export def "user-played-items MarkPlayedItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # User id. (format: uuid)
   --datePlayed: string # Optional. The date the item was played. (format: date-time)
@@ -8326,7 +8578,7 @@ export def "user-played-items MarkPlayedItem" [
   let full_url = (build-url $base $"/UserPlayedItems/($itemId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Marks an item as unplayed for user.
@@ -8342,6 +8594,7 @@ export def "user-played-items MarkUnplayedItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # User id. (format: uuid)
 ]: nothing -> record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string> {
@@ -8351,7 +8604,7 @@ export def "user-played-items MarkUnplayedItem" [
   let full_url = (build-url $base $"/UserPlayedItems/($itemId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of currently installed plugins.
@@ -8366,6 +8619,7 @@ export def "plugins GetPlugins" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Name: string, Version: string, ConfigurationFileName: string, Description: string, Id: string, CanUninstall: bool, HasImage: bool, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8373,7 +8627,7 @@ export def "plugins GetPlugins" [
   let full_url = (build-url $base "/Plugins")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Uninstalls a plugin.
@@ -8391,13 +8645,14 @@ export def "plugins UninstallPlugin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Plugins/($pluginId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Uninstalls a plugin by version.
@@ -8414,13 +8669,14 @@ export def "plugins UninstallPluginByVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Plugins/($pluginId)/($version)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disable a plugin.
@@ -8437,13 +8693,14 @@ export def "plugins-disable DisablePlugin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Plugins/($pluginId)/($version)/Disable")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enables a disabled plugin.
@@ -8460,13 +8717,14 @@ export def "plugins-enable EnablePlugin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Plugins/($pluginId)/($version)/Enable")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a plugin's image.
@@ -8483,13 +8741,14 @@ export def "plugins-image GetPluginImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Plugins/($pluginId)/($version)/Image")
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets plugin configuration.
@@ -8505,6 +8764,7 @@ export def "plugins-configuration GetPluginConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8512,7 +8772,7 @@ export def "plugins-configuration GetPluginConfiguration" [
   let full_url = (build-url $base $"/Plugins/($pluginId)/Configuration")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates plugin configuration.
@@ -8528,13 +8788,14 @@ export def "plugins-configuration UpdatePluginConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Plugins/($pluginId)/Configuration")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a plugin's manifest.
@@ -8550,13 +8811,14 @@ export def "plugins-manifest GetPluginManifest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Plugins/($pluginId)/Manifest")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Authorizes a pending quick connect request.
@@ -8571,6 +8833,7 @@ export def "quick-connect-authorize AuthorizeQuickConnect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --code: string # Quick connect code to authorize.
   --userId: string # The user the authorize. Access to the requested user is required. (format: uuid)
@@ -8581,7 +8844,7 @@ export def "quick-connect-authorize AuthorizeQuickConnect" [
   let full_url = (build-url $base "/QuickConnect/Authorize" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Attempts to retrieve authentication information.
@@ -8596,6 +8859,7 @@ export def "quick-connect-connect GetQuickConnectState" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --secret: string # Secret previously returned from the Initiate endpoint.
 ]: nothing -> record<Authenticated: bool, Secret: string, Code: string, DeviceId: string, DeviceName: string, AppName: string, AppVersion: string, DateAdded: string> {
@@ -8605,7 +8869,7 @@ export def "quick-connect-connect GetQuickConnectState" [
   let full_url = (build-url $base "/QuickConnect/Connect" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the current quick connect state.
@@ -8620,6 +8884,7 @@ export def "quick-connect-enabled GetQuickConnectEnabled" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> bool {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8627,7 +8892,7 @@ export def "quick-connect-enabled GetQuickConnectEnabled" [
   let full_url = (build-url $base "/QuickConnect/Enabled")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Initiate a new quick connect request.
@@ -8642,6 +8907,7 @@ export def "quick-connect-initiate InitiateQuickConnect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Authenticated: bool, Secret: string, Code: string, DeviceId: string, DeviceName: string, AppName: string, AppVersion: string, DateAdded: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8649,7 +8915,7 @@ export def "quick-connect-initiate InitiateQuickConnect" [
   let full_url = (build-url $base "/QuickConnect/Initiate")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets available remote images for an item.
@@ -8665,6 +8931,7 @@ export def "items-remote-images GetRemoteImages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --type: string@type-completer-1 # The image type.
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
@@ -8678,7 +8945,7 @@ export def "items-remote-images GetRemoteImages" [
   let full_url = (build-url $base $"/Items/($itemId)/RemoteImages" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Downloads a remote image for an item.
@@ -8694,6 +8961,7 @@ export def "items-remote-images-download DownloadRemoteImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-1 # The image type.
   --imageUrl: string # The image url.
 ]: nothing -> any {
@@ -8703,7 +8971,7 @@ export def "items-remote-images-download DownloadRemoteImage" [
   let full_url = (build-url $base $"/Items/($itemId)/RemoteImages/Download" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets available remote image providers for an item.
@@ -8719,6 +8987,7 @@ export def "items-remote-images-providers GetRemoteImageProviders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Name: string, SupportedImages: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8726,7 +8995,7 @@ export def "items-remote-images-providers GetRemoteImageProviders" [
   let full_url = (build-url $base $"/Items/($itemId)/RemoteImages/Providers")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tasks.
@@ -8741,6 +9010,7 @@ export def "scheduled-tasks GetTasks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --isHidden: oneof<nothing, bool> # Optional filter tasks that are hidden, or not.
   --isEnabled: oneof<nothing, bool> # Optional filter tasks that are enabled, or not.
@@ -8751,7 +9021,7 @@ export def "scheduled-tasks GetTasks" [
   let full_url = (build-url $base "/ScheduledTasks" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get task by id.
@@ -8767,6 +9037,7 @@ export def "scheduled-tasks GetTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Name: string, State: record, CurrentProgressPercentage: float, Id: string, LastExecutionResult: record<StartTimeUtc: string, EndTimeUtc: string, Status: record, Name: string, Key: string, Id: string, ErrorMessage: string, LongErrorMessage: string>, Triggers: table<Type: record, TimeOfDayTicks: int, IntervalTicks: int, DayOfWeek: record, MaxRuntimeTicks: int>, Description: string, Category: string, IsHidden: bool, Key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8774,7 +9045,7 @@ export def "scheduled-tasks GetTask" [
   let full_url = (build-url $base $"/ScheduledTasks/($taskId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update specified task triggers.
@@ -8790,6 +9061,7 @@ export def "scheduled-tasks-triggers UpdateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -8799,7 +9071,7 @@ export def "scheduled-tasks-triggers UpdateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Start specified task.
@@ -8815,13 +9087,14 @@ export def "scheduled-tasks-running StartTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ScheduledTasks/Running/($taskId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stop specified task.
@@ -8837,13 +9110,14 @@ export def "scheduled-tasks-running StopTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ScheduledTasks/Running/($taskId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the search hint result.
@@ -8858,6 +9132,7 @@ export def "search-hints GetSearchHints" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
@@ -8884,7 +9159,7 @@ export def "search-hints GetSearchHints" [
   let full_url = (build-url $base "/Search/Hints" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all password reset providers.
@@ -8899,6 +9174,7 @@ export def "auth-password-reset-providers GetPasswordResetProviders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Name: string, Id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8906,7 +9182,7 @@ export def "auth-password-reset-providers GetPasswordResetProviders" [
   let full_url = (build-url $base "/Auth/PasswordResetProviders")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all auth providers.
@@ -8921,6 +9197,7 @@ export def "auth-providers GetAuthProviders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Name: string, Id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8928,7 +9205,7 @@ export def "auth-providers GetAuthProviders" [
   let full_url = (build-url $base "/Auth/Providers")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of sessions.
@@ -8943,6 +9220,7 @@ export def "sessions GetSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --controllableByUserId: string # Filter by sessions that a given user is allowed to remote control. (format: uuid)
   --deviceId: string # Filter by device Id.
@@ -8954,7 +9232,7 @@ export def "sessions GetSessions" [
   let full_url = (build-url $base "/Sessions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Issues a full general command to a client.
@@ -8970,6 +9248,7 @@ export def "sessions-command SendFullGeneralCommand" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Name: any@Name-completer # This exists simply to identify a set of known commands.
   --ControllingUserId: string # format: uuid
   --Arguments: record
@@ -8982,7 +9261,7 @@ export def "sessions-command SendFullGeneralCommand" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Issues a general command to a client.
@@ -8999,13 +9278,14 @@ export def "sessions-command SendGeneralCommand" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Sessions/($sessionId)/Command/($command)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Issues a command to a client to display a message to the user.
@@ -9021,6 +9301,7 @@ export def "sessions-message SendMessageCommand" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Header: string # nullable
   Text: string
   --TimeoutMs: int # nullable, format: int64
@@ -9033,7 +9314,7 @@ export def "sessions-message SendMessageCommand" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Instructs a session to play an item.
@@ -9049,6 +9330,7 @@ export def "sessions-playing Play" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --playCommand: string@playCommand-completer # The type of play command to issue (PlayNow, PlayNext, PlayLast). Clients who have not yet implemented play next and play last may play now.
   --itemIds: list # The ids of the items to play, comma delimited.
   --startPositionTicks: int # The starting position of the first item. (format: int64)
@@ -9063,7 +9345,7 @@ export def "sessions-playing Play" [
   let full_url = (build-url $base $"/Sessions/($sessionId)/Playing" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Issues a playstate command to a client.
@@ -9080,6 +9362,7 @@ export def "sessions-playing SendPlaystateCommand" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --seekPositionTicks: int # The optional position ticks. (format: int64)
   --controllingUserId: string # The optional controlling user id.
 ]: nothing -> any {
@@ -9089,7 +9372,7 @@ export def "sessions-playing SendPlaystateCommand" [
   let full_url = (build-url $base $"/Sessions/($sessionId)/Playing/($command)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Issues a system command to a client.
@@ -9106,13 +9389,14 @@ export def "sessions-system SendSystemCommand" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Sessions/($sessionId)/System/($command)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds an additional user to a session.
@@ -9129,13 +9413,14 @@ export def "sessions-user AddUserToSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Sessions/($sessionId)/User/($userId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Removes an additional user from a session.
@@ -9152,13 +9437,14 @@ export def "sessions-user RemoveUserFromSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Sessions/($sessionId)/User/($userId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Instructs a session to browse to an item or view.
@@ -9174,6 +9460,7 @@ export def "sessions-viewing DisplayContent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --itemType: string@itemType-completer # The type of item to browse to.
   --itemId: string # The Id of the item.
   --itemName: string # The name of the item.
@@ -9184,7 +9471,7 @@ export def "sessions-viewing DisplayContent" [
   let full_url = (build-url $base $"/Sessions/($sessionId)/Viewing" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates capabilities for a device.
@@ -9199,6 +9486,7 @@ export def "sessions-capabilities PostCapabilities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The session id.
   --playableMediaTypes: list # A list of playable media types, comma delimited. Audio, Video, Book, Photo.
   --supportedCommands: list # A list of supported remote control commands, comma delimited.
@@ -9211,7 +9499,7 @@ export def "sessions-capabilities PostCapabilities" [
   let full_url = (build-url $base "/Sessions/Capabilities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates capabilities for a device.
@@ -9226,6 +9514,7 @@ export def "sessions-capabilities-full PostFullCapabilities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The session id.
   --PlayableMediaTypes: list # Gets or sets the list of playable media types.
   --SupportedCommands: list # Gets or sets the list of supported commands.
@@ -9244,7 +9533,7 @@ export def "sessions-capabilities-full PostFullCapabilities" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reports that a session has ended.
@@ -9259,13 +9548,14 @@ export def "sessions-logout ReportSessionEnded" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Sessions/Logout")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reports that a session is viewing an item.
@@ -9280,6 +9570,7 @@ export def "sessions-viewing ReportViewing" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sessionId: string # The session id.
   --itemId: string # The item id.
 ]: nothing -> any {
@@ -9289,7 +9580,7 @@ export def "sessions-viewing ReportViewing" [
   let full_url = (build-url $base "/Sessions/Viewing" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Completes the startup wizard.
@@ -9304,13 +9595,14 @@ export def "startup-complete CompleteWizard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Startup/Complete")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the initial startup wizard configuration.
@@ -9325,6 +9617,7 @@ export def "startup-configuration GetStartupConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<ServerName: string, UICulture: string, MetadataCountryCode: string, PreferredMetadataLanguage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9332,7 +9625,7 @@ export def "startup-configuration GetStartupConfiguration" [
   let full_url = (build-url $base "/Startup/Configuration")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sets the initial startup wizard configuration.
@@ -9347,6 +9640,7 @@ export def "startup-configuration UpdateInitialConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ServerName: string # Gets or sets the server name. (nullable)
   --UICulture: string # Gets or sets UI language culture. (nullable)
   --MetadataCountryCode: string # Gets or sets the metadata country code. (nullable)
@@ -9360,7 +9654,7 @@ export def "startup-configuration UpdateInitialConfiguration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets the first user.
@@ -9375,6 +9669,7 @@ export def "startup-first-user GetFirstUser-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Name: string, Password: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9382,7 +9677,7 @@ export def "startup-first-user GetFirstUser-by-" [
   let full_url = (build-url $base "/Startup/FirstUser")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sets remote access and UPnP.
@@ -9398,6 +9693,7 @@ export def "startup-remote-access SetRemoteAccess" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --EnableRemoteAccess: oneof<nothing, bool> # Gets or sets a value indicating whether enable remote access.
   --EnableAutomaticPortMapping: oneof<nothing, bool> # Gets or sets a value indicating whether enable automatic port mapping. (DEPRECATED)
 ]: any -> any {
@@ -9409,7 +9705,7 @@ export def "startup-remote-access SetRemoteAccess" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets the first user.
@@ -9424,6 +9720,7 @@ export def "startup-user GetFirstUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Name: string, Password: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9431,7 +9728,7 @@ export def "startup-user GetFirstUser" [
   let full_url = (build-url $base "/Startup/User")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sets the user name and password.
@@ -9446,6 +9743,7 @@ export def "startup-user UpdateStartupUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Name: string # Gets or sets the username. (nullable)
   --Password: string # Gets or sets the user's password. (nullable)
 ]: any -> any {
@@ -9457,7 +9755,7 @@ export def "startup-user UpdateStartupUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets all studios from a given item, folder, or the entire library.
@@ -9472,6 +9770,7 @@ export def "studios GetStudios" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
@@ -9497,7 +9796,7 @@ export def "studios GetStudios" [
   let full_url = (build-url $base "/Studios" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a studio by name.
@@ -9513,6 +9812,7 @@ export def "studios GetStudio" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
 ]: nothing -> record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: table<Name: string, Url: string>, MediaSources: table<Protocol: record, Id: string, Path: string, EncoderPath: string, EncoderProtocol: record, Type: record, Container: string, Size: int, Name: string, IsRemote: bool, ETag: string, RunTimeTicks: int, ReadAtNativeFramerate: bool, IgnoreDts: bool, IgnoreIndex: bool, GenPtsInput: bool, SupportsTranscoding: bool, SupportsDirectStream: bool, SupportsDirectPlay: bool, IsInfiniteStream: bool, UseMostCompatibleTranscodingProfile: bool, RequiresOpening: bool, OpenToken: string, RequiresClosing: bool, LiveStreamId: string, BufferMs: int, RequiresLooping: bool, SupportsProbing: bool, VideoType: record, IsoType: record, Video3DFormat: record, MediaStreams: list, MediaAttachments: list, Formats: list, Bitrate: int, FallbackMaxStreamingBitrate: int, Timestamp: record, RequiredHttpHeaders: record, TranscodingUrl: string, TranscodingSubProtocol: record, TranscodingContainer: string, AnalyzeDurationMs: int, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, HasSegments: bool>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: table<Url: string, Name: string>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: table<Name: string, Id: string, Role: string, Type: record, PrimaryImageTag: string, ImageBlurHashes: record>, Studios: table<Name: string, Id: string>, GenreItems: table<Name: string, Id: string>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: table<Name: string, Id: string>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: table<Name: string, Id: string>, SeasonName: string, MediaStreams: table<Codec: string, CodecTag: string, Language: string, ColorRange: string, ColorSpace: string, ColorTransfer: string, ColorPrimaries: string, DvVersionMajor: int, DvVersionMinor: int, DvProfile: int, DvLevel: int, RpuPresentFlag: int, ElPresentFlag: int, BlPresentFlag: int, DvBlSignalCompatibilityId: int, Rotation: int, Comment: string, TimeBase: string, CodecTimeBase: string, Title: string, Hdr10PlusPresentFlag: bool, VideoRange: record, VideoRangeType: record, VideoDoViTitle: string, AudioSpatialFormat: record, LocalizedUndefined: string, LocalizedDefault: string, LocalizedForced: string, LocalizedExternal: string, LocalizedHearingImpaired: string, DisplayTitle: string, NalLengthSize: string, IsInterlaced: bool, IsAVC: bool, ChannelLayout: string, BitRate: int, BitDepth: int, RefFrames: int, PacketLength: int, Channels: int, SampleRate: int, IsDefault: bool, IsForced: bool, IsHearingImpaired: bool, Height: int, Width: int, AverageFrameRate: float, RealFrameRate: float, ReferenceFrameRate: float, Profile: string, Type: record, AspectRatio: string, Index: int, Score: int, IsExternal: bool, DeliveryMethod: record, DeliveryUrl: string, IsExternalUrl: bool, IsTextSubtitleStream: bool, SupportsExternalStream: bool, Path: string, PixelFormat: string, Level: float, IsAnamorphic: bool>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: table<StartPositionTicks: int, Name: string, ImagePath: string, ImageDateModified: string, ImageTag: string>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list<record>, MediaSources: list<record>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list<record>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list<record>, Studios: list<record>, GenreItems: list<record>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: list<record>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list<record>, SeasonName: string, MediaStreams: list<record>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list<record>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>>> {
@@ -9522,7 +9822,7 @@ export def "studios GetStudio" [
   let full_url = (build-url $base $"/Studios/($name)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of available fallback font files.
@@ -9537,6 +9837,7 @@ export def "fallback-font-fonts GetFallbackFontList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Name: string, Size: int, DateCreated: string, DateModified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9544,7 +9845,7 @@ export def "fallback-font-fonts GetFallbackFontList" [
   let full_url = (build-url $base "/FallbackFont/Fonts")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a fallback font file.
@@ -9560,13 +9861,14 @@ export def "fallback-font-fonts GetFallbackFont" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/FallbackFont/Fonts/($name)")
   let accept_val = "font/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search remote subtitles.
@@ -9583,6 +9885,7 @@ export def "items-remote-search-subtitles SearchRemoteSubtitles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --isPerfectMatch: oneof<nothing, bool> # Optional. Only show subtitles which are a perfect match.
 ]: nothing -> table<ThreeLetterISOLanguageName: string, Id: string, ProviderName: string, Name: string, Format: string, Author: string, Comment: string, DateCreated: string, CommunityRating: float, FrameRate: float, DownloadCount: int, IsHashMatch: bool, AiTranslated: bool, MachineTranslated: bool, Forced: bool, HearingImpaired: bool> {
@@ -9592,7 +9895,7 @@ export def "items-remote-search-subtitles SearchRemoteSubtitles" [
   let full_url = (build-url $base $"/Items/($itemId)/RemoteSearch/Subtitles/($language)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Downloads a remote subtitle.
@@ -9609,13 +9912,14 @@ export def "items-remote-search-subtitles DownloadRemoteSubtitles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Items/($itemId)/RemoteSearch/Subtitles/($subtitleId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the remote subtitles.
@@ -9631,13 +9935,14 @@ export def "providers-subtitles-subtitles GetRemoteSubtitles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Providers/Subtitles/Subtitles/($subtitleId)")
   let accept_val = "text/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an HLS subtitle playlist.
@@ -9655,6 +9960,7 @@ export def "videos-subtitles-subtitlesm3u8 GetSubtitlePlaylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --segmentLength: int # The subtitle segment length. (format: int32)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9663,7 +9969,7 @@ export def "videos-subtitles-subtitlesm3u8 GetSubtitlePlaylist" [
   let full_url = (build-url $base $"/Videos/($itemId)/($mediaSourceId)/Subtitles/($index)/subtitles.m3u8" $qp)
   let accept_val = "application/x-mpegURL"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload an external subtitle file.
@@ -9679,6 +9985,7 @@ export def "videos-subtitles UploadSubtitle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Language: string # Gets or sets the subtitle language.
   Format: string # Gets or sets the subtitle format.
   --IsForced: oneof<nothing, bool> # Gets or sets a value indicating whether the subtitle is forced.
@@ -9693,7 +10000,7 @@ export def "videos-subtitles UploadSubtitle" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes an external subtitle file.
@@ -9710,13 +10017,14 @@ export def "videos-subtitles DeleteSubtitle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Videos/($itemId)/Subtitles/($index)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets subtitles in a specified format.
@@ -9741,6 +10049,7 @@ export def "videos-subtitles-stream-route-format GetSubtitleWithTicks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --itemId: string # The item id. (DEPRECATED, format: uuid)
   --mediaSourceId: string # The media source id. (DEPRECATED)
   --index: int # The subtitle stream index. (DEPRECATED, format: int32)
@@ -9756,7 +10065,7 @@ export def "videos-subtitles-stream-route-format GetSubtitleWithTicks" [
   let full_url = (build-url $base $"/Videos/($routeItemId)/($routeMediaSourceId)/Subtitles/($routeIndex)/($routeStartPositionTicks)/Stream.($routeFormat)" $qp)
   let accept_val = "text/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets subtitles in a specified format.
@@ -9779,6 +10088,7 @@ export def "videos-subtitles-stream-route-format GetSubtitle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --itemId: string # The item id. (DEPRECATED, format: uuid)
   --mediaSourceId: string # The media source id. (DEPRECATED)
   --index: int # The subtitle stream index. (DEPRECATED, format: int32)
@@ -9794,7 +10104,7 @@ export def "videos-subtitles-stream-route-format GetSubtitle" [
   let full_url = (build-url $base $"/Videos/($routeItemId)/($routeMediaSourceId)/Subtitles/($routeIndex)/Stream.($routeFormat)" $qp)
   let accept_val = "text/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets suggestions.
@@ -9809,6 +10119,7 @@ export def "items-suggestions GetSuggestions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # The user id. (format: uuid)
   --mediaType: list # The media types.
@@ -9823,7 +10134,7 @@ export def "items-suggestions GetSuggestions" [
   let full_url = (build-url $base "/Items/Suggestions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a SyncPlay group by id.
@@ -9839,6 +10150,7 @@ export def "sync-play SyncPlayGetGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<GroupId: string, GroupName: string, State: record, Participants: list<string>, LastUpdatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9846,7 +10158,7 @@ export def "sync-play SyncPlayGetGroup" [
   let full_url = (build-url $base $"/SyncPlay/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Notify SyncPlay group that member is buffering.
@@ -9861,6 +10173,7 @@ export def "sync-play-buffering SyncPlayBuffering" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --When: string # Gets or sets when the request has been made by the client. (format: date-time)
   --PositionTicks: int # Gets or sets the position ticks. (format: int64)
   --IsPlaying: oneof<nothing, bool> # Gets or sets a value indicating whether the client playback is unpaused.
@@ -9874,7 +10187,7 @@ export def "sync-play-buffering SyncPlayBuffering" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Join an existing SyncPlay group.
@@ -9889,6 +10202,7 @@ export def "sync-play-join SyncPlayJoinGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --GroupId: string # Gets or sets the group identifier. (format: uuid)
 ]: any -> any {
   let input = $in
@@ -9899,7 +10213,7 @@ export def "sync-play-join SyncPlayJoinGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Leave the joined SyncPlay group.
@@ -9914,13 +10228,14 @@ export def "sync-play-leave SyncPlayLeaveGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/SyncPlay/Leave")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all SyncPlay groups.
@@ -9935,6 +10250,7 @@ export def "sync-play-list SyncPlayGetGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<GroupId: string, GroupName: string, State: record, Participants: list<string>, LastUpdatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9942,7 +10258,7 @@ export def "sync-play-list SyncPlayGetGroups" [
   let full_url = (build-url $base "/SyncPlay/List")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Request to move an item in the playlist in SyncPlay group.
@@ -9957,6 +10273,7 @@ export def "sync-play-move-playlist-item SyncPlayMovePlaylistItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PlaylistItemId: string # Gets or sets the playlist identifier of the item. (format: uuid)
   --NewIndex: int # Gets or sets the new position. (format: int32)
 ]: any -> any {
@@ -9968,7 +10285,7 @@ export def "sync-play-move-playlist-item SyncPlayMovePlaylistItem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new SyncPlay group.
@@ -9983,6 +10300,7 @@ export def "sync-play-new SyncPlayCreateGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --GroupName: string # Gets or sets the group name.
 ]: any -> record<GroupId: string, GroupName: string, State: record, Participants: list<string>, LastUpdatedAt: string> {
@@ -9994,7 +10312,7 @@ export def "sync-play-new SyncPlayCreateGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Request next item in SyncPlay group.
@@ -10009,6 +10327,7 @@ export def "sync-play-next-item SyncPlayNextItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PlaylistItemId: string # Gets or sets the playing item identifier. (format: uuid)
 ]: any -> any {
   let input = $in
@@ -10019,7 +10338,7 @@ export def "sync-play-next-item SyncPlayNextItem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Request pause in SyncPlay group.
@@ -10034,13 +10353,14 @@ export def "sync-play-pause SyncPlayPause" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/SyncPlay/Pause")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update session ping.
@@ -10055,6 +10375,7 @@ export def "sync-play-ping SyncPlayPing" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Ping: int # Gets or sets the ping time. (format: int64)
 ]: any -> any {
   let input = $in
@@ -10065,7 +10386,7 @@ export def "sync-play-ping SyncPlayPing" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Request previous item in SyncPlay group.
@@ -10080,6 +10401,7 @@ export def "sync-play-previous-item SyncPlayPreviousItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PlaylistItemId: string # Gets or sets the playing item identifier. (format: uuid)
 ]: any -> any {
   let input = $in
@@ -10090,7 +10412,7 @@ export def "sync-play-previous-item SyncPlayPreviousItem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Request to queue items to the playlist of a SyncPlay group.
@@ -10105,6 +10427,7 @@ export def "sync-play-queue SyncPlayQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ItemIds: list # Gets or sets the items to enqueue.
   --Mode: any@Mode-completer # Enum GroupQueueMode.
 ]: any -> any {
@@ -10116,7 +10439,7 @@ export def "sync-play-queue SyncPlayQueue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Notify SyncPlay group that member is ready for playback.
@@ -10131,6 +10454,7 @@ export def "sync-play-ready SyncPlayReady" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --When: string # Gets or sets when the request has been made by the client. (format: date-time)
   --PositionTicks: int # Gets or sets the position ticks. (format: int64)
   --IsPlaying: oneof<nothing, bool> # Gets or sets a value indicating whether the client playback is unpaused.
@@ -10144,7 +10468,7 @@ export def "sync-play-ready SyncPlayReady" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Request to remove items from the playlist in SyncPlay group.
@@ -10159,6 +10483,7 @@ export def "sync-play-remove-from-playlist SyncPlayRemoveFromPlaylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PlaylistItemIds: list # Gets or sets the playlist identifiers of the items. Ignored when clearing the playlist.
   --ClearPlaylist: oneof<nothing, bool> # Gets or sets a value indicating whether the entire playlist should be cleared.
   --ClearPlayingItem: oneof<nothing, bool> # Gets or sets a value indicating whether the playing item should be removed as well. Used only when clearing the playlist.
@@ -10171,7 +10496,7 @@ export def "sync-play-remove-from-playlist SyncPlayRemoveFromPlaylist" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Request seek in SyncPlay group.
@@ -10186,6 +10511,7 @@ export def "sync-play-seek SyncPlaySeek" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PositionTicks: int # Gets or sets the position ticks. (format: int64)
 ]: any -> any {
   let input = $in
@@ -10196,7 +10522,7 @@ export def "sync-play-seek SyncPlaySeek" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Request SyncPlay group to ignore member during group-wait.
@@ -10211,6 +10537,7 @@ export def "sync-play-set-ignore-wait SyncPlaySetIgnoreWait" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --IgnoreWait: oneof<nothing, bool> # Gets or sets a value indicating whether the client should be ignored.
 ]: any -> any {
   let input = $in
@@ -10221,7 +10548,7 @@ export def "sync-play-set-ignore-wait SyncPlaySetIgnoreWait" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Request to set new playlist in SyncPlay group.
@@ -10236,6 +10563,7 @@ export def "sync-play-set-new-queue SyncPlaySetNewQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PlayingQueue: list # Gets or sets the playing queue.
   --PlayingItemPosition: int # Gets or sets the position of the playing item in the queue. (format: int32)
   --StartPositionTicks: int # Gets or sets the start position ticks. (format: int64)
@@ -10248,7 +10576,7 @@ export def "sync-play-set-new-queue SyncPlaySetNewQueue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Request to change playlist item in SyncPlay group.
@@ -10263,6 +10591,7 @@ export def "sync-play-set-playlist-item SyncPlaySetPlaylistItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PlaylistItemId: string # Gets or sets the playlist identifier of the playing item. (format: uuid)
 ]: any -> any {
   let input = $in
@@ -10273,7 +10602,7 @@ export def "sync-play-set-playlist-item SyncPlaySetPlaylistItem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Request to set repeat mode in SyncPlay group.
@@ -10288,6 +10617,7 @@ export def "sync-play-set-repeat-mode SyncPlaySetRepeatMode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Mode: any@Mode-completer-1 # Enum GroupRepeatMode.
 ]: any -> any {
   let input = $in
@@ -10298,7 +10628,7 @@ export def "sync-play-set-repeat-mode SyncPlaySetRepeatMode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Request to set shuffle mode in SyncPlay group.
@@ -10313,6 +10643,7 @@ export def "sync-play-set-shuffle-mode SyncPlaySetShuffleMode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Mode: any@Mode-completer-2 # Enum GroupShuffleMode.
 ]: any -> any {
   let input = $in
@@ -10323,7 +10654,7 @@ export def "sync-play-set-shuffle-mode SyncPlaySetShuffleMode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Request stop in SyncPlay group.
@@ -10338,13 +10669,14 @@ export def "sync-play-stop SyncPlayStop" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/SyncPlay/Stop")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Request unpause in SyncPlay group.
@@ -10359,13 +10691,14 @@ export def "sync-play-unpause SyncPlayUnpause" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/SyncPlay/Unpause")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets information about the request endpoint.
@@ -10380,6 +10713,7 @@ export def "system-endpoint GetEndpointInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<IsLocal: bool, IsInNetwork: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10387,7 +10721,7 @@ export def "system-endpoint GetEndpointInfo" [
   let full_url = (build-url $base "/System/Endpoint")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets information about the server.
@@ -10402,6 +10736,7 @@ export def "system-info GetSystemInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<LocalAddress: string, ServerName: string, Version: string, ProductName: string, OperatingSystem: string, Id: string, StartupWizardCompleted: bool, OperatingSystemDisplayName: string, PackageName: string, HasPendingRestart: bool, IsShuttingDown: bool, SupportsLibraryMonitor: bool, WebSocketPortNumber: int, CompletedInstallations: table<Guid: string, Name: string, Version: string, Changelog: string, SourceUrl: string, Checksum: string, PackageInfo: record>, CanSelfRestart: bool, CanLaunchWebBrowser: bool, ProgramDataPath: string, WebPath: string, ItemsByNamePath: string, CachePath: string, LogPath: string, InternalMetadataPath: string, TranscodingTempPath: string, CastReceiverApplications: table<Id: string, Name: string>, HasUpdateAvailable: bool, EncoderLocation: string, SystemArchitecture: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10409,7 +10744,7 @@ export def "system-info GetSystemInfo" [
   let full_url = (build-url $base "/System/Info")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets public information about the server.
@@ -10424,6 +10759,7 @@ export def "system-info-public GetPublicSystemInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<LocalAddress: string, ServerName: string, Version: string, ProductName: string, OperatingSystem: string, Id: string, StartupWizardCompleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10431,7 +10767,7 @@ export def "system-info-public GetPublicSystemInfo" [
   let full_url = (build-url $base "/System/Info/Public")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets information about the server.
@@ -10446,6 +10782,7 @@ export def "system-info-storage GetSystemStorage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<ProgramDataFolder: record<Path: string, FreeSpace: int, UsedSpace: int, StorageType: string, DeviceId: string>, WebFolder: record<Path: string, FreeSpace: int, UsedSpace: int, StorageType: string, DeviceId: string>, ImageCacheFolder: record<Path: string, FreeSpace: int, UsedSpace: int, StorageType: string, DeviceId: string>, CacheFolder: record<Path: string, FreeSpace: int, UsedSpace: int, StorageType: string, DeviceId: string>, LogFolder: record<Path: string, FreeSpace: int, UsedSpace: int, StorageType: string, DeviceId: string>, InternalMetadataFolder: record<Path: string, FreeSpace: int, UsedSpace: int, StorageType: string, DeviceId: string>, TranscodingTempFolder: record<Path: string, FreeSpace: int, UsedSpace: int, StorageType: string, DeviceId: string>, Libraries: table<Id: string, Name: string, Folders: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10453,7 +10790,7 @@ export def "system-info-storage GetSystemStorage" [
   let full_url = (build-url $base "/System/Info/Storage")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of available server log files.
@@ -10468,6 +10805,7 @@ export def "system-logs GetServerLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<DateCreated: string, DateModified: string, Size: int, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10475,7 +10813,7 @@ export def "system-logs GetServerLogs" [
   let full_url = (build-url $base "/System/Logs")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a log file.
@@ -10490,6 +10828,7 @@ export def "system-logs-log GetLogFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the log file to get.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10498,7 +10837,7 @@ export def "system-logs-log GetLogFile" [
   let full_url = (build-url $base "/System/Logs/Log" $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pings the system.
@@ -10513,6 +10852,7 @@ export def "system-ping GetPingSystem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10520,7 +10860,7 @@ export def "system-ping GetPingSystem" [
   let full_url = (build-url $base "/System/Ping")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pings the system.
@@ -10535,6 +10875,7 @@ export def "system-ping PostPingSystem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10542,7 +10883,7 @@ export def "system-ping PostPingSystem" [
   let full_url = (build-url $base "/System/Ping")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Restarts the application.
@@ -10557,13 +10898,14 @@ export def "system-restart RestartApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/System/Restart")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Shuts down the application.
@@ -10578,13 +10920,14 @@ export def "system-shutdown ShutdownApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/System/Shutdown")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the current UTC time.
@@ -10599,6 +10942,7 @@ export def "get-utc-time GetUtcTime" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<RequestReceptionTime: string, ResponseTransmissionTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10606,7 +10950,7 @@ export def "get-utc-time GetUtcTime" [
   let full_url = (build-url $base "/GetUtcTime")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the TMDb image configuration options.
@@ -10621,13 +10965,14 @@ export def "tmdb-client-configuration TmdbClientConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<BackdropSizes: list<string>, BaseUrl: string, LogoSizes: list<string>, PosterSizes: list<string>, ProfileSizes: list<string>, SecureBaseUrl: string, StillSizes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Tmdb/ClientConfiguration")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Finds movies and trailers similar to a given trailer.
@@ -10642,6 +10987,7 @@ export def "trailers GetTrailers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # The user id supplied as query parameter; this is required when not using an API key. (format: uuid)
   --maxOfficialRating: string # Optional filter by maximum official rating (PG, PG-13, TV-MA, etc).
@@ -10734,7 +11080,7 @@ export def "trailers GetTrailers" [
   let full_url = (build-url $base "/Trailers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a trickplay tile image.
@@ -10752,6 +11098,7 @@ export def "videos-trickplay GetTrickplayTileImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --mediaSourceId: string # The media version id, if using an alternate version. (format: uuid)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10760,7 +11107,7 @@ export def "videos-trickplay GetTrickplayTileImage" [
   let full_url = (build-url $base $"/Videos/($itemId)/Trickplay/($width)/($index).jpg" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an image tiles playlist for trickplay.
@@ -10777,6 +11124,7 @@ export def "videos-trickplay-tilesm3u8 GetTrickplayHlsPlaylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --mediaSourceId: string # The media version id, if using an alternate version. (format: uuid)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10785,7 +11133,7 @@ export def "videos-trickplay-tilesm3u8 GetTrickplayHlsPlaylist" [
   let full_url = (build-url $base $"/Videos/($itemId)/Trickplay/($width)/tiles.m3u8" $qp)
   let accept_val = "application/x-mpegURL"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets episodes for a tv season.
@@ -10801,6 +11149,7 @@ export def "shows-episodes GetEpisodes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # The user id. (format: uuid)
   --qp-fields: list # Optional. Specify additional fields of information to return in the output. This allows multiple, comma delimited. Options: Budget, Chapters, DateCreated, Genres, HomePageUrl, IndexOptions, MediaStreams, Overview, ParentId, Path, People, ProviderIds, PrimaryImageAspectRatio, Revenue, SortName, Studios, Taglines, TrailerUrls.
@@ -10823,7 +11172,7 @@ export def "shows-episodes GetEpisodes" [
   let full_url = (build-url $base $"/Shows/($seriesId)/Episodes" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets seasons for a tv series.
@@ -10839,6 +11188,7 @@ export def "shows-seasons GetSeasons" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # The user id. (format: uuid)
   --qp-fields: list # Optional. Specify additional fields of information to return in the output. This allows multiple, comma delimited. Options: Budget, Chapters, DateCreated, Genres, HomePageUrl, IndexOptions, MediaStreams, Overview, ParentId, Path, People, ProviderIds, PrimaryImageAspectRatio, Revenue, SortName, Studios, Taglines, TrailerUrls.
@@ -10856,7 +11206,7 @@ export def "shows-seasons GetSeasons" [
   let full_url = (build-url $base $"/Shows/($seriesId)/Seasons" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of next up episodes.
@@ -10872,6 +11222,7 @@ export def "shows-next-up GetNextUp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # The user id of the user to get the next up episodes for. (format: uuid)
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
@@ -10895,7 +11246,7 @@ export def "shows-next-up GetNextUp" [
   let full_url = (build-url $base "/Shows/NextUp" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of upcoming episodes.
@@ -10910,6 +11261,7 @@ export def "shows-upcoming GetUpcomingEpisodes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # The user id of the user to get the upcoming episodes for. (format: uuid)
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
@@ -10927,7 +11279,7 @@ export def "shows-upcoming GetUpcomingEpisodes" [
   let full_url = (build-url $base "/Shows/Upcoming" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an audio stream.
@@ -10943,6 +11295,7 @@ export def "audio-universal GetUniversalAudioStream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --container: list # Optional. The audio container.
   --mediaSourceId: string # The media version id, if playing an alternate version.
   --deviceId: string # The device id of the client requesting. Used to stop encoding processes when needed.
@@ -10968,7 +11321,7 @@ export def "audio-universal GetUniversalAudioStream" [
   let full_url = (build-url $base $"/Audio/($itemId)/universal" $qp)
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an audio stream.
@@ -10984,6 +11337,7 @@ export def "audio-universal HeadUniversalAudioStream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --container: list # Optional. The audio container.
   --mediaSourceId: string # The media version id, if playing an alternate version.
   --deviceId: string # The device id of the client requesting. Used to stop encoding processes when needed.
@@ -11009,7 +11363,7 @@ export def "audio-universal HeadUniversalAudioStream" [
   let full_url = (build-url $base $"/Audio/($itemId)/universal" $qp)
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of users.
@@ -11024,6 +11378,7 @@ export def "users GetUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --isHidden: oneof<nothing, bool> # Optional filter by IsHidden=true or false.
   --isDisabled: oneof<nothing, bool> # Optional filter by IsDisabled=true or false.
@@ -11034,7 +11389,7 @@ export def "users GetUsers" [
   let full_url = (build-url $base "/Users" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a user.
@@ -11050,6 +11405,7 @@ export def "users UpdateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # The user id. (format: uuid)
   --Name: string # Gets or sets the name. (nullable)
   --ServerId: string # Gets or sets the server identifier. (nullable)
@@ -11075,7 +11431,7 @@ export def "users UpdateUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets a user by Id.
@@ -11091,6 +11447,7 @@ export def "users GetUserById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Name: string, ServerId: string, ServerName: string, Id: string, PrimaryImageTag: string, HasPassword: bool, HasConfiguredPassword: bool, HasConfiguredEasyPassword: bool, EnableAutoLogin: bool, LastLoginDate: string, LastActivityDate: string, Configuration: record<AudioLanguagePreference: string, PlayDefaultAudioTrack: bool, SubtitleLanguagePreference: string, DisplayMissingEpisodes: bool, GroupedFolders: list<string>, SubtitleMode: record, DisplayCollectionsView: bool, EnableLocalPassword: bool, OrderedViews: list<string>, LatestItemsExcludes: list<string>, MyMediaExcludes: list<string>, HidePlayedInLatest: bool, RememberAudioSelections: bool, RememberSubtitleSelections: bool, EnableNextEpisodeAutoPlay: bool, CastReceiverId: string>, Policy: record<IsAdministrator: bool, IsHidden: bool, EnableCollectionManagement: bool, EnableSubtitleManagement: bool, EnableLyricManagement: bool, IsDisabled: bool, MaxParentalRating: int, MaxParentalSubRating: int, BlockedTags: list<string>, AllowedTags: list<string>, EnableUserPreferenceAccess: bool, AccessSchedules: list<record>, BlockUnratedItems: list<string>, EnableRemoteControlOfOtherUsers: bool, EnableSharedDeviceControl: bool, EnableRemoteAccess: bool, EnableLiveTvManagement: bool, EnableLiveTvAccess: bool, EnableMediaPlayback: bool, EnableAudioPlaybackTranscoding: bool, EnableVideoPlaybackTranscoding: bool, EnablePlaybackRemuxing: bool, ForceRemoteSourceTranscoding: bool, EnableContentDeletion: bool, EnableContentDeletionFromFolders: list<string>, EnableContentDownloading: bool, EnableSyncTranscoding: bool, EnableMediaConversion: bool, EnabledDevices: list<string>, EnableAllDevices: bool, EnabledChannels: list<string>, EnableAllChannels: bool, EnabledFolders: list<string>, EnableAllFolders: bool, InvalidLoginAttemptCount: int, LoginAttemptsBeforeLockout: int, MaxActiveSessions: int, EnablePublicSharing: bool, BlockedMediaFolders: list<string>, BlockedChannels: list<string>, RemoteClientBitrateLimit: int, AuthenticationProviderId: string, PasswordResetProviderId: string, SyncPlayAccess: record>, PrimaryImageAspectRatio: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11098,7 +11455,7 @@ export def "users GetUserById" [
   let full_url = (build-url $base $"/Users/($userId)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a user.
@@ -11114,13 +11471,14 @@ export def "users DeleteUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Users/($userId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a user policy.
@@ -11137,6 +11495,7 @@ export def "users-policy UpdateUserPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --IsAdministrator: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is administrator.
   --IsHidden: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is hidden.
   --EnableCollectionManagement: oneof<nothing, bool> # Gets or sets a value indicating whether this instance can manage collections. (default: false)
@@ -11190,7 +11549,7 @@ export def "users-policy UpdateUserPolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticates a user by name.
@@ -11205,6 +11564,7 @@ export def "users-authenticate-by-name AuthenticateUserByName" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --Username: string # Gets or sets the username. (nullable)
   --Pw: string # Gets or sets the plain text password. (nullable)
@@ -11217,7 +11577,7 @@ export def "users-authenticate-by-name AuthenticateUserByName" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticates a user with quick connect.
@@ -11232,6 +11592,7 @@ export def "users-authenticate-with-quick-connect AuthenticateWithQuickConnect" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   Secret: string # Gets or sets the quick connect secret.
 ]: any -> record<User: record<Name: string, ServerId: string, ServerName: string, Id: string, PrimaryImageTag: string, HasPassword: bool, HasConfiguredPassword: bool, HasConfiguredEasyPassword: bool, EnableAutoLogin: bool, LastLoginDate: string, LastActivityDate: string, Configuration: record<AudioLanguagePreference: string, PlayDefaultAudioTrack: bool, SubtitleLanguagePreference: string, DisplayMissingEpisodes: bool, GroupedFolders: list, SubtitleMode: record, DisplayCollectionsView: bool, EnableLocalPassword: bool, OrderedViews: list, LatestItemsExcludes: list, MyMediaExcludes: list, HidePlayedInLatest: bool, RememberAudioSelections: bool, RememberSubtitleSelections: bool, EnableNextEpisodeAutoPlay: bool, CastReceiverId: string>, Policy: record<IsAdministrator: bool, IsHidden: bool, EnableCollectionManagement: bool, EnableSubtitleManagement: bool, EnableLyricManagement: bool, IsDisabled: bool, MaxParentalRating: int, MaxParentalSubRating: int, BlockedTags: list, AllowedTags: list, EnableUserPreferenceAccess: bool, AccessSchedules: list, BlockUnratedItems: list, EnableRemoteControlOfOtherUsers: bool, EnableSharedDeviceControl: bool, EnableRemoteAccess: bool, EnableLiveTvManagement: bool, EnableLiveTvAccess: bool, EnableMediaPlayback: bool, EnableAudioPlaybackTranscoding: bool, EnableVideoPlaybackTranscoding: bool, EnablePlaybackRemuxing: bool, ForceRemoteSourceTranscoding: bool, EnableContentDeletion: bool, EnableContentDeletionFromFolders: list, EnableContentDownloading: bool, EnableSyncTranscoding: bool, EnableMediaConversion: bool, EnabledDevices: list, EnableAllDevices: bool, EnabledChannels: list, EnableAllChannels: bool, EnabledFolders: list, EnableAllFolders: bool, InvalidLoginAttemptCount: int, LoginAttemptsBeforeLockout: int, MaxActiveSessions: int, EnablePublicSharing: bool, BlockedMediaFolders: list, BlockedChannels: list, RemoteClientBitrateLimit: int, AuthenticationProviderId: string, PasswordResetProviderId: string, SyncPlayAccess: record>, PrimaryImageAspectRatio: float>, SessionInfo: record<PlayState: record<PositionTicks: int, CanSeek: bool, IsPaused: bool, IsMuted: bool, VolumeLevel: int, AudioStreamIndex: int, SubtitleStreamIndex: int, MediaSourceId: string, PlayMethod: record, RepeatMode: record, PlaybackOrder: record, LiveStreamId: string>, AdditionalUsers: list<record>, Capabilities: record<PlayableMediaTypes: list, SupportedCommands: list, SupportsMediaControl: bool, SupportsPersistentIdentifier: bool, DeviceProfile: record, AppStoreUrl: string, IconUrl: string>, RemoteEndPoint: string, PlayableMediaTypes: list<string>, Id: string, UserId: string, UserName: string, Client: string, LastActivityDate: string, LastPlaybackCheckIn: string, LastPausedDate: string, DeviceName: string, DeviceType: string, NowPlayingItem: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, NowViewingItem: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, DeviceId: string, ApplicationVersion: string, TranscodingInfo: record<AudioCodec: string, VideoCodec: string, Container: string, IsVideoDirect: bool, IsAudioDirect: bool, Bitrate: int, Framerate: float, CompletionPercentage: float, Width: int, Height: int, AudioChannels: int, HardwareAccelerationType: record, TranscodeReasons: list>, IsActive: bool, SupportsMediaControl: bool, SupportsRemoteControl: bool, NowPlayingQueue: list<record>, NowPlayingQueueFullItems: list<record>, HasCustomDeviceName: bool, PlaylistItemId: string, ServerId: string, UserPrimaryImageTag: string, SupportedCommands: list<string>>, AccessToken: string, ServerId: string> {
@@ -11243,7 +11604,7 @@ export def "users-authenticate-with-quick-connect AuthenticateWithQuickConnect" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates a user configuration.
@@ -11258,6 +11619,7 @@ export def "users-configuration UpdateUserConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # The user id. (format: uuid)
   --AudioLanguagePreference: string # Gets or sets the audio language preference. (nullable)
   --PlayDefaultAudioTrack: oneof<nothing, bool> # Gets or sets a value indicating whether [play default audio track].
@@ -11285,7 +11647,7 @@ export def "users-configuration UpdateUserConfiguration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Initiates the forgot password process for a local user.
@@ -11300,6 +11662,7 @@ export def "users-forgot-password ForgotPassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   EnteredUsername: string # Gets or sets the entered username to have its password reset.
 ]: any -> record<Action: record, PinFile: string, PinExpirationDate: string> {
@@ -11311,7 +11674,7 @@ export def "users-forgot-password ForgotPassword" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Redeems a forgot password pin.
@@ -11326,6 +11689,7 @@ export def "users-forgot-password-pin ForgotPasswordPin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   Pin: string # Gets or sets the entered pin to have the password reset.
 ]: any -> record<Success: bool, UsersReset: list<string>> {
@@ -11337,7 +11701,7 @@ export def "users-forgot-password-pin ForgotPasswordPin" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets the user based on auth token.
@@ -11352,6 +11716,7 @@ export def "users-me GetCurrentUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<Name: string, ServerId: string, ServerName: string, Id: string, PrimaryImageTag: string, HasPassword: bool, HasConfiguredPassword: bool, HasConfiguredEasyPassword: bool, EnableAutoLogin: bool, LastLoginDate: string, LastActivityDate: string, Configuration: record<AudioLanguagePreference: string, PlayDefaultAudioTrack: bool, SubtitleLanguagePreference: string, DisplayMissingEpisodes: bool, GroupedFolders: list<string>, SubtitleMode: record, DisplayCollectionsView: bool, EnableLocalPassword: bool, OrderedViews: list<string>, LatestItemsExcludes: list<string>, MyMediaExcludes: list<string>, HidePlayedInLatest: bool, RememberAudioSelections: bool, RememberSubtitleSelections: bool, EnableNextEpisodeAutoPlay: bool, CastReceiverId: string>, Policy: record<IsAdministrator: bool, IsHidden: bool, EnableCollectionManagement: bool, EnableSubtitleManagement: bool, EnableLyricManagement: bool, IsDisabled: bool, MaxParentalRating: int, MaxParentalSubRating: int, BlockedTags: list<string>, AllowedTags: list<string>, EnableUserPreferenceAccess: bool, AccessSchedules: list<record>, BlockUnratedItems: list<string>, EnableRemoteControlOfOtherUsers: bool, EnableSharedDeviceControl: bool, EnableRemoteAccess: bool, EnableLiveTvManagement: bool, EnableLiveTvAccess: bool, EnableMediaPlayback: bool, EnableAudioPlaybackTranscoding: bool, EnableVideoPlaybackTranscoding: bool, EnablePlaybackRemuxing: bool, ForceRemoteSourceTranscoding: bool, EnableContentDeletion: bool, EnableContentDeletionFromFolders: list<string>, EnableContentDownloading: bool, EnableSyncTranscoding: bool, EnableMediaConversion: bool, EnabledDevices: list<string>, EnableAllDevices: bool, EnabledChannels: list<string>, EnableAllChannels: bool, EnabledFolders: list<string>, EnableAllFolders: bool, InvalidLoginAttemptCount: int, LoginAttemptsBeforeLockout: int, MaxActiveSessions: int, EnablePublicSharing: bool, BlockedMediaFolders: list<string>, BlockedChannels: list<string>, RemoteClientBitrateLimit: int, AuthenticationProviderId: string, PasswordResetProviderId: string, SyncPlayAccess: record>, PrimaryImageAspectRatio: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11359,7 +11724,7 @@ export def "users-me GetCurrentUser" [
   let full_url = (build-url $base "/Users/Me")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a user.
@@ -11374,6 +11739,7 @@ export def "users-new CreateUserByName" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   Name: string # Gets or sets the username.
   --Password: string # Gets or sets the password. (nullable)
@@ -11386,7 +11752,7 @@ export def "users-new CreateUserByName" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates a user's password.
@@ -11401,6 +11767,7 @@ export def "users-password UpdateUserPassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # The user id. (format: uuid)
   --CurrentPassword: string # Gets or sets the current sha1-hashed password. (nullable)
   --CurrentPw: string # Gets or sets the current plain text password. (nullable)
@@ -11416,7 +11783,7 @@ export def "users-password UpdateUserPassword" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets a list of publicly visible users for display on a login screen.
@@ -11431,6 +11798,7 @@ export def "users-public GetPublicUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> table<Name: string, ServerId: string, ServerName: string, Id: string, PrimaryImageTag: string, HasPassword: bool, HasConfiguredPassword: bool, HasConfiguredEasyPassword: bool, EnableAutoLogin: bool, LastLoginDate: string, LastActivityDate: string, Configuration: record<AudioLanguagePreference: string, PlayDefaultAudioTrack: bool, SubtitleLanguagePreference: string, DisplayMissingEpisodes: bool, GroupedFolders: list, SubtitleMode: record, DisplayCollectionsView: bool, EnableLocalPassword: bool, OrderedViews: list, LatestItemsExcludes: list, MyMediaExcludes: list, HidePlayedInLatest: bool, RememberAudioSelections: bool, RememberSubtitleSelections: bool, EnableNextEpisodeAutoPlay: bool, CastReceiverId: string>, Policy: record<IsAdministrator: bool, IsHidden: bool, EnableCollectionManagement: bool, EnableSubtitleManagement: bool, EnableLyricManagement: bool, IsDisabled: bool, MaxParentalRating: int, MaxParentalSubRating: int, BlockedTags: list, AllowedTags: list, EnableUserPreferenceAccess: bool, AccessSchedules: list, BlockUnratedItems: list, EnableRemoteControlOfOtherUsers: bool, EnableSharedDeviceControl: bool, EnableRemoteAccess: bool, EnableLiveTvManagement: bool, EnableLiveTvAccess: bool, EnableMediaPlayback: bool, EnableAudioPlaybackTranscoding: bool, EnableVideoPlaybackTranscoding: bool, EnablePlaybackRemuxing: bool, ForceRemoteSourceTranscoding: bool, EnableContentDeletion: bool, EnableContentDeletionFromFolders: list, EnableContentDownloading: bool, EnableSyncTranscoding: bool, EnableMediaConversion: bool, EnabledDevices: list, EnableAllDevices: bool, EnabledChannels: list, EnableAllChannels: bool, EnabledFolders: list, EnableAllFolders: bool, InvalidLoginAttemptCount: int, LoginAttemptsBeforeLockout: int, MaxActiveSessions: int, EnablePublicSharing: bool, BlockedMediaFolders: list, BlockedChannels: list, RemoteClientBitrateLimit: int, AuthenticationProviderId: string, PasswordResetProviderId: string, SyncPlayAccess: record>, PrimaryImageAspectRatio: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11438,7 +11806,7 @@ export def "users-public GetPublicUsers" [
   let full_url = (build-url $base "/Users/Public")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets intros to play before the main media item plays.
@@ -11454,6 +11822,7 @@ export def "items-intros GetIntros" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # User id. (format: uuid)
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
@@ -11463,7 +11832,7 @@ export def "items-intros GetIntros" [
   let full_url = (build-url $base $"/Items/($itemId)/Intros" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets local trailers for an item.
@@ -11479,6 +11848,7 @@ export def "items-local-trailers GetLocalTrailers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # User id. (format: uuid)
 ]: nothing -> table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list<record>, MediaSources: list<record>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list<record>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list<record>, Studios: list<record>, GenreItems: list<record>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: list<record>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list<record>, SeasonName: string, MediaStreams: list<record>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list<record>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>> {
@@ -11488,7 +11858,7 @@ export def "items-local-trailers GetLocalTrailers" [
   let full_url = (build-url $base $"/Items/($itemId)/LocalTrailers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets special features for an item.
@@ -11504,6 +11874,7 @@ export def "items-special-features GetSpecialFeatures" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # User id. (format: uuid)
 ]: nothing -> table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list<record>, MediaSources: list<record>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list<record>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list<record>, Studios: list<record>, GenreItems: list<record>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: list<record>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list<record>, SeasonName: string, MediaStreams: list<record>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list<record>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>> {
@@ -11513,7 +11884,7 @@ export def "items-special-features GetSpecialFeatures" [
   let full_url = (build-url $base $"/Items/($itemId)/SpecialFeatures" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets latest media.
@@ -11528,6 +11899,7 @@ export def "items-latest GetLatestMedia" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # User id. (format: uuid)
   --parentId: string # Specify this to localize the search to a specific item or folder. Omit to use the root. (format: uuid)
@@ -11547,7 +11919,7 @@ export def "items-latest GetLatestMedia" [
   let full_url = (build-url $base "/Items/Latest" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the root folder from a user's library.
@@ -11562,6 +11934,7 @@ export def "items-root GetRootFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # User id. (format: uuid)
 ]: nothing -> record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: table<Name: string, Url: string>, MediaSources: table<Protocol: record, Id: string, Path: string, EncoderPath: string, EncoderProtocol: record, Type: record, Container: string, Size: int, Name: string, IsRemote: bool, ETag: string, RunTimeTicks: int, ReadAtNativeFramerate: bool, IgnoreDts: bool, IgnoreIndex: bool, GenPtsInput: bool, SupportsTranscoding: bool, SupportsDirectStream: bool, SupportsDirectPlay: bool, IsInfiniteStream: bool, UseMostCompatibleTranscodingProfile: bool, RequiresOpening: bool, OpenToken: string, RequiresClosing: bool, LiveStreamId: string, BufferMs: int, RequiresLooping: bool, SupportsProbing: bool, VideoType: record, IsoType: record, Video3DFormat: record, MediaStreams: list, MediaAttachments: list, Formats: list, Bitrate: int, FallbackMaxStreamingBitrate: int, Timestamp: record, RequiredHttpHeaders: record, TranscodingUrl: string, TranscodingSubProtocol: record, TranscodingContainer: string, AnalyzeDurationMs: int, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, HasSegments: bool>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: table<Url: string, Name: string>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: table<Name: string, Id: string, Role: string, Type: record, PrimaryImageTag: string, ImageBlurHashes: record>, Studios: table<Name: string, Id: string>, GenreItems: table<Name: string, Id: string>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: table<Name: string, Id: string>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: table<Name: string, Id: string>, SeasonName: string, MediaStreams: table<Codec: string, CodecTag: string, Language: string, ColorRange: string, ColorSpace: string, ColorTransfer: string, ColorPrimaries: string, DvVersionMajor: int, DvVersionMinor: int, DvProfile: int, DvLevel: int, RpuPresentFlag: int, ElPresentFlag: int, BlPresentFlag: int, DvBlSignalCompatibilityId: int, Rotation: int, Comment: string, TimeBase: string, CodecTimeBase: string, Title: string, Hdr10PlusPresentFlag: bool, VideoRange: record, VideoRangeType: record, VideoDoViTitle: string, AudioSpatialFormat: record, LocalizedUndefined: string, LocalizedDefault: string, LocalizedForced: string, LocalizedExternal: string, LocalizedHearingImpaired: string, DisplayTitle: string, NalLengthSize: string, IsInterlaced: bool, IsAVC: bool, ChannelLayout: string, BitRate: int, BitDepth: int, RefFrames: int, PacketLength: int, Channels: int, SampleRate: int, IsDefault: bool, IsForced: bool, IsHearingImpaired: bool, Height: int, Width: int, AverageFrameRate: float, RealFrameRate: float, ReferenceFrameRate: float, Profile: string, Type: record, AspectRatio: string, Index: int, Score: int, IsExternal: bool, DeliveryMethod: record, DeliveryUrl: string, IsExternalUrl: bool, IsTextSubtitleStream: bool, SupportsExternalStream: bool, Path: string, PixelFormat: string, Level: float, IsAnamorphic: bool>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: table<StartPositionTicks: int, Name: string, ImagePath: string, ImageDateModified: string, ImageTag: string>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list<record>, MediaSources: list<record>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list<record>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list<record>, Studios: list<record>, GenreItems: list<record>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: list<record>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list<record>, SeasonName: string, MediaStreams: list<record>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list<record>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>>> {
@@ -11571,7 +11944,7 @@ export def "items-root GetRootFolder" [
   let full_url = (build-url $base "/Items/Root" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Marks an item as a favorite.
@@ -11587,6 +11960,7 @@ export def "user-favorite-items MarkFavoriteItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # User id. (format: uuid)
 ]: nothing -> record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string> {
@@ -11596,7 +11970,7 @@ export def "user-favorite-items MarkFavoriteItem" [
   let full_url = (build-url $base $"/UserFavoriteItems/($itemId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unmarks item as a favorite.
@@ -11612,6 +11986,7 @@ export def "user-favorite-items UnmarkFavoriteItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # User id. (format: uuid)
 ]: nothing -> record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string> {
@@ -11621,7 +11996,7 @@ export def "user-favorite-items UnmarkFavoriteItem" [
   let full_url = (build-url $base $"/UserFavoriteItems/($itemId)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a user's saved personal rating for an item.
@@ -11637,6 +12012,7 @@ export def "user-items-rating DeleteUserItemRating" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # User id. (format: uuid)
 ]: nothing -> record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string> {
@@ -11646,7 +12022,7 @@ export def "user-items-rating DeleteUserItemRating" [
   let full_url = (build-url $base $"/UserItems/($itemId)/Rating" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a user's rating for an item.
@@ -11662,6 +12038,7 @@ export def "user-items-rating UpdateUserItemRating" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # User id. (format: uuid)
   --likes: oneof<nothing, bool> # Whether this M:Jellyfin.Api.Controllers.UserLibraryController.UpdateUserItemRating(System.Nullable{System.Guid},System.Guid,System.Nullable{System.Boolean}) is likes.
@@ -11672,7 +12049,7 @@ export def "user-items-rating UpdateUserItemRating" [
   let full_url = (build-url $base $"/UserItems/($itemId)/Rating" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user views.
@@ -11687,6 +12064,7 @@ export def "user-views GetUserViews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # User id. (format: uuid)
   --includeExternalContent: oneof<nothing, bool> # Whether or not to include external views such as channels or live tv.
@@ -11699,7 +12077,7 @@ export def "user-views GetUserViews" [
   let full_url = (build-url $base "/UserViews" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user view grouping options.
@@ -11714,6 +12092,7 @@ export def "user-views-grouping-options GetGroupingOptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # User id. (format: uuid)
 ]: nothing -> table<Name: string, Id: string> {
@@ -11723,7 +12102,7 @@ export def "user-views-grouping-options GetGroupingOptions" [
   let full_url = (build-url $base "/UserViews/GroupingOptions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get video attachment.
@@ -11741,13 +12120,14 @@ export def "videos-attachments GetAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Videos/($videoId)/($mediaSourceId)/Attachments/($index)")
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets additional parts for a video.
@@ -11763,6 +12143,7 @@ export def "videos-additional-parts GetAdditionalPart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
@@ -11772,7 +12153,7 @@ export def "videos-additional-parts GetAdditionalPart" [
   let full_url = (build-url $base $"/Videos/($itemId)/AdditionalParts" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Removes alternate video sources.
@@ -11788,13 +12169,14 @@ export def "videos-alternate-sources DeleteAlternateSources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/Videos/($itemId)/AlternateSources")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a video stream.
@@ -11811,6 +12193,7 @@ export def "videos-stream GetVideoStream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --container: string # The video container. Possible values are: ts, webm, asf, wmv, ogv, mp4, m4v, mkv, mpeg, mpg, avi, 3gp, wmv, wtv, m2ts, mov, iso, flv.
   --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
@@ -11869,7 +12252,7 @@ export def "videos-stream GetVideoStream" [
   let full_url = (build-url $base $"/Videos/($itemId)/stream" $qp)
   let accept_val = "video/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a video stream.
@@ -11886,6 +12269,7 @@ export def "videos-stream HeadVideoStream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --container: string # The video container. Possible values are: ts, webm, asf, wmv, ogv, mp4, m4v, mkv, mpeg, mpg, avi, 3gp, wmv, wtv, m2ts, mov, iso, flv.
   --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
@@ -11944,7 +12328,7 @@ export def "videos-stream HeadVideoStream" [
   let full_url = (build-url $base $"/Videos/($itemId)/stream" $qp)
   let accept_val = "video/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a video stream.
@@ -11961,6 +12345,7 @@ export def "videos-stream-container GetVideoStreamByContainer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
@@ -12018,7 +12403,7 @@ export def "videos-stream-container GetVideoStreamByContainer" [
   let full_url = (build-url $base $"/Videos/($itemId)/stream.($container)" $qp)
   let accept_val = "video/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a video stream.
@@ -12035,6 +12420,7 @@ export def "videos-stream-container HeadVideoStreamByContainer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
@@ -12092,7 +12478,7 @@ export def "videos-stream-container HeadVideoStreamByContainer" [
   let full_url = (build-url $base $"/Videos/($itemId)/stream.($container)" $qp)
   let accept_val = "video/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Merges videos into a single record.
@@ -12107,6 +12493,7 @@ export def "videos-merge-versions MergeVersions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # Item id list. This allows multiple, comma delimited.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12115,7 +12502,7 @@ export def "videos-merge-versions MergeVersions" [
   let full_url = (build-url $base "/Videos/MergeVersions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get years.
@@ -12130,6 +12517,7 @@ export def "years GetYears" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --startIndex: int # Skips over a given number of items within the results. Use for paging. (format: int32)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
@@ -12153,7 +12541,7 @@ export def "years GetYears" [
   let full_url = (build-url $base "/Years" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a year.
@@ -12169,6 +12557,7 @@ export def "years GetYear" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
 ]: nothing -> record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: table<Name: string, Url: string>, MediaSources: table<Protocol: record, Id: string, Path: string, EncoderPath: string, EncoderProtocol: record, Type: record, Container: string, Size: int, Name: string, IsRemote: bool, ETag: string, RunTimeTicks: int, ReadAtNativeFramerate: bool, IgnoreDts: bool, IgnoreIndex: bool, GenPtsInput: bool, SupportsTranscoding: bool, SupportsDirectStream: bool, SupportsDirectPlay: bool, IsInfiniteStream: bool, UseMostCompatibleTranscodingProfile: bool, RequiresOpening: bool, OpenToken: string, RequiresClosing: bool, LiveStreamId: string, BufferMs: int, RequiresLooping: bool, SupportsProbing: bool, VideoType: record, IsoType: record, Video3DFormat: record, MediaStreams: list, MediaAttachments: list, Formats: list, Bitrate: int, FallbackMaxStreamingBitrate: int, Timestamp: record, RequiredHttpHeaders: record, TranscodingUrl: string, TranscodingSubProtocol: record, TranscodingContainer: string, AnalyzeDurationMs: int, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, HasSegments: bool>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: table<Url: string, Name: string>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: table<Name: string, Id: string, Role: string, Type: record, PrimaryImageTag: string, ImageBlurHashes: record>, Studios: table<Name: string, Id: string>, GenreItems: table<Name: string, Id: string>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: table<Name: string, Id: string>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: table<Name: string, Id: string>, SeasonName: string, MediaStreams: table<Codec: string, CodecTag: string, Language: string, ColorRange: string, ColorSpace: string, ColorTransfer: string, ColorPrimaries: string, DvVersionMajor: int, DvVersionMinor: int, DvProfile: int, DvLevel: int, RpuPresentFlag: int, ElPresentFlag: int, BlPresentFlag: int, DvBlSignalCompatibilityId: int, Rotation: int, Comment: string, TimeBase: string, CodecTimeBase: string, Title: string, Hdr10PlusPresentFlag: bool, VideoRange: record, VideoRangeType: record, VideoDoViTitle: string, AudioSpatialFormat: record, LocalizedUndefined: string, LocalizedDefault: string, LocalizedForced: string, LocalizedExternal: string, LocalizedHearingImpaired: string, DisplayTitle: string, NalLengthSize: string, IsInterlaced: bool, IsAVC: bool, ChannelLayout: string, BitRate: int, BitDepth: int, RefFrames: int, PacketLength: int, Channels: int, SampleRate: int, IsDefault: bool, IsForced: bool, IsHearingImpaired: bool, Height: int, Width: int, AverageFrameRate: float, RealFrameRate: float, ReferenceFrameRate: float, Profile: string, Type: record, AspectRatio: string, Index: int, Score: int, IsExternal: bool, DeliveryMethod: record, DeliveryUrl: string, IsExternalUrl: bool, IsTextSubtitleStream: bool, SupportsExternalStream: bool, Path: string, PixelFormat: string, Level: float, IsAnamorphic: bool>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: table<StartPositionTicks: int, Name: string, ImagePath: string, ImageDateModified: string, ImageTag: string>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list<record>, MediaSources: list<record>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list<record>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list<record>, Studios: list<record>, GenreItems: list<record>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: list<record>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list<record>, SeasonName: string, MediaStreams: list<record>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list<record>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>>> {
@@ -12178,5 +12567,5 @@ export def "years GetYear" [
   let full_url = (build-url $base $"/Years/($year)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

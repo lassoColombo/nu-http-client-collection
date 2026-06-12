@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -66,7 +67,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "namespace GetNamespace" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -98,13 +99,14 @@ export def "namespace GetNamespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<namespace: string, availableNamespaces: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/namespace")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/rollouts/{namespace}/info
@@ -119,13 +121,14 @@ export def "rollouts-info ListRolloutInfos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<rollouts: table<objectMeta: record, status: string, message: string, icon: string, strategy: string, step: string, setWeight: string, actualWeight: string, ready: int, current: int, desired: int, updated: int, available: int, restartedAt: string, generation: string, replicaSets: list, experiments: list, analysisRuns: list, containers: list, steps: list, initContainers: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/rollouts/($namespace)/info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/rollouts/{namespace}/info/watch
@@ -140,13 +143,14 @@ export def "rollouts-info-watch WatchRolloutInfos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<type: string, rolloutInfo: record<objectMeta: record, status: string, message: string, icon: string, strategy: string, step: string, setWeight: string, actualWeight: string, ready: int, current: int, desired: int, updated: int, available: int, restartedAt: string, generation: string, replicaSets: list, experiments: list, analysisRuns: list, containers: list, steps: list, initContainers: list>>, error: record<grpc_code: int, http_code: int, message: string, http_status: string, details: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/rollouts/($namespace)/info/watch")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /api/v1/rollouts/{namespace}/{name}/abort
@@ -162,6 +166,7 @@ export def "rollouts-abort AbortRollout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-name: string
   --body-namespace: string
 ]: any -> record<metadata: record<name: string, generateName: string, namespace: string, selfLink: string, uid: string, resourceVersion: string, generation: string, creationTimestamp: record<seconds: string, nanos: int>, deletionTimestamp: record<seconds: string, nanos: int>, deletionGracePeriodSeconds: string, labels: record, annotations: record, ownerReferences: list<record>, finalizers: list<string>, managedFields: list<record>>, spec: record<replicas: int, selector: record<matchLabels: record, matchExpressions: list>, template: record<metadata: record, spec: record>, workloadRef: record<apiVersion: string, kind: string, name: string, scaleDown: string>, minReadySeconds: int, rollbackWindow: record<revisions: int>, strategy: record<blueGreen: record, canary: record>, revisionHistoryLimit: int, paused: bool, progressDeadlineSeconds: int, progressDeadlineAbort: bool, restartAt: record<seconds: string, nanos: int>, analysis: record<successfulRunHistoryLimit: int, unsuccessfulRunHistoryLimit: int>>, status: record<abort: bool, pauseConditions: list<record>, controllerPause: bool, abortedAt: record<seconds: string, nanos: int>, currentPodHash: string, currentStepHash: string, replicas: int, updatedReplicas: int, readyReplicas: int, availableReplicas: int, currentStepIndex: int, collisionCount: int, observedGeneration: string, conditions: list<record>, canary: record<currentStepAnalysisRunStatus: record, currentBackgroundAnalysisRunStatus: record, currentExperiment: string, weights: record, stablePingPong: string, stepPluginStatuses: list>, blueGreen: record<previewSelector: string, activeSelector: string, scaleUpPreviewCheckPoint: bool, prePromotionAnalysisRunStatus: record, postPromotionAnalysisRunStatus: record>, HPAReplicas: int, selector: string, stableRS: string, restartedAt: record<seconds: string, nanos: int>, promoteFull: bool, phase: string, message: string, workloadObservedGeneration: string, alb: record<loadBalancer: record, canaryTargetGroup: record, stableTargetGroup: record, ingress: string>, albs: list<record>>> {
@@ -173,7 +178,7 @@ export def "rollouts-abort AbortRollout" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/v1/rollouts/{namespace}/{name}/info
@@ -189,13 +194,14 @@ export def "rollouts-info GetRolloutInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<objectMeta: record<name: string, generateName: string, namespace: string, selfLink: string, uid: string, resourceVersion: string, generation: string, creationTimestamp: record<seconds: string, nanos: int>, deletionTimestamp: record<seconds: string, nanos: int>, deletionGracePeriodSeconds: string, labels: record, annotations: record, ownerReferences: list<record>, finalizers: list<string>, managedFields: list<record>>, status: string, message: string, icon: string, strategy: string, step: string, setWeight: string, actualWeight: string, ready: int, current: int, desired: int, updated: int, available: int, restartedAt: string, generation: string, replicaSets: table<objectMeta: record, status: string, icon: string, revision: string, stable: bool, canary: bool, active: bool, preview: bool, replicas: int, available: int, template: string, scaleDownDeadline: string, images: list, pods: list, ping: bool, pong: bool, initContainerImages: list>, experiments: table<objectMeta: record, icon: string, revision: string, status: string, message: string, replicaSets: list, analysisRuns: list>, analysisRuns: table<objectMeta: record, icon: string, revision: string, status: string, successful: int, failed: int, inconclusive: int, error: int, jobs: list, nonJobInfo: list, metrics: list, specAndStatus: record>, containers: table<name: string, image: string>, steps: table<setWeight: int, pause: record, experiment: record, analysis: record, setCanaryScale: record, setHeaderRoute: record, setMirrorRoute: record, plugin: record>, initContainers: table<name: string, image: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/rollouts/($namespace)/($name)/info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/v1/rollouts/{namespace}/{name}/info/watch
@@ -211,13 +217,14 @@ export def "rollouts-info-watch WatchRolloutInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<objectMeta: record<name: string, generateName: string, namespace: string, selfLink: string, uid: string, resourceVersion: string, generation: string, creationTimestamp: record, deletionTimestamp: record, deletionGracePeriodSeconds: string, labels: record, annotations: record, ownerReferences: list, finalizers: list, managedFields: list>, status: string, message: string, icon: string, strategy: string, step: string, setWeight: string, actualWeight: string, ready: int, current: int, desired: int, updated: int, available: int, restartedAt: string, generation: string, replicaSets: list<record>, experiments: list<record>, analysisRuns: list<record>, containers: list<record>, steps: list<record>, initContainers: list<record>>, error: record<grpc_code: int, http_code: int, message: string, http_status: string, details: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/rollouts/($namespace)/($name)/info/watch")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /api/v1/rollouts/{namespace}/{name}/promote
@@ -233,6 +240,7 @@ export def "rollouts-promote PromoteRollout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-name: string
   --body-namespace: string
   --full: oneof<nothing, bool>
@@ -245,7 +253,7 @@ export def "rollouts-promote PromoteRollout" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT /api/v1/rollouts/{namespace}/{name}/restart
@@ -261,6 +269,7 @@ export def "rollouts-restart RestartRollout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-name: string
   --body-namespace: string
 ]: any -> record<metadata: record<name: string, generateName: string, namespace: string, selfLink: string, uid: string, resourceVersion: string, generation: string, creationTimestamp: record<seconds: string, nanos: int>, deletionTimestamp: record<seconds: string, nanos: int>, deletionGracePeriodSeconds: string, labels: record, annotations: record, ownerReferences: list<record>, finalizers: list<string>, managedFields: list<record>>, spec: record<replicas: int, selector: record<matchLabels: record, matchExpressions: list>, template: record<metadata: record, spec: record>, workloadRef: record<apiVersion: string, kind: string, name: string, scaleDown: string>, minReadySeconds: int, rollbackWindow: record<revisions: int>, strategy: record<blueGreen: record, canary: record>, revisionHistoryLimit: int, paused: bool, progressDeadlineSeconds: int, progressDeadlineAbort: bool, restartAt: record<seconds: string, nanos: int>, analysis: record<successfulRunHistoryLimit: int, unsuccessfulRunHistoryLimit: int>>, status: record<abort: bool, pauseConditions: list<record>, controllerPause: bool, abortedAt: record<seconds: string, nanos: int>, currentPodHash: string, currentStepHash: string, replicas: int, updatedReplicas: int, readyReplicas: int, availableReplicas: int, currentStepIndex: int, collisionCount: int, observedGeneration: string, conditions: list<record>, canary: record<currentStepAnalysisRunStatus: record, currentBackgroundAnalysisRunStatus: record, currentExperiment: string, weights: record, stablePingPong: string, stepPluginStatuses: list>, blueGreen: record<previewSelector: string, activeSelector: string, scaleUpPreviewCheckPoint: bool, prePromotionAnalysisRunStatus: record, postPromotionAnalysisRunStatus: record>, HPAReplicas: int, selector: string, stableRS: string, restartedAt: record<seconds: string, nanos: int>, promoteFull: bool, phase: string, message: string, workloadObservedGeneration: string, alb: record<loadBalancer: record, canaryTargetGroup: record, stableTargetGroup: record, ingress: string>, albs: list<record>>> {
@@ -272,7 +281,7 @@ export def "rollouts-restart RestartRollout" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT /api/v1/rollouts/{namespace}/{name}/retry
@@ -288,6 +297,7 @@ export def "rollouts-retry RetryRollout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-name: string
   --body-namespace: string
 ]: any -> record<metadata: record<name: string, generateName: string, namespace: string, selfLink: string, uid: string, resourceVersion: string, generation: string, creationTimestamp: record<seconds: string, nanos: int>, deletionTimestamp: record<seconds: string, nanos: int>, deletionGracePeriodSeconds: string, labels: record, annotations: record, ownerReferences: list<record>, finalizers: list<string>, managedFields: list<record>>, spec: record<replicas: int, selector: record<matchLabels: record, matchExpressions: list>, template: record<metadata: record, spec: record>, workloadRef: record<apiVersion: string, kind: string, name: string, scaleDown: string>, minReadySeconds: int, rollbackWindow: record<revisions: int>, strategy: record<blueGreen: record, canary: record>, revisionHistoryLimit: int, paused: bool, progressDeadlineSeconds: int, progressDeadlineAbort: bool, restartAt: record<seconds: string, nanos: int>, analysis: record<successfulRunHistoryLimit: int, unsuccessfulRunHistoryLimit: int>>, status: record<abort: bool, pauseConditions: list<record>, controllerPause: bool, abortedAt: record<seconds: string, nanos: int>, currentPodHash: string, currentStepHash: string, replicas: int, updatedReplicas: int, readyReplicas: int, availableReplicas: int, currentStepIndex: int, collisionCount: int, observedGeneration: string, conditions: list<record>, canary: record<currentStepAnalysisRunStatus: record, currentBackgroundAnalysisRunStatus: record, currentExperiment: string, weights: record, stablePingPong: string, stepPluginStatuses: list>, blueGreen: record<previewSelector: string, activeSelector: string, scaleUpPreviewCheckPoint: bool, prePromotionAnalysisRunStatus: record, postPromotionAnalysisRunStatus: record>, HPAReplicas: int, selector: string, stableRS: string, restartedAt: record<seconds: string, nanos: int>, promoteFull: bool, phase: string, message: string, workloadObservedGeneration: string, alb: record<loadBalancer: record, canaryTargetGroup: record, stableTargetGroup: record, ingress: string>, albs: list<record>>> {
@@ -299,7 +309,7 @@ export def "rollouts-retry RetryRollout" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT /api/v1/rollouts/{namespace}/{rollout}/set/{container}/{image}/{tag}
@@ -318,6 +328,7 @@ export def "rollouts-set SetRolloutImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-rollout: string
   --body-container: string
   --body-image: string
@@ -332,7 +343,7 @@ export def "rollouts-set SetRolloutImage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PUT /api/v1/rollouts/{namespace}/{rollout}/undo/{revision}
@@ -349,6 +360,7 @@ export def "rollouts-undo UndoRollout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-rollout: string
   --body-revision: string # format: int64
   --body-namespace: string
@@ -361,7 +373,7 @@ export def "rollouts-undo UndoRollout" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/v1/version
@@ -375,11 +387,12 @@ export def "version Version" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<rolloutsVersion: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/version")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

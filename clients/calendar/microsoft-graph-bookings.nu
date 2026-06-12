@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -74,7 +75,7 @@ def status-completer-1 [] { ["canceled" "pendingApproval" "registered" "rejected
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "solutions GetSolutionsRoot" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -107,6 +108,7 @@ export def "solutions GetSolutionsRoot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<backupRestore: record<id: string, serviceStatus: record<backupServiceConsumer: string, disableReason: string, gracePeriodDateTime: string, lastModifiedBy: record, lastModifiedDateTime: string, restoreAllowedTillDateTime: string, status: string>, browseSessions: list<record>, driveInclusionRules: list<record>, driveProtectionUnits: list<record>, driveProtectionUnitsBulkAdditionJobs: list<record>, exchangeProtectionPolicies: list<record>, exchangeRestoreSessions: list<record>, mailboxInclusionRules: list<record>, mailboxProtectionUnits: list<record>, mailboxProtectionUnitsBulkAdditionJobs: list<record>, oneDriveForBusinessBrowseSessions: list<record>, oneDriveForBusinessProtectionPolicies: list<record>, oneDriveForBusinessRestoreSessions: list<record>, protectionPolicies: list<record>, protectionUnits: list<record>, restorePoints: list<record>, restoreSessions: list<record>, serviceApps: list<record>, sharePointBrowseSessions: list<record>, sharePointProtectionPolicies: list<record>, sharePointRestoreSessions: list<record>, siteInclusionRules: list<record>, siteProtectionUnits: list<record>, siteProtectionUnitsBulkAdditionJobs: list<record>>, bookingBusinesses: table<id: string, address: record, bookingPageSettings: record, businessHours: list, businessType: string, createdDateTime: string, defaultCurrencyIso: string, displayName: string, email: string, isPublished: bool, languageTag: string, lastUpdatedDateTime: string, phone: string, publicUrl: string, schedulingPolicy: record, webSiteUrl: string, appointments: list, calendarView: list, customers: list, customQuestions: list, services: list, staffMembers: list>, bookingCurrencies: table<id: string, symbol: string>, virtualEvents: record<id: string, events: list<record>, townhalls: list<record>, webinars: list<record>>> {
@@ -116,7 +118,7 @@ export def "solutions GetSolutionsRoot" [
   let full_url = (build-url $base "/solutions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update solutions
@@ -133,6 +135,7 @@ export def "solutions UpdateSolutionsRoot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --backupRestore: any
   --bookingBusinesses: list # item shape: {id?: string, address?: record, bookingPageSettings?: record, businessHours?: list, businessType?: string, createdDateTime?: string, defaultCurrencyIso?: string, displayName?: string, email?: string, languageTag?: string, lastUpdatedDateTime?: string, phone?: string, schedulingPolicy?: record, webSiteUrl?: string, appointments?: list, calendarView?: list, customers?: list, customQuestions?: list, services?: list, staffMembers?: list}
   --bookingCurrencies: list # item shape: {id?: string, symbol?: string}
@@ -146,7 +149,7 @@ export def "solutions UpdateSolutionsRoot" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List bookingBusinesses
@@ -162,6 +165,7 @@ export def "solutions-booking-businesses ListBookingBusiness" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -177,7 +181,7 @@ export def "solutions-booking-businesses ListBookingBusiness" [
   let full_url = (build-url $base "/solutions/bookingBusinesses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create bookingBusiness
@@ -203,6 +207,7 @@ export def "solutions-booking-businesses CreateBookingBusiness" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --address: record # shape: {city?: string, countryOrRegion?: string, postalCode?: string, state?: string, street?: string}
   --bookingPageSettings: record # shape: {accessControl?: "unrestricted"|"restrictedToOrganization"|"unknownFutureValue", bookingPageColorCode?: string, businessTimeZone?: string, customerConsentMessage?: string, enforceOneTimePassword?: bool, isBusinessLogoDisplayEnabled?: bool, isCustomerConsentEnabled?: bool, isSearchEngineIndexabilityDisabled?: bool, isTimeSlotTimeZoneSetToBusinessTimeZone?: bool, privacyPolicyWebUrl?: string, termsAndConditionsWebUrl?: string}
@@ -232,7 +237,7 @@ export def "solutions-booking-businesses CreateBookingBusiness" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get bookingBusiness
@@ -249,6 +254,7 @@ export def "solutions-booking-businesses GetBookingBusiness" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, address: record<city: string, countryOrRegion: string, postalCode: string, state: string, street: string>, bookingPageSettings: record<accessControl: string, bookingPageColorCode: string, businessTimeZone: string, customerConsentMessage: string, enforceOneTimePassword: bool, isBusinessLogoDisplayEnabled: bool, isCustomerConsentEnabled: bool, isSearchEngineIndexabilityDisabled: bool, isTimeSlotTimeZoneSetToBusinessTimeZone: bool, privacyPolicyWebUrl: string, termsAndConditionsWebUrl: string>, businessHours: table<day: string, timeSlots: list>, businessType: string, createdDateTime: string, defaultCurrencyIso: string, displayName: string, email: string, isPublished: bool, languageTag: string, lastUpdatedDateTime: string, phone: string, publicUrl: string, schedulingPolicy: record<allowStaffSelection: bool, customAvailabilities: list<record>, generalAvailability: record<availabilityType: string, businessHours: list>, isMeetingInviteToCustomersEnabled: bool, maximumAdvance: string, minimumLeadTime: string, sendConfirmationsToOwner: bool, timeSlotInterval: string>, webSiteUrl: string, appointments: table<id: string, additionalInformation: string, anonymousJoinWebUrl: string, appointmentLabel: string, createdDateTime: string, customerEmailAddress: string, customerName: string, customerNotes: string, customerPhone: string, customers: list, customerTimeZone: string, duration: string, endDateTime: record, filledAttendeesCount: float, isCustomerAllowedToManageBooking: bool, isLocationOnline: bool, joinWebUrl: string, lastUpdatedDateTime: string, maximumAttendeesCount: float, optOutOfCustomerEmail: bool, postBuffer: string, preBuffer: string, price: float, priceType: string, reminders: list, selfServiceAppointmentId: string, serviceId: string, serviceLocation: record, serviceName: string, serviceNotes: string, smsNotificationsEnabled: bool, staffMemberIds: list, startDateTime: record>, calendarView: table<id: string, additionalInformation: string, anonymousJoinWebUrl: string, appointmentLabel: string, createdDateTime: string, customerEmailAddress: string, customerName: string, customerNotes: string, customerPhone: string, customers: list, customerTimeZone: string, duration: string, endDateTime: record, filledAttendeesCount: float, isCustomerAllowedToManageBooking: bool, isLocationOnline: bool, joinWebUrl: string, lastUpdatedDateTime: string, maximumAttendeesCount: float, optOutOfCustomerEmail: bool, postBuffer: string, preBuffer: string, price: float, priceType: string, reminders: list, selfServiceAppointmentId: string, serviceId: string, serviceLocation: record, serviceName: string, serviceNotes: string, smsNotificationsEnabled: bool, staffMemberIds: list, startDateTime: record>, customers: table<id: string>, customQuestions: table<id: string, answerInputType: string, answerOptions: list, createdDateTime: string, displayName: string, lastUpdatedDateTime: string>, services: table<id: string, additionalInformation: string, createdDateTime: string, customQuestions: list, defaultDuration: string, defaultLocation: record, defaultPrice: float, defaultPriceType: string, defaultReminders: list, description: string, displayName: string, isAnonymousJoinEnabled: bool, isCustomerAllowedToManageBooking: bool, isHiddenFromCustomers: bool, isLocationOnline: bool, languageTag: string, lastUpdatedDateTime: string, maximumAttendeesCount: float, notes: string, postBuffer: string, preBuffer: string, schedulingPolicy: record, smsNotificationsEnabled: bool, staffMemberIds: list, webUrl: string>, staffMembers: table<id: string>> {
@@ -258,7 +264,7 @@ export def "solutions-booking-businesses GetBookingBusiness" [
   let full_url = (build-url $base $"/solutions/bookingBusinesses/($bookingBusiness_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update bookingbusiness
@@ -285,6 +291,7 @@ export def "solutions-booking-businesses UpdateBookingBusiness" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --address: record # shape: {city?: string, countryOrRegion?: string, postalCode?: string, state?: string, street?: string}
   --bookingPageSettings: record # shape: {accessControl?: "unrestricted"|"restrictedToOrganization"|"unknownFutureValue", bookingPageColorCode?: string, businessTimeZone?: string, customerConsentMessage?: string, enforceOneTimePassword?: bool, isBusinessLogoDisplayEnabled?: bool, isCustomerConsentEnabled?: bool, isSearchEngineIndexabilityDisabled?: bool, isTimeSlotTimeZoneSetToBusinessTimeZone?: bool, privacyPolicyWebUrl?: string, termsAndConditionsWebUrl?: string}
@@ -314,7 +321,7 @@ export def "solutions-booking-businesses UpdateBookingBusiness" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete bookingBusiness
@@ -331,6 +338,7 @@ export def "solutions-booking-businesses DeleteBookingBusiness" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -340,7 +348,7 @@ export def "solutions-booking-businesses DeleteBookingBusiness" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List appointments
@@ -357,6 +365,7 @@ export def "solutions-booking-businesses-appointments ListAppointment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -372,7 +381,7 @@ export def "solutions-booking-businesses-appointments ListAppointment" [
   let full_url = (build-url $base $"/solutions/bookingBusinesses/($bookingBusiness_id)/appointments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create bookingAppointment
@@ -393,6 +402,7 @@ export def "solutions-booking-businesses-appointments CreateAppointment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --additionalInformation: string # Additional information that is sent to the customer when an appointment is confirmed. (nullable)
   --anonymousJoinWebUrl: string # The URL of the meeting to join anonymously. (nullable)
@@ -433,7 +443,7 @@ export def "solutions-booking-businesses-appointments CreateAppointment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get bookingAppointment
@@ -451,6 +461,7 @@ export def "solutions-booking-businesses-appointments GetAppointment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, additionalInformation: string, anonymousJoinWebUrl: string, appointmentLabel: string, createdDateTime: string, customerEmailAddress: string, customerName: string, customerNotes: string, customerPhone: string, customers: list<record>, customerTimeZone: string, duration: string, endDateTime: record<dateTime: string, timeZone: string>, filledAttendeesCount: float, isCustomerAllowedToManageBooking: bool, isLocationOnline: bool, joinWebUrl: string, lastUpdatedDateTime: string, maximumAttendeesCount: float, optOutOfCustomerEmail: bool, postBuffer: string, preBuffer: string, price: float, priceType: string, reminders: table<message: string, offset: string, recipients: string>, selfServiceAppointmentId: string, serviceId: string, serviceLocation: record<address: record<city: string, countryOrRegion: string, postalCode: string, state: string, street: string>, coordinates: record<accuracy: float, altitude: float, altitudeAccuracy: float, latitude: float, longitude: float>, displayName: string, locationEmailAddress: string, locationType: string, locationUri: string, uniqueId: string, uniqueIdType: string>, serviceName: string, serviceNotes: string, smsNotificationsEnabled: bool, staffMemberIds: list<string>, startDateTime: record<dateTime: string, timeZone: string>> {
@@ -460,7 +471,7 @@ export def "solutions-booking-businesses-appointments GetAppointment" [
   let full_url = (build-url $base $"/solutions/bookingBusinesses/($bookingBusiness_id)/appointments/($bookingAppointment_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update bookingAppointment
@@ -482,6 +493,7 @@ export def "solutions-booking-businesses-appointments UpdateAppointment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --additionalInformation: string # Additional information that is sent to the customer when an appointment is confirmed. (nullable)
   --anonymousJoinWebUrl: string # The URL of the meeting to join anonymously. (nullable)
@@ -522,7 +534,7 @@ export def "solutions-booking-businesses-appointments UpdateAppointment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete bookingAppointment
@@ -540,6 +552,7 @@ export def "solutions-booking-businesses-appointments DeleteAppointment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -549,7 +562,7 @@ export def "solutions-booking-businesses-appointments DeleteAppointment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action cancel
@@ -567,6 +580,7 @@ export def "solutions-booking-businesses-appointments-microsoftgraphcancel cance
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cancellationMessage: string # nullable
 ]: any -> any {
   let input = $in
@@ -577,7 +591,7 @@ export def "solutions-booking-businesses-appointments-microsoftgraphcancel cance
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the number of the resource
@@ -593,6 +607,7 @@ export def "solutions-booking-businesses-appointments-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -602,7 +617,7 @@ export def "solutions-booking-businesses-appointments-count GetCount" [
   let full_url = (build-url $base $"/solutions/bookingBusinesses/($bookingBusiness_id)/appointments/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List business calendarView
@@ -619,6 +634,7 @@ export def "solutions-booking-businesses-calendar-view ListCalendarView" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # The start date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T19:00:00-08:00
   --end: string # The end date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --top: int # Show only the first n items (e.g. 50)
@@ -636,7 +652,7 @@ export def "solutions-booking-businesses-calendar-view ListCalendarView" [
   let full_url = (build-url $base $"/solutions/bookingBusinesses/($bookingBusiness_id)/calendarView" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to calendarView for solutions
@@ -656,6 +672,7 @@ export def "solutions-booking-businesses-calendar-view CreateCalendarView" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --additionalInformation: string # Additional information that is sent to the customer when an appointment is confirmed. (nullable)
   --anonymousJoinWebUrl: string # The URL of the meeting to join anonymously. (nullable)
@@ -696,7 +713,7 @@ export def "solutions-booking-businesses-calendar-view CreateCalendarView" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get calendarView from solutions
@@ -713,6 +730,7 @@ export def "solutions-booking-businesses-calendar-view GetCalendarView" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # The start date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T19:00:00-08:00
   --end: string # The end date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --select: list # Select properties to be returned
@@ -724,7 +742,7 @@ export def "solutions-booking-businesses-calendar-view GetCalendarView" [
   let full_url = (build-url $base $"/solutions/bookingBusinesses/($bookingBusiness_id)/calendarView/($bookingAppointment_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property calendarView in solutions
@@ -745,6 +763,7 @@ export def "solutions-booking-businesses-calendar-view UpdateCalendarView" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --additionalInformation: string # Additional information that is sent to the customer when an appointment is confirmed. (nullable)
   --anonymousJoinWebUrl: string # The URL of the meeting to join anonymously. (nullable)
@@ -785,7 +804,7 @@ export def "solutions-booking-businesses-calendar-view UpdateCalendarView" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property calendarView for solutions
@@ -802,6 +821,7 @@ export def "solutions-booking-businesses-calendar-view DeleteCalendarView" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -811,7 +831,7 @@ export def "solutions-booking-businesses-calendar-view DeleteCalendarView" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action cancel
@@ -829,6 +849,7 @@ export def "solutions-booking-businesses-calendar-view-microsoftgraphcancel canc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cancellationMessage: string # nullable
 ]: any -> any {
   let input = $in
@@ -839,7 +860,7 @@ export def "solutions-booking-businesses-calendar-view-microsoftgraphcancel canc
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the number of the resource
@@ -855,6 +876,7 @@ export def "solutions-booking-businesses-calendar-view-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # The start date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T19:00:00-08:00
   --end: string # The end date and time of the time range, represented in ISO 8601 format. For example, 2019-11-08T20:00:00-08:00
   --search: string # Search items by search phrases
@@ -866,7 +888,7 @@ export def "solutions-booking-businesses-calendar-view-count GetCount" [
   let full_url = (build-url $base $"/solutions/bookingBusinesses/($bookingBusiness_id)/calendarView/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List customers
@@ -883,6 +905,7 @@ export def "solutions-booking-businesses-customers ListCustomer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -898,7 +921,7 @@ export def "solutions-booking-businesses-customers ListCustomer" [
   let full_url = (build-url $base $"/solutions/bookingBusinesses/($bookingBusiness_id)/customers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create bookingCustomer
@@ -915,6 +938,7 @@ export def "solutions-booking-businesses-customers CreateCustomer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
 ]: any -> record<id: string> {
   let input = $in
@@ -925,7 +949,7 @@ export def "solutions-booking-businesses-customers CreateCustomer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get bookingCustomer
@@ -943,6 +967,7 @@ export def "solutions-booking-businesses-customers GetCustomer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string> {
@@ -952,7 +977,7 @@ export def "solutions-booking-businesses-customers GetCustomer" [
   let full_url = (build-url $base $"/solutions/bookingBusinesses/($bookingBusiness_id)/customers/($bookingCustomerBase_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update bookingCustomer
@@ -970,6 +995,7 @@ export def "solutions-booking-businesses-customers UpdateCustomer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
 ]: any -> record<id: string> {
   let input = $in
@@ -980,7 +1006,7 @@ export def "solutions-booking-businesses-customers UpdateCustomer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete bookingCustomer
@@ -998,6 +1024,7 @@ export def "solutions-booking-businesses-customers DeleteCustomer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1007,7 +1034,7 @@ export def "solutions-booking-businesses-customers DeleteCustomer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -1023,6 +1050,7 @@ export def "solutions-booking-businesses-customers-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -1032,7 +1060,7 @@ export def "solutions-booking-businesses-customers-count GetCount" [
   let full_url = (build-url $base $"/solutions/bookingBusinesses/($bookingBusiness_id)/customers/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List customQuestions
@@ -1049,6 +1077,7 @@ export def "solutions-booking-businesses-custom-questions ListCustomQuestion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -1064,7 +1093,7 @@ export def "solutions-booking-businesses-custom-questions ListCustomQuestion" [
   let full_url = (build-url $base $"/solutions/bookingBusinesses/($bookingBusiness_id)/customQuestions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create bookingCustomQuestion
@@ -1081,6 +1110,7 @@ export def "solutions-booking-businesses-custom-questions CreateCustomQuestion" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --answerInputType: string@answerInputType-completer
   --answerOptions: list # List of possible answer values.
@@ -1096,7 +1126,7 @@ export def "solutions-booking-businesses-custom-questions CreateCustomQuestion" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get bookingCustomQuestion
@@ -1114,6 +1144,7 @@ export def "solutions-booking-businesses-custom-questions GetCustomQuestion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, answerInputType: string, answerOptions: list<string>, createdDateTime: string, displayName: string, lastUpdatedDateTime: string> {
@@ -1123,7 +1154,7 @@ export def "solutions-booking-businesses-custom-questions GetCustomQuestion" [
   let full_url = (build-url $base $"/solutions/bookingBusinesses/($bookingBusiness_id)/customQuestions/($bookingCustomQuestion_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update bookingCustomQuestion
@@ -1141,6 +1172,7 @@ export def "solutions-booking-businesses-custom-questions UpdateCustomQuestion" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --answerInputType: string@answerInputType-completer
   --answerOptions: list # List of possible answer values.
@@ -1156,7 +1188,7 @@ export def "solutions-booking-businesses-custom-questions UpdateCustomQuestion" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete bookingCustomQuestion
@@ -1174,6 +1206,7 @@ export def "solutions-booking-businesses-custom-questions DeleteCustomQuestion" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1183,7 +1216,7 @@ export def "solutions-booking-businesses-custom-questions DeleteCustomQuestion" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -1199,6 +1232,7 @@ export def "solutions-booking-businesses-custom-questions-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -1208,7 +1242,7 @@ export def "solutions-booking-businesses-custom-questions-count GetCount" [
   let full_url = (build-url $base $"/solutions/bookingBusinesses/($bookingBusiness_id)/customQuestions/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action getStaffAvailability
@@ -1227,6 +1261,7 @@ export def "solutions-booking-businesses-microsoftgraphget-staff-availability po
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --staffIds: list
   --startDateTime: record # shape: {dateTime?: string, timeZone?: string}
   --endDateTime: record # shape: {dateTime?: string, timeZone?: string}
@@ -1239,7 +1274,7 @@ export def "solutions-booking-businesses-microsoftgraphget-staff-availability po
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invoke action publish
@@ -1256,13 +1291,14 @@ export def "solutions-booking-businesses-microsoftgraphpublish publish" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/solutions/bookingBusinesses/($bookingBusiness_id)/microsoft.graph.publish")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action unpublish
@@ -1279,13 +1315,14 @@ export def "solutions-booking-businesses-microsoftgraphunpublish unpublish" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/solutions/bookingBusinesses/($bookingBusiness_id)/microsoft.graph.unpublish")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List services
@@ -1302,6 +1339,7 @@ export def "solutions-booking-businesses-services ListService" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -1317,7 +1355,7 @@ export def "solutions-booking-businesses-services ListService" [
   let full_url = (build-url $base $"/solutions/bookingBusinesses/($bookingBusiness_id)/services" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create bookingService
@@ -1338,6 +1376,7 @@ export def "solutions-booking-businesses-services CreateService" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --additionalInformation: string # Additional information that is sent to the customer when an appointment is confirmed. (nullable)
   --createdDateTime: string # The date, time, and time zone when the service was created. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
@@ -1371,7 +1410,7 @@ export def "solutions-booking-businesses-services CreateService" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get bookingService
@@ -1389,6 +1428,7 @@ export def "solutions-booking-businesses-services GetService" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, additionalInformation: string, createdDateTime: string, customQuestions: table<isRequired: bool, questionId: string>, defaultDuration: string, defaultLocation: record<address: record<city: string, countryOrRegion: string, postalCode: string, state: string, street: string>, coordinates: record<accuracy: float, altitude: float, altitudeAccuracy: float, latitude: float, longitude: float>, displayName: string, locationEmailAddress: string, locationType: string, locationUri: string, uniqueId: string, uniqueIdType: string>, defaultPrice: float, defaultPriceType: string, defaultReminders: table<message: string, offset: string, recipients: string>, description: string, displayName: string, isAnonymousJoinEnabled: bool, isCustomerAllowedToManageBooking: bool, isHiddenFromCustomers: bool, isLocationOnline: bool, languageTag: string, lastUpdatedDateTime: string, maximumAttendeesCount: float, notes: string, postBuffer: string, preBuffer: string, schedulingPolicy: record<allowStaffSelection: bool, customAvailabilities: list<record>, generalAvailability: record<availabilityType: string, businessHours: list>, isMeetingInviteToCustomersEnabled: bool, maximumAdvance: string, minimumLeadTime: string, sendConfirmationsToOwner: bool, timeSlotInterval: string>, smsNotificationsEnabled: bool, staffMemberIds: list<string>, webUrl: string> {
@@ -1398,7 +1438,7 @@ export def "solutions-booking-businesses-services GetService" [
   let full_url = (build-url $base $"/solutions/bookingBusinesses/($bookingBusiness_id)/services/($bookingService_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update bookingservice
@@ -1420,6 +1460,7 @@ export def "solutions-booking-businesses-services UpdateService" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --additionalInformation: string # Additional information that is sent to the customer when an appointment is confirmed. (nullable)
   --createdDateTime: string # The date, time, and time zone when the service was created. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
@@ -1453,7 +1494,7 @@ export def "solutions-booking-businesses-services UpdateService" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete bookingService
@@ -1471,6 +1512,7 @@ export def "solutions-booking-businesses-services DeleteService" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1480,7 +1522,7 @@ export def "solutions-booking-businesses-services DeleteService" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -1496,6 +1538,7 @@ export def "solutions-booking-businesses-services-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -1505,7 +1548,7 @@ export def "solutions-booking-businesses-services-count GetCount" [
   let full_url = (build-url $base $"/solutions/bookingBusinesses/($bookingBusiness_id)/services/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List staffMembers
@@ -1522,6 +1565,7 @@ export def "solutions-booking-businesses-staff-members ListStaffMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -1537,7 +1581,7 @@ export def "solutions-booking-businesses-staff-members ListStaffMember" [
   let full_url = (build-url $base $"/solutions/bookingBusinesses/($bookingBusiness_id)/staffMembers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create bookingStaffMember
@@ -1554,6 +1598,7 @@ export def "solutions-booking-businesses-staff-members CreateStaffMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
 ]: any -> record<id: string> {
   let input = $in
@@ -1564,7 +1609,7 @@ export def "solutions-booking-businesses-staff-members CreateStaffMember" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get bookingStaffMember
@@ -1582,6 +1627,7 @@ export def "solutions-booking-businesses-staff-members GetStaffMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string> {
@@ -1591,7 +1637,7 @@ export def "solutions-booking-businesses-staff-members GetStaffMember" [
   let full_url = (build-url $base $"/solutions/bookingBusinesses/($bookingBusiness_id)/staffMembers/($bookingStaffMemberBase_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update bookingstaffmember
@@ -1609,6 +1655,7 @@ export def "solutions-booking-businesses-staff-members UpdateStaffMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
 ]: any -> record<id: string> {
   let input = $in
@@ -1619,7 +1666,7 @@ export def "solutions-booking-businesses-staff-members UpdateStaffMember" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete bookingStaffMember
@@ -1637,6 +1684,7 @@ export def "solutions-booking-businesses-staff-members DeleteStaffMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1646,7 +1694,7 @@ export def "solutions-booking-businesses-staff-members DeleteStaffMember" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -1662,6 +1710,7 @@ export def "solutions-booking-businesses-staff-members-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -1671,7 +1720,7 @@ export def "solutions-booking-businesses-staff-members-count GetCount" [
   let full_url = (build-url $base $"/solutions/bookingBusinesses/($bookingBusiness_id)/staffMembers/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -1686,6 +1735,7 @@ export def "solutions-booking-businesses-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -1695,7 +1745,7 @@ export def "solutions-booking-businesses-count GetCount" [
   let full_url = (build-url $base "/solutions/bookingBusinesses/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List bookingCurrencies
@@ -1711,6 +1761,7 @@ export def "solutions-booking-currencies ListBookingCurrency" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -1726,7 +1777,7 @@ export def "solutions-booking-currencies ListBookingCurrency" [
   let full_url = (build-url $base "/solutions/bookingCurrencies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to bookingCurrencies for solutions
@@ -1741,6 +1792,7 @@ export def "solutions-booking-currencies CreateBookingCurrency" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --symbol: string # The currency symbol. For example, the currency symbol for the US dollar and for the Australian dollar is $.
 ]: any -> record<id: string, symbol: string> {
@@ -1752,7 +1804,7 @@ export def "solutions-booking-currencies CreateBookingCurrency" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get bookingCurrency
@@ -1769,6 +1821,7 @@ export def "solutions-booking-currencies GetBookingCurrency" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, symbol: string> {
@@ -1778,7 +1831,7 @@ export def "solutions-booking-currencies GetBookingCurrency" [
   let full_url = (build-url $base $"/solutions/bookingCurrencies/($bookingCurrency_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property bookingCurrencies in solutions
@@ -1794,6 +1847,7 @@ export def "solutions-booking-currencies UpdateBookingCurrency" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --symbol: string # The currency symbol. For example, the currency symbol for the US dollar and for the Australian dollar is $.
 ]: any -> record<id: string, symbol: string> {
@@ -1805,7 +1859,7 @@ export def "solutions-booking-currencies UpdateBookingCurrency" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property bookingCurrencies for solutions
@@ -1821,6 +1875,7 @@ export def "solutions-booking-currencies DeleteBookingCurrency" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1830,7 +1885,7 @@ export def "solutions-booking-currencies DeleteBookingCurrency" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -1845,6 +1900,7 @@ export def "solutions-booking-currencies-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -1854,7 +1910,7 @@ export def "solutions-booking-currencies-count GetCount" [
   let full_url = (build-url $base "/solutions/bookingCurrencies/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get virtualEvents from solutions
@@ -1869,6 +1925,7 @@ export def "solutions-virtual-events GetVirtualEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, events: table<id: string, createdBy: record, description: record, displayName: string, endDateTime: record, externalEventInformation: list, settings: record, startDateTime: record, status: string, presenters: list, sessions: list>, townhalls: table<audience: string, coOrganizers: list, invitedAttendees: list, isInviteOnly: bool>, webinars: table<audience: string, coOrganizers: list, registrationConfiguration: record, registrations: list>> {
@@ -1878,7 +1935,7 @@ export def "solutions-virtual-events GetVirtualEvent" [
   let full_url = (build-url $base "/solutions/virtualEvents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property virtualEvents in solutions
@@ -1896,6 +1953,7 @@ export def "solutions-virtual-events UpdateVirtualEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --events: list # item shape: {id?: string, createdBy?: any, description?: record, displayName?: string, endDateTime?: record, externalEventInformation?: list, settings?: record, startDateTime?: record, status?: "draft"|"published"|"canceled"|"unknownFutureValue", presenters?: list, sessions?: list}
   --townhalls: list # A collection of town halls. Nullable. — item shape: {audience?: "everyone"|"organization"|"unknownFutureValue", coOrganizers?: list, invitedAttendees?: list, isInviteOnly?: bool}
@@ -1909,7 +1967,7 @@ export def "solutions-virtual-events UpdateVirtualEvent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property virtualEvents for solutions
@@ -1924,6 +1982,7 @@ export def "solutions-virtual-events DeleteVirtualEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1933,7 +1992,7 @@ export def "solutions-virtual-events DeleteVirtualEvent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get events from solutions
@@ -1948,6 +2007,7 @@ export def "solutions-virtual-events-events ListEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -1963,7 +2023,7 @@ export def "solutions-virtual-events-events ListEvent" [
   let full_url = (build-url $base "/solutions/virtualEvents/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to events for solutions
@@ -1985,6 +2045,7 @@ export def "solutions-virtual-events-events CreateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --createdBy: any
   --description: record # shape: {content?: string, contentType?: "text"|"html"}
@@ -2005,7 +2066,7 @@ export def "solutions-virtual-events-events CreateEvent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get events from solutions
@@ -2021,6 +2082,7 @@ export def "solutions-virtual-events-events GetEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, createdBy: record<application: record<displayName: string, id: string>, device: record<displayName: string, id: string>, user: record<displayName: string, id: string>, applicationInstance: record<displayName: string, id: string>, assertedIdentity: record<displayName: string, id: string>, azureCommunicationServicesUser: record<displayName: string, id: string>, encrypted: record<displayName: string, id: string>, endpointType: string, guest: record<displayName: string, id: string>, onPremises: record<displayName: string, id: string>, phone: record<displayName: string, id: string>>, description: record<content: string, contentType: string>, displayName: string, endDateTime: record<dateTime: string, timeZone: string>, externalEventInformation: table<applicationId: string, externalEventId: string>, settings: record<isAttendeeEmailNotificationEnabled: bool>, startDateTime: record<dateTime: string, timeZone: string>, status: string, presenters: table<id: string, email: string, identity: record, presenterDetails: record>, sessions: table<endDateTime: record, startDateTime: record, videoOnDemandWebUrl: string>> {
@@ -2030,7 +2092,7 @@ export def "solutions-virtual-events-events GetEvent" [
   let full_url = (build-url $base $"/solutions/virtualEvents/events/($virtualEvent_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property events in solutions
@@ -2053,6 +2115,7 @@ export def "solutions-virtual-events-events UpdateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --createdBy: any
   --description: record # shape: {content?: string, contentType?: "text"|"html"}
@@ -2073,7 +2136,7 @@ export def "solutions-virtual-events-events UpdateEvent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property events for solutions
@@ -2089,6 +2152,7 @@ export def "solutions-virtual-events-events DeleteEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2098,7 +2162,7 @@ export def "solutions-virtual-events-events DeleteEvent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action cancel
@@ -2114,13 +2178,14 @@ export def "solutions-virtual-events-events-microsoftgraphcancel cancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/solutions/virtualEvents/events/($virtualEvent_id)/microsoft.graph.cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action publish
@@ -2136,13 +2201,14 @@ export def "solutions-virtual-events-events-microsoftgraphpublish publish" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/solutions/virtualEvents/events/($virtualEvent_id)/microsoft.graph.publish")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action setExternalEventInformation
@@ -2158,6 +2224,7 @@ export def "solutions-virtual-events-events-microsoftgraphset-external-event-inf
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --externalEventId: string # nullable
 ]: any -> any {
   let input = $in
@@ -2168,7 +2235,7 @@ export def "solutions-virtual-events-events-microsoftgraphset-external-event-inf
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get presenters from solutions
@@ -2184,6 +2251,7 @@ export def "solutions-virtual-events-events-presenters ListPresenter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -2199,7 +2267,7 @@ export def "solutions-virtual-events-events-presenters ListPresenter" [
   let full_url = (build-url $base $"/solutions/virtualEvents/events/($virtualEvent_id)/presenters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to presenters for solutions
@@ -2217,6 +2285,7 @@ export def "solutions-virtual-events-events-presenters CreatePresenter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --email: string # Email address of the presenter. (nullable)
   --identity: record # shape: {displayName?: string, id?: string}
@@ -2230,7 +2299,7 @@ export def "solutions-virtual-events-events-presenters CreatePresenter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get presenters from solutions
@@ -2247,6 +2316,7 @@ export def "solutions-virtual-events-events-presenters GetPresenter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, email: string, identity: record<displayName: string, id: string>, presenterDetails: record<bio: record<content: string, contentType: string>, company: string, jobTitle: string, linkedInProfileWebUrl: string, personalSiteWebUrl: string, photo: string, twitterProfileWebUrl: string>> {
@@ -2256,7 +2326,7 @@ export def "solutions-virtual-events-events-presenters GetPresenter" [
   let full_url = (build-url $base $"/solutions/virtualEvents/events/($virtualEvent_id)/presenters/($virtualEventPresenter_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property presenters in solutions
@@ -2275,6 +2345,7 @@ export def "solutions-virtual-events-events-presenters UpdatePresenter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --email: string # Email address of the presenter. (nullable)
   --identity: record # shape: {displayName?: string, id?: string}
@@ -2288,7 +2359,7 @@ export def "solutions-virtual-events-events-presenters UpdatePresenter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property presenters for solutions
@@ -2305,6 +2376,7 @@ export def "solutions-virtual-events-events-presenters DeletePresenter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2314,7 +2386,7 @@ export def "solutions-virtual-events-events-presenters DeletePresenter" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -2330,6 +2402,7 @@ export def "solutions-virtual-events-events-presenters-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -2339,7 +2412,7 @@ export def "solutions-virtual-events-events-presenters-count GetCount" [
   let full_url = (build-url $base $"/solutions/virtualEvents/events/($virtualEvent_id)/presenters/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get sessions from solutions
@@ -2355,6 +2428,7 @@ export def "solutions-virtual-events-events-sessions ListSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -2370,7 +2444,7 @@ export def "solutions-virtual-events-events-sessions ListSession" [
   let full_url = (build-url $base $"/solutions/virtualEvents/events/($virtualEvent_id)/sessions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to sessions for solutions
@@ -2388,6 +2462,7 @@ export def "solutions-virtual-events-events-sessions CreateSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --endDateTime: record # shape: {dateTime?: string, timeZone?: string}
   --startDateTime: record # shape: {dateTime?: string, timeZone?: string}
   --videoOnDemandWebUrl: string # The URL of the video on demand (VOD) for Microsoft Teams events that allows webinar and town hall organizers to quickly publish and share event recordings. (nullable)
@@ -2400,7 +2475,7 @@ export def "solutions-virtual-events-events-sessions CreateSession" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get sessions from solutions
@@ -2417,6 +2492,7 @@ export def "solutions-virtual-events-events-sessions GetSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<endDateTime: record<dateTime: string, timeZone: string>, startDateTime: record<dateTime: string, timeZone: string>, videoOnDemandWebUrl: string> {
@@ -2426,7 +2502,7 @@ export def "solutions-virtual-events-events-sessions GetSession" [
   let full_url = (build-url $base $"/solutions/virtualEvents/events/($virtualEvent_id)/sessions/($virtualEventSession_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property sessions in solutions
@@ -2445,6 +2521,7 @@ export def "solutions-virtual-events-events-sessions UpdateSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --endDateTime: record # shape: {dateTime?: string, timeZone?: string}
   --startDateTime: record # shape: {dateTime?: string, timeZone?: string}
   --videoOnDemandWebUrl: string # The URL of the video on demand (VOD) for Microsoft Teams events that allows webinar and town hall organizers to quickly publish and share event recordings. (nullable)
@@ -2457,7 +2534,7 @@ export def "solutions-virtual-events-events-sessions UpdateSession" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property sessions for solutions
@@ -2474,6 +2551,7 @@ export def "solutions-virtual-events-events-sessions DeleteSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2483,7 +2561,7 @@ export def "solutions-virtual-events-events-sessions DeleteSession" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get attendanceReports from solutions
@@ -2500,6 +2578,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports ListAtte
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -2515,7 +2594,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports ListAtte
   let full_url = (build-url $base $"/solutions/virtualEvents/events/($virtualEvent_id)/sessions/($virtualEventSession_id)/attendanceReports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to attendanceReports for solutions
@@ -2534,6 +2613,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports CreateAt
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --externalEventInformation: list # The external information of a virtual event. Returned only for event organizers or coorganizers. Read-only. — item shape: {applicationId?: string, externalEventId?: string}
   --meetingEndDateTime: string # UTC time when the meeting ended. Read-only. (nullable, format: date-time)
@@ -2549,7 +2629,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports CreateAt
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get attendanceReports from solutions
@@ -2567,6 +2647,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports GetAtten
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, externalEventInformation: table<applicationId: string, externalEventId: string>, meetingEndDateTime: string, meetingStartDateTime: string, totalParticipantCount: float, attendanceRecords: table<id: string, attendanceIntervals: list, emailAddress: string, externalRegistrationInformation: record, identity: record, registrationId: string, role: string, totalAttendanceInSeconds: float>> {
@@ -2576,7 +2657,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports GetAtten
   let full_url = (build-url $base $"/solutions/virtualEvents/events/($virtualEvent_id)/sessions/($virtualEventSession_id)/attendanceReports/($meetingAttendanceReport_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property attendanceReports in solutions
@@ -2596,6 +2677,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports UpdateAt
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --externalEventInformation: list # The external information of a virtual event. Returned only for event organizers or coorganizers. Read-only. — item shape: {applicationId?: string, externalEventId?: string}
   --meetingEndDateTime: string # UTC time when the meeting ended. Read-only. (nullable, format: date-time)
@@ -2611,7 +2693,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports UpdateAt
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property attendanceReports for solutions
@@ -2629,6 +2711,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports DeleteAt
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2638,7 +2721,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports DeleteAt
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get attendanceRecords from solutions
@@ -2656,6 +2739,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports-attendan
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -2671,7 +2755,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports-attendan
   let full_url = (build-url $base $"/solutions/virtualEvents/events/($virtualEvent_id)/sessions/($virtualEventSession_id)/attendanceReports/($meetingAttendanceReport_id)/attendanceRecords" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to attendanceRecords for solutions
@@ -2692,6 +2776,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports-attendan
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --attendanceIntervals: list # List of time periods between joining and leaving a meeting. — item shape: {durationInSeconds?: float, joinDateTime?: string, leaveDateTime?: string}
   --emailAddress: string # Email address of the user associated with this attendance record. (nullable)
@@ -2709,7 +2794,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports-attendan
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get attendanceRecords from solutions
@@ -2728,6 +2813,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports-attendan
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, attendanceIntervals: table<durationInSeconds: float, joinDateTime: string, leaveDateTime: string>, emailAddress: string, externalRegistrationInformation: record<referrer: string, registrationId: string>, identity: record<displayName: string, id: string>, registrationId: string, role: string, totalAttendanceInSeconds: float> {
@@ -2737,7 +2823,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports-attendan
   let full_url = (build-url $base $"/solutions/virtualEvents/events/($virtualEvent_id)/sessions/($virtualEventSession_id)/attendanceReports/($meetingAttendanceReport_id)/attendanceRecords/($attendanceRecord_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property attendanceRecords in solutions
@@ -2759,6 +2845,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports-attendan
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --attendanceIntervals: list # List of time periods between joining and leaving a meeting. — item shape: {durationInSeconds?: float, joinDateTime?: string, leaveDateTime?: string}
   --emailAddress: string # Email address of the user associated with this attendance record. (nullable)
@@ -2776,7 +2863,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports-attendan
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property attendanceRecords for solutions
@@ -2795,6 +2882,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports-attendan
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2804,7 +2892,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports-attendan
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -2822,6 +2910,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports-attendan
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -2831,7 +2920,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports-attendan
   let full_url = (build-url $base $"/solutions/virtualEvents/events/($virtualEvent_id)/sessions/($virtualEventSession_id)/attendanceReports/($meetingAttendanceReport_id)/attendanceRecords/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -2848,6 +2937,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports-count Ge
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -2857,7 +2947,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports-count Ge
   let full_url = (build-url $base $"/solutions/virtualEvents/events/($virtualEvent_id)/sessions/($virtualEventSession_id)/attendanceReports/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -2873,6 +2963,7 @@ export def "solutions-virtual-events-events-sessions-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -2882,7 +2973,7 @@ export def "solutions-virtual-events-events-sessions-count GetCount" [
   let full_url = (build-url $base $"/solutions/virtualEvents/events/($virtualEvent_id)/sessions/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -2897,6 +2988,7 @@ export def "solutions-virtual-events-events-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -2906,7 +2998,7 @@ export def "solutions-virtual-events-events-count GetCount" [
   let full_url = (build-url $base "/solutions/virtualEvents/events/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get virtualEventTownhall
@@ -2921,6 +3013,7 @@ export def "solutions-virtual-events-townhalls ListTownhall" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -2936,7 +3029,7 @@ export def "solutions-virtual-events-townhalls ListTownhall" [
   let full_url = (build-url $base "/solutions/virtualEvents/townhalls" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create virtualEventTownhall
@@ -2954,6 +3047,7 @@ export def "solutions-virtual-events-townhalls CreateTownhall" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --audience: string@audience-completer
   --coOrganizers: list # Identity information of the coorganizers of the town hall. — item shape: {displayName?: string, id?: string, tenantId?: string}
   --invitedAttendees: list # The attendees invited to the town hall. The supported identities are: communicationsUserIdentity and communicationsGuestIdentity. — item shape: {displayName?: string, id?: string}
@@ -2967,7 +3061,7 @@ export def "solutions-virtual-events-townhalls CreateTownhall" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get virtualEventTownhall
@@ -2984,6 +3078,7 @@ export def "solutions-virtual-events-townhalls GetTownhall" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<audience: string, coOrganizers: table<displayName: string, id: string, tenantId: string>, invitedAttendees: table<displayName: string, id: string>, isInviteOnly: bool> {
@@ -2993,7 +3088,7 @@ export def "solutions-virtual-events-townhalls GetTownhall" [
   let full_url = (build-url $base $"/solutions/virtualEvents/townhalls/($virtualEventTownhall_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update virtualEventTownhall
@@ -3012,6 +3107,7 @@ export def "solutions-virtual-events-townhalls UpdateTownhall" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --audience: string@audience-completer
   --coOrganizers: list # Identity information of the coorganizers of the town hall. — item shape: {displayName?: string, id?: string, tenantId?: string}
   --invitedAttendees: list # The attendees invited to the town hall. The supported identities are: communicationsUserIdentity and communicationsGuestIdentity. — item shape: {displayName?: string, id?: string}
@@ -3025,7 +3121,7 @@ export def "solutions-virtual-events-townhalls UpdateTownhall" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property townhalls for solutions
@@ -3041,6 +3137,7 @@ export def "solutions-virtual-events-townhalls DeleteTownhall" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3050,7 +3147,7 @@ export def "solutions-virtual-events-townhalls DeleteTownhall" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List presenters
@@ -3067,6 +3164,7 @@ export def "solutions-virtual-events-townhalls-presenters ListPresenter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -3082,7 +3180,7 @@ export def "solutions-virtual-events-townhalls-presenters ListPresenter" [
   let full_url = (build-url $base $"/solutions/virtualEvents/townhalls/($virtualEventTownhall_id)/presenters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create virtualEventPresenter
@@ -3101,6 +3199,7 @@ export def "solutions-virtual-events-townhalls-presenters CreatePresenter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --email: string # Email address of the presenter. (nullable)
   --identity: record # shape: {displayName?: string, id?: string}
@@ -3114,7 +3213,7 @@ export def "solutions-virtual-events-townhalls-presenters CreatePresenter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get virtualEventPresenter
@@ -3132,6 +3231,7 @@ export def "solutions-virtual-events-townhalls-presenters GetPresenter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, email: string, identity: record<displayName: string, id: string>, presenterDetails: record<bio: record<content: string, contentType: string>, company: string, jobTitle: string, linkedInProfileWebUrl: string, personalSiteWebUrl: string, photo: string, twitterProfileWebUrl: string>> {
@@ -3141,7 +3241,7 @@ export def "solutions-virtual-events-townhalls-presenters GetPresenter" [
   let full_url = (build-url $base $"/solutions/virtualEvents/townhalls/($virtualEventTownhall_id)/presenters/($virtualEventPresenter_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property presenters in solutions
@@ -3160,6 +3260,7 @@ export def "solutions-virtual-events-townhalls-presenters UpdatePresenter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --email: string # Email address of the presenter. (nullable)
   --identity: record # shape: {displayName?: string, id?: string}
@@ -3173,7 +3274,7 @@ export def "solutions-virtual-events-townhalls-presenters UpdatePresenter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete virtualEventPresenter
@@ -3191,6 +3292,7 @@ export def "solutions-virtual-events-townhalls-presenters DeletePresenter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3200,7 +3302,7 @@ export def "solutions-virtual-events-townhalls-presenters DeletePresenter" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -3216,6 +3318,7 @@ export def "solutions-virtual-events-townhalls-presenters-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -3225,7 +3328,7 @@ export def "solutions-virtual-events-townhalls-presenters-count GetCount" [
   let full_url = (build-url $base $"/solutions/virtualEvents/townhalls/($virtualEventTownhall_id)/presenters/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get sessions from solutions
@@ -3241,6 +3344,7 @@ export def "solutions-virtual-events-townhalls-sessions ListSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -3256,7 +3360,7 @@ export def "solutions-virtual-events-townhalls-sessions ListSession" [
   let full_url = (build-url $base $"/solutions/virtualEvents/townhalls/($virtualEventTownhall_id)/sessions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to sessions for solutions
@@ -3274,6 +3378,7 @@ export def "solutions-virtual-events-townhalls-sessions CreateSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --endDateTime: record # shape: {dateTime?: string, timeZone?: string}
   --startDateTime: record # shape: {dateTime?: string, timeZone?: string}
   --videoOnDemandWebUrl: string # The URL of the video on demand (VOD) for Microsoft Teams events that allows webinar and town hall organizers to quickly publish and share event recordings. (nullable)
@@ -3286,7 +3391,7 @@ export def "solutions-virtual-events-townhalls-sessions CreateSession" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get sessions from solutions
@@ -3303,6 +3408,7 @@ export def "solutions-virtual-events-townhalls-sessions GetSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<endDateTime: record<dateTime: string, timeZone: string>, startDateTime: record<dateTime: string, timeZone: string>, videoOnDemandWebUrl: string> {
@@ -3312,7 +3418,7 @@ export def "solutions-virtual-events-townhalls-sessions GetSession" [
   let full_url = (build-url $base $"/solutions/virtualEvents/townhalls/($virtualEventTownhall_id)/sessions/($virtualEventSession_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property sessions in solutions
@@ -3331,6 +3437,7 @@ export def "solutions-virtual-events-townhalls-sessions UpdateSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --endDateTime: record # shape: {dateTime?: string, timeZone?: string}
   --startDateTime: record # shape: {dateTime?: string, timeZone?: string}
   --videoOnDemandWebUrl: string # The URL of the video on demand (VOD) for Microsoft Teams events that allows webinar and town hall organizers to quickly publish and share event recordings. (nullable)
@@ -3343,7 +3450,7 @@ export def "solutions-virtual-events-townhalls-sessions UpdateSession" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property sessions for solutions
@@ -3360,6 +3467,7 @@ export def "solutions-virtual-events-townhalls-sessions DeleteSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3369,7 +3477,7 @@ export def "solutions-virtual-events-townhalls-sessions DeleteSession" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List meetingAttendanceReports
@@ -3387,6 +3495,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports ListA
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -3402,7 +3511,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports ListA
   let full_url = (build-url $base $"/solutions/virtualEvents/townhalls/($virtualEventTownhall_id)/sessions/($virtualEventSession_id)/attendanceReports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to attendanceReports for solutions
@@ -3421,6 +3530,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports Creat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --externalEventInformation: list # The external information of a virtual event. Returned only for event organizers or coorganizers. Read-only. — item shape: {applicationId?: string, externalEventId?: string}
   --meetingEndDateTime: string # UTC time when the meeting ended. Read-only. (nullable, format: date-time)
@@ -3436,7 +3546,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports Creat
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get meetingAttendanceReport
@@ -3455,6 +3565,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports GetAt
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, externalEventInformation: table<applicationId: string, externalEventId: string>, meetingEndDateTime: string, meetingStartDateTime: string, totalParticipantCount: float, attendanceRecords: table<id: string, attendanceIntervals: list, emailAddress: string, externalRegistrationInformation: record, identity: record, registrationId: string, role: string, totalAttendanceInSeconds: float>> {
@@ -3464,7 +3575,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports GetAt
   let full_url = (build-url $base $"/solutions/virtualEvents/townhalls/($virtualEventTownhall_id)/sessions/($virtualEventSession_id)/attendanceReports/($meetingAttendanceReport_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property attendanceReports in solutions
@@ -3484,6 +3595,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports Updat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --externalEventInformation: list # The external information of a virtual event. Returned only for event organizers or coorganizers. Read-only. — item shape: {applicationId?: string, externalEventId?: string}
   --meetingEndDateTime: string # UTC time when the meeting ended. Read-only. (nullable, format: date-time)
@@ -3499,7 +3611,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports Updat
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property attendanceReports for solutions
@@ -3517,6 +3629,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports Delet
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3526,7 +3639,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports Delet
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List attendanceRecords
@@ -3545,6 +3658,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports-atten
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -3560,7 +3674,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports-atten
   let full_url = (build-url $base $"/solutions/virtualEvents/townhalls/($virtualEventTownhall_id)/sessions/($virtualEventSession_id)/attendanceReports/($meetingAttendanceReport_id)/attendanceRecords" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to attendanceRecords for solutions
@@ -3581,6 +3695,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports-atten
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --attendanceIntervals: list # List of time periods between joining and leaving a meeting. — item shape: {durationInSeconds?: float, joinDateTime?: string, leaveDateTime?: string}
   --emailAddress: string # Email address of the user associated with this attendance record. (nullable)
@@ -3598,7 +3713,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports-atten
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get attendanceRecords from solutions
@@ -3617,6 +3732,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports-atten
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, attendanceIntervals: table<durationInSeconds: float, joinDateTime: string, leaveDateTime: string>, emailAddress: string, externalRegistrationInformation: record<referrer: string, registrationId: string>, identity: record<displayName: string, id: string>, registrationId: string, role: string, totalAttendanceInSeconds: float> {
@@ -3626,7 +3742,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports-atten
   let full_url = (build-url $base $"/solutions/virtualEvents/townhalls/($virtualEventTownhall_id)/sessions/($virtualEventSession_id)/attendanceReports/($meetingAttendanceReport_id)/attendanceRecords/($attendanceRecord_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property attendanceRecords in solutions
@@ -3648,6 +3764,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports-atten
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --attendanceIntervals: list # List of time periods between joining and leaving a meeting. — item shape: {durationInSeconds?: float, joinDateTime?: string, leaveDateTime?: string}
   --emailAddress: string # Email address of the user associated with this attendance record. (nullable)
@@ -3665,7 +3782,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports-atten
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property attendanceRecords for solutions
@@ -3684,6 +3801,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports-atten
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3693,7 +3811,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports-atten
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -3711,6 +3829,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports-atten
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -3720,7 +3839,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports-atten
   let full_url = (build-url $base $"/solutions/virtualEvents/townhalls/($virtualEventTownhall_id)/sessions/($virtualEventSession_id)/attendanceReports/($meetingAttendanceReport_id)/attendanceRecords/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -3737,6 +3856,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports-count
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -3746,7 +3866,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports-count
   let full_url = (build-url $base $"/solutions/virtualEvents/townhalls/($virtualEventTownhall_id)/sessions/($virtualEventSession_id)/attendanceReports/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -3762,6 +3882,7 @@ export def "solutions-virtual-events-townhalls-sessions-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -3771,7 +3892,7 @@ export def "solutions-virtual-events-townhalls-sessions-count GetCount" [
   let full_url = (build-url $base $"/solutions/virtualEvents/townhalls/($virtualEventTownhall_id)/sessions/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -3786,6 +3907,7 @@ export def "solutions-virtual-events-townhalls-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -3795,7 +3917,7 @@ export def "solutions-virtual-events-townhalls-count GetCount" [
   let full_url = (build-url $base "/solutions/virtualEvents/townhalls/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function getByUserIdAndRole
@@ -3813,6 +3935,7 @@ export def "solutions-virtual-events-townhalls-microsoftgraphget-by-user-id-and-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -3828,7 +3951,7 @@ export def "solutions-virtual-events-townhalls-microsoftgraphget-by-user-id-and-
   let full_url = (build-url $base $"/solutions/virtualEvents/townhalls/microsoft.graph.getByUserIdAndRole(userId='($userId)',role='($role)')" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function getByUserRole
@@ -3845,6 +3968,7 @@ export def "solutions-virtual-events-townhalls-microsoftgraphget-by-user-rolerol
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -3860,7 +3984,7 @@ export def "solutions-virtual-events-townhalls-microsoftgraphget-by-user-rolerol
   let full_url = (build-url $base $"/solutions/virtualEvents/townhalls/microsoft.graph.getByUserRole(role='($role)')" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List webinars
@@ -3876,6 +4000,7 @@ export def "solutions-virtual-events-webinars ListWebinar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -3891,7 +4016,7 @@ export def "solutions-virtual-events-webinars ListWebinar" [
   let full_url = (build-url $base "/solutions/virtualEvents/webinars" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create virtualEventWebinar
@@ -3909,6 +4034,7 @@ export def "solutions-virtual-events-webinars CreateWebinar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --audience: string@audience-completer
   --coOrganizers: list # Identity information of coorganizers of the webinar. — item shape: {displayName?: string, id?: string, tenantId?: string}
   --registrationConfiguration: any
@@ -3922,7 +4048,7 @@ export def "solutions-virtual-events-webinars CreateWebinar" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get virtualEventWebinar
@@ -3939,6 +4065,7 @@ export def "solutions-virtual-events-webinars GetWebinar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<audience: string, coOrganizers: table<displayName: string, id: string, tenantId: string>, registrationConfiguration: record<isManualApprovalEnabled: bool, isWaitlistEnabled: bool>, registrations: table<id: string, cancelationDateTime: string, email: string, externalRegistrationInformation: record, firstName: string, lastName: string, preferredLanguage: string, preferredTimezone: string, registrationDateTime: string, registrationQuestionAnswers: list, status: string, userId: string, sessions: list>> {
@@ -3948,7 +4075,7 @@ export def "solutions-virtual-events-webinars GetWebinar" [
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update virtualEventWebinar
@@ -3967,6 +4094,7 @@ export def "solutions-virtual-events-webinars UpdateWebinar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --audience: string@audience-completer
   --coOrganizers: list # Identity information of coorganizers of the webinar. — item shape: {displayName?: string, id?: string, tenantId?: string}
   --registrationConfiguration: any
@@ -3980,7 +4108,7 @@ export def "solutions-virtual-events-webinars UpdateWebinar" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property webinars for solutions
@@ -3996,6 +4124,7 @@ export def "solutions-virtual-events-webinars DeleteWebinar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4005,7 +4134,7 @@ export def "solutions-virtual-events-webinars DeleteWebinar" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get presenters from solutions
@@ -4021,6 +4150,7 @@ export def "solutions-virtual-events-webinars-presenters ListPresenter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -4036,7 +4166,7 @@ export def "solutions-virtual-events-webinars-presenters ListPresenter" [
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/presenters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create virtualEventPresenter
@@ -4055,6 +4185,7 @@ export def "solutions-virtual-events-webinars-presenters CreatePresenter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --email: string # Email address of the presenter. (nullable)
   --identity: record # shape: {displayName?: string, id?: string}
@@ -4068,7 +4199,7 @@ export def "solutions-virtual-events-webinars-presenters CreatePresenter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get presenters from solutions
@@ -4085,6 +4216,7 @@ export def "solutions-virtual-events-webinars-presenters GetPresenter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, email: string, identity: record<displayName: string, id: string>, presenterDetails: record<bio: record<content: string, contentType: string>, company: string, jobTitle: string, linkedInProfileWebUrl: string, personalSiteWebUrl: string, photo: string, twitterProfileWebUrl: string>> {
@@ -4094,7 +4226,7 @@ export def "solutions-virtual-events-webinars-presenters GetPresenter" [
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/presenters/($virtualEventPresenter_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update virtualEventPresenter
@@ -4114,6 +4246,7 @@ export def "solutions-virtual-events-webinars-presenters UpdatePresenter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --email: string # Email address of the presenter. (nullable)
   --identity: record # shape: {displayName?: string, id?: string}
@@ -4127,7 +4260,7 @@ export def "solutions-virtual-events-webinars-presenters UpdatePresenter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property presenters for solutions
@@ -4144,6 +4277,7 @@ export def "solutions-virtual-events-webinars-presenters DeletePresenter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4153,7 +4287,7 @@ export def "solutions-virtual-events-webinars-presenters DeletePresenter" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -4169,6 +4303,7 @@ export def "solutions-virtual-events-webinars-presenters-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -4178,7 +4313,7 @@ export def "solutions-virtual-events-webinars-presenters-count GetCount" [
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/presenters/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get virtualEventWebinarRegistrationConfiguration
@@ -4195,6 +4330,7 @@ export def "solutions-virtual-events-webinars-registration-configuration GetRegi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<isManualApprovalEnabled: bool, isWaitlistEnabled: bool> {
@@ -4204,7 +4340,7 @@ export def "solutions-virtual-events-webinars-registration-configuration GetRegi
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/registrationConfiguration" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property registrationConfiguration in solutions
@@ -4220,6 +4356,7 @@ export def "solutions-virtual-events-webinars-registration-configuration UpdateR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isManualApprovalEnabled: oneof<nothing, bool> # nullable
   --isWaitlistEnabled: oneof<nothing, bool> # nullable
 ]: any -> record<isManualApprovalEnabled: bool, isWaitlistEnabled: bool> {
@@ -4231,7 +4368,7 @@ export def "solutions-virtual-events-webinars-registration-configuration UpdateR
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property registrationConfiguration for solutions
@@ -4247,6 +4384,7 @@ export def "solutions-virtual-events-webinars-registration-configuration DeleteR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4256,7 +4394,7 @@ export def "solutions-virtual-events-webinars-registration-configuration DeleteR
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List questions
@@ -4273,6 +4411,7 @@ export def "solutions-virtual-events-webinars-registration-configuration-questio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -4288,7 +4427,7 @@ export def "solutions-virtual-events-webinars-registration-configuration-questio
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/registrationConfiguration/questions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create virtualEventRegistrationCustomQuestion
@@ -4305,6 +4444,7 @@ export def "solutions-virtual-events-webinars-registration-configuration-questio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --displayName: string # Display name of the registration question. (nullable)
   --isRequired: oneof<nothing, bool> # Indicates whether an answer to the question is required. The default value is false. (nullable)
@@ -4317,7 +4457,7 @@ export def "solutions-virtual-events-webinars-registration-configuration-questio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get questions from solutions
@@ -4334,6 +4474,7 @@ export def "solutions-virtual-events-webinars-registration-configuration-questio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, displayName: string, isRequired: bool> {
@@ -4343,7 +4484,7 @@ export def "solutions-virtual-events-webinars-registration-configuration-questio
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/registrationConfiguration/questions/($virtualEventRegistrationQuestionBase_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property questions in solutions
@@ -4360,6 +4501,7 @@ export def "solutions-virtual-events-webinars-registration-configuration-questio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --displayName: string # Display name of the registration question. (nullable)
   --isRequired: oneof<nothing, bool> # Indicates whether an answer to the question is required. The default value is false. (nullable)
@@ -4372,7 +4514,7 @@ export def "solutions-virtual-events-webinars-registration-configuration-questio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete virtualEventRegistrationQuestionBase
@@ -4390,6 +4532,7 @@ export def "solutions-virtual-events-webinars-registration-configuration-questio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4399,7 +4542,7 @@ export def "solutions-virtual-events-webinars-registration-configuration-questio
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -4415,6 +4558,7 @@ export def "solutions-virtual-events-webinars-registration-configuration-questio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -4424,7 +4568,7 @@ export def "solutions-virtual-events-webinars-registration-configuration-questio
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/registrationConfiguration/questions/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List virtualEventRegistrations
@@ -4441,6 +4585,7 @@ export def "solutions-virtual-events-webinars-registrations ListRegistration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -4456,7 +4601,7 @@ export def "solutions-virtual-events-webinars-registrations ListRegistration" [
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/registrations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create virtualEventRegistration
@@ -4476,6 +4621,7 @@ export def "solutions-virtual-events-webinars-registrations CreateRegistration" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --cancelationDateTime: string # Date and time when the registrant cancels their registration for the virtual event. Only appears when applicable. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
   --email: string # Email address of the registrant. (nullable)
@@ -4498,7 +4644,7 @@ export def "solutions-virtual-events-webinars-registrations CreateRegistration" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get virtualEventRegistration
@@ -4516,6 +4662,7 @@ export def "solutions-virtual-events-webinars-registrations GetRegistration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, cancelationDateTime: string, email: string, externalRegistrationInformation: record<referrer: string, registrationId: string>, firstName: string, lastName: string, preferredLanguage: string, preferredTimezone: string, registrationDateTime: string, registrationQuestionAnswers: table<booleanValue: bool, displayName: string, multiChoiceValues: list, questionId: string, value: string>, status: string, userId: string, sessions: table<endDateTime: record, startDateTime: record, videoOnDemandWebUrl: string>> {
@@ -4525,7 +4672,7 @@ export def "solutions-virtual-events-webinars-registrations GetRegistration" [
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/registrations/($virtualEventRegistration_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property registrations in solutions
@@ -4545,6 +4692,7 @@ export def "solutions-virtual-events-webinars-registrations UpdateRegistration" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --cancelationDateTime: string # Date and time when the registrant cancels their registration for the virtual event. Only appears when applicable. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
   --email: string # Email address of the registrant. (nullable)
@@ -4567,7 +4715,7 @@ export def "solutions-virtual-events-webinars-registrations UpdateRegistration" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property registrations for solutions
@@ -4584,6 +4732,7 @@ export def "solutions-virtual-events-webinars-registrations DeleteRegistration" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4593,7 +4742,7 @@ export def "solutions-virtual-events-webinars-registrations DeleteRegistration" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action cancel
@@ -4610,13 +4759,14 @@ export def "solutions-virtual-events-webinars-registrations-microsoftgraphcancel
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/registrations/($virtualEventRegistration_id)/microsoft.graph.cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List sessions for a virtual event registration
@@ -4634,6 +4784,7 @@ export def "solutions-virtual-events-webinars-registrations-sessions ListSession
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -4649,7 +4800,7 @@ export def "solutions-virtual-events-webinars-registrations-sessions ListSession
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/registrations/($virtualEventRegistration_id)/sessions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get sessions from solutions
@@ -4667,6 +4818,7 @@ export def "solutions-virtual-events-webinars-registrations-sessions GetSession"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<endDateTime: record<dateTime: string, timeZone: string>, startDateTime: record<dateTime: string, timeZone: string>, videoOnDemandWebUrl: string> {
@@ -4676,7 +4828,7 @@ export def "solutions-virtual-events-webinars-registrations-sessions GetSession"
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/registrations/($virtualEventRegistration_id)/sessions/($virtualEventSession_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -4693,6 +4845,7 @@ export def "solutions-virtual-events-webinars-registrations-sessions-count GetCo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -4702,7 +4855,7 @@ export def "solutions-virtual-events-webinars-registrations-sessions-count GetCo
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/registrations/($virtualEventRegistration_id)/sessions/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get virtualEventRegistration
@@ -4720,6 +4873,7 @@ export def "solutions-virtual-events-webinars-registrationsemail-email GetGraphB
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, cancelationDateTime: string, email: string, externalRegistrationInformation: record<referrer: string, registrationId: string>, firstName: string, lastName: string, preferredLanguage: string, preferredTimezone: string, registrationDateTime: string, registrationQuestionAnswers: table<booleanValue: bool, displayName: string, multiChoiceValues: list, questionId: string, value: string>, status: string, userId: string, sessions: table<endDateTime: record, startDateTime: record, videoOnDemandWebUrl: string>> {
@@ -4729,7 +4883,7 @@ export def "solutions-virtual-events-webinars-registrationsemail-email GetGraphB
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/registrations(email='($email)')" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property registrations in solutions
@@ -4749,6 +4903,7 @@ export def "solutions-virtual-events-webinars-registrationsemail-email UpdateGra
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --cancelationDateTime: string # Date and time when the registrant cancels their registration for the virtual event. Only appears when applicable. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
   --body-email: string # Email address of the registrant. (nullable)
@@ -4771,7 +4926,7 @@ export def "solutions-virtual-events-webinars-registrationsemail-email UpdateGra
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property registrations for solutions
@@ -4788,6 +4943,7 @@ export def "solutions-virtual-events-webinars-registrationsemail-email DeleteGra
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4797,7 +4953,7 @@ export def "solutions-virtual-events-webinars-registrationsemail-email DeleteGra
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action cancel
@@ -4814,13 +4970,14 @@ export def "solutions-virtual-events-webinars-registrationsemail-email-microsoft
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/registrations(email='($email)')/microsoft.graph.cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get virtualEventRegistration
@@ -4838,6 +4995,7 @@ export def "solutions-virtual-events-webinars-registrationsuser-id-user-id GetGr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, cancelationDateTime: string, email: string, externalRegistrationInformation: record<referrer: string, registrationId: string>, firstName: string, lastName: string, preferredLanguage: string, preferredTimezone: string, registrationDateTime: string, registrationQuestionAnswers: table<booleanValue: bool, displayName: string, multiChoiceValues: list, questionId: string, value: string>, status: string, userId: string, sessions: table<endDateTime: record, startDateTime: record, videoOnDemandWebUrl: string>> {
@@ -4847,7 +5005,7 @@ export def "solutions-virtual-events-webinars-registrationsuser-id-user-id GetGr
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/registrations(userId='($userId)')" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property registrations in solutions
@@ -4867,6 +5025,7 @@ export def "solutions-virtual-events-webinars-registrationsuser-id-user-id Updat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --cancelationDateTime: string # Date and time when the registrant cancels their registration for the virtual event. Only appears when applicable. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
   --email: string # Email address of the registrant. (nullable)
@@ -4889,7 +5048,7 @@ export def "solutions-virtual-events-webinars-registrationsuser-id-user-id Updat
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property registrations for solutions
@@ -4906,6 +5065,7 @@ export def "solutions-virtual-events-webinars-registrationsuser-id-user-id Delet
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4915,7 +5075,7 @@ export def "solutions-virtual-events-webinars-registrationsuser-id-user-id Delet
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke action cancel
@@ -4932,13 +5092,14 @@ export def "solutions-virtual-events-webinars-registrationsuser-id-user-id-micro
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/registrations(userId='($userId)')/microsoft.graph.cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -4954,6 +5115,7 @@ export def "solutions-virtual-events-webinars-registrations-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -4963,7 +5125,7 @@ export def "solutions-virtual-events-webinars-registrations-count GetCount" [
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/registrations/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List sessions for a virtual event
@@ -4980,6 +5142,7 @@ export def "solutions-virtual-events-webinars-sessions ListSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -4995,7 +5158,7 @@ export def "solutions-virtual-events-webinars-sessions ListSession" [
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/sessions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to sessions for solutions
@@ -5013,6 +5176,7 @@ export def "solutions-virtual-events-webinars-sessions CreateSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --endDateTime: record # shape: {dateTime?: string, timeZone?: string}
   --startDateTime: record # shape: {dateTime?: string, timeZone?: string}
   --videoOnDemandWebUrl: string # The URL of the video on demand (VOD) for Microsoft Teams events that allows webinar and town hall organizers to quickly publish and share event recordings. (nullable)
@@ -5025,7 +5189,7 @@ export def "solutions-virtual-events-webinars-sessions CreateSession" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get virtualEventSession
@@ -5043,6 +5207,7 @@ export def "solutions-virtual-events-webinars-sessions GetSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<endDateTime: record<dateTime: string, timeZone: string>, startDateTime: record<dateTime: string, timeZone: string>, videoOnDemandWebUrl: string> {
@@ -5052,7 +5217,7 @@ export def "solutions-virtual-events-webinars-sessions GetSession" [
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/sessions/($virtualEventSession_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property sessions in solutions
@@ -5071,6 +5236,7 @@ export def "solutions-virtual-events-webinars-sessions UpdateSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --endDateTime: record # shape: {dateTime?: string, timeZone?: string}
   --startDateTime: record # shape: {dateTime?: string, timeZone?: string}
   --videoOnDemandWebUrl: string # The URL of the video on demand (VOD) for Microsoft Teams events that allows webinar and town hall organizers to quickly publish and share event recordings. (nullable)
@@ -5083,7 +5249,7 @@ export def "solutions-virtual-events-webinars-sessions UpdateSession" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property sessions for solutions
@@ -5100,6 +5266,7 @@ export def "solutions-virtual-events-webinars-sessions DeleteSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5109,7 +5276,7 @@ export def "solutions-virtual-events-webinars-sessions DeleteSession" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List meetingAttendanceReports
@@ -5127,6 +5294,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports ListAt
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -5142,7 +5310,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports ListAt
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/sessions/($virtualEventSession_id)/attendanceReports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to attendanceReports for solutions
@@ -5161,6 +5329,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports Create
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --externalEventInformation: list # The external information of a virtual event. Returned only for event organizers or coorganizers. Read-only. — item shape: {applicationId?: string, externalEventId?: string}
   --meetingEndDateTime: string # UTC time when the meeting ended. Read-only. (nullable, format: date-time)
@@ -5176,7 +5345,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports Create
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get meetingAttendanceReport
@@ -5195,6 +5364,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports GetAtt
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, externalEventInformation: table<applicationId: string, externalEventId: string>, meetingEndDateTime: string, meetingStartDateTime: string, totalParticipantCount: float, attendanceRecords: table<id: string, attendanceIntervals: list, emailAddress: string, externalRegistrationInformation: record, identity: record, registrationId: string, role: string, totalAttendanceInSeconds: float>> {
@@ -5204,7 +5374,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports GetAtt
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/sessions/($virtualEventSession_id)/attendanceReports/($meetingAttendanceReport_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property attendanceReports in solutions
@@ -5224,6 +5394,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports Update
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --externalEventInformation: list # The external information of a virtual event. Returned only for event organizers or coorganizers. Read-only. — item shape: {applicationId?: string, externalEventId?: string}
   --meetingEndDateTime: string # UTC time when the meeting ended. Read-only. (nullable, format: date-time)
@@ -5239,7 +5410,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports Update
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property attendanceReports for solutions
@@ -5257,6 +5428,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports Delete
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5266,7 +5438,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports Delete
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List attendanceRecords
@@ -5285,6 +5457,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports-attend
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -5300,7 +5473,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports-attend
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/sessions/($virtualEventSession_id)/attendanceReports/($meetingAttendanceReport_id)/attendanceRecords" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new navigation property to attendanceRecords for solutions
@@ -5321,6 +5494,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports-attend
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --attendanceIntervals: list # List of time periods between joining and leaving a meeting. — item shape: {durationInSeconds?: float, joinDateTime?: string, leaveDateTime?: string}
   --emailAddress: string # Email address of the user associated with this attendance record. (nullable)
@@ -5338,7 +5512,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports-attend
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get attendanceRecords from solutions
@@ -5357,6 +5531,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports-attend
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
 ]: nothing -> record<id: string, attendanceIntervals: table<durationInSeconds: float, joinDateTime: string, leaveDateTime: string>, emailAddress: string, externalRegistrationInformation: record<referrer: string, registrationId: string>, identity: record<displayName: string, id: string>, registrationId: string, role: string, totalAttendanceInSeconds: float> {
@@ -5366,7 +5541,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports-attend
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/sessions/($virtualEventSession_id)/attendanceReports/($meetingAttendanceReport_id)/attendanceRecords/($attendanceRecord_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the navigation property attendanceRecords in solutions
@@ -5388,6 +5563,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports-attend
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The unique identifier for an entity. Read-only.
   --attendanceIntervals: list # List of time periods between joining and leaving a meeting. — item shape: {durationInSeconds?: float, joinDateTime?: string, leaveDateTime?: string}
   --emailAddress: string # Email address of the user associated with this attendance record. (nullable)
@@ -5405,7 +5581,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports-attend
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete navigation property attendanceRecords for solutions
@@ -5424,6 +5600,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports-attend
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # ETag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5433,7 +5610,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports-attend
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -5451,6 +5628,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports-attend
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -5460,7 +5638,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports-attend
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/sessions/($virtualEventSession_id)/attendanceReports/($meetingAttendanceReport_id)/attendanceRecords/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -5477,6 +5655,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports-count 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -5486,7 +5665,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports-count 
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/sessions/($virtualEventSession_id)/attendanceReports/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -5502,6 +5681,7 @@ export def "solutions-virtual-events-webinars-sessions-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -5511,7 +5691,7 @@ export def "solutions-virtual-events-webinars-sessions-count GetCount" [
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/($virtualEventWebinar_id)/sessions/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the number of the resource
@@ -5526,6 +5706,7 @@ export def "solutions-virtual-events-webinars-count GetCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
 ]: nothing -> any {
@@ -5535,7 +5716,7 @@ export def "solutions-virtual-events-webinars-count GetCount" [
   let full_url = (build-url $base "/solutions/virtualEvents/webinars/$count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function getByUserIdAndRole
@@ -5553,6 +5734,7 @@ export def "solutions-virtual-events-webinars-microsoftgraphget-by-user-id-and-r
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -5568,7 +5750,7 @@ export def "solutions-virtual-events-webinars-microsoftgraphget-by-user-id-and-r
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/microsoft.graph.getByUserIdAndRole(userId='($userId)',role='($role)')" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoke function getByUserRole
@@ -5585,6 +5767,7 @@ export def "solutions-virtual-events-webinars-microsoftgraphget-by-user-rolerole
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Show only the first n items (e.g. 50)
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
@@ -5600,5 +5783,5 @@ export def "solutions-virtual-events-webinars-microsoftgraphget-by-user-rolerole
   let full_url = (build-url $base $"/solutions/virtualEvents/webinars/microsoft.graph.getByUserRole(role='($role)')" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

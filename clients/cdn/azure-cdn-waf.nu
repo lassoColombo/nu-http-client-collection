@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-cdn-cdn-web-application-firewall-managed-rule-sets List" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -101,6 +102,7 @@ export def "subscriptions-providers-microsoft-cdn-cdn-web-application-firewall-m
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<nextLink: string, value: table<properties: record, sku: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -109,7 +111,7 @@ export def "subscriptions-providers-microsoft-cdn-cdn-web-application-firewall-m
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Cdn/CdnWebApplicationFirewallManagedRuleSets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all of the protection policies within a resource group.
@@ -126,6 +128,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-cdn-web-applic
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, sku: record, location: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -134,7 +137,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-cdn-web-applic
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/CdnWebApplicationFirewallPolicies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes Policy
@@ -152,6 +155,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-cdn-web-applic
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -160,7 +164,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-cdn-web-applic
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/CdnWebApplicationFirewallPolicies/($policyName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve protection policy with specified name within a resource group.
@@ -178,6 +182,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-cdn-web-applic
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
 ]: nothing -> record<etag: string, properties: record<customRules: record<rules: list>, endpointLinks: list<record>, managedRules: record<managedRuleSets: list>, policySettings: record<defaultCustomBlockResponseBody: string, defaultCustomBlockResponseStatusCode: int, defaultRedirectUrl: string, enabledState: string, mode: string>, provisioningState: string, rateLimitRules: record<rules: list>, resourceState: string>, sku: record<name: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -186,7 +191,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-cdn-web-applic
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/CdnWebApplicationFirewallPolicies/($policyName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing CdnWebApplicationFirewallPolicy with the specified policy name under the specified subscription and resource group
@@ -204,6 +209,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-cdn-web-applic
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
   --tags: record # CdnWebApplicationFirewallPolicy tags
 ]: any -> record<etag: string, properties: record<customRules: record<rules: list>, endpointLinks: list<record>, managedRules: record<managedRuleSets: list>, policySettings: record<defaultCustomBlockResponseBody: string, defaultCustomBlockResponseStatusCode: int, defaultRedirectUrl: string, enabledState: string, mode: string>, provisioningState: string, rateLimitRules: record<rules: list>, resourceState: string>, sku: record<name: string>, location: string, tags: record> {
@@ -216,7 +222,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-cdn-web-applic
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create or update policy with specified rule set name within a resource group.
@@ -236,6 +242,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-cdn-web-applic
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
   --etag: string # Gets a unique read-only string that changes whenever the resource is updated.
   --properties: any # Defines CDN web application firewall policy properties. — shape: {customRules?: any, managedRules?: any, policySettings?: any, rateLimitRules?: any}
@@ -252,5 +259,5 @@ export def "subscriptions-resource-groups-providers-microsoft-cdn-cdn-web-applic
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

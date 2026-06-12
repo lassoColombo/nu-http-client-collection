@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-domain-registration-check-domain-availability CheckAvailability" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -101,6 +102,7 @@ export def "subscriptions-providers-microsoft-domain-registration-check-domain-a
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
   --name: string # Name of the object.
 ]: any -> record<available: bool, domainType: string, name: string> {
@@ -113,7 +115,7 @@ export def "subscriptions-providers-microsoft-domain-registration-check-domain-a
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all domains in a subscription.
@@ -129,6 +131,7 @@ export def "subscriptions-providers-microsoft-domain-registration-domains List" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -137,7 +140,7 @@ export def "subscriptions-providers-microsoft-domain-registration-domains List" 
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.DomainRegistration/domains" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate a single sign-on request for the domain management portal.
@@ -153,6 +156,7 @@ export def "subscriptions-providers-microsoft-domain-registration-generate-sso-r
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
 ]: nothing -> record<postParameterKey: string, postParameterValue: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -161,7 +165,7 @@ export def "subscriptions-providers-microsoft-domain-registration-generate-sso-r
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.DomainRegistration/generateSsoRequest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get domain name recommendations based on keywords.
@@ -177,6 +181,7 @@ export def "subscriptions-providers-microsoft-domain-registration-list-domain-re
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
   --keywords: string # Keywords to be used for generating domain recommendations.
   --maxDomainRecommendations: int # Maximum number of recommendations. (format: int32)
@@ -190,7 +195,7 @@ export def "subscriptions-providers-microsoft-domain-registration-list-domain-re
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all domains in a resource group.
@@ -207,6 +212,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -215,7 +221,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DomainRegistration/domains" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a domain.
@@ -233,6 +239,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --forceHardDeleteDomain: oneof<nothing, bool> # Specify <code>true</code> to delete the domain immediately. The default is <code>false</code> which deletes the domain after 24 hours.
   --api-version: string # API Version
 ]: nothing -> any {
@@ -242,7 +249,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DomainRegistration/domains/($domainName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a domain.
@@ -260,6 +267,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
 ]: nothing -> record<properties: record<authCode: string, autoRenew: bool, consent: record<agreedAt: string, agreedBy: string, agreementKeys: list>, contactAdmin: record<addressMailing: record, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, contactBilling: record<addressMailing: record, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, contactRegistrant: record<addressMailing: record, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, contactTech: record<addressMailing: record, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, createdTime: string, dnsType: string, dnsZoneId: string, domainNotRenewableReasons: list<string>, expirationTime: string, lastRenewedTime: string, managedHostNames: list<record>, nameServers: list<string>, privacy: bool, provisioningState: string, readyForDnsRecordManagement: bool, registrationStatus: string, targetDnsType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -268,7 +276,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DomainRegistration/domains/($domainName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates a domain.
@@ -287,6 +295,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
   --properties: any # DomainPatchResource resource specific properties — shape: {authCode?: string, autoRenew?: bool, consent: record, contactAdmin: record, contactBilling: record, contactRegistrant: record, contactTech: record, dnsType?: "AzureDns"|"DefaultDomainRegistrarDns", dnsZoneId?: string, privacy?: bool, targetDnsType?: "AzureDns"|"DefaultDomainRegistrarDns"}
   --kind: string # Kind of resource.
@@ -300,7 +309,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates or updates a domain.
@@ -319,6 +328,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
   --properties: any # Domain resource specific properties — shape: {authCode?: string, autoRenew?: bool, consent: record, contactAdmin: record, contactBilling: record, contactRegistrant: record, contactTech: record, dnsType?: "AzureDns"|"DefaultDomainRegistrarDns", dnsZoneId?: string, privacy?: bool, targetDnsType?: "AzureDns"|"DefaultDomainRegistrarDns"}
   --kind: string # Kind of resource.
@@ -334,7 +344,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists domain ownership identifiers.
@@ -352,6 +362,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -360,7 +371,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DomainRegistration/domains/($domainName)/domainOwnershipIdentifiers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete ownership identifier for domain
@@ -379,6 +390,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -387,7 +399,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DomainRegistration/domains/($domainName)/domainOwnershipIdentifiers/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get ownership identifier for domain
@@ -406,6 +418,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
 ]: nothing -> record<properties: record<ownershipId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -414,7 +427,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DomainRegistration/domains/($domainName)/domainOwnershipIdentifiers/($name)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates an ownership identifier for a domain or updates identifier details for an existing identifer
@@ -434,6 +447,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
   --properties: any # DomainOwnershipIdentifier resource specific properties — shape: {ownershipId?: string}
   --kind: string # Kind of resource.
@@ -447,7 +461,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates an ownership identifier for a domain or updates identifier details for an existing identifer
@@ -467,6 +481,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
   --properties: any # DomainOwnershipIdentifier resource specific properties — shape: {ownershipId?: string}
   --kind: string # Kind of resource.
@@ -480,7 +495,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Renew a domain.
@@ -498,6 +513,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -506,5 +522,5 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DomainRegistration/domains/($domainName)/renew" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

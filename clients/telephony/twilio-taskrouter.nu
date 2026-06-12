@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -78,7 +79,7 @@ def PrioritizeQueueOrder-completer [] { ["FIFO" "LIFO"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "workspaces-activities FetchActivity" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -112,13 +113,14 @@ export def "workspaces-activities FetchActivity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, available: bool, date_created: string, date_updated: string, friendly_name: string, sid: string, workspace_sid: string, url: string, links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Activities/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/Activities/{Sid}
@@ -134,6 +136,7 @@ export def "workspaces-activities UpdateActivity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # A descriptive string that you create to describe the Activity resource. It can be up to 64 characters long. These names are used to calculate and expose statistics about Workers, and provide visibility into the state of each Worker. Examples of friendly names include: `on-call`, `break`, and `email`.
 ]: any -> record<account_sid: string, available: bool, date_created: string, date_updated: string, friendly_name: string, sid: string, workspace_sid: string, url: string, links: record> {
   let input = $in
@@ -144,7 +147,7 @@ export def "workspaces-activities UpdateActivity" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # DELETE /v1/Workspaces/{WorkspaceSid}/Activities/{Sid}
@@ -160,13 +163,14 @@ export def "workspaces-activities DeleteActivity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Activities/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Activities
@@ -181,6 +185,7 @@ export def "workspaces-activities ListActivity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # The `friendly_name` of the Activity resources to read.
   --Available: string # Whether return only Activity resources that are available or unavailable. A value of `true` returns only available activities. Values of '1' or `yes` also indicate `true`. All other values represent `false` and return activities that are unavailable.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
@@ -193,7 +198,7 @@ export def "workspaces-activities ListActivity" [
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Activities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/Activities
@@ -208,6 +213,7 @@ export def "workspaces-activities CreateActivity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   FriendlyName: string # A descriptive string that you create to describe the Activity resource. It can be up to 64 characters long. These names are used to calculate and expose statistics about Workers, and provide visibility into the state of each Worker. Examples of friendly names include: `on-call`, `break`, and `email`.
   --Available: oneof<nothing, bool> # Whether the Worker should be eligible to receive a Task when it occupies the Activity. A value of `true`, `1`, or `yes` specifies the Activity is available. All other values specify that it is not. The value cannot be changed after the Activity is created.
 ]: any -> record<account_sid: string, available: bool, date_created: string, date_updated: string, friendly_name: string, sid: string, workspace_sid: string, url: string, links: record> {
@@ -219,7 +225,7 @@ export def "workspaces-activities CreateActivity" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Events/{Sid}
@@ -235,13 +241,14 @@ export def "workspaces-events FetchEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, actor_sid: string, actor_type: string, actor_url: string, description: string, event_data: any, event_date: string, event_date_ms: int, event_type: string, resource_sid: string, resource_type: string, resource_url: string, sid: string, source: string, source_ip_address: string, url: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Events/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Events
@@ -256,6 +263,7 @@ export def "workspaces-events ListEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --EndDate: string # Only include Events that occurred on or before this date, specified in GMT as an [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) date-time. (format: date-time)
   --EventType: string # The type of Events to read. Returns only Events of the type specified.
   --Minutes: int # The period of events to read in minutes. Returns only Events that occurred since this many minutes in the past. The default is `15` minutes. Task Attributes for Events occuring more 43,200 minutes ago will be redacted.
@@ -277,7 +285,7 @@ export def "workspaces-events ListEvent" [
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Tasks/{Sid}
@@ -293,13 +301,14 @@ export def "workspaces-tasks FetchTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, age: int, assignment_status: string, attributes: string, addons: string, date_created: string, date_updated: string, task_queue_entered_date: string, priority: int, reason: string, sid: string, task_queue_sid: string, task_queue_friendly_name: string, task_channel_sid: string, task_channel_unique_name: string, timeout: int, workflow_sid: string, workflow_friendly_name: string, workspace_sid: string, url: string, links: record, virtual_start_time: string, ignore_capacity: bool, routing_target: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Tasks/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/Tasks/{Sid}
@@ -315,6 +324,7 @@ export def "workspaces-tasks UpdateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # If provided, applies this mutation if (and only if) the [ETag](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag) header of the Task matches the provided value. This matches the semantics of (and is implemented with) the HTTP [If-Match header](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/If-Match).
   --Attributes: string # The JSON string that describes the custom attributes of the task.
   --AssignmentStatus: string@AssignmentStatus-completer # The current status of the Task's assignment. Can be: `pending`, `reserved`, `assigned`, `canceled`, `wrapping`, or `completed`.
@@ -333,7 +343,7 @@ export def "workspaces-tasks UpdateTask" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # DELETE /v1/Workspaces/{WorkspaceSid}/Tasks/{Sid}
@@ -349,6 +359,7 @@ export def "workspaces-tasks DeleteTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # If provided, deletes this Task if (and only if) the [ETag](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag) header of the Task matches the provided value. This matches the semantics of (and is implemented with) the HTTP [If-Match header](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/If-Match).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -358,7 +369,7 @@ export def "workspaces-tasks DeleteTask" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Tasks
@@ -373,6 +384,7 @@ export def "workspaces-tasks ListTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Priority: int # The priority value of the Tasks to read. Returns the list of all Tasks in the Workspace with the specified priority.
   --AssignmentStatus: list # The `assignment_status` of the Tasks you want to read. Can be: `pending`, `reserved`, `assigned`, `canceled`, `wrapping`, or `completed`. Returns all Tasks in the Workspace with the specified `assignment_status`.
   --WorkflowSid: string # The SID of the Workflow with the Tasks to read. Returns the Tasks controlled by the Workflow identified by this SID.
@@ -393,7 +405,7 @@ export def "workspaces-tasks ListTask" [
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/Tasks
@@ -408,6 +420,7 @@ export def "workspaces-tasks CreateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Timeout: int # The amount of time in seconds the new task can live before being assigned. Can be up to a maximum of 2 weeks (1,209,600 seconds). The default value is 24 hours (86,400 seconds). On timeout, the `task.canceled` event will fire with description `Task TTL Exceeded`.
   --Priority: int # The priority to assign the new task and override the default. When supplied, the new Task will have this priority unless it matches a Workflow Target with a Priority set. When not supplied, the new Task will have the priority of the matching Workflow Target. Value can be 0 to 2^31^ (2,147,483,647).
   --TaskChannel: string # When MultiTasking is enabled, specify the TaskChannel by passing either its `unique_name` or `sid`. Default value is `default`.
@@ -426,7 +439,7 @@ export def "workspaces-tasks CreateTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/TaskChannels/{Sid}
@@ -442,13 +455,14 @@ export def "workspaces-task-channels FetchTaskChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, unique_name: string, workspace_sid: string, channel_optimized_routing: bool, url: string, links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/TaskChannels/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/TaskChannels/{Sid}
@@ -464,6 +478,7 @@ export def "workspaces-task-channels UpdateTaskChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # A descriptive string that you create to describe the Task Channel. It can be up to 64 characters long.
   --ChannelOptimizedRouting: oneof<nothing, bool> # Whether the TaskChannel should prioritize Workers that have been idle. If `true`, Workers that have been idle the longest are prioritized.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, unique_name: string, workspace_sid: string, channel_optimized_routing: bool, url: string, links: record> {
@@ -475,7 +490,7 @@ export def "workspaces-task-channels UpdateTaskChannel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # DELETE /v1/Workspaces/{WorkspaceSid}/TaskChannels/{Sid}
@@ -491,13 +506,14 @@ export def "workspaces-task-channels DeleteTaskChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/TaskChannels/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/TaskChannels
@@ -512,6 +528,7 @@ export def "workspaces-task-channels ListTaskChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -522,7 +539,7 @@ export def "workspaces-task-channels ListTaskChannel" [
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/TaskChannels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/TaskChannels
@@ -537,6 +554,7 @@ export def "workspaces-task-channels CreateTaskChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   FriendlyName: string # A descriptive string that you create to describe the Task Channel. It can be up to 64 characters long.
   UniqueName: string # An application-defined string that uniquely identifies the Task Channel, such as `voice` or `sms`.
   --ChannelOptimizedRouting: oneof<nothing, bool> # Whether the Task Channel should prioritize Workers that have been idle. If `true`, Workers that have been idle the longest are prioritized.
@@ -549,7 +567,7 @@ export def "workspaces-task-channels CreateTaskChannel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/TaskQueues/{Sid}
@@ -565,13 +583,14 @@ export def "workspaces-task-queues FetchTaskQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, assignment_activity_sid: string, assignment_activity_name: string, date_created: string, date_updated: string, friendly_name: string, max_reserved_workers: int, reservation_activity_sid: string, reservation_activity_name: string, sid: string, target_workers: string, task_order: string, url: string, workspace_sid: string, links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/TaskQueues/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/TaskQueues/{Sid}
@@ -587,6 +606,7 @@ export def "workspaces-task-queues UpdateTaskQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # A descriptive string that you create to describe the TaskQueue. For example `Support-Tier 1`, `Sales`, or `Escalation`.
   --TargetWorkers: string # A string describing the Worker selection criteria for any Tasks that enter the TaskQueue. For example '"language" == "spanish"' If no TargetWorkers parameter is provided, Tasks will wait in the queue until they are either deleted or moved to another queue. Additional examples on how to describing Worker selection criteria below.
   --ReservationActivitySid: string # The SID of the Activity to assign Workers when a task is reserved for them.
@@ -602,7 +622,7 @@ export def "workspaces-task-queues UpdateTaskQueue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # DELETE /v1/Workspaces/{WorkspaceSid}/TaskQueues/{Sid}
@@ -618,13 +638,14 @@ export def "workspaces-task-queues DeleteTaskQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/TaskQueues/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/TaskQueues
@@ -639,6 +660,7 @@ export def "workspaces-task-queues ListTaskQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # The `friendly_name` of the TaskQueue resources to read.
   --EvaluateWorkerAttributes: string # The attributes of the Workers to read. Returns the TaskQueues with Workers that match the attributes specified in this parameter.
   --WorkerSid: string # The SID of the Worker with the TaskQueue resources to read.
@@ -653,7 +675,7 @@ export def "workspaces-task-queues ListTaskQueue" [
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/TaskQueues" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/TaskQueues
@@ -668,6 +690,7 @@ export def "workspaces-task-queues CreateTaskQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   FriendlyName: string # A descriptive string that you create to describe the TaskQueue. For example `Support-Tier 1`, `Sales`, or `Escalation`.
   --TargetWorkers: string # A string that describes the Worker selection criteria for any Tasks that enter the TaskQueue. For example, `'"language" == "spanish"'`. The default value is `1==1`. If this value is empty, Tasks will wait in the TaskQueue until they are deleted or moved to another TaskQueue. For more information about Worker selection, see [Describing Worker selection criteria](https://www.twilio.com/docs/taskrouter/api/taskqueues#target-workers).
   --MaxReservedWorkers: int # The maximum number of Workers to reserve for the assignment of a Task in the queue. Can be an integer between 1 and 50, inclusive and defaults to 1.
@@ -683,7 +706,7 @@ export def "workspaces-task-queues CreateTaskQueue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Fetch a Task Queue Real Time Statistics in bulk for the array of TaskQueue SIDs, support upto 50 in a request.
@@ -699,6 +722,7 @@ export def "workspaces-task-queues-real-time-statistics CreateTaskQueueBulkRealT
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<account_sid: string, workspace_sid: string, task_queue_data: list<any>, task_queue_response_count: int, url: string> {
   let input = $in
@@ -708,7 +732,7 @@ export def "workspaces-task-queues-real-time-statistics CreateTaskQueueBulkRealT
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/TaskQueues/{TaskQueueSid}/CumulativeStatistics
@@ -724,6 +748,7 @@ export def "workspaces-task-queues-cumulative-statistics FetchTaskQueueCumulativ
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --EndDate: string # Only calculate statistics from this date and time and earlier, specified in GMT as an [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) date-time. (format: date-time)
   --Minutes: int # Only calculate statistics since this many minutes in the past. The default is 15 minutes.
   --StartDate: string # Only calculate statistics from this date and time and later, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
@@ -736,7 +761,7 @@ export def "workspaces-task-queues-cumulative-statistics FetchTaskQueueCumulativ
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/TaskQueues/($TaskQueueSid)/CumulativeStatistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/TaskQueues/{TaskQueueSid}/RealTimeStatistics
@@ -752,6 +777,7 @@ export def "workspaces-task-queues-real-time-statistics FetchTaskQueueRealTimeSt
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --TaskChannel: string # The TaskChannel for which to fetch statistics. Can be the TaskChannel's SID or its `unique_name`, such as `voice`, `sms`, or `default`.
 ]: nothing -> record<account_sid: string, activity_statistics: list<any>, longest_task_waiting_age: int, longest_task_waiting_sid: string, longest_relative_task_age_in_queue: int, longest_relative_task_sid_in_queue: string, task_queue_sid: string, tasks_by_priority: any, tasks_by_status: any, total_available_workers: int, total_eligible_workers: int, total_tasks: int, workspace_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -760,7 +786,7 @@ export def "workspaces-task-queues-real-time-statistics FetchTaskQueueRealTimeSt
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/TaskQueues/($TaskQueueSid)/RealTimeStatistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/TaskQueues/{TaskQueueSid}/Statistics
@@ -776,6 +802,7 @@ export def "workspaces-task-queues-statistics FetchTaskQueueStatistics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --EndDate: string # Only calculate statistics from this date and time and earlier, specified in GMT as an [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) date-time. (format: date-time)
   --Minutes: int # Only calculate statistics since this many minutes in the past. The default is 15 minutes.
   --StartDate: string # Only calculate statistics from this date and time and later, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
@@ -788,7 +815,7 @@ export def "workspaces-task-queues-statistics FetchTaskQueueStatistics" [
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/TaskQueues/($TaskQueueSid)/Statistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/TaskQueues/Statistics
@@ -803,6 +830,7 @@ export def "workspaces-task-queues-statistics ListTaskQueuesStatistics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --EndDate: string # Only calculate statistics from this date and time and earlier, specified in GMT as an [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) date-time. (format: date-time)
   --FriendlyName: string # The `friendly_name` of the TaskQueue statistics to read.
   --Minutes: int # Only calculate statistics since this many minutes in the past. The default is 15 minutes.
@@ -819,7 +847,7 @@ export def "workspaces-task-queues-statistics ListTaskQueuesStatistics" [
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/TaskQueues/Statistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Tasks/{TaskSid}/Reservations
@@ -835,6 +863,7 @@ export def "workspaces-tasks-reservations ListTaskReservation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ReservationStatus: string@ReservationStatus-completer # Returns the list of reservations for a task with a specified ReservationStatus.  Can be: `pending`, `accepted`, `rejected`, or `timeout`.
   --WorkerSid: string # The SID of the reserved Worker resource to read.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
@@ -847,7 +876,7 @@ export def "workspaces-tasks-reservations ListTaskReservation" [
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Tasks/($TaskSid)/Reservations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Tasks/{TaskSid}/Reservations/{Sid}
@@ -864,13 +893,14 @@ export def "workspaces-tasks-reservations FetchTaskReservation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, reservation_status: string, sid: string, task_sid: string, worker_name: string, worker_sid: string, workspace_sid: string, url: string, links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Tasks/($TaskSid)/Reservations/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/Tasks/{TaskSid}/Reservations/{Sid}
@@ -887,6 +917,7 @@ export def "workspaces-tasks-reservations UpdateTaskReservation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # The If-Match HTTP request header
   --ReservationStatus: string@ReservationStatus-completer # The current status of the reservation. Can be: `pending`, `accepted`, `rejected`, or `timeout`.
   --WorkerActivitySid: string # The new worker activity SID if rejecting a reservation.
@@ -953,7 +984,7 @@ export def "workspaces-tasks-reservations UpdateTaskReservation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers
@@ -968,6 +999,7 @@ export def "workspaces-workers ListWorker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ActivityName: string # The `activity_name` of the Worker resources to read.
   --ActivitySid: string # The `activity_sid` of the Worker resources to read.
   --Available: string # Whether to return only Worker resources that are available or unavailable. Can be `true`, `1`, or `yes` to return Worker resources that are available, and `false`, or any value returns the Worker resources that are not available.
@@ -986,7 +1018,7 @@ export def "workspaces-workers ListWorker" [
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Workers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/Workers
@@ -1001,6 +1033,7 @@ export def "workspaces-workers CreateWorker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   FriendlyName: string # A descriptive string that you create to describe the new Worker. It can be up to 64 characters long.
   --ActivitySid: string # The SID of a valid Activity that will describe the new Worker's initial state. See [Activities](https://www.twilio.com/docs/taskrouter/api/activity) for more information. If not provided, the new Worker's initial state is the `default_activity_sid` configured on the Workspace.
   --Attributes: string # A valid JSON string that describes the new Worker. For example: `{ "email": "Bob@example.com", "phone": "+5095551234" }`. This data is passed to the `assignment_callback_url` when TaskRouter assigns a Task to the Worker. Defaults to {}.
@@ -1013,7 +1046,7 @@ export def "workspaces-workers CreateWorker" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/{Sid}
@@ -1029,13 +1062,14 @@ export def "workspaces-workers FetchWorker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, activity_name: string, activity_sid: string, attributes: string, available: bool, date_created: string, date_status_changed: string, date_updated: string, friendly_name: string, sid: string, workspace_sid: string, url: string, links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Workers/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/Workers/{Sid}
@@ -1051,6 +1085,7 @@ export def "workspaces-workers UpdateWorker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # The If-Match HTTP request header
   --ActivitySid: string # The SID of a valid Activity that will describe the Worker's initial state. See [Activities](https://www.twilio.com/docs/taskrouter/api/activity) for more information.
   --Attributes: string # The JSON string that describes the Worker. For example: `{ "email": "Bob@example.com", "phone": "+5095551234" }`. This data is passed to the `assignment_callback_url` when TaskRouter assigns a Task to the Worker. Defaults to {}.
@@ -1067,7 +1102,7 @@ export def "workspaces-workers UpdateWorker" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # DELETE /v1/Workspaces/{WorkspaceSid}/Workers/{Sid}
@@ -1083,6 +1118,7 @@ export def "workspaces-workers DeleteWorker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # The If-Match HTTP request header
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1092,7 +1128,7 @@ export def "workspaces-workers DeleteWorker" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Channels
@@ -1108,6 +1144,7 @@ export def "workspaces-workers-channels ListWorkerChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -1118,7 +1155,7 @@ export def "workspaces-workers-channels ListWorkerChannel" [
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Workers/($WorkerSid)/Channels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Channels/{Sid}
@@ -1135,13 +1172,14 @@ export def "workspaces-workers-channels FetchWorkerChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, assigned_tasks: int, available: bool, available_capacity_percentage: int, configured_capacity: int, date_created: string, date_updated: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, worker_sid: string, workspace_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Workers/($WorkerSid)/Channels/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Channels/{Sid}
@@ -1158,6 +1196,7 @@ export def "workspaces-workers-channels UpdateWorkerChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Capacity: int # The total number of Tasks that the Worker should handle for the TaskChannel type. TaskRouter creates reservations for Tasks of this TaskChannel type up to the specified capacity. If the capacity is 0, no new reservations will be created.
   --Available: oneof<nothing, bool> # Whether the WorkerChannel is available. Set to `false` to prevent the Worker from receiving any new Tasks of this TaskChannel type.
 ]: any -> record<account_sid: string, assigned_tasks: int, available: bool, available_capacity_percentage: int, configured_capacity: int, date_created: string, date_updated: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, worker_sid: string, workspace_sid: string, url: string> {
@@ -1169,7 +1208,7 @@ export def "workspaces-workers-channels UpdateWorkerChannel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Statistics
@@ -1185,6 +1224,7 @@ export def "workspaces-workers-statistics FetchWorkerInstanceStatistics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Minutes: int # Only calculate statistics since this many minutes in the past. The default 15 minutes. This is helpful for displaying statistics for the last 15 minutes, 240 minutes (4 hours), and 480 minutes (8 hours) to see trends.
   --StartDate: string # Only calculate statistics from this date and time and later, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
   --EndDate: string # Only include usage that occurred on or before this date, specified in GMT as an [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) date-time. (format: date-time)
@@ -1196,7 +1236,7 @@ export def "workspaces-workers-statistics FetchWorkerInstanceStatistics" [
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Workers/($WorkerSid)/Statistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Reservations
@@ -1212,6 +1252,7 @@ export def "workspaces-workers-reservations ListWorkerReservation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ReservationStatus: string@ReservationStatus-completer # Returns the list of reservations for a worker with a specified ReservationStatus. Can be: `pending`, `accepted`, `rejected`, `timeout`, `canceled`, or `rescinded`.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
@@ -1223,7 +1264,7 @@ export def "workspaces-workers-reservations ListWorkerReservation" [
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Workers/($WorkerSid)/Reservations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Reservations/{Sid}
@@ -1240,13 +1281,14 @@ export def "workspaces-workers-reservations FetchWorkerReservation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, reservation_status: string, sid: string, task_sid: string, worker_name: string, worker_sid: string, workspace_sid: string, url: string, links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Workers/($WorkerSid)/Reservations/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Reservations/{Sid}
@@ -1263,6 +1305,7 @@ export def "workspaces-workers-reservations UpdateWorkerReservation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --If-Match: string # The If-Match HTTP request header
   --ReservationStatus: string@ReservationStatus-completer # The current status of the reservation. Can be: `pending`, `accepted`, `rejected`, `timeout`, `canceled`, or `rescinded`.
   --WorkerActivitySid: string # The new worker activity SID if rejecting a reservation.
@@ -1327,7 +1370,7 @@ export def "workspaces-workers-reservations UpdateWorkerReservation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/Statistics
@@ -1342,6 +1385,7 @@ export def "workspaces-workers-statistics FetchWorkerStatistics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Minutes: int # Only calculate statistics since this many minutes in the past. The default 15 minutes. This is helpful for displaying statistics for the last 15 minutes, 240 minutes (4 hours), and 480 minutes (8 hours) to see trends.
   --StartDate: string # Only calculate statistics from this date and time and later, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
   --EndDate: string # Only calculate statistics from this date and time and earlier, specified in GMT as an [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) date-time. (format: date-time)
@@ -1356,7 +1400,7 @@ export def "workspaces-workers-statistics FetchWorkerStatistics" [
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Workers/Statistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/CumulativeStatistics
@@ -1371,6 +1415,7 @@ export def "workspaces-workers-cumulative-statistics FetchWorkersCumulativeStati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --EndDate: string # Only calculate statistics from this date and time and earlier, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
   --Minutes: int # Only calculate statistics since this many minutes in the past. The default 15 minutes. This is helpful for displaying statistics for the last 15 minutes, 240 minutes (4 hours), and 480 minutes (8 hours) to see trends.
   --StartDate: string # Only calculate statistics from this date and time and later, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
@@ -1382,7 +1427,7 @@ export def "workspaces-workers-cumulative-statistics FetchWorkersCumulativeStati
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Workers/CumulativeStatistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/RealTimeStatistics
@@ -1397,6 +1442,7 @@ export def "workspaces-workers-real-time-statistics FetchWorkersRealTimeStatisti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --TaskChannel: string # Only calculate real-time statistics on this TaskChannel. Can be the TaskChannel's SID or its `unique_name`, such as `voice`, `sms`, or `default`.
 ]: nothing -> record<account_sid: string, activity_statistics: list<any>, total_workers: int, workspace_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1405,7 +1451,7 @@ export def "workspaces-workers-real-time-statistics FetchWorkersRealTimeStatisti
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Workers/RealTimeStatistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workflows/{Sid}
@@ -1421,13 +1467,14 @@ export def "workspaces-workflows FetchWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, assignment_callback_url: string, configuration: string, date_created: string, date_updated: string, document_content_type: string, fallback_assignment_callback_url: string, friendly_name: string, sid: string, task_reservation_timeout: int, workspace_sid: string, url: string, links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Workflows/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/Workflows/{Sid}
@@ -1443,6 +1490,7 @@ export def "workspaces-workflows UpdateWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # A descriptive string that you create to describe the Workflow resource. For example, `Inbound Call Workflow` or `2014 Outbound Campaign`.
   --AssignmentCallbackUrl: string # The URL from your application that will process task assignment events. See [Handling Task Assignment Callback](https://www.twilio.com/docs/taskrouter/handle-assignment-callbacks) for more details. (format: uri)
   --FallbackAssignmentCallbackUrl: string # The URL that we should call when a call to the `assignment_callback_url` fails. (format: uri)
@@ -1458,7 +1506,7 @@ export def "workspaces-workflows UpdateWorkflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # DELETE /v1/Workspaces/{WorkspaceSid}/Workflows/{Sid}
@@ -1474,13 +1522,14 @@ export def "workspaces-workflows DeleteWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Workflows/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workflows
@@ -1495,6 +1544,7 @@ export def "workspaces-workflows ListWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # The `friendly_name` of the Workflow resources to read.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
@@ -1506,7 +1556,7 @@ export def "workspaces-workflows ListWorkflow" [
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Workflows" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/Workflows
@@ -1521,6 +1571,7 @@ export def "workspaces-workflows CreateWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   FriendlyName: string # A descriptive string that you create to describe the Workflow resource. For example, `Inbound Call Workflow` or `2014 Outbound Campaign`.
   Configuration: string # A JSON string that contains the rules to apply to the Workflow. See [Configuring Workflows](https://www.twilio.com/docs/taskrouter/workflow-configuration) for more information.
   --AssignmentCallbackUrl: string # The URL from your application that will process task assignment events. See [Handling Task Assignment Callback](https://www.twilio.com/docs/taskrouter/handle-assignment-callbacks) for more details. (format: uri)
@@ -1535,7 +1586,7 @@ export def "workspaces-workflows CreateWorkflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workflows/{WorkflowSid}/CumulativeStatistics
@@ -1551,6 +1602,7 @@ export def "workspaces-workflows-cumulative-statistics FetchWorkflowCumulativeSt
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --EndDate: string # Only include usage that occurred on or before this date, specified in GMT as an [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) date-time. (format: date-time)
   --Minutes: int # Only calculate statistics since this many minutes in the past. The default 15 minutes. This is helpful for displaying statistics for the last 15 minutes, 240 minutes (4 hours), and 480 minutes (8 hours) to see trends.
   --StartDate: string # Only calculate statistics from this date and time and later, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
@@ -1563,7 +1615,7 @@ export def "workspaces-workflows-cumulative-statistics FetchWorkflowCumulativeSt
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Workflows/($WorkflowSid)/CumulativeStatistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workflows/{WorkflowSid}/RealTimeStatistics
@@ -1579,6 +1631,7 @@ export def "workspaces-workflows-real-time-statistics FetchWorkflowRealTimeStati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --TaskChannel: string # Only calculate real-time statistics on this TaskChannel. Can be the TaskChannel's SID or its `unique_name`, such as `voice`, `sms`, or `default`.
 ]: nothing -> record<account_sid: string, longest_task_waiting_age: int, longest_task_waiting_sid: string, tasks_by_priority: any, tasks_by_status: any, total_tasks: int, workflow_sid: string, workspace_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1587,7 +1640,7 @@ export def "workspaces-workflows-real-time-statistics FetchWorkflowRealTimeStati
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Workflows/($WorkflowSid)/RealTimeStatistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workflows/{WorkflowSid}/Statistics
@@ -1603,6 +1656,7 @@ export def "workspaces-workflows-statistics FetchWorkflowStatistics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Minutes: int # Only calculate statistics since this many minutes in the past. The default 15 minutes. This is helpful for displaying statistics for the last 15 minutes, 240 minutes (4 hours), and 480 minutes (8 hours) to see trends.
   --StartDate: string # Only calculate statistics from this date and time and later, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
   --EndDate: string # Only calculate statistics from this date and time and earlier, specified in GMT as an [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) date-time. (format: date-time)
@@ -1615,7 +1669,7 @@ export def "workspaces-workflows-statistics FetchWorkflowStatistics" [
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Workflows/($WorkflowSid)/Statistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{Sid}
@@ -1630,13 +1684,14 @@ export def "workspaces FetchWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, default_activity_name: string, default_activity_sid: string, event_callback_url: string, events_filter: string, friendly_name: string, multi_task_enabled: bool, sid: string, timeout_activity_name: string, timeout_activity_sid: string, prioritize_queue_order: string, url: string, links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let full_url = (build-url $base $"/v1/Workspaces/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/Workspaces/{Sid}
@@ -1651,6 +1706,7 @@ export def "workspaces UpdateWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --DefaultActivitySid: string # The SID of the Activity that will be used when new Workers are created in the Workspace.
   --EventCallbackUrl: string # The URL we should call when an event occurs. See [Workspace Events](https://www.twilio.com/docs/taskrouter/api/event) for more information. This parameter supports Twilio's [Webhooks (HTTP callbacks) Connection Overrides](https://www.twilio.com/docs/usage/webhooks/webhooks-connection-overrides). (format: uri)
   --EventsFilter: string # The list of Workspace events for which to call event_callback_url. For example if `EventsFilter=task.created,task.canceled,worker.activity.update`, then TaskRouter will call event_callback_url only when a task is created, canceled, or a Worker activity is updated.
@@ -1667,7 +1723,7 @@ export def "workspaces UpdateWorkspace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # DELETE /v1/Workspaces/{Sid}
@@ -1682,13 +1738,14 @@ export def "workspaces DeleteWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let full_url = (build-url $base $"/v1/Workspaces/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces
@@ -1702,6 +1759,7 @@ export def "workspaces ListWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # The `friendly_name` of the Workspace resources to read. For example `Customer Support` or `2014 Election Campaign`.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
@@ -1713,7 +1771,7 @@ export def "workspaces ListWorkspace" [
   let full_url = (build-url $base "/v1/Workspaces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/Workspaces
@@ -1727,6 +1785,7 @@ export def "workspaces CreateWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   FriendlyName: string # A descriptive string that you create to describe the Workspace resource. It can be up to 64 characters long. For example: `Customer Support` or `2014 Election Campaign`.
   --EventCallbackUrl: string # The URL we should call when an event occurs. If provided, the Workspace will publish events to this URL, for example, to collect data for reporting. See [Workspace Events](https://www.twilio.com/docs/taskrouter/api/event) for more information. This parameter supports Twilio's [Webhooks (HTTP callbacks) Connection Overrides](https://www.twilio.com/docs/usage/webhooks/webhooks-connection-overrides). (format: uri)
   --EventsFilter: string # The list of Workspace events for which to call event_callback_url. For example, if `EventsFilter=task.created, task.canceled, worker.activity.update`, then TaskRouter will call event_callback_url only when a task is created, canceled, or a Worker activity is updated.
@@ -1742,7 +1801,7 @@ export def "workspaces CreateWorkspace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/CumulativeStatistics
@@ -1757,6 +1816,7 @@ export def "workspaces-cumulative-statistics FetchWorkspaceCumulativeStatistics"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --EndDate: string # Only include usage that occurred on or before this date, specified in GMT as an [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) date-time. (format: date-time)
   --Minutes: int # Only calculate statistics since this many minutes in the past. The default 15 minutes. This is helpful for displaying statistics for the last 15 minutes, 240 minutes (4 hours), and 480 minutes (8 hours) to see trends.
   --StartDate: string # Only calculate statistics from this date and time and later, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
@@ -1769,7 +1829,7 @@ export def "workspaces-cumulative-statistics FetchWorkspaceCumulativeStatistics"
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/CumulativeStatistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/RealTimeStatistics
@@ -1784,6 +1844,7 @@ export def "workspaces-real-time-statistics FetchWorkspaceRealTimeStatistics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --TaskChannel: string # Only calculate real-time statistics on this TaskChannel. Can be the TaskChannel's SID or its `unique_name`, such as `voice`, `sms`, or `default`.
 ]: nothing -> record<account_sid: string, activity_statistics: list<any>, longest_task_waiting_age: int, longest_task_waiting_sid: string, tasks_by_priority: any, tasks_by_status: any, total_tasks: int, total_workers: int, workspace_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1792,7 +1853,7 @@ export def "workspaces-real-time-statistics FetchWorkspaceRealTimeStatistics" [
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/RealTimeStatistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Statistics
@@ -1807,6 +1868,7 @@ export def "workspaces-statistics FetchWorkspaceStatistics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Minutes: int # Only calculate statistics since this many minutes in the past. The default 15 minutes. This is helpful for displaying statistics for the last 15 minutes, 240 minutes (4 hours), and 480 minutes (8 hours) to see trends.
   --StartDate: string # Only calculate statistics from this date and time and later, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
   --EndDate: string # Only calculate statistics from this date and time and earlier, specified in GMT as an [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) date-time. (format: date-time)
@@ -1819,5 +1881,5 @@ export def "workspaces-statistics FetchWorkspaceStatistics" [
   let full_url = (build-url $base $"/v1/Workspaces/($WorkspaceSid)/Statistics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

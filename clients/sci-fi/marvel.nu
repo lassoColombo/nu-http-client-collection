@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -66,7 +67,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "public-characters list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -99,6 +100,7 @@ export def "public-characters list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Return only characters matching the specified full character name (e.g. Spider-Man).
   --nameStartsWith: string # Return characters with names that begin with the specified string (e.g. Sp).
   --modifiedSince: string # Return only characters which have been modified since the specified date. (format: date)
@@ -116,7 +118,7 @@ export def "public-characters list" [
   let full_url = (build-url $base "/v1/public/characters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches a single character by id.
@@ -132,13 +134,14 @@ export def "public-characters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, status: string, copyright: string, attributionText: string, attributionHTML: string, data: record<offset: int, limit: int, total: int, count: int, results: list<record>>, etag: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/public/characters/($characterId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of comics filtered by a character id.
@@ -154,6 +157,7 @@ export def "public-characters-comics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Filter by the issue format (e.g. comic, digital comic, hardcover).
   --formatType: string # Filter by the issue format type (comic or collection).
   --noVariants: oneof<nothing, bool> # Exclude variant comics from the result set.
@@ -187,7 +191,7 @@ export def "public-characters-comics get" [
   let full_url = (build-url $base $"/v1/public/characters/($characterId)/comics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of events filtered by a character id.
@@ -203,6 +207,7 @@ export def "public-characters-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Filter the event list by name.
   --nameStartsWith: string # Return events with names that begin with the specified string (e.g. Sp).
   --modifiedSince: string # Return only events which have been modified since the specified date. (format: date)
@@ -220,7 +225,7 @@ export def "public-characters-events get" [
   let full_url = (build-url $base $"/v1/public/characters/($characterId)/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of series filtered by a character id.
@@ -236,6 +241,7 @@ export def "public-characters-series get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --title: string # Filter by series title.
   --titleStartsWith: string # Return series with titles that begin with the specified string (e.g. Sp).
   --startYear: int # Return only series matching the specified start year. (format: int32)
@@ -256,7 +262,7 @@ export def "public-characters-series get" [
   let full_url = (build-url $base $"/v1/public/characters/($characterId)/series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of stories filtered by a character id.
@@ -272,6 +278,7 @@ export def "public-characters-stories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --modifiedSince: string # Return only stories which have been modified since the specified date. (format: date)
   --comics: list # Return only stories contained in the specified (accepts a comma-separated list of ids).
   --series: list # Return only stories contained the specified series (accepts a comma-separated list of ids).
@@ -287,7 +294,7 @@ export def "public-characters-stories get" [
   let full_url = (build-url $base $"/v1/public/characters/($characterId)/stories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of comics.
@@ -302,6 +309,7 @@ export def "public-comics list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Filter by the issue format (e.g. comic, digital comic, hardcover).
   --formatType: string # Filter by the issue format type (comic or collection).
   --noVariants: oneof<nothing, bool> # Exclude variants (alternate covers, secondary printings, director's cuts, etc.) from the result set.
@@ -336,7 +344,7 @@ export def "public-comics list" [
   let full_url = (build-url $base "/v1/public/comics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches a single comic by id.
@@ -352,13 +360,14 @@ export def "public-comics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, status: string, copyright: string, attributionText: string, attributionHTML: string, data: record<offset: int, limit: int, total: int, count: int, results: list<record>>, etag: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/public/comics/($comicId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of characters filtered by a comic id.
@@ -374,6 +383,7 @@ export def "public-comics-characters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Return only characters matching the specified full character name (e.g. Spider-Man).
   --nameStartsWith: string # Return characters with names that begin with the specified string (e.g. Sp).
   --modifiedSince: string # Return only characters which have been modified since the specified date. (format: date)
@@ -390,7 +400,7 @@ export def "public-comics-characters get" [
   let full_url = (build-url $base $"/v1/public/comics/($comicId)/characters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of creators filtered by a comic id.
@@ -406,6 +416,7 @@ export def "public-comics-creators get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --firstName: string # Filter by creator first name (e.g. brian).
   --middleName: string # Filter by creator middle name (e.g. Michael).
   --lastName: string # Filter by creator last name (e.g. Bendis).
@@ -428,7 +439,7 @@ export def "public-comics-creators get" [
   let full_url = (build-url $base $"/v1/public/comics/($comicId)/creators" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of events filtered by a comic id.
@@ -444,6 +455,7 @@ export def "public-comics-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Filter the event list by name.
   --nameStartsWith: string # Return events with names that begin with the specified string (e.g. Sp).
   --modifiedSince: string # Return only events which have been modified since the specified date. (format: date)
@@ -461,7 +473,7 @@ export def "public-comics-events get" [
   let full_url = (build-url $base $"/v1/public/comics/($comicId)/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of stories filtered by a comic id.
@@ -477,6 +489,7 @@ export def "public-comics-stories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --modifiedSince: string # Return only stories which have been modified since the specified date. (format: date)
   --series: list # Return only stories contained the specified series (accepts a comma-separated list of ids).
   --events: list # Return only stories which take place during the specified events (accepts a comma-separated list of ids).
@@ -492,7 +505,7 @@ export def "public-comics-stories get" [
   let full_url = (build-url $base $"/v1/public/comics/($comicId)/stories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of creators.
@@ -507,6 +520,7 @@ export def "public-creators list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --firstName: string # Filter by creator first name (e.g. Brian).
   --middleName: string # Filter by creator middle name (e.g. Michael).
   --lastName: string # Filter by creator last name (e.g. Bendis).
@@ -530,7 +544,7 @@ export def "public-creators list" [
   let full_url = (build-url $base "/v1/public/creators" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches a single creator by id.
@@ -546,13 +560,14 @@ export def "public-creators get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, status: string, copyright: string, attributionText: string, attributionHTML: string, data: record<offset: int, limit: int, total: int, count: int, results: list<record>>, etag: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/public/creators/($creatorId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of comics filtered by a creator id.
@@ -568,6 +583,7 @@ export def "public-creators-comics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Filter by the issue format (e.g. comic, digital comic, hardcover).
   --formatType: string # Filter by the issue format type (comic or collection).
   --noVariants: oneof<nothing, bool> # Exclude variant comics from the result set.
@@ -601,7 +617,7 @@ export def "public-creators-comics get" [
   let full_url = (build-url $base $"/v1/public/creators/($creatorId)/comics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of events filtered by a creator id.
@@ -617,6 +633,7 @@ export def "public-creators-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Filter the event list by name.
   --nameStartsWith: string # Return events with names that begin with the specified string (e.g. Sp).
   --modifiedSince: string # Return only events which have been modified since the specified date. (format: date)
@@ -634,7 +651,7 @@ export def "public-creators-events get" [
   let full_url = (build-url $base $"/v1/public/creators/($creatorId)/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of series filtered by a creator id.
@@ -650,6 +667,7 @@ export def "public-creators-series get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --title: string # Filter by series title.
   --titleStartsWith: string # Return series with titles that begin with the specified string (e.g. Sp).
   --startYear: int # Return only series matching the specified start year. (format: int32)
@@ -670,7 +688,7 @@ export def "public-creators-series get" [
   let full_url = (build-url $base $"/v1/public/creators/($creatorId)/series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of stories filtered by a creator id.
@@ -686,6 +704,7 @@ export def "public-creators-stories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --modifiedSince: string # Return only stories which have been modified since the specified date. (format: date)
   --comics: list # Return only stories contained in the specified comics (accepts a comma-separated list of ids).
   --series: list # Return only stories contained the specified series (accepts a comma-separated list of ids).
@@ -701,7 +720,7 @@ export def "public-creators-stories get" [
   let full_url = (build-url $base $"/v1/public/creators/($creatorId)/stories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of events.
@@ -716,6 +735,7 @@ export def "public-events list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Return only events which match the specified name.
   --nameStartsWith: string # Return events with names that begin with the specified string (e.g. Sp).
   --modifiedSince: string # Return only events which have been modified since the specified date. (format: date)
@@ -734,7 +754,7 @@ export def "public-events list" [
   let full_url = (build-url $base "/v1/public/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches a single event by id.
@@ -750,13 +770,14 @@ export def "public-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, status: string, copyright: string, attributionText: string, attributionHTML: string, data: record<offset: int, limit: int, total: int, count: int, results: list<record>>, etag: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/public/events/($eventId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of characters filtered by an event id.
@@ -772,6 +793,7 @@ export def "public-events-characters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Return only characters matching the specified full character name (e.g. Spider-Man).
   --nameStartsWith: string # Return characters with names that begin with the specified string (e.g. Sp).
   --modifiedSince: string # Return only characters which have been modified since the specified date. (format: date)
@@ -788,7 +810,7 @@ export def "public-events-characters get" [
   let full_url = (build-url $base $"/v1/public/events/($eventId)/characters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of comics filtered by an event id.
@@ -804,6 +826,7 @@ export def "public-events-comics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Filter by the issue format (e.g. comic, digital comic, hardcover).
   --formatType: string # Filter by the issue format type (comic or collection).
   --noVariants: list # Exclude variant comics from the result set.
@@ -838,7 +861,7 @@ export def "public-events-comics get" [
   let full_url = (build-url $base $"/v1/public/events/($eventId)/comics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of creators filtered by an event id.
@@ -854,6 +877,7 @@ export def "public-events-creators get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --firstName: string # Filter by creator first name (e.g. brian).
   --middleName: string # Filter by creator middle name (e.g. Michael).
   --lastName: string # Filter by creator last name (e.g. Bendis).
@@ -876,7 +900,7 @@ export def "public-events-creators get" [
   let full_url = (build-url $base $"/v1/public/events/($eventId)/creators" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of series filtered by an event id.
@@ -892,6 +916,7 @@ export def "public-events-series get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --title: string # Filter by series title.
   --titleStartsWith: string # Return series with titles that begin with the specified string (e.g. Sp).
   --startYear: int # Return only series matching the specified start year. (format: int32)
@@ -912,7 +937,7 @@ export def "public-events-series get" [
   let full_url = (build-url $base $"/v1/public/events/($eventId)/series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of stories filtered by an event id.
@@ -928,6 +953,7 @@ export def "public-events-stories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --modifiedSince: string # Return only stories which have been modified since the specified date. (format: date)
   --comics: list # Return only stories contained in the specified (accepts a comma-separated list of ids).
   --series: list # Return only stories contained the specified series (accepts a comma-separated list of ids).
@@ -943,7 +969,7 @@ export def "public-events-stories get" [
   let full_url = (build-url $base $"/v1/public/events/($eventId)/stories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of series.
@@ -958,6 +984,7 @@ export def "public-series list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --title: string # Return only series matching the specified title.
   --titleStartsWith: string # Return series with titles that begin with the specified string (e.g. Sp).
   --startYear: int # Return only series matching the specified start year. (format: int32)
@@ -979,7 +1006,7 @@ export def "public-series list" [
   let full_url = (build-url $base "/v1/public/series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches a single comic series by id.
@@ -995,13 +1022,14 @@ export def "public-series get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, status: string, copyright: string, attributionText: string, attributionHTML: string, data: record<offset: int, limit: int, total: int, count: int, results: list<record>>, etag: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/public/series/($seriesId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of characters filtered by a series id.
@@ -1017,6 +1045,7 @@ export def "public-series-characters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Return only characters matching the specified full character name (e.g. Spider-Man).
   --nameStartsWith: string # Return characters with names that begin with the specified string (e.g. Sp).
   --modifiedSince: string # Return only characters which have been modified since the specified date. (format: date)
@@ -1033,7 +1062,7 @@ export def "public-series-characters get" [
   let full_url = (build-url $base $"/v1/public/series/($seriesId)/characters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of comics filtered by a series id.
@@ -1049,6 +1078,7 @@ export def "public-series-comics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Filter by the issue format (e.g. comic, digital comic, hardcover).
   --formatType: string # Filter by the issue format type (comic or collection).
   --noVariants: list # Exclude variant comics from the result set.
@@ -1082,7 +1112,7 @@ export def "public-series-comics get" [
   let full_url = (build-url $base $"/v1/public/series/($seriesId)/comics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of creators filtered by a series id.
@@ -1098,6 +1128,7 @@ export def "public-series-creators get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --firstName: string # Filter by creator first name (e.g. brian).
   --middleName: string # Filter by creator middle name (e.g. Michael).
   --lastName: string # Filter by creator last name (e.g. Bendis).
@@ -1120,7 +1151,7 @@ export def "public-series-creators get" [
   let full_url = (build-url $base $"/v1/public/series/($seriesId)/creators" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of events filtered by a series id.
@@ -1136,6 +1167,7 @@ export def "public-series-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Filter the event list by name.
   --nameStartsWith: string # Return events with names that begin with the specified string (e.g. Sp).
   --modifiedSince: string # Return only events which have been modified since the specified date. (format: date)
@@ -1153,7 +1185,7 @@ export def "public-series-events get" [
   let full_url = (build-url $base $"/v1/public/series/($seriesId)/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of stories filtered by a series id.
@@ -1169,6 +1201,7 @@ export def "public-series-stories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --modifiedSince: string # Return only stories which have been modified since the specified date. (format: date)
   --comics: list # Return only stories contained in the specified (accepts a comma-separated list of ids).
   --events: list # Return only stories which take place during the specified events (accepts a comma-separated list of ids).
@@ -1184,7 +1217,7 @@ export def "public-series-stories get" [
   let full_url = (build-url $base $"/v1/public/series/($seriesId)/stories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of stories.
@@ -1199,6 +1232,7 @@ export def "public-stories list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --modifiedSince: string # Return only stories which have been modified since the specified date. (format: date)
   --comics: list # Return only stories contained in the specified (accepts a comma-separated list of ids).
   --series: list # Return only stories contained the specified series (accepts a comma-separated list of ids).
@@ -1215,7 +1249,7 @@ export def "public-stories list" [
   let full_url = (build-url $base "/v1/public/stories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches a single comic story by id.
@@ -1231,13 +1265,14 @@ export def "public-stories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, status: string, copyright: string, attributionText: string, attributionHTML: string, data: record<offset: int, limit: int, total: int, count: int, results: list<record>>, etag: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/public/stories/($storyId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of characters filtered by a story id.
@@ -1253,6 +1288,7 @@ export def "public-stories-characters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Return only characters matching the specified full character name (e.g. Spider-Man).
   --nameStartsWith: string # Return characters with names that begin with the specified string (e.g. Sp).
   --modifiedSince: string # Return only characters which have been modified since the specified date. (format: date)
@@ -1269,7 +1305,7 @@ export def "public-stories-characters get" [
   let full_url = (build-url $base $"/v1/public/stories/($storyId)/characters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of comics filtered by a story id.
@@ -1285,6 +1321,7 @@ export def "public-stories-comics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # Filter by the issue format (e.g. comic, digital comic, hardcover).
   --formatType: string # Filter by the issue format type (comic or collection).
   --noVariants: list # Exclude variant comics from the result set.
@@ -1318,7 +1355,7 @@ export def "public-stories-comics get" [
   let full_url = (build-url $base $"/v1/public/stories/($storyId)/comics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of creators filtered by a story id.
@@ -1334,6 +1371,7 @@ export def "public-stories-creators get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --firstName: string # Filter by creator first name (e.g. brian).
   --middleName: string # Filter by creator middle name (e.g. Michael).
   --lastName: string # Filter by creator last name (e.g. Bendis).
@@ -1356,7 +1394,7 @@ export def "public-stories-creators get" [
   let full_url = (build-url $base $"/v1/public/stories/($storyId)/creators" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of events filtered by a story id.
@@ -1372,6 +1410,7 @@ export def "public-stories-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Filter the event list by name.
   --nameStartsWith: string # Return events with names that begin with the specified string (e.g. Sp).
   --modifiedSince: string # Return only events which have been modified since the specified date. (format: date)
@@ -1389,7 +1428,7 @@ export def "public-stories-events get" [
   let full_url = (build-url $base $"/v1/public/stories/($storyId)/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetches lists of series filtered by a story id.
@@ -1405,6 +1444,7 @@ export def "public-stories-series get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --events: list # Return only series which have comics that take place during the specified events (accepts a comma-separated list of ids).
   --title: string # Filter by series title.
   --titleStartsWith: string # Return series with titles that begin with the specified string (e.g. Sp).
@@ -1425,5 +1465,5 @@ export def "public-stories-series get" [
   let full_url = (build-url $base $"/v1/public/stories/($storyId)/series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

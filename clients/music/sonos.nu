@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -69,7 +70,7 @@ def playbackState-completer [] { ["pause" "play" "toggle"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "players list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -102,13 +103,14 @@ export def "players list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<coordinator: record<uuid: string, zoneName: string>, groupState: record<volume: int, mute: string, : string>, playerName: string, state: record<currentTrack: record, nextTrack: record, volume: int, mute: string, trackNo: int, elapsedTime: int, elapsedTimeFormatted: string, playbackState: string, playMode: record>, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/players")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get individual player
@@ -124,13 +126,14 @@ export def "players get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<coordinator: record<uuid: string, zoneName: string>, groupState: record<volume: int, mute: string, : string>, playerName: string, state: record<currentTrack: record<artist: string, title: string, album: string, duration: int, uri: string, type: string, stationName: string>, nextTrack: record<artist: string, title: string, album: string, duration: int, uri: string>, volume: int, mute: string, trackNo: int, elapsedTime: int, elapsedTimeFormatted: string, playbackState: string, playMode: record<repeat: string, shuffle: string, crossfade: string>>, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/players/($playerName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get player state
@@ -146,13 +149,14 @@ export def "players-state get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<currentTrack: record<artist: string, title: string, album: string, duration: int, uri: string, type: string, stationName: string>, nextTrack: record<artist: string, title: string, album: string, duration: int, uri: string>, volume: int, mute: string, trackNo: int, elapsedTime: int, elapsedTimeFormatted: string, playbackState: string, playMode: record<repeat: string, shuffle: string, crossfade: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/players/($playerName)/state")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # set player state
@@ -170,6 +174,7 @@ export def "players-state setPlayerState" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --async: oneof<nothing, bool>
   --currentTrack: record # shape: {favourite?: string, playlist?: string, clip?: string, text?: string, skip?: string, source?: string, lineinSource?: string, artistTopTracks?: string, artistRadio?: string, song?: string, ?: string}
   --volume: int
@@ -188,7 +193,7 @@ export def "players-state setPlayerState" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # get player now playing
@@ -204,13 +209,14 @@ export def "players-nowplaying get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<artist: string, title: string, album: string, albumArtUri: string, duration: int, uri: string, type: string, stationName: string, absoluteAlbumArtUri: string, uriMetadata: string, avTransportUri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/players/($playerName)/nowplaying")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # set player now playing
@@ -226,6 +232,7 @@ export def "players-nowplaying setPlayerNowPlaying" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --async: oneof<nothing, bool>
   --uri: string
   --metadata: string
@@ -239,7 +246,7 @@ export def "players-nowplaying setPlayerNowPlaying" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # get player queue
@@ -255,6 +262,7 @@ export def "players-queue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --detailed: oneof<nothing, bool> # Flag to indicate if detailed information should be returned. Default is false
 ]: nothing -> table<uri: string, albumArtURI: string, title: string, artist: string, album: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -263,7 +271,7 @@ export def "players-queue get" [
   let full_url = (build-url $base $"/players/($playerName)/queue" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # add to player queue
@@ -279,6 +287,7 @@ export def "players-queue addToPlayerQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --async: oneof<nothing, bool>
   --uri: string
   --metadata: string
@@ -294,7 +303,7 @@ export def "players-queue addToPlayerQueue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # clear player queue
@@ -310,6 +319,7 @@ export def "players-queue clearPlayerQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --async: oneof<nothing, bool>
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -318,7 +328,7 @@ export def "players-queue clearPlayerQueue" [
   let full_url = (build-url $base $"/players/($playerName)/queue" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # replace playerqueue
@@ -334,6 +344,7 @@ export def "players-queue replacePlayerQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --async: oneof<nothing, bool>
   --uri: string
   --metadata: string
@@ -349,7 +360,7 @@ export def "players-queue replacePlayerQueue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # get all zones
@@ -364,13 +375,14 @@ export def "zones list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<zoneName: string, state: record<currentTrack: record, nextTrack: record, volume: int, mute: string, trackNo: int, elapsedTime: int, elapsedTimeFormatted: string, playbackState: string, playMode: record>, members: list<record>, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/zones")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get individual zone
@@ -386,13 +398,14 @@ export def "zones get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<zoneName: string, state: record<currentTrack: record<artist: string, title: string, album: string, duration: int, uri: string, type: string, stationName: string>, nextTrack: record<artist: string, title: string, album: string, duration: int, uri: string>, volume: int, mute: string, trackNo: int, elapsedTime: int, elapsedTimeFormatted: string, playbackState: string, playMode: record<repeat: string, shuffle: string, crossfade: string>>, members: table<playerName: string, state: record, uuid: string>, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/zones/($zoneName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get zone state
@@ -408,13 +421,14 @@ export def "zones-state get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<currentTrack: record<artist: string, title: string, album: string, duration: int, uri: string, type: string, stationName: string>, nextTrack: record<artist: string, title: string, album: string, duration: int, uri: string>, volume: int, mute: string, trackNo: int, elapsedTime: int, elapsedTimeFormatted: string, playbackState: string, playMode: record<repeat: string, shuffle: string, crossfade: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/zones/($zoneName)/state")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # set zone state
@@ -432,6 +446,7 @@ export def "zones-state setZoneState" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --async: oneof<nothing, bool>
   --currentTrack: record # shape: {favourite?: string, playlist?: string, clip?: string, text?: string, skip?: string, source?: string, lineinSource?: string, artistTopTracks?: string, artistRadio?: string, song?: string, ?: string}
   --volume: int
@@ -450,7 +465,7 @@ export def "zones-state setZoneState" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # get zone now playing
@@ -466,13 +481,14 @@ export def "zones-nowplaying get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<artist: string, title: string, album: string, albumArtUri: string, duration: int, uri: string, type: string, stationName: string, absoluteAlbumArtUri: string, uriMetadata: string, avTransportUri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/zones/($zoneName)/nowplaying")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # set zone now playing
@@ -488,6 +504,7 @@ export def "zones-nowplaying setZoneNowPlaying" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --async: oneof<nothing, bool>
   --uri: string
   --metadata: string
@@ -501,7 +518,7 @@ export def "zones-nowplaying setZoneNowPlaying" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # get zone queue
@@ -517,6 +534,7 @@ export def "zones-queue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --detailed: oneof<nothing, bool> # Flag to indicate if detailed information should be returned. Default is false
 ]: nothing -> table<uri: string, albumArtURI: string, title: string, artist: string, album: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -525,7 +543,7 @@ export def "zones-queue get" [
   let full_url = (build-url $base $"/zones/($zoneName)/queue" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # add to zone queue
@@ -541,6 +559,7 @@ export def "zones-queue addToZoneQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --async: oneof<nothing, bool>
   --uri: string
   --metadata: string
@@ -556,7 +575,7 @@ export def "zones-queue addToZoneQueue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # clear zone queue
@@ -572,6 +591,7 @@ export def "zones-queue clearZoneQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --async: oneof<nothing, bool>
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -580,7 +600,7 @@ export def "zones-queue clearZoneQueue" [
   let full_url = (build-url $base $"/zones/($zoneName)/queue" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # replace zone queue
@@ -596,6 +616,7 @@ export def "zones-queue replaceZoneQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --async: oneof<nothing, bool>
   --uri: string
   --metadata: string
@@ -611,7 +632,7 @@ export def "zones-queue replaceZoneQueue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # get zone members
@@ -627,13 +648,14 @@ export def "zones-members get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<playerName: string, state: record<currentTrack: record, nextTrack: record, volume: int, mute: string, trackNo: int, elapsedTime: int, elapsedTimeFormatted: string, playbackState: string, playMode: record>, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/zones/($zoneName)/members")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # add zone member
@@ -649,6 +671,7 @@ export def "zones-members addZoneMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --async: oneof<nothing, bool>
   player: string
 ]: any -> table<playerName: string, state: record<currentTrack: record, nextTrack: record, volume: int, mute: string, trackNo: int, elapsedTime: int, elapsedTimeFormatted: string, playbackState: string, playMode: record>, uuid: string> {
@@ -661,7 +684,7 @@ export def "zones-members addZoneMember" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # remove zone member
@@ -678,6 +701,7 @@ export def "zones-members removeZoneMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --async: oneof<nothing, bool>
 ]: nothing -> table<playerName: string, state: record<currentTrack: record, nextTrack: record, volume: int, mute: string, trackNo: int, elapsedTime: int, elapsedTimeFormatted: string, playbackState: string, playMode: record>, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -686,7 +710,7 @@ export def "zones-members removeZoneMember" [
   let full_url = (build-url $base $"/zones/($zoneName)/members/($roomName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get search results from a music service
@@ -701,6 +725,7 @@ export def "search search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --service: string # The service to search
   --type: string # The type of search to perform - can be song, album, artist
   --q: string # The term to search for
@@ -713,7 +738,7 @@ export def "search search" [
   let full_url = (build-url $base "/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get favourites from sonos
@@ -728,6 +753,7 @@ export def "favourites list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --detailed: oneof<nothing, bool> # Used to specify if return just the names of the favourites or full details. Defaults to false
 ]: nothing -> table<uri: string, title: string, metadata: string, albumArtUri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -736,7 +762,7 @@ export def "favourites list" [
   let full_url = (build-url $base "/favourites" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get individual favourite
@@ -752,13 +778,14 @@ export def "favourites get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uri: string, title: string, albumArtUri: string, metadata: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/favourites/($favourite)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the swagger definiton
@@ -773,11 +800,12 @@ export def "swagger swagger" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/swagger")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

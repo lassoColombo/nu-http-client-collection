@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -72,7 +73,7 @@ def sendOption-completer [] { ["now"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "v11-accounts-forms ListForms" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -106,6 +107,7 @@ export def "v11-accounts-forms ListForms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-filter: string@user-filter-completer # Set to `owned_by_me` to return only forms owned by the authenticated user. By default, all forms are returned. (default: all)
   --is-standalone: oneof<nothing, bool> # Set to `true` or `false` to filter by whether forms are [stand-alone (not tied to a template)](https://support.docusign.com/s/document-item?bundleId=yff1696971835267&topicId=gua1698120920620.html). By default, all forms are returned.
   --is-published: oneof<nothing, bool> # When `true`, only published forms are returned. By default, published and unpublished forms are both returned.
@@ -120,7 +122,7 @@ export def "v11-accounts-forms ListForms" [
   let full_url = (build-url $base $"/v1.1/accounts/($accountId)/forms" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a web form configuration.
@@ -137,6 +139,7 @@ export def "v11-accounts-forms GetForm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string@state-completer # The state of the web form configuration. Valid values:  - `active` - `draft` (default: draft)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -145,7 +148,7 @@ export def "v11-accounts-forms GetForm" [
   let full_url = (build-url $base $"/v1.1/accounts/($accountId)/forms/($formId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists the instances of a given web form configuration.
@@ -162,6 +165,7 @@ export def "v11-accounts-forms-instances ListInstances" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-user-id: string # A unique identifier for a user from the client's system. This value can be anything your backend system would use to track individual form instances, such as employee IDs, email addresses, or surrogate key values.
 ]: nothing -> record<items: table<formUrl: string, instanceToken: string, tokenExpirationDateTime: string, id: string, formId: string, accountId: string, clientUserId: string, tags: list, status: string, envelopes: list, instanceMetadata: record, formValues: record, recipients: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -170,7 +174,7 @@ export def "v11-accounts-forms-instances ListInstances" [
   let full_url = (build-url $base $"/v1.1/accounts/($accountId)/forms/($formId)/instances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a web form instance.
@@ -188,6 +192,7 @@ export def "v11-accounts-forms-instances CreateInstance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --formValues: record # Key-value pairs of data used to create a form instance. (e.g. {Textbox_Name: First Last, Email_primary: example@example.com, Date_birth: 2020-01-01, Number_age: 52, Select_state: California, Radio_Gender: Female, Checkbox_hobbies: [singing, dancing], ID_card_attachment: {documentName: id_card.pdf}})
   --clientUserId: string # A unique identifier for a user that should originate from client's system. This value can be anything your backend system would use to track individual form instances. Examples include employee IDs, email addresses, surrogate key values, etc. (e.g. customer_id@domain.com)
   --authenticationInstant: string # A sender-generated value that indicates the date and time that the signer was authenticated.
@@ -208,7 +213,7 @@ export def "v11-accounts-forms-instances CreateInstance" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a secure web form instance.
@@ -226,13 +231,14 @@ export def "v11-accounts-forms-instances GetInstance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<formUrl: string, instanceToken: string, tokenExpirationDateTime: string, id: string, formId: string, accountId: string, clientUserId: string, tags: list<string>, status: string, envelopes: table<id: string, createdDateTime: string>, instanceMetadata: record<expirationDateTime: string, createdDateTime: string, createdBy: record<userId: string, userName: string>, lastModifiedDateTime: string, lastModifiedBy: record<userId: string, userName: string>, submittedDateTime: string, instanceSource: string>, formValues: record, recipients: table<recipientViewId: string, instanceRecipientStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1.1/accounts/($accountId)/forms/($formId)/instances/($instanceId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Refreshes the instance token.
@@ -250,11 +256,12 @@ export def "v11-accounts-forms-instances-refresh RefreshToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<formUrl: string, instanceToken: string, tokenExpirationDateTime: string, id: string, formId: string, accountId: string, clientUserId: string, tags: list<string>, status: string, envelopes: table<id: string, createdDateTime: string>, instanceMetadata: record<expirationDateTime: string, createdDateTime: string, createdBy: record<userId: string, userName: string>, lastModifiedDateTime: string, lastModifiedBy: record<userId: string, userName: string>, submittedDateTime: string, instanceSource: string>, formValues: record, recipients: table<recipientViewId: string, instanceRecipientStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1.1/accounts/($accountId)/forms/($formId)/instances/($instanceId)/refresh")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

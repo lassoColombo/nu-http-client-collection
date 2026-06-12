@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -77,7 +78,7 @@ def post-listing-mode-completer [] { ["Card" "List" "SmallCard"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "site get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -109,13 +110,14 @@ export def "site get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<site_view: record<site: record<id: int, name: string, sidebar: string, published: string, updated: string, icon: string, banner: string, description: string, actor_id: string, last_refreshed_at: string, inbox_url: string, public_key: string, instance_id: int, content_warning: string>, local_site: record<id: int, site_id: int, site_setup: bool, enable_downvotes: bool, enable_nsfw: bool, community_creation_admin_only: bool, require_email_verification: bool, application_question: string, private_instance: bool, default_theme: string, default_post_listing_type: string, legal_information: string, hide_modlog_mod_names: bool, application_email_admins: bool, slur_filter_regex: string, actor_name_max_length: int, federation_enabled: bool, captcha_enabled: bool, captcha_difficulty: string, published: string, updated: string, registration_mode: string, reports_email_admins: bool, federation_signed_fetch: bool, default_post_listing_mode: string, default_sort_type: string>, local_site_rate_limit: record<local_site_id: int, message: int, message_per_second: int, post: int, post_per_second: int, register: int, register_per_second: int, image: int, image_per_second: int, comment: int, comment_per_second: int, search: int, search_per_second: int, published: string, updated: string, import_user_settings: int, import_user_settings_per_second: int>, counts: record<site_id: int, users: int, posts: int, comments: int, communities: int, users_active_day: int, users_active_week: int, users_active_month: int, users_active_half_year: int>>, admins: table<person: record, counts: record, is_admin: bool>, version: string, my_user: record<local_user_view: record<local_user: record, local_user_vote_display_mode: record, person: record, counts: record>, follows: list<record>, moderates: list<record>, community_blocks: list<record>, instance_blocks: list<record>, person_blocks: list<record>, discussion_languages: list<int>>, all_languages: table<id: int, code: string, name: string>, discussion_languages: list<int>, taglines: table<id: int, local_site_id: int, content: string, published: string, updated: string>, custom_emojis: table<custom_emoji: record, keywords: list>, blocked_urls: table<id: int, url: string, published: string, updated: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/site")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create your site.
@@ -129,6 +131,7 @@ export def "site post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   --sidebar: string
   --description: string
@@ -180,7 +183,7 @@ export def "site post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Edit your site.
@@ -194,6 +197,7 @@ export def "site put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --sidebar: string
   --description: string
@@ -247,7 +251,7 @@ export def "site put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the modlog.
@@ -261,6 +265,7 @@ export def "modlog get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --GetModlog: record
 ]: nothing -> record<removed_posts: table<mod_remove_post: record, moderator: record, post: record, community: record>, locked_posts: table<mod_lock_post: record, moderator: record, post: record, community: record>, featured_posts: table<mod_feature_post: record, moderator: record, post: record, community: record>, removed_comments: table<mod_remove_comment: record, moderator: record, comment: record, commenter: record, post: record, community: record>, removed_communities: table<mod_remove_community: record, moderator: record, community: record>, banned_from_community: table<mod_ban_from_community: record, moderator: record, community: record, banned_person: record>, banned: table<mod_ban: record, moderator: record, banned_person: record>, added_to_community: table<mod_add_community: record, moderator: record, community: record, modded_person: record>, transferred_to_community: table<mod_transfer_community: record, moderator: record, community: record, modded_person: record>, added: table<mod_add: record, moderator: record, modded_person: record>, admin_purged_persons: table<admin_purge_person: record, admin: record>, admin_purged_communities: table<admin_purge_community: record, admin: record>, admin_purged_posts: table<admin_purge_post: record, admin: record, community: record>, admin_purged_comments: table<admin_purge_comment: record, admin: record, post: record>, hidden_communities: table<mod_hide_community: record, admin: record, community: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -269,7 +274,7 @@ export def "modlog get" [
   let full_url = (build-url $base "/modlog" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search lemmy.
@@ -283,6 +288,7 @@ export def "search get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Search: record
 ]: nothing -> record<type_: string, comments: table<comment: record, creator: record, post: record, community: record, counts: record, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>, posts: table<post: record, creator: record, community: record, image_details: record, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>, communities: table<community: record, subscribed: string, blocked: bool, counts: record, banned_from_community: bool>, users: table<person: record, counts: record, is_admin: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -291,7 +297,7 @@ export def "search get" [
   let full_url = (build-url $base "/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a non-local / federated object.
@@ -305,6 +311,7 @@ export def "resolve-object get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ResolveObject: record
 ]: nothing -> record<comment: record<comment: record<id: int, creator_id: int, post_id: int, content: string, removed: bool, published: string, updated: string, deleted: bool, ap_id: string, local: bool, path: string, distinguished: bool, language_id: int>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, counts: record<comment_id: int, score: int, upvotes: int, downvotes: int, published: string, child_count: int>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>, post: record<post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, image_details: record<link: string, width: int, height: int, content_type: string>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record<post_id: int, comments: int, score: int, upvotes: int, downvotes: int, published: string, newest_comment_time: string>, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>, community: record<community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, subscribed: string, blocked: bool, counts: record<community_id: int, subscribers: int, posts: int, comments: int, published: string, users_active_day: int, users_active_week: int, users_active_month: int, users_active_half_year: int, subscribers_local: int>, banned_from_community: bool>, person: record<person: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, counts: record<person_id: int, post_count: int, comment_count: int>, is_admin: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -313,7 +320,7 @@ export def "resolve-object get" [
   let full_url = (build-url $base "/resolve_object" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get / fetch a community.
@@ -327,6 +334,7 @@ export def "community get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --GetCommunity: record
 ]: nothing -> record<community_view: record<community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, subscribed: string, blocked: bool, counts: record<community_id: int, subscribers: int, posts: int, comments: int, published: string, users_active_day: int, users_active_week: int, users_active_month: int, users_active_half_year: int, subscribers_local: int>, banned_from_community: bool>, site: record<id: int, name: string, sidebar: string, published: string, updated: string, icon: string, banner: string, description: string, actor_id: string, last_refreshed_at: string, inbox_url: string, public_key: string, instance_id: int, content_warning: string>, moderators: table<community: record, moderator: record>, discussion_languages: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -335,7 +343,7 @@ export def "community get" [
   let full_url = (build-url $base "/community" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new community.
@@ -349,6 +357,7 @@ export def "community post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   title: string
   --description: string
@@ -367,7 +376,7 @@ export def "community post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Edit a community.
@@ -381,6 +390,7 @@ export def "community put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   community_id: int
   --title: string
   --description: string
@@ -399,7 +409,7 @@ export def "community put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Hide a community from public / "All" view. Admins only.
@@ -413,6 +423,7 @@ export def "community-hide put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   community_id: int
   --hidden: oneof<nothing, bool>
   --reason: string
@@ -425,7 +436,7 @@ export def "community-hide put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List communities, with various filters.
@@ -439,6 +450,7 @@ export def "community-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ListCommunities: record
 ]: nothing -> record<communities: table<community: record, subscribed: string, blocked: bool, counts: record, banned_from_community: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -447,7 +459,7 @@ export def "community-list get" [
   let full_url = (build-url $base "/community/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Follow / subscribe to a community.
@@ -461,6 +473,7 @@ export def "community-follow post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   community_id: int
   --follow: oneof<nothing, bool>
 ]: any -> record<community_view: record<community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, subscribed: string, blocked: bool, counts: record<community_id: int, subscribers: int, posts: int, comments: int, published: string, users_active_day: int, users_active_week: int, users_active_month: int, users_active_half_year: int, subscribers_local: int>, banned_from_community: bool>, discussion_languages: list<int>> {
@@ -472,7 +485,7 @@ export def "community-follow post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Block a community.
@@ -486,6 +499,7 @@ export def "community-block post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   community_id: int
   --block: oneof<nothing, bool>
 ]: any -> record<community_view: record<community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, subscribed: string, blocked: bool, counts: record<community_id: int, subscribers: int, posts: int, comments: int, published: string, users_active_day: int, users_active_week: int, users_active_month: int, users_active_half_year: int, subscribers_local: int>, banned_from_community: bool>, blocked: bool> {
@@ -497,7 +511,7 @@ export def "community-block post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a community.
@@ -511,6 +525,7 @@ export def "community-delete post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   community_id: int
   --deleted: oneof<nothing, bool>
 ]: any -> record<community_view: record<community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, subscribed: string, blocked: bool, counts: record<community_id: int, subscribers: int, posts: int, comments: int, published: string, users_active_day: int, users_active_week: int, users_active_month: int, users_active_half_year: int, subscribers_local: int>, banned_from_community: bool>, discussion_languages: list<int>> {
@@ -522,7 +537,7 @@ export def "community-delete post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # A moderator remove for a community.
@@ -536,6 +551,7 @@ export def "community-remove post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   community_id: int
   --removed: oneof<nothing, bool>
   --reason: string
@@ -548,7 +564,7 @@ export def "community-remove post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Transfer your community to an existing moderator.
@@ -562,6 +578,7 @@ export def "community-transfer post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   community_id: int
   person_id: int
 ]: any -> record<community_view: record<community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, subscribed: string, blocked: bool, counts: record<community_id: int, subscribers: int, posts: int, comments: int, published: string, users_active_day: int, users_active_week: int, users_active_month: int, users_active_half_year: int, subscribers_local: int>, banned_from_community: bool>, discussion_languages: list<int>> {
@@ -573,7 +590,7 @@ export def "community-transfer post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Ban a user from a community.
@@ -587,6 +604,7 @@ export def "community-ban-user post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   community_id: int
   person_id: int
   --ban: oneof<nothing, bool>
@@ -602,7 +620,7 @@ export def "community-ban-user post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a moderator to your community.
@@ -616,6 +634,7 @@ export def "community-mod post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   community_id: int
   person_id: int
   --added: oneof<nothing, bool>
@@ -628,7 +647,7 @@ export def "community-mod post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetch federated instances.
@@ -642,13 +661,14 @@ export def "federated-instances get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<federated_instances: record<linked: list<record>, allowed: list<record>, blocked: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/federated_instances")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get / fetch a post.
@@ -662,6 +682,7 @@ export def "post get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --GetPost: record
 ]: nothing -> record<post_view: record<post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, image_details: record<link: string, width: int, height: int, content_type: string>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record<post_id: int, comments: int, score: int, upvotes: int, downvotes: int, published: string, newest_comment_time: string>, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>, community_view: record<community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, subscribed: string, blocked: bool, counts: record<community_id: int, subscribers: int, posts: int, comments: int, published: string, users_active_day: int, users_active_week: int, users_active_month: int, users_active_half_year: int, subscribers_local: int>, banned_from_community: bool>, moderators: table<community: record, moderator: record>, cross_posts: table<post: record, creator: record, community: record, image_details: record, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -670,7 +691,7 @@ export def "post get" [
   let full_url = (build-url $base "/post" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit a post.
@@ -684,6 +705,7 @@ export def "post put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   post_id: int
   --name: string
   --body-url: string
@@ -701,7 +723,7 @@ export def "post put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a post.
@@ -715,6 +737,7 @@ export def "post post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   community_id: int
   --body-url: string
@@ -733,7 +756,7 @@ export def "post post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get / fetch posts, with various filters.
@@ -747,6 +770,7 @@ export def "post-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --GetPosts: record
 ]: nothing -> record<posts: table<post: record, creator: record, community: record, image_details: record, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>, next_page: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -755,7 +779,7 @@ export def "post-list get" [
   let full_url = (build-url $base "/post/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a post.
@@ -769,6 +793,7 @@ export def "post-delete post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   post_id: int
   --deleted: oneof<nothing, bool>
 ]: any -> record<post_view: record<post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, image_details: record<link: string, width: int, height: int, content_type: string>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record<post_id: int, comments: int, score: int, upvotes: int, downvotes: int, published: string, newest_comment_time: string>, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>> {
@@ -780,7 +805,7 @@ export def "post-delete post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # A moderator remove for a post.
@@ -794,6 +819,7 @@ export def "post-remove post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   post_id: int
   --removed: oneof<nothing, bool>
   --reason: string
@@ -806,7 +832,7 @@ export def "post-remove post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Mark a post as read.
@@ -820,6 +846,7 @@ export def "post-mark-as-read post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   post_ids: list
   --read: oneof<nothing, bool>
 ]: any -> any {
@@ -831,7 +858,7 @@ export def "post-mark-as-read post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # A moderator can lock a post ( IE disable new comments ).
@@ -845,6 +872,7 @@ export def "post-lock post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   post_id: int
   --locked: oneof<nothing, bool>
 ]: any -> record<post_view: record<post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, image_details: record<link: string, width: int, height: int, content_type: string>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record<post_id: int, comments: int, score: int, upvotes: int, downvotes: int, published: string, newest_comment_time: string>, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>> {
@@ -856,7 +884,7 @@ export def "post-lock post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # A moderator can feature a community post ( IE stick it to the top of a community ).
@@ -870,6 +898,7 @@ export def "post-feature post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   post_id: int
   --featured: oneof<nothing, bool>
   feature_type: string@feature-type-completer
@@ -882,7 +911,7 @@ export def "post-feature post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Like / vote on a post.
@@ -896,6 +925,7 @@ export def "post-like post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   post_id: int
   score: int
 ]: any -> record<post_view: record<post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, image_details: record<link: string, width: int, height: int, content_type: string>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record<post_id: int, comments: int, score: int, upvotes: int, downvotes: int, published: string, newest_comment_time: string>, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>> {
@@ -907,7 +937,7 @@ export def "post-like post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Save a post.
@@ -921,6 +951,7 @@ export def "post-save put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   post_id: int
   --body-save: oneof<nothing, bool>
 ]: any -> record<post_view: record<post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, image_details: record<link: string, width: int, height: int, content_type: string>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record<post_id: int, comments: int, score: int, upvotes: int, downvotes: int, published: string, newest_comment_time: string>, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>> {
@@ -932,7 +963,7 @@ export def "post-save put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Report a post.
@@ -946,6 +977,7 @@ export def "post-report post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   post_id: int
   reason: string
 ]: any -> record<post_report_view: record<post_report: record<id: int, creator_id: int, post_id: int, original_post_name: string, original_post_url: string, original_post_body: string, reason: string, resolved: bool, resolver_id: int, published: string, updated: string>, post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, post_creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, creator_banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int, counts: record<post_id: int, comments: int, score: int, upvotes: int, downvotes: int, published: string, newest_comment_time: string>, resolver: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>>> {
@@ -957,7 +989,7 @@ export def "post-report post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Resolve a post report. Only a mod can do this.
@@ -971,6 +1003,7 @@ export def "post-report-resolve put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   report_id: int
   --resolved: oneof<nothing, bool>
 ]: any -> record<post_report_view: record<post_report: record<id: int, creator_id: int, post_id: int, original_post_name: string, original_post_url: string, original_post_body: string, reason: string, resolved: bool, resolver_id: int, published: string, updated: string>, post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, post_creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, creator_banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int, counts: record<post_id: int, comments: int, score: int, upvotes: int, downvotes: int, published: string, newest_comment_time: string>, resolver: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>>> {
@@ -982,7 +1015,7 @@ export def "post-report-resolve put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List post reports.
@@ -996,6 +1029,7 @@ export def "post-report-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ListPostReports: record
 ]: nothing -> record<post_reports: table<post_report: record, post: record, community: record, creator: record, post_creator: record, creator_banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int, counts: record, resolver: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1004,7 +1038,7 @@ export def "post-report-list get" [
   let full_url = (build-url $base "/post/report/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch metadata for any given site.
@@ -1018,6 +1052,7 @@ export def "post-site-metadata get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --GetSiteMetadata: record
 ]: nothing -> record<metadata: record<title: string, description: string, image: string, embed_video_url: string, content_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1026,7 +1061,7 @@ export def "post-site-metadata get" [
   let full_url = (build-url $base "/post/site_metadata" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get / fetch comment.
@@ -1040,6 +1075,7 @@ export def "comment get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --GetComment: record
 ]: nothing -> record<comment_view: record<comment: record<id: int, creator_id: int, post_id: int, content: string, removed: bool, published: string, updated: string, deleted: bool, ap_id: string, local: bool, path: string, distinguished: bool, language_id: int>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, counts: record<comment_id: int, score: int, upvotes: int, downvotes: int, published: string, child_count: int>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>, recipient_ids: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1048,7 +1084,7 @@ export def "comment get" [
   let full_url = (build-url $base "/comment" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a comment.
@@ -1062,6 +1098,7 @@ export def "comment post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   content: string
   post_id: int
   --parent-id: int
@@ -1075,7 +1112,7 @@ export def "comment post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Edit a comment.
@@ -1089,6 +1126,7 @@ export def "comment put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   comment_id: int
   --content: string
   --language-id: int
@@ -1101,7 +1139,7 @@ export def "comment put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get / fetch comments.
@@ -1115,6 +1153,7 @@ export def "comment-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --GetComments: record
 ]: nothing -> record<comments: table<comment: record, creator: record, post: record, community: record, counts: record, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1123,7 +1162,7 @@ export def "comment-list get" [
   let full_url = (build-url $base "/comment/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a comment.
@@ -1137,6 +1176,7 @@ export def "comment-delete post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   comment_id: int
   --deleted: oneof<nothing, bool>
 ]: any -> record<comment_view: record<comment: record<id: int, creator_id: int, post_id: int, content: string, removed: bool, published: string, updated: string, deleted: bool, ap_id: string, local: bool, path: string, distinguished: bool, language_id: int>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, counts: record<comment_id: int, score: int, upvotes: int, downvotes: int, published: string, child_count: int>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>, recipient_ids: list<int>> {
@@ -1148,7 +1188,7 @@ export def "comment-delete post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # A moderator remove for a comment.
@@ -1162,6 +1202,7 @@ export def "comment-remove post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   comment_id: int
   --removed: oneof<nothing, bool>
   --reason: string
@@ -1174,7 +1215,7 @@ export def "comment-remove post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Mark a comment as read.
@@ -1188,6 +1229,7 @@ export def "comment-mark-as-read post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   comment_reply_id: int
   --read: oneof<nothing, bool>
 ]: any -> record<comment_reply_view: record<comment_reply: record<id: int, recipient_id: int, comment_id: int, read: bool, published: string>, comment: record<id: int, creator_id: int, post_id: int, content: string, removed: bool, published: string, updated: string, deleted: bool, ap_id: string, local: bool, path: string, distinguished: bool, language_id: int>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, recipient: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, counts: record<comment_id: int, score: int, upvotes: int, downvotes: int, published: string, child_count: int>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>> {
@@ -1199,7 +1241,7 @@ export def "comment-mark-as-read post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Distinguishes a comment (speak as moderator)
@@ -1213,6 +1255,7 @@ export def "comment-distinguish post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   comment_id: int
   --distinguished: oneof<nothing, bool>
 ]: any -> record<comment_view: record<comment: record<id: int, creator_id: int, post_id: int, content: string, removed: bool, published: string, updated: string, deleted: bool, ap_id: string, local: bool, path: string, distinguished: bool, language_id: int>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, counts: record<comment_id: int, score: int, upvotes: int, downvotes: int, published: string, child_count: int>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>, recipient_ids: list<int>> {
@@ -1224,7 +1267,7 @@ export def "comment-distinguish post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Like / vote on a comment.
@@ -1238,6 +1281,7 @@ export def "comment-like post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   comment_id: int
   score: int
 ]: any -> record<comment_view: record<comment: record<id: int, creator_id: int, post_id: int, content: string, removed: bool, published: string, updated: string, deleted: bool, ap_id: string, local: bool, path: string, distinguished: bool, language_id: int>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, counts: record<comment_id: int, score: int, upvotes: int, downvotes: int, published: string, child_count: int>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>, recipient_ids: list<int>> {
@@ -1249,7 +1293,7 @@ export def "comment-like post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Save a comment.
@@ -1263,6 +1307,7 @@ export def "comment-save put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   comment_id: int
   --body-save: oneof<nothing, bool>
 ]: any -> record<comment_view: record<comment: record<id: int, creator_id: int, post_id: int, content: string, removed: bool, published: string, updated: string, deleted: bool, ap_id: string, local: bool, path: string, distinguished: bool, language_id: int>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, counts: record<comment_id: int, score: int, upvotes: int, downvotes: int, published: string, child_count: int>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>, recipient_ids: list<int>> {
@@ -1274,7 +1319,7 @@ export def "comment-save put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Report a comment.
@@ -1288,6 +1333,7 @@ export def "comment-report post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   comment_id: int
   reason: string
 ]: any -> record<comment_report_view: record<comment_report: record<id: int, creator_id: int, comment_id: int, original_comment_text: string, reason: string, resolved: bool, resolver_id: int, published: string, updated: string>, comment: record<id: int, creator_id: int, post_id: int, content: string, removed: bool, published: string, updated: string, deleted: bool, ap_id: string, local: bool, path: string, distinguished: bool, language_id: int>, post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, comment_creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, counts: record<comment_id: int, score: int, upvotes: int, downvotes: int, published: string, child_count: int>, creator_banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, creator_blocked: bool, subscribed: string, saved: bool, my_vote: int, resolver: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>>> {
@@ -1299,7 +1345,7 @@ export def "comment-report post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Resolve a comment report. Only a mod can do this.
@@ -1313,6 +1359,7 @@ export def "comment-report-resolve put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   report_id: int
   --resolved: oneof<nothing, bool>
 ]: any -> record<comment_report_view: record<comment_report: record<id: int, creator_id: int, comment_id: int, original_comment_text: string, reason: string, resolved: bool, resolver_id: int, published: string, updated: string>, comment: record<id: int, creator_id: int, post_id: int, content: string, removed: bool, published: string, updated: string, deleted: bool, ap_id: string, local: bool, path: string, distinguished: bool, language_id: int>, post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, comment_creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, counts: record<comment_id: int, score: int, upvotes: int, downvotes: int, published: string, child_count: int>, creator_banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, creator_blocked: bool, subscribed: string, saved: bool, my_vote: int, resolver: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>>> {
@@ -1324,7 +1371,7 @@ export def "comment-report-resolve put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List comment reports.
@@ -1338,6 +1385,7 @@ export def "comment-report-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ListCommentReports: record
 ]: nothing -> record<comment_reports: table<comment_report: record, comment: record, post: record, community: record, creator: record, comment_creator: record, counts: record, creator_banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, creator_blocked: bool, subscribed: string, saved: bool, my_vote: int, resolver: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1346,7 +1394,7 @@ export def "comment-report-list get" [
   let full_url = (build-url $base "/comment/report/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit a private message.
@@ -1360,6 +1408,7 @@ export def "private-message put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   private_message_id: int
   content: string
 ]: any -> record<private_message_view: record<private_message: record<id: int, creator_id: int, recipient_id: int, content: string, deleted: bool, read: bool, published: string, updated: string, ap_id: string, local: bool>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, recipient: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>>> {
@@ -1371,7 +1420,7 @@ export def "private-message put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a private message.
@@ -1385,6 +1434,7 @@ export def "private-message post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   content: string
   recipient_id: int
 ]: any -> record<private_message_view: record<private_message: record<id: int, creator_id: int, recipient_id: int, content: string, deleted: bool, read: bool, published: string, updated: string, ap_id: string, local: bool>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, recipient: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>>> {
@@ -1396,7 +1446,7 @@ export def "private-message post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get / fetch private messages.
@@ -1410,6 +1460,7 @@ export def "private-message-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --GetPrivateMessages: record
 ]: nothing -> record<private_messages: table<private_message: record, creator: record, recipient: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1418,7 +1469,7 @@ export def "private-message-list get" [
   let full_url = (build-url $base "/private_message/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a private message.
@@ -1432,6 +1483,7 @@ export def "private-message-delete post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   private_message_id: int
   --deleted: oneof<nothing, bool>
 ]: any -> record<private_message_view: record<private_message: record<id: int, creator_id: int, recipient_id: int, content: string, deleted: bool, read: bool, published: string, updated: string, ap_id: string, local: bool>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, recipient: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>>> {
@@ -1443,7 +1495,7 @@ export def "private-message-delete post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Mark a private message as read.
@@ -1457,6 +1509,7 @@ export def "private-message-mark-as-read post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   private_message_id: int
   --read: oneof<nothing, bool>
 ]: any -> record<private_message_view: record<private_message: record<id: int, creator_id: int, recipient_id: int, content: string, deleted: bool, read: bool, published: string, updated: string, ap_id: string, local: bool>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, recipient: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>>> {
@@ -1468,7 +1521,7 @@ export def "private-message-mark-as-read post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a report for a private message.
@@ -1482,6 +1535,7 @@ export def "private-message-report post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   private_message_id: int
   reason: string
 ]: any -> record<private_message_report_view: record<private_message_report: record<id: int, creator_id: int, private_message_id: int, original_pm_text: string, reason: string, resolved: bool, resolver_id: int, published: string, updated: string>, private_message: record<id: int, creator_id: int, recipient_id: int, content: string, deleted: bool, read: bool, published: string, updated: string, ap_id: string, local: bool>, private_message_creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, resolver: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>>> {
@@ -1493,7 +1547,7 @@ export def "private-message-report post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Resolve a report for a private message.
@@ -1507,6 +1561,7 @@ export def "private-message-report-resolve put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   report_id: int
   --resolved: oneof<nothing, bool>
 ]: any -> record<private_message_report_view: record<private_message_report: record<id: int, creator_id: int, private_message_id: int, original_pm_text: string, reason: string, resolved: bool, resolver_id: int, published: string, updated: string>, private_message: record<id: int, creator_id: int, recipient_id: int, content: string, deleted: bool, read: bool, published: string, updated: string, ap_id: string, local: bool>, private_message_creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, resolver: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>>> {
@@ -1518,7 +1573,7 @@ export def "private-message-report-resolve put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List private message reports.
@@ -1532,6 +1587,7 @@ export def "private-message-report-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ListPrivateMessageReports: record
 ]: nothing -> record<private_message_reports: table<private_message_report: record, private_message: record, private_message_creator: record, creator: record, resolver: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1540,7 +1596,7 @@ export def "private-message-report-list get" [
   let full_url = (build-url $base "/private_message/report/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the details for a person.
@@ -1554,6 +1610,7 @@ export def "user get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --GetPersonDetails: record
 ]: nothing -> record<person_view: record<person: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, counts: record<person_id: int, post_count: int, comment_count: int>, is_admin: bool>, site: record<id: int, name: string, sidebar: string, published: string, updated: string, icon: string, banner: string, description: string, actor_id: string, last_refreshed_at: string, inbox_url: string, public_key: string, instance_id: int, content_warning: string>, comments: table<comment: record, creator: record, post: record, community: record, counts: record, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>, posts: table<post: record, creator: record, community: record, image_details: record, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>, moderates: table<community: record, moderator: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1562,7 +1619,7 @@ export def "user get" [
   let full_url = (build-url $base "/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Register a new user.
@@ -1576,6 +1633,7 @@ export def "user-register post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   username: string
   password: string
   password_verify: string
@@ -1594,7 +1652,7 @@ export def "user-register post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetch a Captcha.
@@ -1608,13 +1666,14 @@ export def "user-get-captcha get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ok: record<png: string, wav: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/get_captcha")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get mentions for your user.
@@ -1628,6 +1687,7 @@ export def "user-mention get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --GetPersonMentions: record
 ]: nothing -> record<mentions: table<person_mention: record, comment: record, creator: record, post: record, community: record, recipient: record, counts: record, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1636,7 +1696,7 @@ export def "user-mention get" [
   let full_url = (build-url $base "/user/mention" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Mark a person mention as read.
@@ -1650,6 +1710,7 @@ export def "user-mention-mark-as-read post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   person_mention_id: int
   --read: oneof<nothing, bool>
 ]: any -> record<person_mention_view: record<person_mention: record<id: int, recipient_id: int, comment_id: int, read: bool, published: string>, comment: record<id: int, creator_id: int, post_id: int, content: string, removed: bool, published: string, updated: string, deleted: bool, ap_id: string, local: bool, path: string, distinguished: bool, language_id: int>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, recipient: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, counts: record<comment_id: int, score: int, upvotes: int, downvotes: int, published: string, child_count: int>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>> {
@@ -1661,7 +1722,7 @@ export def "user-mention-mark-as-read post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get comment replies.
@@ -1675,6 +1736,7 @@ export def "user-replies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --GetReplies: record
 ]: nothing -> record<replies: table<comment_reply: record, comment: record, creator: record, post: record, community: record, recipient: record, counts: record, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1683,7 +1745,7 @@ export def "user-replies get" [
   let full_url = (build-url $base "/user/replies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Ban a person from your site.
@@ -1697,6 +1759,7 @@ export def "user-ban post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   person_id: int
   --ban: oneof<nothing, bool>
   --remove-data: oneof<nothing, bool>
@@ -1711,7 +1774,7 @@ export def "user-ban post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of banned users
@@ -1726,13 +1789,14 @@ export def "user-banned get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<banned: table<person: record, counts: record, is_admin: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/banned")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Block a person.
@@ -1746,6 +1810,7 @@ export def "user-block post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   person_id: int
   --block: oneof<nothing, bool>
 ]: any -> record<person_view: record<person: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, counts: record<person_id: int, post_count: int, comment_count: int>, is_admin: bool>, blocked: bool> {
@@ -1757,7 +1822,7 @@ export def "user-block post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Log into lemmy.
@@ -1771,6 +1836,7 @@ export def "user-login post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   username_or_email: string
   password: string
   --totp-2fa-token: string
@@ -1783,7 +1849,7 @@ export def "user-login post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete your account.
@@ -1797,6 +1863,7 @@ export def "user-delete-account post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   password: string
   --delete-content: oneof<nothing, bool>
 ]: any -> any {
@@ -1808,7 +1875,7 @@ export def "user-delete-account post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reset your password.
@@ -1823,6 +1890,7 @@ export def "user-password-reset resetPassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string
 ]: any -> any {
   let input = $in
@@ -1833,7 +1901,7 @@ export def "user-password-reset resetPassword" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Change your password from an email / token based reset.
@@ -1848,6 +1916,7 @@ export def "user-password-change changePasswordAfterReset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string
   password: string
   password_verify: string
@@ -1860,7 +1929,7 @@ export def "user-password-change changePasswordAfterReset" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Mark all replies as read.
@@ -1875,13 +1944,14 @@ export def "user-mark-all-as-read markAllAsRead" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<replies: table<comment_reply: record, comment: record, creator: record, post: record, community: record, recipient: record, counts: record, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/mark_all_as_read")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Save your user settings.
@@ -1895,6 +1965,7 @@ export def "user-save-user-settings put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --show-nsfw: oneof<nothing, bool>
   --blur-nsfw: oneof<nothing, bool>
   --auto-expand: oneof<nothing, bool>
@@ -1933,7 +2004,7 @@ export def "user-save-user-settings put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Change your user password.
@@ -1948,6 +2019,7 @@ export def "user-change-password changePassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   new_password: string
   new_password_verify: string
   old_password: string
@@ -1960,7 +2032,7 @@ export def "user-change-password changePassword" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get counts for your reports
@@ -1974,6 +2046,7 @@ export def "user-report-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --GetReportCount: record
 ]: nothing -> record<community_id: int, comment_reports: int, post_reports: int, private_message_reports: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1982,7 +2055,7 @@ export def "user-report-count get" [
   let full_url = (build-url $base "/user/report_count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get your unread counts
@@ -1996,13 +2069,14 @@ export def "user-unread-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<replies: int, mentions: int, private_messages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/unread_count")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Verify your email
@@ -2016,6 +2090,7 @@ export def "user-verify-email post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string
 ]: any -> any {
   let input = $in
@@ -2026,7 +2101,7 @@ export def "user-verify-email post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Leave the Site admins.
@@ -2041,13 +2116,14 @@ export def "user-leave-admin leaveAdmin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<site_view: record<site: record<id: int, name: string, sidebar: string, published: string, updated: string, icon: string, banner: string, description: string, actor_id: string, last_refreshed_at: string, inbox_url: string, public_key: string, instance_id: int, content_warning: string>, local_site: record<id: int, site_id: int, site_setup: bool, enable_downvotes: bool, enable_nsfw: bool, community_creation_admin_only: bool, require_email_verification: bool, application_question: string, private_instance: bool, default_theme: string, default_post_listing_type: string, legal_information: string, hide_modlog_mod_names: bool, application_email_admins: bool, slur_filter_regex: string, actor_name_max_length: int, federation_enabled: bool, captcha_enabled: bool, captcha_difficulty: string, published: string, updated: string, registration_mode: string, reports_email_admins: bool, federation_signed_fetch: bool, default_post_listing_mode: string, default_sort_type: string>, local_site_rate_limit: record<local_site_id: int, message: int, message_per_second: int, post: int, post_per_second: int, register: int, register_per_second: int, image: int, image_per_second: int, comment: int, comment_per_second: int, search: int, search_per_second: int, published: string, updated: string, import_user_settings: int, import_user_settings_per_second: int>, counts: record<site_id: int, users: int, posts: int, comments: int, communities: int, users_active_day: int, users_active_week: int, users_active_month: int, users_active_half_year: int>>, admins: table<person: record, counts: record, is_admin: bool>, version: string, my_user: record<local_user_view: record<local_user: record, local_user_vote_display_mode: record, person: record, counts: record>, follows: list<record>, moderates: list<record>, community_blocks: list<record>, instance_blocks: list<record>, person_blocks: list<record>, discussion_languages: list<int>>, all_languages: table<id: int, code: string, name: string>, discussion_languages: list<int>, taglines: table<id: int, local_site_id: int, content: string, published: string, updated: string>, custom_emojis: table<custom_emoji: record, keywords: list>, blocked_urls: table<id: int, url: string, published: string, updated: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/leave_admin")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Mark donation dialog as shown.
@@ -2062,13 +2138,14 @@ export def "user-donation-dialog-shown markDonationDialogShown" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/donation_dialog_shown")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an admin to your site.
@@ -2082,6 +2159,7 @@ export def "admin-add post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   person_id: int
   --added: oneof<nothing, bool>
 ]: any -> record<admins: table<person: record, counts: record, is_admin: bool>> {
@@ -2093,7 +2171,7 @@ export def "admin-add post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the unread registration applications count.
@@ -2107,13 +2185,14 @@ export def "admin-registration-application-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<registration_applications: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/registration_application/count")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List the registration applications.
@@ -2127,6 +2206,7 @@ export def "admin-registration-application-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ListRegistrationApplications: record
 ]: nothing -> record<registration_applications: table<registration_application: record, creator_local_user: record, creator: record, admin: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2135,7 +2215,7 @@ export def "admin-registration-application-list get" [
   let full_url = (build-url $base "/admin/registration_application/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Approve a registration application
@@ -2149,6 +2229,7 @@ export def "admin-registration-application-approve put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: int
   --approve: oneof<nothing, bool>
   --deny-reason: string
@@ -2161,7 +2242,7 @@ export def "admin-registration-application-approve put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Purge / Delete a person from the database.
@@ -2175,6 +2256,7 @@ export def "admin-purge-person post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   person_id: int
   --reason: string
 ]: any -> any {
@@ -2186,7 +2268,7 @@ export def "admin-purge-person post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Purge / Delete a community from the database.
@@ -2200,6 +2282,7 @@ export def "admin-purge-community post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   community_id: int
   --reason: string
 ]: any -> any {
@@ -2211,7 +2294,7 @@ export def "admin-purge-community post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Purge / Delete a post from the database.
@@ -2225,6 +2308,7 @@ export def "admin-purge-post post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   post_id: int
   --reason: string
 ]: any -> any {
@@ -2236,7 +2320,7 @@ export def "admin-purge-post post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Purge / Delete a comment from the database.
@@ -2250,6 +2334,7 @@ export def "admin-purge-comment post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   comment_id: int
   --reason: string
 ]: any -> any {
@@ -2261,7 +2346,7 @@ export def "admin-purge-comment post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Edit an existing custom emoji
@@ -2275,6 +2360,7 @@ export def "custom-emoji put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: int
   category: string
   image_url: string
@@ -2289,7 +2375,7 @@ export def "custom-emoji put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new custom emoji
@@ -2303,6 +2389,7 @@ export def "custom-emoji post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   category: string
   shortcode: string
   image_url: string
@@ -2317,7 +2404,7 @@ export def "custom-emoji post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a custom emoji
@@ -2331,6 +2418,7 @@ export def "custom-emoji-delete post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: int
 ]: any -> any {
   let input = $in
@@ -2341,7 +2429,7 @@ export def "custom-emoji-delete post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Block an instance.
@@ -2355,6 +2443,7 @@ export def "site-block post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   instance_id: int
   --block: oneof<nothing, bool>
 ]: any -> record<blocked: bool> {
@@ -2366,7 +2455,7 @@ export def "site-block post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate a TOTP / two-factor secret. Afterwards you need to call `/user/totp/update` with a valid token to enable it.
@@ -2380,13 +2469,14 @@ export def "user-totp-generate post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<totp_secret_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/totp/generate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable / Disable TOTP / two-factor authentication. To enable, you need to first call `/user/totp/generate` and then pass a valid token to this. Disabling is only possible if 2FA was previously enabled. Again it is necessary to pass a valid token.
@@ -2400,6 +2490,7 @@ export def "user-totp-update post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   totp_token: string
   --enabled: oneof<nothing, bool>
 ]: any -> record<enabled: bool> {
@@ -2411,7 +2502,7 @@ export def "user-totp-update post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Export a backup of your user settings, including your saved content, followed communities, and blocks.
@@ -2425,13 +2516,14 @@ export def "user-export-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/export_settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Import a backup of your user settings.
@@ -2445,6 +2537,7 @@ export def "user-import-settings post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -2454,7 +2547,7 @@ export def "user-import-settings post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List login tokens for your user
@@ -2469,13 +2562,14 @@ export def "user-list-logins listLogins" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<user_id: int, published: string, ip: string, user_agent: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/list_logins")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns an error message if your auth token is invalid
@@ -2490,13 +2584,14 @@ export def "user-validate-auth validateAuth" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/validate_auth")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invalidate the currently used auth token.
@@ -2511,13 +2606,14 @@ export def "user-logout logout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/logout")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a post's likes. Admin-only.
@@ -2531,6 +2627,7 @@ export def "post-like-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   post_id: int
   --page: int
   --limit: int
@@ -2543,7 +2640,7 @@ export def "post-like-list get" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List a comment's likes. Admin-only.
@@ -2557,6 +2654,7 @@ export def "comment-like-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   comment_id: int
   --page: int
   --limit: int
@@ -2569,7 +2667,7 @@ export def "comment-like-list get" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all the media for your user
@@ -2583,6 +2681,7 @@ export def "account-list-media get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int
   --limit: int
 ]: any -> record<images: table<local_image: record, person: record>> {
@@ -2594,7 +2693,7 @@ export def "account-list-media get" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all the media known to your instance.
@@ -2609,6 +2708,7 @@ export def "admin-list-all-media listAllMedia" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int
   --limit: int
 ]: any -> record<images: table<local_image: record, person: record>> {
@@ -2620,7 +2720,7 @@ export def "admin-list-all-media listAllMedia" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Hide a post from list views.
@@ -2634,6 +2734,7 @@ export def "post-hide post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   post_ids: list
   --hide: oneof<nothing, bool>
 ]: any -> any {
@@ -2645,7 +2746,7 @@ export def "post-hide post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the application a user submitted when they first registered their account
@@ -2659,6 +2760,7 @@ export def "admin-registration-application get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   person_id: int
 ]: any -> record<registration_application: record<registration_application: record<id: int, local_user_id: int, answer: string, admin_id: int, deny_reason: string, published: string>, creator_local_user: record<id: int, person_id: int, email: string, show_nsfw: bool, theme: string, default_sort_type: string, default_listing_type: string, interface_language: string, show_avatars: bool, send_notifications_to_email: bool, show_scores: bool, show_bot_accounts: bool, show_read_posts: bool, email_verified: bool, accepted_application: bool, open_links_in_new_tab: bool, blur_nsfw: bool, auto_expand: bool, infinite_scroll_enabled: bool, admin: bool, post_listing_mode: string, totp_2fa_enabled: bool, enable_keyboard_navigation: bool, enable_animated_images: bool, collapse_bot_comments: bool, last_donation_notification: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, admin: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>>> {
   let input = $in
@@ -2669,5 +2771,5 @@ export def "admin-registration-application get" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

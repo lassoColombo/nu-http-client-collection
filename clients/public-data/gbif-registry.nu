@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -97,7 +98,7 @@ def accept-completer [] { ["application/json" "application/x-javascript"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "derived-dataset createDerivedDataset" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -130,6 +131,7 @@ export def "derived-dataset createDerivedDataset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --originalDownloadDOI: string # The DOI of the source (large) download which has been filtered
   title: string # The human title of the derived dataset.
   --description: string # Description of the derived dataset, such as how it was filtered.
@@ -145,7 +147,7 @@ export def "derived-dataset createDerivedDataset" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # An inventory of all enumerations
@@ -160,13 +162,14 @@ export def "enumeration-basic enumerationsBasic" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/enumeration/basic")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all collections
@@ -182,6 +185,7 @@ export def "grscicoll-collection listCollections" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --institution: string # A key for the institution. Deprecated: use institutionKey instead. (DEPRECATED, format: uuid)
   --contentType: string # Content type of a GrSciColl collection. Accepts multiple values, for example `contentType=Paleontological&contentType=EarthPlanetary`.
   --preservationType: string # Preservation type of a GrSciColl collection. Accepts multiple values, for example `preservationType=SampleCryopreserved&preservationType=SampleFluidPreserved`.
@@ -224,7 +228,7 @@ export def "grscicoll-collection listCollections" [
   let full_url = (build-url $base "/grscicoll/collection" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new collection
@@ -249,6 +253,7 @@ export def "grscicoll-collection createCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --code: string # Code of the collection — identifies a collection at the owner's location.  *(NB Not required for updates.)*
   name: string # Descriptive name of the collection.  *(NB Not required for updates.)*
   --description: string # Description or summary of the contents of the collection.
@@ -293,7 +298,7 @@ export def "grscicoll-collection createCollection" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all collections in Latimer Core format
@@ -309,6 +314,7 @@ export def "grscicoll-collection-latimer-core listCollectionsAsLatimerCore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --institution: string # A key for the institution. Deprecated: use institutionKey instead. (DEPRECATED, format: uuid)
   --contentType: string # Content type of a GrSciColl collection. Accepts multiple values, for example `contentType=Paleontological&contentType=EarthPlanetary`.
   --preservationType: string # Preservation type of a GrSciColl collection. Accepts multiple values, for example `preservationType=SampleCryopreserved&preservationType=SampleFluidPreserved`.
@@ -351,7 +357,7 @@ export def "grscicoll-collection-latimer-core listCollectionsAsLatimerCore" [
   let full_url = (build-url $base "/grscicoll/collection/latimerCore" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new collection posted in Latimer Core format.
@@ -377,6 +383,7 @@ export def "grscicoll-collection-latimer-core createCollectionFromLatimerCore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --collectionName: string
   --description: string
   --discipline: list
@@ -403,7 +410,7 @@ export def "grscicoll-collection-latimer-core createCollectionFromLatimerCore" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all datasets
@@ -418,6 +425,7 @@ export def "dataset listDatasets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --country: string@country-completer # The 2-letter country code (as per ISO-3166-1) of the country publishing the dataset.
   --type: string@type-completer # The primary type of the dataset.
   --identifierType: string@identifierType-completer # An identifier type for the identifier parameter.
@@ -437,7 +445,7 @@ export def "dataset listDatasets" [
   let full_url = (build-url $base "/dataset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new dataset
@@ -470,6 +478,7 @@ export def "dataset createDataset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --parentDatasetKey: string # If set, this dataset is a sub-dataset of the parent. (format: uuid)
   --duplicateOfDatasetKey: string # A dataset of which this dataset is a duplicate. Typically, this means this dataset is an old version of the duplicated dataset, which has replaced this dataset. Therefore **this link is usually found on deleted datasets**. (format: uuid)
   installationKey: string # The installation providing access to the source dataset.  *(NB Not required for updates.)* (format: uuid)
@@ -505,7 +514,7 @@ export def "dataset createDataset" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all installations
@@ -520,6 +529,7 @@ export def "installation listInstallations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-1 # Filter by the type of installation.
   --identifierType: string@identifierType-completer # An identifier type for the identifier parameter.
   --identifier: string # An identifier of the type given by the identifierType parameter, for example a DOI or UUID.
@@ -538,7 +548,7 @@ export def "installation listInstallations" [
   let full_url = (build-url $base "/installation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new installation
@@ -559,6 +569,7 @@ export def "installation createInstallation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organizationKey: string # The publishing organization managing this installation.  *(NB Not required for updates.)* (format: uuid)
   type: string@type-completer-1 # The type of the installation. Defines what protocols are usedfor communication.  *(NB Not required for updates.)*
   title: string # A name for the installation.  *(NB Not required for updates.)*
@@ -573,7 +584,7 @@ export def "installation createInstallation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all institutions
@@ -588,6 +599,7 @@ export def "grscicoll-institution listInstitutions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string # Type of a GrSciColl institution. Accepts multiple values, for example `type=Museum&type=BotanicalGarden
   --institutionalGovernance: string # Institutional governance of a GrSciColl institution. Accepts multiple values, for example `InstitutionalGovernance=NonProfit&InstitutionalGovernance=Local`
   --discipline: string # Discipline of a GrSciColl institution. Accepts multiple values, for example `discipline=Zoology&discipline=Biological`
@@ -628,7 +640,7 @@ export def "grscicoll-institution listInstitutions" [
   let full_url = (build-url $base "/grscicoll/institution" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new institution
@@ -653,6 +665,7 @@ export def "grscicoll-institution createInstitution" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --code: string # Code used to identify the institution.  *(NB Not required for updates.)*
   name: string # Name or title of the institution.  *(NB Not required for updates.)*
   --description: string # Description of the institution.
@@ -694,7 +707,7 @@ export def "grscicoll-institution createInstitution" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List institutions in Latimer Core format
@@ -709,6 +722,7 @@ export def "grscicoll-institution-latimer-core listInstitutionsAsLatimerCore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string # Type of a GrSciColl institution. Accepts multiple values, for example `type=Museum&type=BotanicalGarden
   --institutionalGovernance: string # Institutional governance of a GrSciColl institution. Accepts multiple values, for example `InstitutionalGovernance=NonProfit&InstitutionalGovernance=Local`
   --discipline: string # Discipline of a GrSciColl institution. Accepts multiple values, for example `discipline=Zoology&discipline=Biological`
@@ -749,7 +763,7 @@ export def "grscicoll-institution-latimer-core listInstitutionsAsLatimerCore" [
   let full_url = (build-url $base "/grscicoll/institution/latimerCore" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new institution posted in Latimer Core format
@@ -769,6 +783,7 @@ export def "grscicoll-institution-latimer-core createInstitutionFromLatimerCore"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --organisationalUnitName: string
   --organisationalUnitType: string
   --address: list # item shape: {key?: int, address?: string, city?: string, province?: string, postalCode?: string, country?: "AF"|"AX"|"AL"|"DZ"|"AS"|"AD"|"AO"|"AI"|"AQ"|"AG"|"AR"|"AM"|"AW"|"AU"|"AT"|"AZ"|"BS"|"BH"|"BD"|"BB"|"BY"|"BE"|"BZ"|"BJ"|"BM"|"BT"|"BO"|"BQ"|"BA"|"BW"|"BV"|"BR"|"IO"|"BN"|"BG"|"BF"|"BI"|"KH"|"CM"|"CA"|"CV"|"KY"|"CF"|"TD"|"CL"|"CN"|"CX"|"CC"|"CO"|"KM"|"CD"|"CG"|"CK"|"CR"|"CI"|"HR"|"CU"|"CW"|"CY"|"CZ"|"DK"|"DJ"|"DM"|"DO"|"EC"|"EG"|"SV"|"GQ"|"ER"|"EE"|"ET"|"FK"|"FO"|"FJ"|"FI"|"FR"|"GF"|"PF"|"TF"|"GA"|"GM"|"GE"|"DE"|"GH"|"GI"|"GR"|"GL"|"GD"|"GP"|"GU"|"GT"|"GG"|"GN"|"GW"|"GY"|"HT"|"HM"|"VA"|"HN"|"HK"|"HU"|"IS"|"IN"|"ID"|"IR"|"IQ"|"IE"|"IM"|"IL"|"IT"|"JM"|"JP"|"JE"|"JO"|"KZ"|"KE"|"KI"|"KP"|"KR"|"KW"|"KG"|"LA"|"LV"|"LB"|"LS"|"LR"|"LY"|"LI"|"LT"|"LU"|"MO"|"MK"|"MG"|"MW"|"MY"|"MV"|"ML"|"MT"|"MH"|"MQ"|"MR"|"MU"|"YT"|"MX"|"FM"|"MD"|"MC"|"MN"|"ME"|"MS"|"MA"|"MZ"|"MM"|"NA"|"NR"|"NP"|"NL"|"NC"|"NZ"|"NI"|"NE"|"NG"|"NU"|"NF"|"MP"|"NO"|"OM"|"PK"|"PW"|"PS"|"PA"|"PG"|"PY"|"PE"|"PH"|"PN"|"PL"|"PT"|"PR"|"QA"|"RE"|"RO"|"RU"|"RW"|"BL"|"SH"|"KN"|"LC"|"MF"|"PM"|"VC"|"WS"|"SM"|"ST"|"SA"|"SN"|"RS"|"SC"|"SL"|"SG"|"SX"|"SK"|"SI"|"SB"|"SO"|"ZA"|"GS"|"SS"|"ES"|"LK"|"SD"|"SR"|"SJ"|"SZ"|"SE"|"CH"|"SY"|"TW"|"TJ"|"TZ"|"TH"|"TL"|"TG"|"TK"|"TO"|"TT"|"TN"|"TR"|"TM"|"TC"|"TV"|"UG"|"UA"|"AE"|"GB"|"US"|"UM"|"UY"|"UZ"|"VU"|"VE"|"VN"|"VG"|"VI"|"WF"|"EH"|"YE"|"ZM"|"ZW"|"AA"|"XK"|"XZ"|"ZZ"}
@@ -785,7 +800,7 @@ export def "grscicoll-institution-latimer-core createInstitutionFromLatimerCore"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all networks
@@ -800,6 +815,7 @@ export def "network listNetworks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --identifierType: string@identifierType-completer # An identifier type for the identifier parameter.
   --identifier: string # An identifier of the type given by the identifierType parameter, for example a DOI or UUID.
   --machineTagNamespace: string # Filters for entities with a machine tag in the specified namespace.
@@ -817,7 +833,7 @@ export def "network listNetworks" [
   let full_url = (build-url $base "/network" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new network
@@ -838,6 +854,7 @@ export def "network createNetwork" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   title: string # A name for the network.  *(NB Not required for updates.)*
   --description: string # A description for the network.
   language: string@language-completer # The language of the network metadata.  *(NB Not required for updates.)*
@@ -860,7 +877,7 @@ export def "network createNetwork" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all nodes
@@ -875,6 +892,7 @@ export def "node listNodes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --identifierType: string@identifierType-completer # An identifier type for the identifier parameter.
   --identifier: string # An identifier of the type given by the identifierType parameter, for example a DOI or UUID.
   --machineTagNamespace: string # Filters for entities with a machine tag in the specified namespace.
@@ -892,7 +910,7 @@ export def "node listNodes" [
   let full_url = (build-url $base "/node" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all publishing organizations
@@ -907,6 +925,7 @@ export def "organization listOrganizations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isEndorsed: oneof<nothing, bool> # Whether the organization is endorsed by a node.
   --networkKey: string # Filter for organizations publishing datasets belonging to a network. (format: uuid)
   --numPublishedDatasets: string # Filter by number of published datasets. Examples: '5' (exactly 5), '1,*' (at least 1), '*,10' (at most 10), '5,15' (between 5 and 15).
@@ -928,7 +947,7 @@ export def "organization listOrganizations" [
   let full_url = (build-url $base "/organization" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new publishing organization
@@ -949,6 +968,7 @@ export def "organization createOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   endorsingNodeKey: string # The participant node which has endorsed or would endorse this publishing organization.  *(NB Not required for updates.)* (format: uuid)
   --endorsementApproved: oneof<nothing, bool> # Whether the participant node in `endorsingNodeKey` has endorsed this publishing organization — whether `endorsementStatus == ENDORSED`.
   --endorsementStatus: string@endorsementStatus-completer # The endorsement decision regarding this publishing organization made by the participant node in `endorsingNodeKey`.
@@ -977,7 +997,7 @@ export def "organization createOrganization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all institutions in GeoJson format
@@ -992,6 +1012,7 @@ export def "grscicoll-institution-geojson listInstitutionsGeoJson" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string # Type of a GrSciColl institution. Accepts multiple values, for example `type=Museum&type=BotanicalGarden
   --institutionalGovernance: string # Institutional governance of a GrSciColl institution. Accepts multiple values, for example `InstitutionalGovernance=NonProfit&InstitutionalGovernance=Local`
   --discipline: string # Discipline of a GrSciColl institution. Accepts multiple values, for example `discipline=Zoology&discipline=Biological`
@@ -1032,7 +1053,7 @@ export def "grscicoll-institution-geojson listInstitutionsGeoJson" [
   let full_url = (build-url $base "/grscicoll/institution/geojson" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search collections and institutions
@@ -1047,6 +1068,7 @@ export def "grscicoll-search searchCollectionsInstitutions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Simple full text search parameter. The value for this parameter can be a simple word or a phrase. Wildcards are not supported
   --hl: oneof<nothing, bool> # Set `hl=true` to highlight terms matching the query when in fulltext search fields. The highlight will be an emphasis tag of class `gbifHl`.
   --entityType: string # Code of a GrSciColl institution or collection
@@ -1061,7 +1083,7 @@ export def "grscicoll-search searchCollectionsInstitutions" [
   let full_url = (build-url $base "/grscicoll/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search across all datasets.
@@ -1077,6 +1099,7 @@ export def "dataset-search searchDatasets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # The primary type of the dataset.
   --subtype: string@subtype-completer # The sub-type of the dataset.
   --publishingOrg: string # Filters datasets by their publishing organization UUID key (format: uuid)
@@ -1116,7 +1139,7 @@ export def "dataset-search searchDatasets" [
   let full_url = (build-url $base "/dataset/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Export search across all collections.
@@ -1132,6 +1155,7 @@ export def "grscicoll-collection-export listCollectionsExport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer # default: TSV
   --institution: string # A key for the institution. Deprecated: use institutionKey instead. (DEPRECATED, format: uuid)
   --contentType: string # Content type of a GrSciColl collection. Accepts multiple values, for example `contentType=Paleontological&contentType=EarthPlanetary`.
@@ -1175,7 +1199,7 @@ export def "grscicoll-collection-export listCollectionsExport" [
   let full_url = (build-url $base "/grscicoll/collection/export" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Export search across all institutions.
@@ -1191,6 +1215,7 @@ export def "grscicoll-institution-export listInstitutionsExport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer # default: TSV
   --institution: string # A key for the institution. Deprecated: use institutionKey instead. (DEPRECATED, format: uuid)
   --contentType: string # Content type of a GrSciColl collection. Accepts multiple values, for example `contentType=Paleontological&contentType=EarthPlanetary`.
@@ -1234,7 +1259,7 @@ export def "grscicoll-institution-export listInstitutionsExport" [
   let full_url = (build-url $base "/grscicoll/institution/export" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Export search across all datasets.
@@ -1250,6 +1275,7 @@ export def "dataset-search-export searchDatasetsExport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer # default: TSV
   --type: string@type-completer # The primary type of the dataset.
   --subtype: string@subtype-completer # The sub-type of the dataset.
@@ -1282,7 +1308,7 @@ export def "dataset-search-export searchDatasetsExport" [
   let full_url = (build-url $base "/dataset/search/export" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Export collections for institutions matching search criteria
@@ -1297,6 +1323,7 @@ export def "grscicoll-collection-export-for-institution exportCollectionsForInst
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer # default: TSV
   --searchRequest: record
 ]: nothing -> any {
@@ -1306,7 +1333,7 @@ export def "grscicoll-collection-export-for-institution exportCollectionsForInst
   let full_url = (build-url $base "/grscicoll/collection/exportForInstitution" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest collections.
@@ -1321,6 +1348,7 @@ export def "grscicoll-collection-suggest suggestCollections" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Simple full text search parameter. The value for this parameter can be a simple word or a phrase. Wildcards are not supported
 ]: nothing -> table<key: string, code: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1329,7 +1357,7 @@ export def "grscicoll-collection-suggest suggestCollections" [
   let full_url = (build-url $base "/grscicoll/collection/suggest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest datasets.
@@ -1345,6 +1373,7 @@ export def "dataset-suggest suggestDatasets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # The primary type of the dataset.
   --subtype: string@subtype-completer # The sub-type of the dataset.
   --publishingOrg: string # Filters datasets by their publishing organization UUID key (format: uuid)
@@ -1376,7 +1405,7 @@ export def "dataset-suggest suggestDatasets" [
   let full_url = (build-url $base "/dataset/suggest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest installations.
@@ -1391,6 +1420,7 @@ export def "installation-suggest suggestInstallations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Simple full text search parameter. The value for this parameter can be a simple word or a phrase. Wildcards are not supported
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
@@ -1401,7 +1431,7 @@ export def "installation-suggest suggestInstallations" [
   let full_url = (build-url $base "/installation/suggest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest institutions.
@@ -1416,6 +1446,7 @@ export def "grscicoll-institution-suggest suggestInstitutions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Simple full text search parameter. The value for this parameter can be a simple word or a phrase. Wildcards are not supported
 ]: nothing -> table<key: string, code: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1424,7 +1455,7 @@ export def "grscicoll-institution-suggest suggestInstitutions" [
   let full_url = (build-url $base "/grscicoll/institution/suggest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest networks.
@@ -1439,6 +1470,7 @@ export def "network-suggest suggestNetworks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Simple full text search parameter. The value for this parameter can be a simple word or a phrase. Wildcards are not supported
 ]: nothing -> table<key: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1447,7 +1479,7 @@ export def "network-suggest suggestNetworks" [
   let full_url = (build-url $base "/network/suggest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest nodes.
@@ -1462,6 +1494,7 @@ export def "node-suggest suggestNodes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Simple full text search parameter. The value for this parameter can be a simple word or a phrase. Wildcards are not supported
 ]: nothing -> table<key: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1470,7 +1503,7 @@ export def "node-suggest suggestNodes" [
   let full_url = (build-url $base "/node/suggest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Suggest organizations.
@@ -1485,6 +1518,7 @@ export def "organization-suggest suggestOrganizations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Simple full text search parameter. The value for this parameter can be a simple word or a phrase. Wildcards are not supported
 ]: nothing -> table<key: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1493,7 +1527,7 @@ export def "organization-suggest suggestOrganizations" [
   let full_url = (build-url $base "/organization/suggest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List collections for institutions matching search criteria
@@ -1508,6 +1542,7 @@ export def "grscicoll-collection-list-for-institution listCollectionsForInstitut
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --searchRequest: record
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: string, code: string, name: string, description: string, contentTypes: list, active: bool, personalCollection: bool, doi: string, email: list, phone: list, homepage: string, catalogUrls: list, apiUrls: list, preservationTypes: list, accessionStatus: string, institutionKey: string, mailingAddress: record, address: record, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, tags: list, identifiers: list, contactPersons: list, numberSpecimens: int, machineTags: list, taxonomicCoverage: string, geographicCoverage: string, notes: string, incorporatedCollections: list, alternativeCodes: list, comments: list, occurrenceMappings: list, replacedBy: string, masterSource: string, masterSourceMetadata: record, department: string, division: string, displayOnNHCPortal: bool, occurrenceCount: int, typeSpecimenCount: int, featuredImageUrl: string, featuredImageLicense: string, temporalCoverage: string, featuredImageAttribution: string, institutionName: string, institutionCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1516,7 +1551,7 @@ export def "grscicoll-collection-list-for-institution listCollectionsForInstitut
   let full_url = (build-url $base "/grscicoll/collection/listForInstitution" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Show a summary of an enumeration
@@ -1532,13 +1567,14 @@ export def "enumeration-basic enumerationBasic" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/enumeration/basic/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a derived dataset record
@@ -1555,13 +1591,14 @@ export def "derived-dataset get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<doi: string, originalDownloadDOI: string, description: string, citation: string, title: string, sourceUrl: string, createdBy: string, modifiedBy: string, registrationDate: string, created: string, modified: string, category: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/derivedDataset/($doiPrefix)/($doiSuffix)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a derived dataset
@@ -1578,6 +1615,7 @@ export def "derived-dataset updateDerivedDataset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sourceUrl: string # format: uri
   --title: string
   --description: string
@@ -1590,7 +1628,7 @@ export def "derived-dataset updateDerivedDataset" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a dataset by DOI
@@ -1607,6 +1645,7 @@ export def "dataset-doi datasetByDoi" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: string, parentDatasetKey: string, duplicateOfDatasetKey: string, installationKey: string, publishingOrganizationKey: string, publishingOrganizationName: string, networkKeys: list, doi: string, version: string, external: bool, numConstituents: int, type: string, subtype: string, shortName: string, title: string, alias: string, abbreviation: string, description: string, language: string, homepage: string, logoUrl: string, citation: record, contactsCitation: list, rights: string, lockedForAutoUpdate: bool, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, contacts: list, endpoints: list, machineTags: list, tags: list, identifiers: list, comments: list, bibliographicCitations: list, curatorialUnits: list, taxonomicCoverages: list, geographicCoverageDescription: string, geographicCoverages: list, temporalCoverages: list, keywordCollections: list, project: record, samplingDescription: record, countryCoverage: list, collections: list, dataDescriptions: list, dataLanguage: string, purpose: string, introduction: string, gettingStarted: string, acknowledgements: string, additionalInfo: string, pubDate: string, maintenanceUpdateFrequency: string, maintenanceDescription: string, license: string, dwca: record, category: list>> {
@@ -1616,7 +1655,7 @@ export def "dataset-doi datasetByDoi" [
   let full_url = (build-url $base $"/dataset/doi/($prefix)/($suffix)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Show the Country enumeration
@@ -1631,13 +1670,14 @@ export def "enumeration-country enumerationCountry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/enumeration/country")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of a single dataset
@@ -1653,13 +1693,14 @@ export def "dataset get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, parentDatasetKey: string, duplicateOfDatasetKey: string, installationKey: string, publishingOrganizationKey: string, publishingOrganizationName: string, networkKeys: list<string>, doi: string, version: string, external: bool, numConstituents: int, type: string, subtype: string, shortName: string, title: string, alias: string, abbreviation: string, description: string, language: string, homepage: string, logoUrl: string, citation: record<text: string, identifier: string, citationProvidedBySource: bool>, contactsCitation: table<key: int, abbreviatedName: string, firstName: string, lastName: string, roles: list, userId: list>, rights: string, lockedForAutoUpdate: bool, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, contacts: table<key: int, type: string, primary: bool, userId: list, salutation: string, firstName: string, lastName: string, position: list, description: string, email: list, phone: list, homepage: list, organization: string, address: list, city: string, province: string, country: string, postalCode: string, createdBy: string, modifiedBy: string, created: string, modified: string>, endpoints: table<key: int, type: string, url: string, description: string, createdBy: string, modifiedBy: string, created: string, modified: string, machineTags: list>, machineTags: table<key: int, namespace: string, name: string, value: string, createdBy: string, created: string>, tags: table<key: int, value: string, createdBy: string, created: string>, identifiers: table<key: int, type: string, identifier: string, createdBy: string, created: string, primary: bool>, comments: table<key: int, content: string, createdBy: string, modifiedBy: string, created: string, modified: string>, bibliographicCitations: table<text: string, identifier: string, citationProvidedBySource: bool>, curatorialUnits: table<type: string, typeVerbatim: string, count: int, deviation: int, lower: int, upper: int>, taxonomicCoverages: table<description: string, coverages: list>, geographicCoverageDescription: string, geographicCoverages: table<description: string, boundingBox: record>, temporalCoverages: list<any>, keywordCollections: table<thesaurus: string, keywords: list>, project: record<title: string, identifier: string, description: string, contacts: list<record>, funding: string, awards: list<record>, studyAreaDescription: string, designDescription: string, relatedProjects: list<record>, abstract: string>, samplingDescription: record<studyExtent: string, sampling: string, qualityControl: string, methodSteps: list<string>>, countryCoverage: list<string>, collections: table<key: string, code: string, name: string, description: string, contentTypes: list, active: bool, personalCollection: bool, doi: string, email: list, phone: list, homepage: string, catalogUrls: list, apiUrls: list, preservationTypes: list, accessionStatus: string, institutionKey: string, mailingAddress: record, address: record, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, tags: list, identifiers: list, contactPersons: list, numberSpecimens: int, machineTags: list, taxonomicCoverage: string, geographicCoverage: string, notes: string, incorporatedCollections: list, alternativeCodes: list, comments: list, occurrenceMappings: list, replacedBy: string, masterSource: string, masterSourceMetadata: record, department: string, division: string, displayOnNHCPortal: bool, occurrenceCount: int, typeSpecimenCount: int, featuredImageUrl: string, featuredImageLicense: string, temporalCoverage: string, featuredImageAttribution: string>, dataDescriptions: table<name: string, charset: string, url: string, format: string, formatVersion: string>, dataLanguage: string, purpose: string, introduction: string, gettingStarted: string, acknowledgements: string, additionalInfo: string, pubDate: string, maintenanceUpdateFrequency: string, maintenanceDescription: string, license: string, dwca: record<coreType: string, extensions: list<string>, modified: string>, category: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dataset/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing dataset
@@ -1693,6 +1734,7 @@ export def "dataset updateDataset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --parentDatasetKey: string # If set, this dataset is a sub-dataset of the parent. (format: uuid)
   --duplicateOfDatasetKey: string # A dataset of which this dataset is a duplicate. Typically, this means this dataset is an old version of the duplicated dataset, which has replaced this dataset. Therefore **this link is usually found on deleted datasets**. (format: uuid)
   installationKey: string # The installation providing access to the source dataset.  *(NB Not required for updates.)* (format: uuid)
@@ -1728,7 +1770,7 @@ export def "dataset updateDataset" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an existing dataset
@@ -1744,13 +1786,14 @@ export def "dataset delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dataset/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve derived datasets of a dataset by key
@@ -1766,6 +1809,7 @@ export def "derived-dataset-dataset list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<doi: string, originalDownloadDOI: string, description: string, citation: string, title: string, sourceUrl: string, createdBy: string, modifiedBy: string, registrationDate: string, created: string, modified: string, category: list>> {
@@ -1775,7 +1819,7 @@ export def "derived-dataset-dataset list" [
   let full_url = (build-url $base $"/derivedDataset/dataset/($key)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search across institutions
@@ -1790,6 +1834,7 @@ export def "grscicoll-institution-search searchInstitutions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hl: oneof<nothing, bool> # Set `hl=true` to highlight terms matching the query when in fulltext search fields. The highlight will be an emphasis tag of class `gbifHl`.
   --type: string # Type of a GrSciColl institution. Accepts multiple values, for example `type=Museum&type=BotanicalGarden
   --institutionalGovernance: string # Institutional governance of a GrSciColl institution. Accepts multiple values, for example `InstitutionalGovernance=NonProfit&InstitutionalGovernance=Local`
@@ -1831,7 +1876,7 @@ export def "grscicoll-institution-search searchInstitutions" [
   let full_url = (build-url $base "/grscicoll/institution/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Show the Extension enumeration
@@ -1846,13 +1891,14 @@ export def "enumeration-extension enumerationExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/enumeration/extension")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve derived datasets of a dataset by DOI
@@ -1869,6 +1915,7 @@ export def "derived-dataset-dataset get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<doi: string, originalDownloadDOI: string, description: string, citation: string, title: string, sourceUrl: string, createdBy: string, modifiedBy: string, registrationDate: string, created: string, modified: string, category: list>> {
@@ -1878,7 +1925,7 @@ export def "derived-dataset-dataset get" [
   let full_url = (build-url $base $"/derivedDataset/dataset/($doiPrefix)/($doiSuffix)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search across collections
@@ -1894,6 +1941,7 @@ export def "grscicoll-collection-search searchCollections" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --institution: string # A key for the institution. Deprecated: use institutionKey instead. (DEPRECATED, format: uuid)
   --contentType: string # Content type of a GrSciColl collection. Accepts multiple values, for example `contentType=Paleontological&contentType=EarthPlanetary`.
   --preservationType: string # Preservation type of a GrSciColl collection. Accepts multiple values, for example `preservationType=SampleCryopreserved&preservationType=SampleFluidPreserved`.
@@ -1954,7 +2002,7 @@ export def "grscicoll-collection-search searchCollections" [
   let full_url = (build-url $base "/grscicoll/collection/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Show the Interpretation Remark enumeration
@@ -1969,13 +2017,14 @@ export def "enumeration-interpretation-remark enumerationInterpretationRemark" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/enumeration/interpretationRemark")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve derived datasets of a dataset by User
@@ -1991,6 +2040,7 @@ export def "derived-dataset-user get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<doi: string, originalDownloadDOI: string, description: string, citation: string, title: string, sourceUrl: string, createdBy: string, modifiedBy: string, registrationDate: string, created: string, modified: string, category: list>> {
@@ -2000,7 +2050,7 @@ export def "derived-dataset-user get" [
   let full_url = (build-url $base $"/derivedDataset/user/($user)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Show the Language enumeration
@@ -2015,13 +2065,14 @@ export def "enumeration-language enumerationLanguage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/enumeration/language")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Show the License enumeration
@@ -2036,13 +2087,14 @@ export def "enumeration-license enumerationLicense" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/enumeration/license")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of a single collection
@@ -2058,13 +2110,14 @@ export def "grscicoll-collection get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, code: string, name: string, description: string, contentTypes: list<string>, active: bool, personalCollection: bool, doi: string, email: list<string>, phone: list<string>, homepage: string, catalogUrls: list<string>, apiUrls: list<string>, preservationTypes: list<string>, accessionStatus: string, institutionKey: string, mailingAddress: record<key: int, address: string, city: string, province: string, postalCode: string, country: string>, address: record<key: int, address: string, city: string, province: string, postalCode: string, country: string>, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, tags: table<key: int, value: string, createdBy: string, created: string>, identifiers: table<key: int, type: string, identifier: string, createdBy: string, created: string, primary: bool>, contactPersons: table<key: int, type: string, primary: bool, userId: list, salutation: string, firstName: string, lastName: string, position: list, description: string, email: list, phone: list, homepage: list, organization: string, address: list, city: string, province: string, country: string, postalCode: string, createdBy: string, modifiedBy: string, created: string, modified: string>, numberSpecimens: int, machineTags: table<key: int, namespace: string, name: string, value: string, createdBy: string, created: string>, taxonomicCoverage: string, geographicCoverage: string, notes: string, incorporatedCollections: list<string>, alternativeCodes: table<code: string, description: string>, comments: table<key: int, content: string, createdBy: string, modifiedBy: string, created: string, modified: string>, occurrenceMappings: table<key: int, code: string, parentCode: string, identifier: string, datasetKey: string, createdBy: string, created: string>, replacedBy: string, masterSource: string, masterSourceMetadata: record<key: int, source: string, sourceId: string, createdBy: string, created: string>, department: string, division: string, displayOnNHCPortal: bool, occurrenceCount: int, typeSpecimenCount: int, featuredImageUrl: string, featuredImageLicense: string, temporalCoverage: string, featuredImageAttribution: string, institutionName: string, institutionCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing collection
@@ -2090,6 +2143,7 @@ export def "grscicoll-collection updateCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --code: string # Code of the collection — identifies a collection at the owner's location.  *(NB Not required for updates.)*
   name: string # Descriptive name of the collection.  *(NB Not required for updates.)*
   --description: string # Description or summary of the contents of the collection.
@@ -2134,7 +2188,7 @@ export def "grscicoll-collection updateCollection" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an existing collection
@@ -2150,13 +2204,14 @@ export def "grscicoll-collection delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of a single collection in Latimer Core format
@@ -2172,13 +2227,14 @@ export def "grscicoll-collection-latimer-core get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<collectionName: string, description: string, discipline: list<string>, typeOfObjectGroup: list<string>, hasOrganisationalUnit: table<organisationalUnitName: string, organisationalUnitType: string, address: list, contactDetail: list, identifier: list, measurementOrFact: list, reference: list>, isCurrentCollection: bool, preservationMethod: list<string>, address: table<key: int, address: string, city: string, province: string, postalCode: string, country: string>, collectionStatusHistory: table<status: string, statusType: string>, contactDetail: table<contactDetailValue: string, contactDetailCategory: string>, geographicContext: table<hasMeasurementOrFact: list>, identifier: table<key: int, type: string, identifier: string, createdBy: string, created: string, primary: bool>, measurementOrFact: table<measurementFactText: string, measurementValue: string, measurementType: string>, personRole: table<person: list, role: list, measurementOrFact: list>, reference: table<resourceIRI: string, referenceType: string, referenceName: string>, resourceRelationship: table<relatedResourceName: string, relationshipOfResource: string>, objectClassification: table<objectClassificationName: string, objectClassificationLevel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/latimerCore/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing collection sent in Latimer Core format
@@ -2205,6 +2261,7 @@ export def "grscicoll-collection-latimer-core updateCollectionFromLatimerCore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --collectionName: string
   --description: string
   --discipline: list
@@ -2231,7 +2288,7 @@ export def "grscicoll-collection-latimer-core updateCollectionFromLatimerCore" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve derived dataset citation
@@ -2248,6 +2305,7 @@ export def "derived-dataset-citation get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> string {
@@ -2257,7 +2315,7 @@ export def "derived-dataset-citation get" [
   let full_url = (build-url $base $"/derivedDataset/($doiPrefix)/($doiSuffix)/citation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of a single installation
@@ -2273,13 +2331,14 @@ export def "installation get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, organizationKey: string, type: string, title: string, description: string, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, disabled: bool, contacts: table<key: int, type: string, primary: bool, userId: list, salutation: string, firstName: string, lastName: string, position: list, description: string, email: list, phone: list, homepage: list, organization: string, address: list, city: string, province: string, country: string, postalCode: string, createdBy: string, modifiedBy: string, created: string, modified: string>, endpoints: table<key: int, type: string, url: string, description: string, createdBy: string, modifiedBy: string, created: string, modified: string, machineTags: list>, machineTags: table<key: int, namespace: string, name: string, value: string, createdBy: string, created: string>, tags: table<key: int, value: string, createdBy: string, created: string>, identifiers: table<key: int, type: string, identifier: string, createdBy: string, created: string, primary: bool>, comments: table<key: int, content: string, createdBy: string, modifiedBy: string, created: string, modified: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/installation/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing installation
@@ -2301,6 +2360,7 @@ export def "installation updateInstallation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organizationKey: string # The publishing organization managing this installation.  *(NB Not required for updates.)* (format: uuid)
   type: string@type-completer-1 # The type of the installation. Defines what protocols are usedfor communication.  *(NB Not required for updates.)*
   title: string # A name for the installation.  *(NB Not required for updates.)*
@@ -2315,7 +2375,7 @@ export def "installation updateInstallation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an installation
@@ -2331,13 +2391,14 @@ export def "installation delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/installation/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of a single institution
@@ -2353,13 +2414,14 @@ export def "grscicoll-institution get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, code: string, name: string, description: string, types: list<string>, active: bool, email: list<string>, phone: list<string>, homepage: string, catalogUrls: list<string>, apiUrls: list<string>, institutionalGovernances: list<string>, disciplines: list<string>, latitude: float, longitude: float, mailingAddress: record<key: int, address: string, city: string, province: string, postalCode: string, country: string>, address: record<key: int, address: string, city: string, province: string, postalCode: string, country: string>, additionalNames: list<string>, foundingDate: int, numberSpecimens: int, logoUrl: string, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, tags: table<key: int, value: string, createdBy: string, created: string>, identifiers: table<key: int, type: string, identifier: string, createdBy: string, created: string, primary: bool>, contactPersons: table<key: int, type: string, primary: bool, userId: list, salutation: string, firstName: string, lastName: string, position: list, description: string, email: list, phone: list, homepage: list, organization: string, address: list, city: string, province: string, country: string, postalCode: string, createdBy: string, modifiedBy: string, created: string, modified: string>, machineTags: table<key: int, namespace: string, name: string, value: string, createdBy: string, created: string>, alternativeCodes: table<code: string, description: string>, comments: table<key: int, content: string, createdBy: string, modifiedBy: string, created: string, modified: string>, occurrenceMappings: table<key: int, code: string, parentCode: string, identifier: string, datasetKey: string, createdBy: string, created: string>, replacedBy: string, convertedToCollection: string, masterSource: string, masterSourceMetadata: record<key: int, source: string, sourceId: string, createdBy: string, created: string>, displayOnNHCPortal: bool, occurrenceCount: int, typeSpecimenCount: int, featuredImageUrl: string, featuredImageLicense: string, featuredImageAttribution: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing institution
@@ -2385,6 +2447,7 @@ export def "grscicoll-institution updateInstitution" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --code: string # Code used to identify the institution.  *(NB Not required for updates.)*
   name: string # Name or title of the institution.  *(NB Not required for updates.)*
   --description: string # Description of the institution.
@@ -2426,7 +2489,7 @@ export def "grscicoll-institution updateInstitution" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an existing institution
@@ -2442,13 +2505,14 @@ export def "grscicoll-institution delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of a single institution in Latimer Core format
@@ -2464,13 +2528,14 @@ export def "grscicoll-institution-latimer-core get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<organisationalUnitName: string, organisationalUnitType: string, address: table<key: int, address: string, city: string, province: string, postalCode: string, country: string>, contactDetail: table<contactDetailValue: string, contactDetailCategory: string>, identifier: table<key: int, type: string, identifier: string, createdBy: string, created: string, primary: bool>, measurementOrFact: table<measurementFactText: string, measurementValue: string, measurementType: string>, reference: table<resourceIRI: string, referenceType: string, referenceName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/latimerCore/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing institution sent in Latimer Core format
@@ -2491,6 +2556,7 @@ export def "grscicoll-institution-latimer-core updateInstitutionFromLatimerCore"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --organisationalUnitName: string
   --organisationalUnitType: string
   --address: list # item shape: {key?: int, address?: string, city?: string, province?: string, postalCode?: string, country?: "AF"|"AX"|"AL"|"DZ"|"AS"|"AD"|"AO"|"AI"|"AQ"|"AG"|"AR"|"AM"|"AW"|"AU"|"AT"|"AZ"|"BS"|"BH"|"BD"|"BB"|"BY"|"BE"|"BZ"|"BJ"|"BM"|"BT"|"BO"|"BQ"|"BA"|"BW"|"BV"|"BR"|"IO"|"BN"|"BG"|"BF"|"BI"|"KH"|"CM"|"CA"|"CV"|"KY"|"CF"|"TD"|"CL"|"CN"|"CX"|"CC"|"CO"|"KM"|"CD"|"CG"|"CK"|"CR"|"CI"|"HR"|"CU"|"CW"|"CY"|"CZ"|"DK"|"DJ"|"DM"|"DO"|"EC"|"EG"|"SV"|"GQ"|"ER"|"EE"|"ET"|"FK"|"FO"|"FJ"|"FI"|"FR"|"GF"|"PF"|"TF"|"GA"|"GM"|"GE"|"DE"|"GH"|"GI"|"GR"|"GL"|"GD"|"GP"|"GU"|"GT"|"GG"|"GN"|"GW"|"GY"|"HT"|"HM"|"VA"|"HN"|"HK"|"HU"|"IS"|"IN"|"ID"|"IR"|"IQ"|"IE"|"IM"|"IL"|"IT"|"JM"|"JP"|"JE"|"JO"|"KZ"|"KE"|"KI"|"KP"|"KR"|"KW"|"KG"|"LA"|"LV"|"LB"|"LS"|"LR"|"LY"|"LI"|"LT"|"LU"|"MO"|"MK"|"MG"|"MW"|"MY"|"MV"|"ML"|"MT"|"MH"|"MQ"|"MR"|"MU"|"YT"|"MX"|"FM"|"MD"|"MC"|"MN"|"ME"|"MS"|"MA"|"MZ"|"MM"|"NA"|"NR"|"NP"|"NL"|"NC"|"NZ"|"NI"|"NE"|"NG"|"NU"|"NF"|"MP"|"NO"|"OM"|"PK"|"PW"|"PS"|"PA"|"PG"|"PY"|"PE"|"PH"|"PN"|"PL"|"PT"|"PR"|"QA"|"RE"|"RO"|"RU"|"RW"|"BL"|"SH"|"KN"|"LC"|"MF"|"PM"|"VC"|"WS"|"SM"|"ST"|"SA"|"SN"|"RS"|"SC"|"SL"|"SG"|"SX"|"SK"|"SI"|"SB"|"SO"|"ZA"|"GS"|"SS"|"ES"|"LK"|"SD"|"SR"|"SJ"|"SZ"|"SE"|"CH"|"SY"|"TW"|"TJ"|"TZ"|"TH"|"TL"|"TG"|"TK"|"TO"|"TT"|"TN"|"TR"|"TM"|"TC"|"TV"|"UG"|"UA"|"AE"|"GB"|"US"|"UM"|"UY"|"UZ"|"VU"|"VE"|"VN"|"VG"|"VI"|"WF"|"EH"|"YE"|"ZM"|"ZW"|"AA"|"XK"|"XZ"|"ZZ"}
@@ -2507,7 +2573,7 @@ export def "grscicoll-institution-latimer-core updateInstitutionFromLatimerCore"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get details of a single network
@@ -2523,13 +2589,14 @@ export def "network get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, title: string, description: string, language: string, numConstituents: int, email: list<string>, phone: list<string>, homepage: list<string>, logoUrl: string, address: list<string>, city: string, province: string, country: string, postalCode: string, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, contacts: table<key: int, type: string, primary: bool, userId: list, salutation: string, firstName: string, lastName: string, position: list, description: string, email: list, phone: list, homepage: list, organization: string, address: list, city: string, province: string, country: string, postalCode: string, createdBy: string, modifiedBy: string, created: string, modified: string>, endpoints: table<key: int, type: string, url: string, description: string, createdBy: string, modifiedBy: string, created: string, modified: string, machineTags: list>, machineTags: table<key: int, namespace: string, name: string, value: string, createdBy: string, created: string>, tags: table<key: int, value: string, createdBy: string, created: string>, identifiers: table<key: int, type: string, identifier: string, createdBy: string, created: string, primary: bool>, comments: table<key: int, content: string, createdBy: string, modifiedBy: string, created: string, modified: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/network/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing network
@@ -2551,6 +2618,7 @@ export def "network updateNetwork" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   title: string # A name for the network.  *(NB Not required for updates.)*
   --description: string # A description for the network.
   language: string@language-completer # The language of the network metadata.  *(NB Not required for updates.)*
@@ -2573,7 +2641,7 @@ export def "network updateNetwork" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a network
@@ -2589,13 +2657,14 @@ export def "network delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/network/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of a single node
@@ -2611,13 +2680,14 @@ export def "node get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, type: string, participationStatus: string, participantSince: int, dateSignedMOU: string, gbifRegion: string, title: string, participantTitle: string, abbreviation: string, description: string, email: list<string>, phone: list<string>, homepage: list<string>, logoUrl: string, address: list<string>, city: string, province: string, country: string, postalCode: string, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, contacts: table<key: int, type: string, primary: bool, userId: list, salutation: string, firstName: string, lastName: string, position: list, description: string, email: list, phone: list, homepage: list, organization: string, address: list, city: string, province: string, country: string, postalCode: string, createdBy: string, modifiedBy: string, created: string, modified: string>, endpoints: table<key: int, type: string, url: string, description: string, createdBy: string, modifiedBy: string, created: string, modified: string, machineTags: list>, machineTags: table<key: int, namespace: string, name: string, value: string, createdBy: string, created: string>, tags: table<key: int, value: string, createdBy: string, created: string>, identifiers: table<key: int, type: string, identifier: string, createdBy: string, created: string, primary: bool>, comments: table<key: int, content: string, createdBy: string, modifiedBy: string, created: string, modified: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/node/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of a single publishing organization
@@ -2633,13 +2703,14 @@ export def "organization get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, endorsingNodeKey: string, endorsementApproved: bool, endorsementStatus: string, title: string, abbreviation: string, description: string, language: string, email: list<string>, phone: list<string>, homepage: list<string>, logoUrl: string, address: list<string>, city: string, province: string, country: string, postalCode: string, latitude: float, longitude: float, numPublishedDatasets: int, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, endorsed: string, contacts: table<key: int, type: string, primary: bool, userId: list, salutation: string, firstName: string, lastName: string, position: list, description: string, email: list, phone: list, homepage: list, organization: string, address: list, city: string, province: string, country: string, postalCode: string, createdBy: string, modifiedBy: string, created: string, modified: string>, endpoints: table<key: int, type: string, url: string, description: string, createdBy: string, modifiedBy: string, created: string, modified: string, machineTags: list>, machineTags: table<key: int, namespace: string, name: string, value: string, createdBy: string, created: string>, tags: table<key: int, value: string, createdBy: string, created: string>, identifiers: table<key: int, type: string, identifier: string, createdBy: string, created: string, primary: bool>, comments: table<key: int, content: string, createdBy: string, modifiedBy: string, created: string, modified: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organization/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing organization
@@ -2661,6 +2732,7 @@ export def "organization updateOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   endorsingNodeKey: string # The participant node which has endorsed or would endorse this publishing organization.  *(NB Not required for updates.)* (format: uuid)
   --endorsementApproved: oneof<nothing, bool> # Whether the participant node in `endorsingNodeKey` has endorsed this publishing organization — whether `endorsementStatus == ENDORSED`.
   --endorsementStatus: string@endorsementStatus-completer # The endorsement decision regarding this publishing organization made by the participant node in `endorsingNodeKey`.
@@ -2689,7 +2761,7 @@ export def "organization updateOrganization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a publishing organization
@@ -2705,13 +2777,14 @@ export def "organization delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organization/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Schedule a new ingestion of the dataset
@@ -2727,6 +2800,7 @@ export def "dataset-crawl crawlDataset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2735,7 +2809,7 @@ export def "dataset-crawl crawlDataset" [
   let full_url = (build-url $base $"/dataset/($key)/crawl" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve derived dataset related datasets
@@ -2752,6 +2826,7 @@ export def "derived-dataset-datasets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<datasetKey: string, datasetDOI: string, datasetTitle: string, derivedDatasetDOI: string, numberRecords: int, citation: string>> {
@@ -2761,7 +2836,7 @@ export def "derived-dataset-datasets get" [
   let full_url = (build-url $base $"/derivedDataset/($doiPrefix)/($doiSuffix)/datasets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of all crawl attempts for a dataset
@@ -2777,6 +2852,7 @@ export def "dataset-process listDatasetCrawlAttempt" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<datasetKey: string, crawlJob: record, startedCrawling: string, finishedCrawling: string, crawlContext: string, finishReason: string, processStateOccurrence: string, processStateChecklist: string, processStateSample: string, declaredCount: int, pagesCrawled: int, pagesFragmentedSuccessful: int, pagesFragmentedError: int, fragmentsEmitted: int, fragmentsReceived: int, rawOccurrencesPersistedNew: int, rawOccurrencesPersistedUpdated: int, rawOccurrencesPersistedUnchanged: int, rawOccurrencesPersistedError: int, fragmentsProcessed: int, verbatimOccurrencesPersistedSuccessful: int, verbatimOccurrencesPersistedError: int, interpretedOccurrencesPersistedSuccessful: int, interpretedOccurrencesPersistedError: int>> {
@@ -2786,7 +2862,7 @@ export def "dataset-process listDatasetCrawlAttempt" [
   let full_url = (build-url $base $"/dataset/($key)/process" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of a particular crawl attempt for the dataset
@@ -2803,6 +2879,7 @@ export def "dataset-process datasetCrawlAttempt" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<datasetKey: string, crawlJob: record<datasetKey: string, endpointType: string, targetUrl: string, attempt: int, properties: record>, startedCrawling: string, finishedCrawling: string, crawlContext: string, finishReason: string, processStateOccurrence: string, processStateChecklist: string, processStateSample: string, declaredCount: int, pagesCrawled: int, pagesFragmentedSuccessful: int, pagesFragmentedError: int, fragmentsEmitted: int, fragmentsReceived: int, rawOccurrencesPersistedNew: int, rawOccurrencesPersistedUpdated: int, rawOccurrencesPersistedUnchanged: int, rawOccurrencesPersistedError: int, fragmentsProcessed: int, verbatimOccurrencesPersistedSuccessful: int, verbatimOccurrencesPersistedError: int, interpretedOccurrencesPersistedSuccessful: int, interpretedOccurrencesPersistedError: int> {
@@ -2812,7 +2889,7 @@ export def "dataset-process datasetCrawlAttempt" [
   let full_url = (build-url $base $"/dataset/($key)/process/($attempt)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List the networks the dataset belongs to
@@ -2828,13 +2905,14 @@ export def "dataset-networks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: string, title: string, description: string, language: string, numConstituents: int, email: list<string>, phone: list<string>, homepage: list<string>, logoUrl: string, address: list<string>, city: string, province: string, country: string, postalCode: string, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, contacts: list<record>, endpoints: list<record>, machineTags: list<record>, tags: list<record>, identifiers: list<record>, comments: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dataset/($key)/networks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve all constituents of the dataset
@@ -2850,6 +2928,7 @@ export def "dataset-constituents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: string, parentDatasetKey: string, duplicateOfDatasetKey: string, installationKey: string, publishingOrganizationKey: string, publishingOrganizationName: string, networkKeys: list, doi: string, version: string, external: bool, numConstituents: int, type: string, subtype: string, shortName: string, title: string, alias: string, abbreviation: string, description: string, language: string, homepage: string, logoUrl: string, citation: record, contactsCitation: list, rights: string, lockedForAutoUpdate: bool, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, contacts: list, endpoints: list, machineTags: list, tags: list, identifiers: list, comments: list, bibliographicCitations: list, curatorialUnits: list, taxonomicCoverages: list, geographicCoverageDescription: string, geographicCoverages: list, temporalCoverages: list, keywordCollections: list, project: record, samplingDescription: record, countryCoverage: list, collections: list, dataDescriptions: list, dataLanguage: string, purpose: string, introduction: string, gettingStarted: string, acknowledgements: string, additionalInfo: string, pubDate: string, maintenanceUpdateFrequency: string, maintenanceDescription: string, license: string, dwca: record, category: list>> {
@@ -2859,7 +2938,7 @@ export def "dataset-constituents get" [
   let full_url = (build-url $base $"/dataset/($key)/constituents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all constituents (datasets) of a network
@@ -2875,6 +2954,7 @@ export def "network-constituents listNetworkConstituents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: string, parentDatasetKey: string, duplicateOfDatasetKey: string, installationKey: string, publishingOrganizationKey: string, publishingOrganizationName: string, networkKeys: list, doi: string, version: string, external: bool, numConstituents: int, type: string, subtype: string, shortName: string, title: string, alias: string, abbreviation: string, description: string, language: string, homepage: string, logoUrl: string, citation: record, contactsCitation: list, rights: string, lockedForAutoUpdate: bool, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, contacts: list, endpoints: list, machineTags: list, tags: list, identifiers: list, comments: list, bibliographicCitations: list, curatorialUnits: list, taxonomicCoverages: list, geographicCoverageDescription: string, geographicCoverages: list, temporalCoverages: list, keywordCollections: list, project: record, samplingDescription: record, countryCoverage: list, collections: list, dataDescriptions: list, dataLanguage: string, purpose: string, introduction: string, gettingStarted: string, acknowledgements: string, additionalInfo: string, pubDate: string, maintenanceUpdateFrequency: string, maintenanceDescription: string, license: string, dwca: record, category: list>> {
@@ -2884,7 +2964,7 @@ export def "network-constituents listNetworkConstituents" [
   let full_url = (build-url $base $"/network/($key)/constituents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List published datasets
@@ -2900,6 +2980,7 @@ export def "organization-published-dataset get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: string, parentDatasetKey: string, duplicateOfDatasetKey: string, installationKey: string, publishingOrganizationKey: string, publishingOrganizationName: string, networkKeys: list, doi: string, version: string, external: bool, numConstituents: int, type: string, subtype: string, shortName: string, title: string, alias: string, abbreviation: string, description: string, language: string, homepage: string, logoUrl: string, citation: record, contactsCitation: list, rights: string, lockedForAutoUpdate: bool, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, contacts: list, endpoints: list, machineTags: list, tags: list, identifiers: list, comments: list, bibliographicCitations: list, curatorialUnits: list, taxonomicCoverages: list, geographicCoverageDescription: string, geographicCoverages: list, temporalCoverages: list, keywordCollections: list, project: record, samplingDescription: record, countryCoverage: list, collections: list, dataDescriptions: list, dataLanguage: string, purpose: string, introduction: string, gettingStarted: string, acknowledgements: string, additionalInfo: string, pubDate: string, maintenanceUpdateFrequency: string, maintenanceDescription: string, license: string, dwca: record, category: list>> {
@@ -2909,7 +2990,7 @@ export def "organization-published-dataset get" [
   let full_url = (build-url $base $"/organization/($key)/publishedDataset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List hosted datasets
@@ -2925,6 +3006,7 @@ export def "organization-hosted-dataset get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: string, parentDatasetKey: string, duplicateOfDatasetKey: string, installationKey: string, publishingOrganizationKey: string, publishingOrganizationName: string, networkKeys: list, doi: string, version: string, external: bool, numConstituents: int, type: string, subtype: string, shortName: string, title: string, alias: string, abbreviation: string, description: string, language: string, homepage: string, logoUrl: string, citation: record, contactsCitation: list, rights: string, lockedForAutoUpdate: bool, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, contacts: list, endpoints: list, machineTags: list, tags: list, identifiers: list, comments: list, bibliographicCitations: list, curatorialUnits: list, taxonomicCoverages: list, geographicCoverageDescription: string, geographicCoverages: list, temporalCoverages: list, keywordCollections: list, project: record, samplingDescription: record, countryCoverage: list, collections: list, dataDescriptions: list, dataLanguage: string, purpose: string, introduction: string, gettingStarted: string, acknowledgements: string, additionalInfo: string, pubDate: string, maintenanceUpdateFrequency: string, maintenanceDescription: string, license: string, dwca: record, category: list>> {
@@ -2934,7 +3016,7 @@ export def "organization-hosted-dataset get" [
   let full_url = (build-url $base $"/organization/($key)/hostedDataset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List installation's datasets
@@ -2950,6 +3032,7 @@ export def "installation-dataset get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: string, parentDatasetKey: string, duplicateOfDatasetKey: string, installationKey: string, publishingOrganizationKey: string, publishingOrganizationName: string, networkKeys: list, doi: string, version: string, external: bool, numConstituents: int, type: string, subtype: string, shortName: string, title: string, alias: string, abbreviation: string, description: string, language: string, homepage: string, logoUrl: string, citation: record, contactsCitation: list, rights: string, lockedForAutoUpdate: bool, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, contacts: list, endpoints: list, machineTags: list, tags: list, identifiers: list, comments: list, bibliographicCitations: list, curatorialUnits: list, taxonomicCoverages: list, geographicCoverageDescription: string, geographicCoverages: list, temporalCoverages: list, keywordCollections: list, project: record, samplingDescription: record, countryCoverage: list, collections: list, dataDescriptions: list, dataLanguage: string, purpose: string, introduction: string, gettingStarted: string, acknowledgements: string, additionalInfo: string, pubDate: string, maintenanceUpdateFrequency: string, maintenanceDescription: string, license: string, dwca: record, category: list>> {
@@ -2959,7 +3042,7 @@ export def "installation-dataset get" [
   let full_url = (build-url $base $"/installation/($key)/dataset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List organization's installations
@@ -2975,6 +3058,7 @@ export def "organization-installation get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: string, organizationKey: string, type: string, title: string, description: string, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, disabled: bool, contacts: list, endpoints: list, machineTags: list, tags: list, identifiers: list, comments: list>> {
@@ -2984,7 +3068,7 @@ export def "organization-installation get" [
   let full_url = (build-url $base $"/organization/($key)/installation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List node's organizations
@@ -3000,6 +3084,7 @@ export def "node-organization get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: string, endorsingNodeKey: string, endorsementApproved: bool, endorsementStatus: string, title: string, abbreviation: string, description: string, language: string, email: list, phone: list, homepage: list, logoUrl: string, address: list, city: string, province: string, country: string, postalCode: string, latitude: float, longitude: float, numPublishedDatasets: int, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, endorsed: string, contacts: list, endpoints: list, machineTags: list, tags: list, identifiers: list, comments: list>> {
@@ -3009,7 +3094,7 @@ export def "node-organization get" [
   let full_url = (build-url $base $"/node/($key)/organization" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the node for a country
@@ -3025,13 +3110,14 @@ export def "node-country get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, type: string, participationStatus: string, participantSince: int, dateSignedMOU: string, gbifRegion: string, title: string, participantTitle: string, abbreviation: string, description: string, email: list<string>, phone: list<string>, homepage: list<string>, logoUrl: string, address: list<string>, city: string, province: string, country: string, postalCode: string, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, contacts: table<key: int, type: string, primary: bool, userId: list, salutation: string, firstName: string, lastName: string, position: list, description: string, email: list, phone: list, homepage: list, organization: string, address: list, city: string, province: string, country: string, postalCode: string, createdBy: string, modifiedBy: string, created: string, modified: string>, endpoints: table<key: int, type: string, url: string, description: string, createdBy: string, modifiedBy: string, created: string, modified: string, machineTags: list>, machineTags: table<key: int, namespace: string, name: string, value: string, createdBy: string, created: string>, tags: table<key: int, value: string, createdBy: string, created: string>, identifiers: table<key: int, type: string, identifier: string, createdBy: string, created: string, primary: bool>, comments: table<key: int, content: string, createdBy: string, modifiedBy: string, created: string, modified: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/node/country/($countryCode)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all GBIF member countries
@@ -3046,13 +3132,14 @@ export def "node-country list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/node/country")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all GBIF member countries than are either voting or associate participants
@@ -3067,13 +3154,14 @@ export def "node-active-countries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/node/activeCountries")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all datasets from a node
@@ -3089,6 +3177,7 @@ export def "node-dataset get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: string, parentDatasetKey: string, duplicateOfDatasetKey: string, installationKey: string, publishingOrganizationKey: string, publishingOrganizationName: string, networkKeys: list, doi: string, version: string, external: bool, numConstituents: int, type: string, subtype: string, shortName: string, title: string, alias: string, abbreviation: string, description: string, language: string, homepage: string, logoUrl: string, citation: record, contactsCitation: list, rights: string, lockedForAutoUpdate: bool, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, contacts: list, endpoints: list, machineTags: list, tags: list, identifiers: list, comments: list, bibliographicCitations: list, curatorialUnits: list, taxonomicCoverages: list, geographicCoverageDescription: string, geographicCoverages: list, temporalCoverages: list, keywordCollections: list, project: record, samplingDescription: record, countryCoverage: list, collections: list, dataDescriptions: list, dataLanguage: string, purpose: string, introduction: string, gettingStarted: string, acknowledgements: string, additionalInfo: string, pubDate: string, maintenanceUpdateFrequency: string, maintenanceDescription: string, license: string, dwca: record, category: list>> {
@@ -3098,7 +3187,7 @@ export def "node-dataset get" [
   let full_url = (build-url $base $"/node/($key)/dataset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List node's installations
@@ -3114,6 +3203,7 @@ export def "node-installation get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: string, organizationKey: string, type: string, title: string, description: string, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, disabled: bool, contacts: list, endpoints: list, machineTags: list, tags: list, identifiers: list, comments: list>> {
@@ -3123,7 +3213,7 @@ export def "node-installation get" [
   let full_url = (build-url $base $"/node/($key)/installation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve GBIF metadata document of the dataset
@@ -3139,13 +3229,14 @@ export def "dataset-document get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dataset/($key)/document")
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a metadata document to the record
@@ -3161,6 +3252,7 @@ export def "dataset-document addDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<key: int, datasetKey: string, type: string, content: string, createdBy: string, modifiedBy: string, created: string, modified: string> {
   let input = $in
@@ -3170,7 +3262,7 @@ export def "dataset-document addDocument" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/xml" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/xml" $body
 }
 
 # Export a descriptor suggestion file
@@ -3187,13 +3279,14 @@ export def "grscicoll-collection-descriptor-group-suggestion-file exportDescript
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($collectionKey)/descriptorGroup/suggestion/($key)/file")
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve all dataset source metadata
@@ -3209,6 +3302,7 @@ export def "dataset-metadata get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-2
 ]: nothing -> table<key: int, datasetKey: string, type: string, content: string, createdBy: string, modifiedBy: string, created: string, modified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3217,7 +3311,7 @@ export def "dataset-metadata get-by-key" [
   let full_url = (build-url $base $"/dataset/($key)/metadata" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a descriptor change suggestion
@@ -3234,13 +3328,14 @@ export def "grscicoll-collection-descriptor-group-suggestion get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: int, collectionKey: string, descriptorGroupKey: int, format: string, type: string, title: string, description: string, tags: list<string>, status: string, proposed: string, proposedBy: string, proposerEmail: string, applied: string, appliedBy: string, discarded: string, discardedBy: string, suggestedFile: string, comments: list<string>, country: string, modified: string, modifiedBy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($collectionKey)/descriptorGroup/suggestion/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a descriptor change suggestion
@@ -3257,6 +3352,7 @@ export def "grscicoll-collection-descriptor-group-suggestion updateDescriptorSug
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-3
   --title: string
   --description: string
@@ -3275,7 +3371,7 @@ export def "grscicoll-collection-descriptor-group-suggestion updateDescriptorSug
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Apply a descriptor change suggestion
@@ -3292,13 +3388,14 @@ export def "grscicoll-collection-descriptor-group-suggestion-apply applyDescript
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($collectionKey)/descriptorGroup/suggestion/($key)/apply")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve metadata about a source metadata document of a dataset
@@ -3314,13 +3411,14 @@ export def "dataset-metadata get-by-metadataKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: int, datasetKey: string, type: string, content: string, createdBy: string, modifiedBy: string, created: string, modified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dataset/metadata/($metadataKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a source metadata document from the record
@@ -3336,13 +3434,14 @@ export def "dataset-metadata delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dataset/metadata/($metadataKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Discard a descriptor change suggestion
@@ -3359,13 +3458,14 @@ export def "grscicoll-collection-descriptor-group-suggestion-discard discardDesc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($collectionKey)/descriptorGroup/suggestion/($key)/discard")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a source metadata document of the dataset
@@ -3381,13 +3481,14 @@ export def "dataset-metadata-document get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dataset/metadata/($metadataKey)/document")
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List descriptor change suggestions
@@ -3403,6 +3504,7 @@ export def "grscicoll-collection-descriptor-group-suggestion listDescriptorSugge
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer
   --type: string@type-completer-3
   --proposerEmail: string
@@ -3415,7 +3517,7 @@ export def "grscicoll-collection-descriptor-group-suggestion listDescriptorSugge
   let full_url = (build-url $base $"/grscicoll/collection/($collectionKey)/descriptorGroup/suggestion" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new descriptor change suggestion
@@ -3431,6 +3533,7 @@ export def "grscicoll-collection-descriptor-group-suggestion createDescriptorSug
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-3
   --descriptorGroupKey: int # format: int64
   --title: string
@@ -3450,7 +3553,7 @@ export def "grscicoll-collection-descriptor-group-suggestion createDescriptorSug
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # List all descriptor change suggestions
@@ -3465,6 +3568,7 @@ export def "grscicoll-collection-descriptor-group-suggestion listAllDescriptorSu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer
   --type: string@type-completer-3
   --proposerEmail: string
@@ -3477,7 +3581,7 @@ export def "grscicoll-collection-descriptor-group-suggestion listAllDescriptorSu
   let full_url = (build-url $base "/grscicoll/collection/descriptorGroup/suggestion" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve all comments of the record
@@ -3493,13 +3597,14 @@ export def "organization-comment get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, content: string, createdBy: string, modifiedBy: string, created: string, modified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organization/($key)/comment")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a comment to the record
@@ -3515,6 +3620,7 @@ export def "organization-comment addComment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   content: string # The text of the comment
 ]: any -> int {
   let input = $in
@@ -3525,7 +3631,7 @@ export def "organization-comment addComment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all comments of the record
@@ -3541,13 +3647,14 @@ export def "node-comment get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, content: string, createdBy: string, modifiedBy: string, created: string, modified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/node/($key)/comment")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a comment to the record
@@ -3563,6 +3670,7 @@ export def "node-comment addComment-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   content: string # The text of the comment
 ]: any -> int {
   let input = $in
@@ -3573,7 +3681,7 @@ export def "node-comment addComment-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all comments of the record
@@ -3589,13 +3697,14 @@ export def "network-comment get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, content: string, createdBy: string, modifiedBy: string, created: string, modified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/network/($key)/comment")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a comment to the record
@@ -3611,6 +3720,7 @@ export def "network-comment addComment-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   content: string # The text of the comment
 ]: any -> int {
   let input = $in
@@ -3621,7 +3731,7 @@ export def "network-comment addComment-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all comments of the record
@@ -3637,13 +3747,14 @@ export def "installation-comment get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, content: string, createdBy: string, modifiedBy: string, created: string, modified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/installation/($key)/comment")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a comment to the record
@@ -3659,6 +3770,7 @@ export def "installation-comment addComment-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   content: string # The text of the comment
 ]: any -> int {
   let input = $in
@@ -3669,7 +3781,7 @@ export def "installation-comment addComment-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all comments of the record
@@ -3685,13 +3797,14 @@ export def "grscicoll-institution-comment get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, content: string, createdBy: string, modifiedBy: string, created: string, modified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/($key)/comment")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a comment to the record
@@ -3707,6 +3820,7 @@ export def "grscicoll-institution-comment addComment-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   content: string # The text of the comment
 ]: any -> int {
   let input = $in
@@ -3717,7 +3831,7 @@ export def "grscicoll-institution-comment addComment-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all comments of the record
@@ -3733,13 +3847,14 @@ export def "grscicoll-collection-comment get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, content: string, createdBy: string, modifiedBy: string, created: string, modified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($key)/comment")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a comment to the record
@@ -3755,6 +3870,7 @@ export def "grscicoll-collection-comment addComment-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   content: string # The text of the comment
 ]: any -> int {
   let input = $in
@@ -3765,7 +3881,7 @@ export def "grscicoll-collection-comment addComment-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all comments of the record
@@ -3781,13 +3897,14 @@ export def "dataset-comment get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, content: string, createdBy: string, modifiedBy: string, created: string, modified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dataset/($key)/comment")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a comment to the record
@@ -3803,6 +3920,7 @@ export def "dataset-comment addComment-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   content: string # The text of the comment
 ]: any -> int {
   let input = $in
@@ -3813,7 +3931,7 @@ export def "dataset-comment addComment-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a comment from the record
@@ -3830,13 +3948,14 @@ export def "organization-comment delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organization/($key)/comment/($commentKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a comment from the record
@@ -3853,13 +3972,14 @@ export def "node-comment delete-by-key-commentKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/node/($key)/comment/($commentKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a comment from the record
@@ -3876,13 +3996,14 @@ export def "network-comment delete-by-key-commentKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/network/($key)/comment/($commentKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a comment from the record
@@ -3899,13 +4020,14 @@ export def "installation-comment delete-by-key-commentKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/installation/($key)/comment/($commentKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a comment from the record
@@ -3922,13 +4044,14 @@ export def "dataset-comment delete-by-key-commentKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dataset/($key)/comment/($commentKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a comment from the record
@@ -3945,13 +4068,14 @@ export def "grscicoll-institution-comment delete-by-key-commentKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/($key)/comment/($commentKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a comment from the record
@@ -3968,13 +4092,14 @@ export def "grscicoll-collection-comment delete-by-key-commentKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($key)/comment/($commentKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a constituent dataset to a network
@@ -3991,13 +4116,14 @@ export def "network-constituents networkConstituentAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/network/($key)/constituents/($datasetKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove a constituent dataset from a network
@@ -4014,13 +4140,14 @@ export def "network-constituents networkConstituentDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/network/($key)/constituents/($datasetKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve all contacts of the record
@@ -4036,13 +4163,14 @@ export def "organization-contact get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, type: string, primary: bool, userId: list<string>, salutation: string, firstName: string, lastName: string, position: list<string>, description: string, email: list<string>, phone: list<string>, homepage: list<string>, organization: string, address: list<string>, city: string, province: string, country: string, postalCode: string, createdBy: string, modifiedBy: string, created: string, modified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organization/($key)/contact")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing contact on the record
@@ -4058,6 +4186,7 @@ export def "organization-contact updateContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4 # The type of contact.
   --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
@@ -4084,7 +4213,7 @@ export def "organization-contact updateContact" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a contact to the record
@@ -4100,6 +4229,7 @@ export def "organization-contact addContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4 # The type of contact.
   --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
@@ -4126,7 +4256,7 @@ export def "organization-contact addContact" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all contacts of the record
@@ -4142,13 +4272,14 @@ export def "network-contact get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, type: string, primary: bool, userId: list<string>, salutation: string, firstName: string, lastName: string, position: list<string>, description: string, email: list<string>, phone: list<string>, homepage: list<string>, organization: string, address: list<string>, city: string, province: string, country: string, postalCode: string, createdBy: string, modifiedBy: string, created: string, modified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/network/($key)/contact")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing contact on the record
@@ -4164,6 +4295,7 @@ export def "network-contact updateContact-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4 # The type of contact.
   --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
@@ -4190,7 +4322,7 @@ export def "network-contact updateContact-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a contact to the record
@@ -4206,6 +4338,7 @@ export def "network-contact addContact-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4 # The type of contact.
   --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
@@ -4232,7 +4365,7 @@ export def "network-contact addContact-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all contacts of the record
@@ -4248,13 +4381,14 @@ export def "installation-contact get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, type: string, primary: bool, userId: list<string>, salutation: string, firstName: string, lastName: string, position: list<string>, description: string, email: list<string>, phone: list<string>, homepage: list<string>, organization: string, address: list<string>, city: string, province: string, country: string, postalCode: string, createdBy: string, modifiedBy: string, created: string, modified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/installation/($key)/contact")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing contact on the record
@@ -4270,6 +4404,7 @@ export def "installation-contact updateContact-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4 # The type of contact.
   --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
@@ -4296,7 +4431,7 @@ export def "installation-contact updateContact-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a contact to the record
@@ -4312,6 +4447,7 @@ export def "installation-contact addContact-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4 # The type of contact.
   --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
@@ -4338,7 +4474,7 @@ export def "installation-contact addContact-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all contacts of the record
@@ -4354,13 +4490,14 @@ export def "dataset-contact get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, type: string, primary: bool, userId: list<string>, salutation: string, firstName: string, lastName: string, position: list<string>, description: string, email: list<string>, phone: list<string>, homepage: list<string>, organization: string, address: list<string>, city: string, province: string, country: string, postalCode: string, createdBy: string, modifiedBy: string, created: string, modified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dataset/($key)/contact")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing contact on the record
@@ -4376,6 +4513,7 @@ export def "dataset-contact updateContact-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4 # The type of contact.
   --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
@@ -4402,7 +4540,7 @@ export def "dataset-contact updateContact-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a contact to the record
@@ -4418,6 +4556,7 @@ export def "dataset-contact addContact-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4 # The type of contact.
   --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
@@ -4444,7 +4583,7 @@ export def "dataset-contact addContact-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an existing contact person on the record
@@ -4461,6 +4600,7 @@ export def "grscicoll-institution-contact-person updateContactPerson" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4 # The type of contact.
   --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
@@ -4487,7 +4627,7 @@ export def "grscicoll-institution-contact-person updateContactPerson" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a contact person from the record
@@ -4504,13 +4644,14 @@ export def "grscicoll-institution-contact-person delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/($key)/contactPerson/($contactKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing contact person on the record
@@ -4527,6 +4668,7 @@ export def "grscicoll-collection-contact-person updateContactPerson-by-key-conta
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4 # The type of contact.
   --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
@@ -4553,7 +4695,7 @@ export def "grscicoll-collection-contact-person updateContactPerson-by-key-conta
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a contact person from the record
@@ -4570,13 +4712,14 @@ export def "grscicoll-collection-contact-person delete-by-key-contactKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($key)/contactPerson/($contactKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing contact on the record
@@ -4593,6 +4736,7 @@ export def "organization-contact updateContact-by-key-contactKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4 # The type of contact.
   --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
@@ -4619,7 +4763,7 @@ export def "organization-contact updateContact-by-key-contactKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a contact from the record
@@ -4636,13 +4780,14 @@ export def "organization-contact delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organization/($key)/contact/($contactKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing contact on the record
@@ -4658,6 +4803,7 @@ export def "node-contact updateContact-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4 # The type of contact.
   --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
@@ -4684,7 +4830,7 @@ export def "node-contact updateContact-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an existing contact on the record
@@ -4701,6 +4847,7 @@ export def "node-contact updateContact-by-key-contactKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4 # The type of contact.
   --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
@@ -4727,7 +4874,7 @@ export def "node-contact updateContact-by-key-contactKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an existing contact on the record
@@ -4744,6 +4891,7 @@ export def "network-contact updateContact-by-key-contactKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4 # The type of contact.
   --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
@@ -4770,7 +4918,7 @@ export def "network-contact updateContact-by-key-contactKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a contact from the record
@@ -4787,13 +4935,14 @@ export def "network-contact delete-by-key-contactKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/network/($key)/contact/($contactKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing contact on the record
@@ -4810,6 +4959,7 @@ export def "installation-contact updateContact-by-key-contactKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4 # The type of contact.
   --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
@@ -4836,7 +4986,7 @@ export def "installation-contact updateContact-by-key-contactKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a contact from the record
@@ -4853,13 +5003,14 @@ export def "installation-contact delete-by-key-contactKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/installation/($key)/contact/($contactKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing contact on the record
@@ -4876,6 +5027,7 @@ export def "dataset-contact updateContact-by-key-contactKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4 # The type of contact.
   --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
@@ -4902,7 +5054,7 @@ export def "dataset-contact updateContact-by-key-contactKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a contact from the record
@@ -4919,13 +5071,14 @@ export def "dataset-contact delete-by-key-contactKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dataset/($key)/contact/($contactKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve all endpoints of the record
@@ -4941,13 +5094,14 @@ export def "organization-endpoint get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, type: string, url: string, description: string, createdBy: string, modifiedBy: string, created: string, modified: string, machineTags: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organization/($key)/endpoint")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an endpoint to the record
@@ -4964,6 +5118,7 @@ export def "organization-endpoint addEndpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-5
   --body-url: string # format: uri
   --description: string
@@ -4977,7 +5132,7 @@ export def "organization-endpoint addEndpoint" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all endpoints of the record
@@ -4993,13 +5148,14 @@ export def "node-endpoint get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, type: string, url: string, description: string, createdBy: string, modifiedBy: string, created: string, modified: string, machineTags: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/node/($key)/endpoint")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an endpoint to the record
@@ -5016,6 +5172,7 @@ export def "node-endpoint addEndpoint-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-5
   --body-url: string # format: uri
   --description: string
@@ -5029,7 +5186,7 @@ export def "node-endpoint addEndpoint-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all endpoints of the record
@@ -5045,13 +5202,14 @@ export def "network-endpoint get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, type: string, url: string, description: string, createdBy: string, modifiedBy: string, created: string, modified: string, machineTags: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/network/($key)/endpoint")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an endpoint to the record
@@ -5068,6 +5226,7 @@ export def "network-endpoint addEndpoint-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-5
   --body-url: string # format: uri
   --description: string
@@ -5081,7 +5240,7 @@ export def "network-endpoint addEndpoint-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all endpoints of the record
@@ -5097,13 +5256,14 @@ export def "installation-endpoint get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, type: string, url: string, description: string, createdBy: string, modifiedBy: string, created: string, modified: string, machineTags: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/installation/($key)/endpoint")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an endpoint to the record
@@ -5120,6 +5280,7 @@ export def "installation-endpoint addEndpoint-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-5
   --body-url: string # format: uri
   --description: string
@@ -5133,7 +5294,7 @@ export def "installation-endpoint addEndpoint-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all endpoints of the record
@@ -5149,13 +5310,14 @@ export def "dataset-endpoint get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, type: string, url: string, description: string, createdBy: string, modifiedBy: string, created: string, modified: string, machineTags: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dataset/($key)/endpoint")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an endpoint to the record
@@ -5172,6 +5334,7 @@ export def "dataset-endpoint addEndpoint-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-5
   --body-url: string # format: uri
   --description: string
@@ -5185,7 +5348,7 @@ export def "dataset-endpoint addEndpoint-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an endpoint from the record
@@ -5202,13 +5365,14 @@ export def "organization-endpoint delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organization/($key)/endpoint/($endpointKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an endpoint from the record
@@ -5225,13 +5389,14 @@ export def "node-endpoint delete-by-key-endpointKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/node/($key)/endpoint/($endpointKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an endpoint from the record
@@ -5248,13 +5413,14 @@ export def "network-endpoint delete-by-key-endpointKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/network/($key)/endpoint/($endpointKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an endpoint from the record
@@ -5271,13 +5437,14 @@ export def "installation-endpoint delete-by-key-endpointKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/installation/($key)/endpoint/($endpointKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an endpoint from the record
@@ -5294,13 +5461,14 @@ export def "dataset-endpoint delete-by-key-endpointKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dataset/($key)/endpoint/($endpointKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve all identifiers of the record
@@ -5316,13 +5484,14 @@ export def "organization-identifier get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, type: string, identifier: string, createdBy: string, created: string, primary: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organization/($key)/identifier")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an identifier to the record
@@ -5338,6 +5507,7 @@ export def "organization-identifier addIdentifier" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-6
   identifier: string # Value for the identifier
   --primary: oneof<nothing, bool> # Whether this is the primary identifier for the associated entity.
@@ -5350,7 +5520,7 @@ export def "organization-identifier addIdentifier" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all identifiers of the record
@@ -5366,13 +5536,14 @@ export def "node-identifier get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, type: string, identifier: string, createdBy: string, created: string, primary: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/node/($key)/identifier")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an identifier to the record
@@ -5388,6 +5559,7 @@ export def "node-identifier addIdentifier-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-6
   identifier: string # Value for the identifier
   --primary: oneof<nothing, bool> # Whether this is the primary identifier for the associated entity.
@@ -5400,7 +5572,7 @@ export def "node-identifier addIdentifier-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all identifiers of the record
@@ -5416,13 +5588,14 @@ export def "network-identifier get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, type: string, identifier: string, createdBy: string, created: string, primary: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/network/($key)/identifier")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an identifier to the record
@@ -5438,6 +5611,7 @@ export def "network-identifier addIdentifier-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-6
   identifier: string # Value for the identifier
   --primary: oneof<nothing, bool> # Whether this is the primary identifier for the associated entity.
@@ -5450,7 +5624,7 @@ export def "network-identifier addIdentifier-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all identifiers of the record
@@ -5466,13 +5640,14 @@ export def "installation-identifier get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, type: string, identifier: string, createdBy: string, created: string, primary: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/installation/($key)/identifier")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an identifier to the record
@@ -5488,6 +5663,7 @@ export def "installation-identifier addIdentifier-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-6
   identifier: string # Value for the identifier
   --primary: oneof<nothing, bool> # Whether this is the primary identifier for the associated entity.
@@ -5500,7 +5676,7 @@ export def "installation-identifier addIdentifier-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all identifiers of the record
@@ -5516,13 +5692,14 @@ export def "grscicoll-institution-identifier get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, type: string, identifier: string, createdBy: string, created: string, primary: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/($key)/identifier")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an identifier to the record
@@ -5538,6 +5715,7 @@ export def "grscicoll-institution-identifier addIdentifier-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-6
   identifier: string # Value for the identifier
   --primary: oneof<nothing, bool> # Whether this is the primary identifier for the associated entity.
@@ -5550,7 +5728,7 @@ export def "grscicoll-institution-identifier addIdentifier-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all identifiers of the record
@@ -5566,13 +5744,14 @@ export def "grscicoll-collection-identifier get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, type: string, identifier: string, createdBy: string, created: string, primary: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($key)/identifier")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an identifier to the record
@@ -5588,6 +5767,7 @@ export def "grscicoll-collection-identifier addIdentifier-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-6
   identifier: string # Value for the identifier
   --primary: oneof<nothing, bool> # Whether this is the primary identifier for the associated entity.
@@ -5600,7 +5780,7 @@ export def "grscicoll-collection-identifier addIdentifier-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all identifiers of the record
@@ -5616,13 +5796,14 @@ export def "dataset-identifier get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, type: string, identifier: string, createdBy: string, created: string, primary: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dataset/($key)/identifier")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add an identifier to the record
@@ -5638,6 +5819,7 @@ export def "dataset-identifier addIdentifier-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-6
   identifier: string # Value for the identifier
   --primary: oneof<nothing, bool> # Whether this is the primary identifier for the associated entity.
@@ -5650,7 +5832,7 @@ export def "dataset-identifier addIdentifier-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an identifier from the record
@@ -5667,13 +5849,14 @@ export def "organization-identifier delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organization/($key)/identifier/($identifierKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an identifier from the record
@@ -5690,13 +5873,14 @@ export def "node-identifier delete-by-key-identifierKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/node/($key)/identifier/($identifierKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an identifier from the record
@@ -5713,13 +5897,14 @@ export def "network-identifier delete-by-key-identifierKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/network/($key)/identifier/($identifierKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an identifier from the record
@@ -5736,13 +5921,14 @@ export def "installation-identifier delete-by-key-identifierKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/installation/($key)/identifier/($identifierKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an identifier from the record
@@ -5759,13 +5945,14 @@ export def "dataset-identifier delete-by-key-identifierKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dataset/($key)/identifier/($identifierKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an identifier for a specified entity
@@ -5782,6 +5969,7 @@ export def "grscicoll-institution-identifier updateIdentifier" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -5791,7 +5979,7 @@ export def "grscicoll-institution-identifier updateIdentifier" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an identifier from the record
@@ -5808,13 +5996,14 @@ export def "grscicoll-institution-identifier delete-by-key-identifierKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/($key)/identifier/($identifierKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an identifier for a specified entity
@@ -5831,6 +6020,7 @@ export def "grscicoll-collection-identifier updateIdentifier-by-key-identifierKe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -5840,7 +6030,7 @@ export def "grscicoll-collection-identifier updateIdentifier-by-key-identifierKe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an identifier from the record
@@ -5857,13 +6047,14 @@ export def "grscicoll-collection-identifier delete-by-key-identifierKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($key)/identifier/($identifierKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all machine tags on the record
@@ -5879,13 +6070,14 @@ export def "organization-machine-tag listMachineTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, namespace: string, name: string, value: string, createdBy: string, created: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organization/($key)/machineTag")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a machine tag to the record
@@ -5901,6 +6093,7 @@ export def "organization-machine-tag addMachineTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   namespace: string # The namespace for the machine tag.
   name: string # The name (within the namespace) of the machine tag.
   value: string # The value of the machine tag.
@@ -5913,7 +6106,7 @@ export def "organization-machine-tag addMachineTag" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all machine tags on the record
@@ -5929,13 +6122,14 @@ export def "node-machine-tag listMachineTag-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, namespace: string, name: string, value: string, createdBy: string, created: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/node/($key)/machineTag")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a machine tag to the record
@@ -5951,6 +6145,7 @@ export def "node-machine-tag addMachineTag-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   namespace: string # The namespace for the machine tag.
   name: string # The name (within the namespace) of the machine tag.
   value: string # The value of the machine tag.
@@ -5963,7 +6158,7 @@ export def "node-machine-tag addMachineTag-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all machine tags on the record
@@ -5979,13 +6174,14 @@ export def "network-machine-tag listMachineTag-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, namespace: string, name: string, value: string, createdBy: string, created: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/network/($key)/machineTag")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a machine tag to the record
@@ -6001,6 +6197,7 @@ export def "network-machine-tag addMachineTag-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   namespace: string # The namespace for the machine tag.
   name: string # The name (within the namespace) of the machine tag.
   value: string # The value of the machine tag.
@@ -6013,7 +6210,7 @@ export def "network-machine-tag addMachineTag-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all machine tags on the record
@@ -6029,13 +6226,14 @@ export def "installation-machine-tag listMachineTag-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, namespace: string, name: string, value: string, createdBy: string, created: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/installation/($key)/machineTag")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a machine tag to the record
@@ -6051,6 +6249,7 @@ export def "installation-machine-tag addMachineTag-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   namespace: string # The namespace for the machine tag.
   name: string # The name (within the namespace) of the machine tag.
   value: string # The value of the machine tag.
@@ -6063,7 +6262,7 @@ export def "installation-machine-tag addMachineTag-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all machine tags on the record
@@ -6079,13 +6278,14 @@ export def "grscicoll-institution-machine-tag listMachineTag-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, namespace: string, name: string, value: string, createdBy: string, created: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/($key)/machineTag")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a machine tag to the record
@@ -6101,6 +6301,7 @@ export def "grscicoll-institution-machine-tag addMachineTag-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   namespace: string # The namespace for the machine tag.
   name: string # The name (within the namespace) of the machine tag.
   value: string # The value of the machine tag.
@@ -6113,7 +6314,7 @@ export def "grscicoll-institution-machine-tag addMachineTag-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all machine tags on the record
@@ -6129,13 +6330,14 @@ export def "grscicoll-collection-machine-tag listMachineTag-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, namespace: string, name: string, value: string, createdBy: string, created: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($key)/machineTag")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a machine tag to the record
@@ -6151,6 +6353,7 @@ export def "grscicoll-collection-machine-tag addMachineTag-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   namespace: string # The namespace for the machine tag.
   name: string # The name (within the namespace) of the machine tag.
   value: string # The value of the machine tag.
@@ -6163,7 +6366,7 @@ export def "grscicoll-collection-machine-tag addMachineTag-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all machine tags on the record
@@ -6179,13 +6382,14 @@ export def "dataset-machine-tag listMachineTag-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, namespace: string, name: string, value: string, createdBy: string, created: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dataset/($key)/machineTag")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a machine tag to the record
@@ -6201,6 +6405,7 @@ export def "dataset-machine-tag addMachineTag-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   namespace: string # The namespace for the machine tag.
   name: string # The name (within the namespace) of the machine tag.
   value: string # The value of the machine tag.
@@ -6213,7 +6418,7 @@ export def "dataset-machine-tag addMachineTag-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a machine tag from the record
@@ -6230,13 +6435,14 @@ export def "organization-machine-tag delete-by-key-machineTagKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organization/($key)/machineTag/($machineTagKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a machine tag from the record
@@ -6253,13 +6459,14 @@ export def "node-machine-tag delete-by-key-machineTagKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/node/($key)/machineTag/($machineTagKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a machine tag from the record
@@ -6276,13 +6483,14 @@ export def "network-machine-tag delete-by-key-machineTagKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/network/($key)/machineTag/($machineTagKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a machine tag from the record
@@ -6299,13 +6507,14 @@ export def "installation-machine-tag delete-by-key-machineTagKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/installation/($key)/machineTag/($machineTagKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a machine tag from the record
@@ -6322,13 +6531,14 @@ export def "grscicoll-institution-machine-tag delete-by-key-machineTagKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/($key)/machineTag/($machineTagKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a machine tag from the record
@@ -6345,13 +6555,14 @@ export def "grscicoll-collection-machine-tag delete-by-key-machineTagKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($key)/machineTag/($machineTagKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a machine tag from the record
@@ -6368,13 +6579,14 @@ export def "dataset-machine-tag delete-by-key-machineTagKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dataset/($key)/machineTag/($machineTagKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete all machine tags in a namespace from the record
@@ -6391,13 +6603,14 @@ export def "organization-machine-tag delete-by-key-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organization/($key)/machineTag/($namespace)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete all machine tags in a namespace from the record
@@ -6414,13 +6627,14 @@ export def "node-machine-tag delete-by-key-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/node/($key)/machineTag/($namespace)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete all machine tags in a namespace from the record
@@ -6437,13 +6651,14 @@ export def "network-machine-tag delete-by-key-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/network/($key)/machineTag/($namespace)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete all machine tags in a namespace from the record
@@ -6460,13 +6675,14 @@ export def "installation-machine-tag delete-by-key-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/installation/($key)/machineTag/($namespace)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete all machine tags in a namespace from the record
@@ -6483,13 +6699,14 @@ export def "grscicoll-institution-machine-tag delete-by-key-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/($key)/machineTag/($namespace)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete all machine tags in a namespace from the record
@@ -6506,13 +6723,14 @@ export def "grscicoll-collection-machine-tag delete-by-key-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($key)/machineTag/($namespace)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete all machine tags in a namespace from the record
@@ -6529,13 +6747,14 @@ export def "dataset-machine-tag delete-by-key-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dataset/($key)/machineTag/($namespace)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete all machine tags of a name in a namespace from the record
@@ -6553,13 +6772,14 @@ export def "organization-machine-tag delete-by-key-namespace-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organization/($key)/machineTag/($namespace)/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete all machine tags of a name in a namespace from the record
@@ -6577,13 +6797,14 @@ export def "node-machine-tag delete-by-key-namespace-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/node/($key)/machineTag/($namespace)/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete all machine tags of a name in a namespace from the record
@@ -6601,13 +6822,14 @@ export def "network-machine-tag delete-by-key-namespace-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/network/($key)/machineTag/($namespace)/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete all machine tags of a name in a namespace from the record
@@ -6625,13 +6847,14 @@ export def "installation-machine-tag delete-by-key-namespace-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/installation/($key)/machineTag/($namespace)/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete all machine tags of a name in a namespace from the record
@@ -6649,13 +6872,14 @@ export def "grscicoll-institution-machine-tag delete-by-key-namespace-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/($key)/machineTag/($namespace)/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete all machine tags of a name in a namespace from the record
@@ -6673,13 +6897,14 @@ export def "grscicoll-collection-machine-tag delete-by-key-namespace-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($key)/machineTag/($namespace)/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete all machine tags of a name in a namespace from the record
@@ -6697,13 +6922,14 @@ export def "dataset-machine-tag delete-by-key-namespace-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dataset/($key)/machineTag/($namespace)/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a master source metadata record
@@ -6719,13 +6945,14 @@ export def "grscicoll-institution-master-source-metadata get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: int, source: string, sourceId: string, createdBy: string, created: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/($key)/masterSourceMetadata")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add master source metadata to the record
@@ -6741,6 +6968,7 @@ export def "grscicoll-institution-master-source-metadata addMasterSourceMetadata
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-source: string@source-completer
   sourceId: string
 ]: any -> int {
@@ -6752,7 +6980,7 @@ export def "grscicoll-institution-master-source-metadata addMasterSourceMetadata
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a master source metadata from a record
@@ -6768,13 +6996,14 @@ export def "grscicoll-institution-master-source-metadata delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/($key)/masterSourceMetadata")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a master source metadata record
@@ -6790,13 +7019,14 @@ export def "grscicoll-collection-master-source-metadata get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: int, source: string, sourceId: string, createdBy: string, created: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($key)/masterSourceMetadata")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add master source metadata to the record
@@ -6812,6 +7042,7 @@ export def "grscicoll-collection-master-source-metadata addMasterSourceMetadata-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-source: string@source-completer
   sourceId: string
 ]: any -> int {
@@ -6823,7 +7054,7 @@ export def "grscicoll-collection-master-source-metadata addMasterSourceMetadata-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a master source metadata from a record
@@ -6839,13 +7070,14 @@ export def "grscicoll-collection-master-source-metadata delete-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($key)/masterSourceMetadata")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve all tags of the record
@@ -6861,6 +7093,7 @@ export def "organization-tag get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string
 ]: nothing -> record<key: int, value: string, createdBy: string, created: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6869,7 +7102,7 @@ export def "organization-tag get" [
   let full_url = (build-url $base $"/organization/($key)/tag" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a tag to the record
@@ -6885,6 +7118,7 @@ export def "organization-tag addTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   value: string # Text value of the tag
 ]: any -> int {
   let input = $in
@@ -6895,7 +7129,7 @@ export def "organization-tag addTag" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all tags of the record
@@ -6911,6 +7145,7 @@ export def "node-tag get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string
 ]: nothing -> record<key: int, value: string, createdBy: string, created: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6919,7 +7154,7 @@ export def "node-tag get-by-key" [
   let full_url = (build-url $base $"/node/($key)/tag" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a tag to the record
@@ -6935,6 +7170,7 @@ export def "node-tag addTag-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   value: string # Text value of the tag
 ]: any -> int {
   let input = $in
@@ -6945,7 +7181,7 @@ export def "node-tag addTag-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all tags of the record
@@ -6961,6 +7197,7 @@ export def "network-tag get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string
 ]: nothing -> record<key: int, value: string, createdBy: string, created: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6969,7 +7206,7 @@ export def "network-tag get-by-key" [
   let full_url = (build-url $base $"/network/($key)/tag" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a tag to the record
@@ -6985,6 +7222,7 @@ export def "network-tag addTag-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   value: string # Text value of the tag
 ]: any -> int {
   let input = $in
@@ -6995,7 +7233,7 @@ export def "network-tag addTag-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all tags of the record
@@ -7011,6 +7249,7 @@ export def "installation-tag get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string
 ]: nothing -> record<key: int, value: string, createdBy: string, created: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7019,7 +7258,7 @@ export def "installation-tag get-by-key" [
   let full_url = (build-url $base $"/installation/($key)/tag" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a tag to the record
@@ -7035,6 +7274,7 @@ export def "installation-tag addTag-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   value: string # Text value of the tag
 ]: any -> int {
   let input = $in
@@ -7045,7 +7285,7 @@ export def "installation-tag addTag-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all tags of the record
@@ -7061,6 +7301,7 @@ export def "dataset-tag get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string
 ]: nothing -> record<key: int, value: string, createdBy: string, created: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7069,7 +7310,7 @@ export def "dataset-tag get-by-key" [
   let full_url = (build-url $base $"/dataset/($key)/tag" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a tag to the record
@@ -7085,6 +7326,7 @@ export def "dataset-tag addTag-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   value: string # Text value of the tag
 ]: any -> int {
   let input = $in
@@ -7095,7 +7337,7 @@ export def "dataset-tag addTag-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a tag from the record
@@ -7112,13 +7354,14 @@ export def "organization-tag delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organization/($key)/tag/($tagKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a tag from the record
@@ -7135,13 +7378,14 @@ export def "node-tag delete-by-key-tagKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/node/($key)/tag/($tagKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a tag from the record
@@ -7158,13 +7402,14 @@ export def "network-tag delete-by-key-tagKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/network/($key)/tag/($tagKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a tag from the record
@@ -7181,13 +7426,14 @@ export def "installation-tag delete-by-key-tagKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/installation/($key)/tag/($tagKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a tag from the record
@@ -7204,13 +7450,14 @@ export def "dataset-tag delete-by-key-tagKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dataset/($key)/tag/($tagKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve all occurrence mappings of the record
@@ -7226,13 +7473,14 @@ export def "grscicoll-institution-occurrence-mapping listOccurrenceMappings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, code: string, parentCode: string, identifier: string, datasetKey: string, createdBy: string, created: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/($key)/occurrenceMapping")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a occurrence mapping to the record
@@ -7248,6 +7496,7 @@ export def "grscicoll-institution-occurrence-mapping addOccurrenceMapping" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-key: int # format: int32
   --code: string
   --parentCode: string
@@ -7264,7 +7513,7 @@ export def "grscicoll-institution-occurrence-mapping addOccurrenceMapping" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all occurrence mappings of the record
@@ -7280,13 +7529,14 @@ export def "grscicoll-collection-occurrence-mapping listOccurrenceMappings-by-ke
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, code: string, parentCode: string, identifier: string, datasetKey: string, createdBy: string, created: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($key)/occurrenceMapping")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a occurrence mapping to the record
@@ -7302,6 +7552,7 @@ export def "grscicoll-collection-occurrence-mapping addOccurrenceMapping-by-key"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-key: int # format: int32
   --code: string
   --parentCode: string
@@ -7318,7 +7569,7 @@ export def "grscicoll-collection-occurrence-mapping addOccurrenceMapping-by-key"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all contact people of the record
@@ -7334,13 +7585,14 @@ export def "grscicoll-institution-contact-person listContactPeople" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, type: string, primary: bool, userId: list<string>, salutation: string, firstName: string, lastName: string, position: list<string>, description: string, email: list<string>, phone: list<string>, homepage: list<string>, organization: string, address: list<string>, city: string, province: string, country: string, postalCode: string, createdBy: string, modifiedBy: string, created: string, modified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/($key)/contactPerson")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a contact person to the record
@@ -7356,6 +7608,7 @@ export def "grscicoll-institution-contact-person addContactPerson" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4 # The type of contact.
   --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
@@ -7382,7 +7635,7 @@ export def "grscicoll-institution-contact-person addContactPerson" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all contact people of the record
@@ -7398,13 +7651,14 @@ export def "grscicoll-collection-contact-person listContactPeople-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: int, type: string, primary: bool, userId: list<string>, salutation: string, firstName: string, lastName: string, position: list<string>, description: string, email: list<string>, phone: list<string>, homepage: list<string>, organization: string, address: list<string>, city: string, province: string, country: string, postalCode: string, createdBy: string, modifiedBy: string, created: string, modified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($key)/contactPerson")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a contact person to the record
@@ -7420,6 +7674,7 @@ export def "grscicoll-collection-contact-person addContactPerson-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-4 # The type of contact.
   --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
@@ -7446,7 +7701,7 @@ export def "grscicoll-collection-contact-person addContactPerson-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an occurrence mapping from the record
@@ -7463,13 +7718,14 @@ export def "grscicoll-institution-occurrence-mapping delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/($key)/occurrenceMapping/($occurrenceMappingKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an occurrence mapping from the record
@@ -7486,13 +7742,14 @@ export def "grscicoll-collection-occurrence-mapping delete-by-key-occurrenceMapp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($key)/occurrenceMapping/($occurrenceMappingKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve all tags of the record
@@ -7508,6 +7765,7 @@ export def "grscicoll-institution-tag get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string
 ]: nothing -> table<key: int, value: string, createdBy: string, created: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7516,7 +7774,7 @@ export def "grscicoll-institution-tag get-by-key" [
   let full_url = (build-url $base $"/grscicoll/institution/($key)/tag" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a tag to the record
@@ -7532,6 +7790,7 @@ export def "grscicoll-institution-tag addTag-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   value: string # Text value of the tag
 ]: any -> int {
   let input = $in
@@ -7542,7 +7801,7 @@ export def "grscicoll-institution-tag addTag-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all tags of the record
@@ -7558,6 +7817,7 @@ export def "grscicoll-collection-tag get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: string
 ]: nothing -> table<key: int, value: string, createdBy: string, created: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7566,7 +7826,7 @@ export def "grscicoll-collection-tag get-by-key" [
   let full_url = (build-url $base $"/grscicoll/collection/($key)/tag" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a tag to the record
@@ -7582,6 +7842,7 @@ export def "grscicoll-collection-tag addTag-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   value: string # Text value of the tag
 ]: any -> int {
   let input = $in
@@ -7592,7 +7853,7 @@ export def "grscicoll-collection-tag addTag-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a tag from the record
@@ -7609,13 +7870,14 @@ export def "grscicoll-institution-tag delete-by-key-tagKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/($key)/tag/($tagKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a tag from the record
@@ -7632,13 +7894,14 @@ export def "grscicoll-collection-tag delete-by-key-tagKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($key)/tag/($tagKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve all change suggestions of the record
@@ -7653,6 +7916,7 @@ export def "grscicoll-institution-change-suggestion listChangeSuggestion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer
   --type: string@type-completer-3
   --proposerEmail: string
@@ -7667,7 +7931,7 @@ export def "grscicoll-institution-change-suggestion listChangeSuggestion" [
   let full_url = (build-url $base "/grscicoll/institution/changeSuggestion" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a change suggestion to the record
@@ -7684,6 +7948,7 @@ export def "grscicoll-institution-change-suggestion addChangeSuggestion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-3
   --status: string@status-completer
   --entityKey: string # format: uuid
@@ -7713,7 +7978,7 @@ export def "grscicoll-institution-change-suggestion addChangeSuggestion" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all change suggestions of the record
@@ -7728,6 +7993,7 @@ export def "grscicoll-collection-change-suggestion listChangeSuggestion-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer
   --type: string@type-completer-3
   --proposerEmail: string
@@ -7742,7 +8008,7 @@ export def "grscicoll-collection-change-suggestion listChangeSuggestion-by-" [
   let full_url = (build-url $base "/grscicoll/collection/changeSuggestion" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a change suggestion to the record
@@ -7759,6 +8025,7 @@ export def "grscicoll-collection-change-suggestion addChangeSuggestion-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-3
   --status: string@status-completer
   --entityKey: string # format: uuid
@@ -7788,7 +8055,7 @@ export def "grscicoll-collection-change-suggestion addChangeSuggestion-by-" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a single change suggestion of a record
@@ -7804,13 +8071,14 @@ export def "grscicoll-institution-change-suggestion get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: int, type: string, status: string, entityKey: string, entityName: string, entityCountry: string, suggestedEntity: record<key: string, code: string, name: string, description: string, types: list<string>, active: bool, email: list<string>, phone: list<string>, homepage: string, catalogUrls: list<string>, apiUrls: list<string>, institutionalGovernances: list<string>, disciplines: list<string>, latitude: float, longitude: float, mailingAddress: record<key: int, address: string, city: string, province: string, postalCode: string, country: string>, address: record<key: int, address: string, city: string, province: string, postalCode: string, country: string>, additionalNames: list<string>, foundingDate: int, numberSpecimens: int, logoUrl: string, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, tags: list<record>, identifiers: list<record>, contactPersons: list<record>, machineTags: list<record>, alternativeCodes: list<record>, comments: list<record>, occurrenceMappings: list<record>, replacedBy: string, convertedToCollection: string, masterSource: string, masterSourceMetadata: record<key: int, source: string, sourceId: string, createdBy: string, created: string>, displayOnNHCPortal: bool, occurrenceCount: int, typeSpecimenCount: int, featuredImageUrl: string, featuredImageLicense: string, featuredImageAttribution: string>, proposed: string, proposedBy: string, proposerEmail: string, applied: string, appliedBy: string, discarded: string, discardedBy: string, comments: list<string>, mergeTargetKey: string, changes: table<field: string, suggested: any, previous: any, created: string, author: string, overwritten: bool, outdated: bool>, modified: string, modifiedBy: string, institutionForConvertedCollection: string, nameForNewInstitutionForConvertedCollection: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/changeSuggestion/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing change suggestion on the record
@@ -7828,6 +8096,7 @@ export def "grscicoll-institution-change-suggestion updateChangeSuggestion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-3
   --status: string@status-completer
   --entityKey: string # format: uuid
@@ -7857,7 +8126,7 @@ export def "grscicoll-institution-change-suggestion updateChangeSuggestion" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a single change suggestion of a record
@@ -7873,13 +8142,14 @@ export def "grscicoll-collection-change-suggestion get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: int, type: string, status: string, entityKey: string, entityName: string, entityCountry: string, suggestedEntity: record<key: string, code: string, name: string, description: string, contentTypes: list<string>, active: bool, personalCollection: bool, doi: string, email: list<string>, phone: list<string>, homepage: string, catalogUrls: list<string>, apiUrls: list<string>, preservationTypes: list<string>, accessionStatus: string, institutionKey: string, mailingAddress: record<key: int, address: string, city: string, province: string, postalCode: string, country: string>, address: record<key: int, address: string, city: string, province: string, postalCode: string, country: string>, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, tags: list<record>, identifiers: list<record>, contactPersons: list<record>, numberSpecimens: int, machineTags: list<record>, taxonomicCoverage: string, geographicCoverage: string, notes: string, incorporatedCollections: list<string>, alternativeCodes: list<record>, comments: list<record>, occurrenceMappings: list<record>, replacedBy: string, masterSource: string, masterSourceMetadata: record<key: int, source: string, sourceId: string, createdBy: string, created: string>, department: string, division: string, displayOnNHCPortal: bool, occurrenceCount: int, typeSpecimenCount: int, featuredImageUrl: string, featuredImageLicense: string, temporalCoverage: string, featuredImageAttribution: string>, proposed: string, proposedBy: string, proposerEmail: string, applied: string, appliedBy: string, discarded: string, discardedBy: string, comments: list<string>, mergeTargetKey: string, changes: table<field: string, suggested: any, previous: any, created: string, author: string, overwritten: bool, outdated: bool>, modified: string, modifiedBy: string, ihIdentifier: string, createInstitution: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/changeSuggestion/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing change suggestion on the record
@@ -7897,6 +8167,7 @@ export def "grscicoll-collection-change-suggestion updateChangeSuggestion-by-key
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-3
   --status: string@status-completer
   --entityKey: string # format: uuid
@@ -7926,7 +8197,7 @@ export def "grscicoll-collection-change-suggestion updateChangeSuggestion-by-key
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Discard a collection change suggestion
@@ -7942,13 +8213,14 @@ export def "grscicoll-institution-change-suggestion-discard discardChangeSuggest
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/changeSuggestion/($key)/discard")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Discard a collection change suggestion
@@ -7964,13 +8236,14 @@ export def "grscicoll-collection-change-suggestion-discard discardChangeSuggesti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/changeSuggestion/($key)/discard")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Apply a collection change suggestion
@@ -7986,13 +8259,14 @@ export def "grscicoll-institution-change-suggestion-apply applyChangeSuggestion"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<entityCreatedKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/changeSuggestion/($key)/apply")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Apply a collection change suggestion
@@ -8008,13 +8282,14 @@ export def "grscicoll-collection-change-suggestion-apply applyChangeSuggestion-b
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<entityCreatedKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/changeSuggestion/($key)/apply")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Merges a record with another record
@@ -8030,6 +8305,7 @@ export def "grscicoll-institution-merge merge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --replacementEntityKey: string # format: uuid
 ]: any -> any {
   let input = $in
@@ -8040,7 +8316,7 @@ export def "grscicoll-institution-merge merge" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Merges a record with another record
@@ -8056,6 +8332,7 @@ export def "grscicoll-collection-merge merge-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --replacementEntityKey: string # format: uuid
 ]: any -> any {
   let input = $in
@@ -8066,7 +8343,7 @@ export def "grscicoll-collection-merge merge-by-key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Converts an institution into a collection
@@ -8082,6 +8359,7 @@ export def "grscicoll-institution-convert-to-collection importCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --institutionForNewCollectionKey: string # format: uuid
   --nameForNewInstitution: string
 ]: any -> any {
@@ -8093,7 +8371,7 @@ export def "grscicoll-institution-convert-to-collection importCollection" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Import a collection
@@ -8108,6 +8386,7 @@ export def "grscicoll-collection-import importCollection-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --datasetKey: string # format: uuid
   --collectionCode: string
 ]: any -> any {
@@ -8119,7 +8398,7 @@ export def "grscicoll-collection-import importCollection-by-" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Import an institution
@@ -8134,6 +8413,7 @@ export def "grscicoll-institution-import importInstitution" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --organizationKey: string # format: uuid
   --institutionCode: string
 ]: any -> any {
@@ -8145,7 +8425,7 @@ export def "grscicoll-institution-import importInstitution" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get details of a single collection descriptor
@@ -8162,13 +8442,14 @@ export def "grscicoll-collection-descriptor-group get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: int, title: string, description: string, collectionKey: string, created: string, createdBy: string, modified: string, modifiedBy: string, deleted: string, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($collectionKey)/descriptorGroup/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing collection descriptor group
@@ -8185,6 +8466,7 @@ export def "grscicoll-collection-descriptor-group updateCollectionDescriptorGrou
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer # default: CSV
   --title: string
   --description: string
@@ -8200,7 +8482,7 @@ export def "grscicoll-collection-descriptor-group updateCollectionDescriptorGrou
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Deletes a collection descriptor group
@@ -8217,13 +8499,14 @@ export def "grscicoll-collection-descriptor-group delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($collectionKey)/descriptorGroup/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists the descriptor groups of the collection.
@@ -8239,6 +8522,7 @@ export def "grscicoll-collection-descriptor-group list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --searchRequest: record
   --title: string # Descriptor group title
   --description: string # Descriptor group description
@@ -8253,7 +8537,7 @@ export def "grscicoll-collection-descriptor-group list" [
   let full_url = (build-url $base $"/grscicoll/collection/($collectionKey)/descriptorGroup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new collection descriptor group
@@ -8269,6 +8553,7 @@ export def "grscicoll-collection-descriptor-group createCollectionDescriptorGrou
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer # default: CSV
   --title: string
   --description: string
@@ -8284,7 +8569,7 @@ export def "grscicoll-collection-descriptor-group createCollectionDescriptorGrou
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # List deleted installations
@@ -8299,6 +8584,7 @@ export def "installation-deleted get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --searchParams: record
   --type: string@type-completer-1 # Filter by the type of installation.
   --identifierType: string@identifierType-completer # An identifier type for the identifier parameter.
@@ -8318,7 +8604,7 @@ export def "installation-deleted get" [
   let full_url = (build-url $base "/installation/deleted" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List deleted organizations
@@ -8333,6 +8619,7 @@ export def "organization-deleted get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --searchParams: record
   --isEndorsed: oneof<nothing, bool> # Whether the organization is endorsed by a node.
   --networkKey: string # Filter for organizations publishing datasets belonging to a network. (format: uuid)
@@ -8356,7 +8643,7 @@ export def "organization-deleted get" [
   let full_url = (build-url $base "/organization/deleted" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve all deleted institution records
@@ -8371,6 +8658,7 @@ export def "grscicoll-institution-deleted listDeleted" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string # Type of a GrSciColl institution. Accepts multiple values, for example `type=Museum&type=BotanicalGarden
   --institutionalGovernance: string # Institutional governance of a GrSciColl institution. Accepts multiple values, for example `InstitutionalGovernance=NonProfit&InstitutionalGovernance=Local`
   --discipline: string # Discipline of a GrSciColl institution. Accepts multiple values, for example `discipline=Zoology&discipline=Biological`
@@ -8411,7 +8699,7 @@ export def "grscicoll-institution-deleted listDeleted" [
   let full_url = (build-url $base "/grscicoll/institution/deleted" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve all deleted collection records
@@ -8427,6 +8715,7 @@ export def "grscicoll-collection-deleted listDeleted-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --institution: string # A key for the institution. Deprecated: use institutionKey instead. (DEPRECATED, format: uuid)
   --contentType: string # Content type of a GrSciColl collection. Accepts multiple values, for example `contentType=Paleontological&contentType=EarthPlanetary`.
   --preservationType: string # Preservation type of a GrSciColl collection. Accepts multiple values, for example `preservationType=SampleCryopreserved&preservationType=SampleFluidPreserved`.
@@ -8469,7 +8758,7 @@ export def "grscicoll-collection-deleted listDeleted-by-" [
   let full_url = (build-url $base "/grscicoll/collection/deleted" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reinterprets all the descriptor groups
@@ -8484,13 +8773,14 @@ export def "grscicoll-collection-reinterpret-all-descriptor-groups reinterpretAl
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/grscicoll/collection/reinterpretAllDescriptorGroups")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reinterprets a collection descriptor group
@@ -8507,13 +8797,14 @@ export def "grscicoll-collection-descriptor-group-reinterpret reinterpretCollect
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($collectionKey)/descriptorGroup/($key)/reinterpret")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reinterprets all the descriptor groups of the collection
@@ -8529,13 +8820,14 @@ export def "grscicoll-collection-descriptor-group-reinterpret-all reinterpretCol
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($collectionKey)/descriptorGroup/reinterpretAll")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all deleted datasets
@@ -8550,6 +8842,7 @@ export def "dataset-deleted get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --country: string@country-completer # The 2-letter country code (as per ISO-3166-1) of the country publishing the dataset.
   --type: string@type-completer # The primary type of the dataset.
   --identifierType: string@identifierType-completer # An identifier type for the identifier parameter.
@@ -8569,7 +8862,7 @@ export def "dataset-deleted get" [
   let full_url = (build-url $base "/dataset/deleted" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all duplicate datasets
@@ -8584,6 +8877,7 @@ export def "dataset-duplicate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: string, parentDatasetKey: string, duplicateOfDatasetKey: string, installationKey: string, publishingOrganizationKey: string, publishingOrganizationName: string, networkKeys: list, doi: string, version: string, external: bool, numConstituents: int, type: string, subtype: string, shortName: string, title: string, alias: string, abbreviation: string, description: string, language: string, homepage: string, logoUrl: string, citation: record, contactsCitation: list, rights: string, lockedForAutoUpdate: bool, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, contacts: list, endpoints: list, machineTags: list, tags: list, identifiers: list, comments: list, bibliographicCitations: list, curatorialUnits: list, taxonomicCoverages: list, geographicCoverageDescription: string, geographicCoverages: list, temporalCoverages: list, keywordCollections: list, project: record, samplingDescription: record, countryCoverage: list, collections: list, dataDescriptions: list, dataLanguage: string, purpose: string, introduction: string, gettingStarted: string, acknowledgements: string, additionalInfo: string, pubDate: string, maintenanceUpdateFrequency: string, maintenanceDescription: string, license: string, dwca: record, category: list>> {
@@ -8593,7 +8887,7 @@ export def "dataset-duplicate get" [
   let full_url = (build-url $base "/dataset/duplicate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List pending organizations of a node
@@ -8609,6 +8903,7 @@ export def "node-pending-endorsement get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: string, endorsingNodeKey: string, endorsementApproved: bool, endorsementStatus: string, title: string, abbreviation: string, description: string, language: string, email: list, phone: list, homepage: list, logoUrl: string, address: list, city: string, province: string, country: string, postalCode: string, latitude: float, longitude: float, numPublishedDatasets: int, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, endorsed: string, contacts: list, endpoints: list, machineTags: list, tags: list, identifiers: list, comments: list>> {
@@ -8618,7 +8913,7 @@ export def "node-pending-endorsement get" [
   let full_url = (build-url $base $"/node/($key)/pendingEndorsement" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List pending organizations
@@ -8633,6 +8928,7 @@ export def "organization-pending get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: string, endorsingNodeKey: string, endorsementApproved: bool, endorsementStatus: string, title: string, abbreviation: string, description: string, language: string, email: list, phone: list, homepage: list, logoUrl: string, address: list, city: string, province: string, country: string, postalCode: string, latitude: float, longitude: float, numPublishedDatasets: int, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, endorsed: string, contacts: list, endpoints: list, machineTags: list, tags: list, identifiers: list, comments: list>> {
@@ -8642,7 +8938,7 @@ export def "organization-pending get" [
   let full_url = (build-url $base "/organization/pending" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of all possible duplicates
@@ -8657,6 +8953,7 @@ export def "grscicoll-institution-possible-duplicates listPossibleDuplicates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --request: record
 ]: nothing -> record<generationDate: string, duplicates: list<list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8665,7 +8962,7 @@ export def "grscicoll-institution-possible-duplicates listPossibleDuplicates" [
   let full_url = (build-url $base "/grscicoll/institution/possibleDuplicates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of all possible duplicates
@@ -8680,6 +8977,7 @@ export def "grscicoll-collection-possible-duplicates listPossibleDuplicates-by-"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --request: record
 ]: nothing -> record<generationDate: string, duplicates: list<list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8688,7 +8986,7 @@ export def "grscicoll-collection-possible-duplicates listPossibleDuplicates-by-"
   let full_url = (build-url $base "/grscicoll/collection/possibleDuplicates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List pending organizations
@@ -8705,6 +9003,7 @@ export def "node-pending-endorsement list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: string, endorsingNodeKey: string, endorsementApproved: bool, endorsementStatus: string, title: string, abbreviation: string, description: string, language: string, email: list, phone: list, homepage: list, logoUrl: string, address: list, city: string, province: string, country: string, postalCode: string, latitude: float, longitude: float, numPublishedDatasets: int, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, endorsed: string, contacts: list, endpoints: list, machineTags: list, tags: list, identifiers: list, comments: list>> {
@@ -8714,7 +9013,7 @@ export def "node-pending-endorsement list" [
   let full_url = (build-url $base "/node/pendingEndorsement" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Exports a collection descriptor group.
@@ -8732,6 +9031,7 @@ export def "grscicoll-collection-descriptor-group-export CollectionDescriptorGro
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer # default: TSV
   --institution: string # A key for the institution. Deprecated: use institutionKey instead. (DEPRECATED, format: uuid)
   --contentType: string # Content type of a GrSciColl collection. Accepts multiple values, for example `contentType=Paleontological&contentType=EarthPlanetary`.
@@ -8775,7 +9075,7 @@ export def "grscicoll-collection-descriptor-group-export CollectionDescriptorGro
   let full_url = (build-url $base $"/grscicoll/collection/($collectionKey)/descriptorGroup/($key)/export" $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all datasets with no endpoint
@@ -8790,6 +9090,7 @@ export def "dataset-with-no-endpoint get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: string, parentDatasetKey: string, duplicateOfDatasetKey: string, installationKey: string, publishingOrganizationKey: string, publishingOrganizationName: string, networkKeys: list, doi: string, version: string, external: bool, numConstituents: int, type: string, subtype: string, shortName: string, title: string, alias: string, abbreviation: string, description: string, language: string, homepage: string, logoUrl: string, citation: record, contactsCitation: list, rights: string, lockedForAutoUpdate: bool, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, contacts: list, endpoints: list, machineTags: list, tags: list, identifiers: list, comments: list, bibliographicCitations: list, curatorialUnits: list, taxonomicCoverages: list, geographicCoverageDescription: string, geographicCoverages: list, temporalCoverages: list, keywordCollections: list, project: record, samplingDescription: record, countryCoverage: list, collections: list, dataDescriptions: list, dataLanguage: string, purpose: string, introduction: string, gettingStarted: string, acknowledgements: string, additionalInfo: string, pubDate: string, maintenanceUpdateFrequency: string, maintenanceDescription: string, license: string, dwca: record, category: list>> {
@@ -8799,7 +9100,7 @@ export def "dataset-with-no-endpoint get" [
   let full_url = (build-url $base "/dataset/withNoEndpoint" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List non-publishing installations
@@ -8814,6 +9115,7 @@ export def "installation-non-publishing get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: string, organizationKey: string, type: string, title: string, description: string, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, disabled: bool, contacts: list, endpoints: list, machineTags: list, tags: list, identifiers: list, comments: list>> {
@@ -8823,7 +9125,7 @@ export def "installation-non-publishing get" [
   let full_url = (build-url $base "/installation/nonPublishing" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List non-publishing organizations
@@ -8838,6 +9140,7 @@ export def "organization-non-publishing get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: string, endorsingNodeKey: string, endorsementApproved: bool, endorsementStatus: string, title: string, abbreviation: string, description: string, language: string, email: list, phone: list, homepage: list, logoUrl: string, address: list, city: string, province: string, country: string, postalCode: string, latitude: float, longitude: float, numPublishedDatasets: int, createdBy: string, modifiedBy: string, created: string, modified: string, deleted: string, endorsed: string, contacts: list, endpoints: list, machineTags: list, tags: list, identifiers: list, comments: list>> {
@@ -8847,7 +9150,7 @@ export def "organization-non-publishing get" [
   let full_url = (build-url $base "/organization/nonPublishing" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all organizations as GeoJson.
@@ -8862,6 +9165,7 @@ export def "organization-geojson listOrganizationAsGeoJson" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isEndorsed: oneof<nothing, bool> # Whether the organization is endorsed by a node.
   --networkKey: string # Filter for organizations publishing datasets belonging to a network. (format: uuid)
   --numPublishedDatasets: string # Filter by number of published datasets. Examples: '5' (exactly 5), '1,*' (at least 1), '*,10' (at most 10), '5,15' (between 5 and 15).
@@ -8882,7 +9186,7 @@ export def "organization-geojson listOrganizationAsGeoJson" [
   let full_url = (build-url $base "/organization/geojson" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists the descriptors.
@@ -8899,6 +9203,7 @@ export def "grscicoll-collection-descriptor-group-descriptor list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --searchRequest: record
   --descriptorGroupKey: int # Key of the descriptor group (format: int64)
   --usageKey: int # Taxon usage key of the descriptor (format: int32)
@@ -8928,7 +9233,7 @@ export def "grscicoll-collection-descriptor-group-descriptor list" [
   let full_url = (build-url $base $"/grscicoll/collection/($collectionKey)/descriptorGroup/($key)/descriptor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists the descriptor records.
@@ -8946,13 +9251,14 @@ export def "grscicoll-collection-descriptor-group-descriptor get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: int, descriptorGroupKey: int, usageKey: string, usageName: string, usageRank: string, country: string, individualCount: int, identifiedBy: list<string>, dateIdentified: string, typeStatus: list<string>, recordedBy: list<string>, discipline: string, objectClassification: string, biome: string, biomeType: string, taxonClassification: table<key: string, name: string, rank: string, authorship: string>, defaultChecklistKey: string, otherTaxonClassifications: record, issues: list<string>, verbatim: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/($collectionKey)/descriptorGroup/($descriptorGroupKey)/descriptor/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of a batch
@@ -8968,13 +9274,14 @@ export def "grscicoll-institution-batch get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: int, state: string, entityType: string, errors: list<string>, created: string, createdBy: string, resultFileLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/batch/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get details of a batch
@@ -8990,13 +9297,14 @@ export def "grscicoll-collection-batch get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: int, state: string, entityType: string, errors: list<string>, created: string, createdBy: string, resultFileLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/batch/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a file with the result of a batch that includes keys of the new entities created and errors found
@@ -9012,13 +9320,14 @@ export def "grscicoll-institution-batch-result-file get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/institution/batch/($key)/resultFile")
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a file with the result of a batch that includes keys of the new entities created and errors found
@@ -9034,13 +9343,14 @@ export def "grscicoll-collection-batch-result-file get-by-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/grscicoll/collection/batch/($key)/resultFile")
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Process a batch of GRSciColl entities
@@ -9055,6 +9365,7 @@ export def "grscicoll-institution-batch importBatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer # Format of the files(CSV or TSV)
   --entitiesFile: string # File with the entities of the batch
   --contactsFile: string # File with the contacts associated to the entities
@@ -9070,7 +9381,7 @@ export def "grscicoll-institution-batch importBatch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Process a batch of GRSciColl entities
@@ -9085,6 +9396,7 @@ export def "grscicoll-collection-batch importBatch-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer # Format of the files(CSV or TSV)
   --entitiesFile: string # File with the entities of the batch
   --contactsFile: string # File with the contacts associated to the entities
@@ -9100,7 +9412,7 @@ export def "grscicoll-collection-batch importBatch-by-" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Lookup collections and institutions
@@ -9115,6 +9427,7 @@ export def "grscicoll-lookup lookupCollectionsInstitutions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --datasetKey: string # Institutions and collections can be linked manually to datasets by using occurrence mappings. If the dataset key parameter is set it will be used to try to match an occurrence mapping that contains that dataset. This manual mapping only happens if no exact matches were found (format: uuid)
   --institutionCode: string # The code of an institution
   --institutionId: string # The identifier of an institution
@@ -9134,7 +9447,7 @@ export def "grscicoll-lookup lookupCollectionsInstitutions" [
   let full_url = (build-url $base "/grscicoll/lookup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lookup collections and institutions
@@ -9149,6 +9462,7 @@ export def "grscicoll-audit-log lookupCollectionsInstitutions-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --traceId: int # Trace ID of a GRSciColl audit log (format: int64)
   --collectionEntityType: string@collectionEntityType-completer # Entity type used in the GRSciColl audit log
   --subEntityType: string # Subentity type used in the GRSciColl audit log: Identifier, MachineTag, Comment, Tag, OccurrenceMapping, Person, ChangeSuggestion
@@ -9167,7 +9481,7 @@ export def "grscicoll-audit-log lookupCollectionsInstitutions-by-" [
   let full_url = (build-url $base "/grscicoll/auditLog" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Make an OAI-PMH request
@@ -9183,6 +9497,7 @@ export def "oai-pmh-registry oaipmh" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --params: record
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9191,7 +9506,7 @@ export def "oai-pmh-registry oaipmh" [
   let full_url = (build-url $base "/oai-pmh/registry" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Checklist dataset metrics
@@ -9207,6 +9522,7 @@ export def "dataset-metrics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<key: int, datasetKey: string, usagesCount: int, synonymsCount: int, distinctNamesCount: int, nubMatchingCount: int, colMatchingCount: int, nubCoveragePct: int, colCoveragePct: int, countByConstituent: record, countByKingdom: record, countByRank: record, countNamesByLanguage: record, countExtRecordsByExtension: record, countByOrigin: record, countByIssue: record, otherCount: record, created: string, downloaded: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9214,5 +9530,5 @@ export def "dataset-metrics get" [
   let full_url = (build-url $base $"/dataset/($key)/metrics")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

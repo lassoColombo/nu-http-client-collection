@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -78,7 +79,7 @@ def collectionView-completer-1 [] { ["FOLDERS"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "accepted-terms get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -110,6 +111,7 @@ export def "accepted-terms get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners, terms (e.g. owners)
   --filterownersid: list # User id. Use `me` for the authenticated user
   --filtertermsisLatestVersion: list # Filter by terms.isLatestVersion
@@ -121,7 +123,7 @@ export def "accepted-terms get" [
   let full_url = (build-url $base "/acceptedTerms" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single acceptedTerm.
@@ -135,6 +137,7 @@ export def "accepted-terms post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -147,7 +150,7 @@ export def "accepted-terms post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get owners relationship ("to-many").
@@ -162,6 +165,7 @@ export def "accepted-terms-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -171,7 +175,7 @@ export def "accepted-terms-relationships-owners get" [
   let full_url = (build-url $base $"/acceptedTerms/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get terms relationship ("to-one").
@@ -186,6 +190,7 @@ export def "accepted-terms-relationships-terms get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: terms (e.g. terms)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -194,7 +199,7 @@ export def "accepted-terms-relationships-terms get" [
   let full_url = (build-url $base $"/acceptedTerms/($id)/relationships/terms" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single albumStatistic.
@@ -209,6 +214,7 @@ export def "album-statistics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -217,7 +223,7 @@ export def "album-statistics get" [
   let full_url = (build-url $base $"/albumStatistics/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get owners relationship ("to-many").
@@ -232,6 +238,7 @@ export def "album-statistics-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -241,7 +248,7 @@ export def "album-statistics-relationships-owners get" [
   let full_url = (build-url $base $"/albumStatistics/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple albums.
@@ -255,6 +262,7 @@ export def "albums list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --qp-sort: list # Values prefixed with "-" are sorted descending; values without it are sorted ascending.
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
@@ -270,7 +278,7 @@ export def "albums list" [
   let full_url = (build-url $base "/albums" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single album.
@@ -284,6 +292,7 @@ export def "albums post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -296,7 +305,7 @@ export def "albums post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete single album.
@@ -311,6 +320,7 @@ export def "albums delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -320,7 +330,7 @@ export def "albums delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single album.
@@ -335,6 +345,7 @@ export def "albums get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: albumStatistics, artists, coverArt, genres, items, owners, priceConfig, providers, replacement, shares, similarAlbums, suggestedCoverArts, usageRules (e.g. albumStatistics)
   --shareCode: string # Share code that grants access to UNLISTED resources. When provided, allows non-owners to access resources that would otherwise be restricted. (e.g. xyz)
@@ -345,7 +356,7 @@ export def "albums get" [
   let full_url = (build-url $base $"/albums/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update single album.
@@ -360,6 +371,7 @@ export def "albums patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -372,7 +384,7 @@ export def "albums patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get albumStatistics relationship ("to-one").
@@ -387,6 +399,7 @@ export def "albums-relationships-album-statistics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: albumStatistics (e.g. albumStatistics)
   --shareCode: string # Share code that grants access to UNLISTED resources. When provided, allows non-owners to access resources that would otherwise be restricted. (e.g. xyz)
 ]: nothing -> any {
@@ -396,7 +409,7 @@ export def "albums-relationships-album-statistics get" [
   let full_url = (build-url $base $"/albums/($id)/relationships/albumStatistics" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get artists relationship ("to-many").
@@ -411,6 +424,7 @@ export def "albums-relationships-artists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: artists (e.g. artists)
@@ -422,7 +436,7 @@ export def "albums-relationships-artists get" [
   let full_url = (build-url $base $"/albums/($id)/relationships/artists" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get coverArt relationship ("to-many").
@@ -437,6 +451,7 @@ export def "albums-relationships-cover-art get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: coverArt (e.g. coverArt)
@@ -448,7 +463,7 @@ export def "albums-relationships-cover-art get" [
   let full_url = (build-url $base $"/albums/($id)/relationships/coverArt" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update coverArt relationship ("to-many").
@@ -463,6 +478,7 @@ export def "albums-relationships-cover-art patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -475,7 +491,7 @@ export def "albums-relationships-cover-art patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get genres relationship ("to-many").
@@ -490,6 +506,7 @@ export def "albums-relationships-genres get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: genres (e.g. genres)
@@ -501,7 +518,7 @@ export def "albums-relationships-genres get" [
   let full_url = (build-url $base $"/albums/($id)/relationships/genres" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get items relationship ("to-many").
@@ -516,6 +533,7 @@ export def "albums-relationships-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: items (e.g. items)
@@ -527,7 +545,7 @@ export def "albums-relationships-items get" [
   let full_url = (build-url $base $"/albums/($id)/relationships/items" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update items relationship ("to-many").
@@ -542,6 +560,7 @@ export def "albums-relationships-items patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -554,7 +573,7 @@ export def "albums-relationships-items patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get owners relationship ("to-many").
@@ -569,6 +588,7 @@ export def "albums-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --shareCode: string # Share code that grants access to UNLISTED resources. When provided, allows non-owners to access resources that would otherwise be restricted. (e.g. xyz)
@@ -579,7 +599,7 @@ export def "albums-relationships-owners get" [
   let full_url = (build-url $base $"/albums/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get priceConfig relationship ("to-one").
@@ -594,6 +614,7 @@ export def "albums-relationships-price-config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: priceConfig (e.g. priceConfig)
   --shareCode: string # Share code that grants access to UNLISTED resources. When provided, allows non-owners to access resources that would otherwise be restricted. (e.g. xyz)
@@ -604,7 +625,7 @@ export def "albums-relationships-price-config get" [
   let full_url = (build-url $base $"/albums/($id)/relationships/priceConfig" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get providers relationship ("to-many").
@@ -619,6 +640,7 @@ export def "albums-relationships-providers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: providers (e.g. providers)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
@@ -630,7 +652,7 @@ export def "albums-relationships-providers get" [
   let full_url = (build-url $base $"/albums/($id)/relationships/providers" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get replacement relationship ("to-one").
@@ -645,6 +667,7 @@ export def "albums-relationships-replacement get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: replacement (e.g. replacement)
   --shareCode: string # Share code that grants access to UNLISTED resources. When provided, allows non-owners to access resources that would otherwise be restricted. (e.g. xyz)
@@ -655,7 +678,7 @@ export def "albums-relationships-replacement get" [
   let full_url = (build-url $base $"/albums/($id)/relationships/replacement" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get shares relationship ("to-many").
@@ -670,6 +693,7 @@ export def "albums-relationships-shares get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: shares (e.g. shares)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --shareCode: string # Share code that grants access to UNLISTED resources. When provided, allows non-owners to access resources that would otherwise be restricted. (e.g. xyz)
@@ -680,7 +704,7 @@ export def "albums-relationships-shares get" [
   let full_url = (build-url $base $"/albums/($id)/relationships/shares" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get similarAlbums relationship ("to-many").
@@ -695,6 +719,7 @@ export def "albums-relationships-similar-albums get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: similarAlbums (e.g. similarAlbums)
@@ -706,7 +731,7 @@ export def "albums-relationships-similar-albums get" [
   let full_url = (build-url $base $"/albums/($id)/relationships/similarAlbums" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get suggestedCoverArts relationship ("to-many").
@@ -721,6 +746,7 @@ export def "albums-relationships-suggested-cover-arts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: suggestedCoverArts (e.g. suggestedCoverArts)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --shareCode: string # Share code that grants access to UNLISTED resources. When provided, allows non-owners to access resources that would otherwise be restricted. (e.g. xyz)
@@ -731,7 +757,7 @@ export def "albums-relationships-suggested-cover-arts get" [
   let full_url = (build-url $base $"/albums/($id)/relationships/suggestedCoverArts" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get usageRules relationship ("to-one").
@@ -746,6 +772,7 @@ export def "albums-relationships-usage-rules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: usageRules (e.g. usageRules)
   --shareCode: string # Share code that grants access to UNLISTED resources. When provided, allows non-owners to access resources that would otherwise be restricted. (e.g. xyz)
@@ -756,7 +783,7 @@ export def "albums-relationships-usage-rules get" [
   let full_url = (build-url $base $"/albums/($id)/relationships/usageRules" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single appreciation.
@@ -770,6 +797,7 @@ export def "appreciations post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -782,7 +810,7 @@ export def "appreciations post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get single artistBiographie.
@@ -797,6 +825,7 @@ export def "artist-biographies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
 ]: nothing -> any {
@@ -806,7 +835,7 @@ export def "artist-biographies get" [
   let full_url = (build-url $base $"/artistBiographies/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update single artistBiographie.
@@ -821,6 +850,7 @@ export def "artist-biographies patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -833,7 +863,7 @@ export def "artist-biographies patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get owners relationship ("to-many").
@@ -848,6 +878,7 @@ export def "artist-biographies-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -857,7 +888,7 @@ export def "artist-biographies-relationships-owners get" [
   let full_url = (build-url $base $"/artistBiographies/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple artistClaims.
@@ -871,6 +902,7 @@ export def "artist-claims list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: acceptedArtists, owners, recommendedArtists (e.g. acceptedArtists)
   --filterownersid: list # User id. Use `me` for the authenticated user
 ]: nothing -> any {
@@ -880,7 +912,7 @@ export def "artist-claims list" [
   let full_url = (build-url $base "/artistClaims" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single artistClaim.
@@ -894,6 +926,7 @@ export def "artist-claims post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
@@ -908,7 +941,7 @@ export def "artist-claims post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete single artistClaim.
@@ -923,6 +956,7 @@ export def "artist-claims delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -932,7 +966,7 @@ export def "artist-claims delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single artistClaim.
@@ -947,6 +981,7 @@ export def "artist-claims get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: acceptedArtists, owners, recommendedArtists (e.g. acceptedArtists)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -955,7 +990,7 @@ export def "artist-claims get" [
   let full_url = (build-url $base $"/artistClaims/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update single artistClaim.
@@ -970,6 +1005,7 @@ export def "artist-claims patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
@@ -984,7 +1020,7 @@ export def "artist-claims patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get acceptedArtists relationship ("to-many").
@@ -999,6 +1035,7 @@ export def "artist-claims-relationships-accepted-artists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: acceptedArtists (e.g. acceptedArtists)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -1008,7 +1045,7 @@ export def "artist-claims-relationships-accepted-artists get" [
   let full_url = (build-url $base $"/artistClaims/($id)/relationships/acceptedArtists" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update acceptedArtists relationship ("to-many").
@@ -1023,6 +1060,7 @@ export def "artist-claims-relationships-accepted-artists patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
@@ -1037,7 +1075,7 @@ export def "artist-claims-relationships-accepted-artists patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get owners relationship ("to-many").
@@ -1052,6 +1090,7 @@ export def "artist-claims-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -1061,7 +1100,7 @@ export def "artist-claims-relationships-owners get" [
   let full_url = (build-url $base $"/artistClaims/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get recommendedArtists relationship ("to-many").
@@ -1076,6 +1115,7 @@ export def "artist-claims-relationships-recommended-artists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: recommendedArtists (e.g. recommendedArtists)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -1085,7 +1125,7 @@ export def "artist-claims-relationships-recommended-artists get" [
   let full_url = (build-url $base $"/artistClaims/($id)/relationships/recommendedArtists" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single artistRole.
@@ -1100,13 +1140,14 @@ export def "artist-roles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/artistRoles/($id)")
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple artists.
@@ -1120,6 +1161,7 @@ export def "artists list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: albums, biography, followers, following, owners, profileArt, radio, roles, similarArtists, trackProviders, tracks, videos (e.g. albums)
   --filterhandle: list # Artist handle (e.g. `jayz`)
@@ -1132,7 +1174,7 @@ export def "artists list" [
   let full_url = (build-url $base "/artists" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single artist.
@@ -1146,6 +1188,7 @@ export def "artists post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -1158,7 +1201,7 @@ export def "artists post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get single artist.
@@ -1173,6 +1216,7 @@ export def "artists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: albums, biography, followers, following, owners, profileArt, radio, roles, similarArtists, trackProviders, tracks, videos (e.g. albums)
 ]: nothing -> any {
@@ -1182,7 +1226,7 @@ export def "artists get" [
   let full_url = (build-url $base $"/artists/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update single artist.
@@ -1197,6 +1241,7 @@ export def "artists patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -1209,7 +1254,7 @@ export def "artists patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get albums relationship ("to-many").
@@ -1224,6 +1269,7 @@ export def "artists-relationships-albums get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: albums (e.g. albums)
@@ -1234,7 +1280,7 @@ export def "artists-relationships-albums get" [
   let full_url = (build-url $base $"/artists/($id)/relationships/albums" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get biography relationship ("to-one").
@@ -1249,6 +1295,7 @@ export def "artists-relationships-biography get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: biography (e.g. biography)
 ]: nothing -> any {
@@ -1258,7 +1305,7 @@ export def "artists-relationships-biography get" [
   let full_url = (build-url $base $"/artists/($id)/relationships/biography" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get followers relationship ("to-many").
@@ -1273,6 +1320,7 @@ export def "artists-relationships-followers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --viewerContext: string
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --include: list # Allows the client to customize which related resources should be returned. Available options: followers (e.g. followers)
@@ -1283,7 +1331,7 @@ export def "artists-relationships-followers get" [
   let full_url = (build-url $base $"/artists/($id)/relationships/followers" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete from following relationship ("to-many").
@@ -1298,6 +1346,7 @@ export def "artists-relationships-following delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -1310,7 +1359,7 @@ export def "artists-relationships-following delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get following relationship ("to-many").
@@ -1325,6 +1374,7 @@ export def "artists-relationships-following get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --viewerContext: string
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --include: list # Allows the client to customize which related resources should be returned. Available options: following (e.g. following)
@@ -1335,7 +1385,7 @@ export def "artists-relationships-following get" [
   let full_url = (build-url $base $"/artists/($id)/relationships/following" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add to following relationship ("to-many").
@@ -1350,6 +1400,7 @@ export def "artists-relationships-following post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
@@ -1364,7 +1415,7 @@ export def "artists-relationships-following post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get owners relationship ("to-many").
@@ -1379,6 +1430,7 @@ export def "artists-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -1388,7 +1440,7 @@ export def "artists-relationships-owners get" [
   let full_url = (build-url $base $"/artists/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get profileArt relationship ("to-many").
@@ -1403,6 +1455,7 @@ export def "artists-relationships-profile-art get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: profileArt (e.g. profileArt)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
@@ -1413,7 +1466,7 @@ export def "artists-relationships-profile-art get" [
   let full_url = (build-url $base $"/artists/($id)/relationships/profileArt" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update profileArt relationship ("to-many").
@@ -1428,6 +1481,7 @@ export def "artists-relationships-profile-art patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -1440,7 +1494,7 @@ export def "artists-relationships-profile-art patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get radio relationship ("to-many").
@@ -1455,6 +1509,7 @@ export def "artists-relationships-radio get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: radio (e.g. radio)
@@ -1465,7 +1520,7 @@ export def "artists-relationships-radio get" [
   let full_url = (build-url $base $"/artists/($id)/relationships/radio" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get roles relationship ("to-many").
@@ -1480,6 +1535,7 @@ export def "artists-relationships-roles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: roles (e.g. roles)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -1489,7 +1545,7 @@ export def "artists-relationships-roles get" [
   let full_url = (build-url $base $"/artists/($id)/relationships/roles" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get similarArtists relationship ("to-many").
@@ -1504,6 +1560,7 @@ export def "artists-relationships-similar-artists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: similarArtists (e.g. similarArtists)
@@ -1514,7 +1571,7 @@ export def "artists-relationships-similar-artists get" [
   let full_url = (build-url $base $"/artists/($id)/relationships/similarArtists" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get trackProviders relationship ("to-many").
@@ -1529,6 +1586,7 @@ export def "artists-relationships-track-providers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --include: list # Allows the client to customize which related resources should be returned. Available options: trackProviders (e.g. trackProviders)
 ]: nothing -> any {
@@ -1538,7 +1596,7 @@ export def "artists-relationships-track-providers get" [
   let full_url = (build-url $base $"/artists/($id)/relationships/trackProviders" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tracks relationship ("to-many").
@@ -1553,6 +1611,7 @@ export def "artists-relationships-tracks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --collapseBy: string@collapseBy-completer # Collapse by options for getting artist tracks. Available options: FINGERPRINT, ID. FINGERPRINT option might collapse similar tracks based entry fingerprints while collapsing by ID always returns all available items. (e.g. FINGERPRINT)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
@@ -1564,7 +1623,7 @@ export def "artists-relationships-tracks get" [
   let full_url = (build-url $base $"/artists/($id)/relationships/tracks" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get videos relationship ("to-many").
@@ -1579,6 +1638,7 @@ export def "artists-relationships-videos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: videos (e.g. videos)
@@ -1589,7 +1649,7 @@ export def "artists-relationships-videos get" [
   let full_url = (build-url $base $"/artists/($id)/relationships/videos" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple artworks.
@@ -1603,6 +1663,7 @@ export def "artworks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --filterid: list # Artwork id (e.g. `a468bee88def`)
@@ -1613,7 +1674,7 @@ export def "artworks list" [
   let full_url = (build-url $base "/artworks" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single artwork.
@@ -1627,6 +1688,7 @@ export def "artworks post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -1639,7 +1701,7 @@ export def "artworks post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get single artwork.
@@ -1654,6 +1716,7 @@ export def "artworks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
 ]: nothing -> any {
@@ -1663,7 +1726,7 @@ export def "artworks get" [
   let full_url = (build-url $base $"/artworks/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get owners relationship ("to-many").
@@ -1678,6 +1741,7 @@ export def "artworks-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -1687,7 +1751,7 @@ export def "artworks-relationships-owners get" [
   let full_url = (build-url $base $"/artworks/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple clients.
@@ -1701,6 +1765,7 @@ export def "clients list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --filterownersid: list # User id. Use `me` for the authenticated user
 ]: nothing -> any {
@@ -1710,7 +1775,7 @@ export def "clients list" [
   let full_url = (build-url $base "/clients" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single client.
@@ -1724,6 +1789,7 @@ export def "clients post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -1736,7 +1802,7 @@ export def "clients post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete single client.
@@ -1751,6 +1817,7 @@ export def "clients delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1760,7 +1827,7 @@ export def "clients delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single client.
@@ -1775,6 +1842,7 @@ export def "clients get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1783,7 +1851,7 @@ export def "clients get" [
   let full_url = (build-url $base $"/clients/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update single client.
@@ -1798,6 +1866,7 @@ export def "clients patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -1810,7 +1879,7 @@ export def "clients patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get owners relationship ("to-many").
@@ -1825,6 +1894,7 @@ export def "clients-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -1834,7 +1904,7 @@ export def "clients-relationships-owners get" [
   let full_url = (build-url $base $"/clients/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single collaborationInviteRedemption.
@@ -1848,6 +1918,7 @@ export def "collaboration-invite-redemptions post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -1860,7 +1931,7 @@ export def "collaboration-invite-redemptions post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get multiple collaborationInvites.
@@ -1874,6 +1945,7 @@ export def "collaboration-invites list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners, subject (e.g. owners)
   --filtercode: list # Invite code
 ]: nothing -> any {
@@ -1883,7 +1955,7 @@ export def "collaboration-invites list" [
   let full_url = (build-url $base "/collaborationInvites" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single collaborationInvite.
@@ -1897,6 +1969,7 @@ export def "collaboration-invites post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -1909,7 +1982,7 @@ export def "collaboration-invites post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete single collaborationInvite.
@@ -1924,6 +1997,7 @@ export def "collaboration-invites delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1933,7 +2007,7 @@ export def "collaboration-invites delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single collaborationInvite.
@@ -1948,6 +2022,7 @@ export def "collaboration-invites get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners, subject (e.g. owners)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1956,7 +2031,7 @@ export def "collaboration-invites get" [
   let full_url = (build-url $base $"/collaborationInvites/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get owners relationship ("to-many").
@@ -1971,6 +2046,7 @@ export def "collaboration-invites-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -1980,7 +2056,7 @@ export def "collaboration-invites-relationships-owners get" [
   let full_url = (build-url $base $"/collaborationInvites/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get subject relationship ("to-one").
@@ -1995,6 +2071,7 @@ export def "collaboration-invites-relationships-subject get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: subject (e.g. subject)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2003,7 +2080,7 @@ export def "collaboration-invites-relationships-subject get" [
   let full_url = (build-url $base $"/collaborationInvites/($id)/relationships/subject" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple comments.
@@ -2017,6 +2094,7 @@ export def "comments list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --qp-sort: list # Values prefixed with "-" are sorted descending; values without it are sorted ascending.
   --include: list # Allows the client to customize which related resources should be returned. Available options: ownerProfiles, owners, parentComment (e.g. ownerProfiles)
@@ -2030,7 +2108,7 @@ export def "comments list" [
   let full_url = (build-url $base "/comments" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single comment.
@@ -2044,6 +2122,7 @@ export def "comments post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -2056,7 +2135,7 @@ export def "comments post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete single comment.
@@ -2071,6 +2150,7 @@ export def "comments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2080,7 +2160,7 @@ export def "comments delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single comment.
@@ -2095,6 +2175,7 @@ export def "comments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: ownerProfiles, owners, parentComment (e.g. ownerProfiles)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2103,7 +2184,7 @@ export def "comments get" [
   let full_url = (build-url $base $"/comments/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update single comment.
@@ -2118,6 +2199,7 @@ export def "comments patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -2130,7 +2212,7 @@ export def "comments patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get ownerProfiles relationship ("to-many").
@@ -2145,6 +2227,7 @@ export def "comments-relationships-owner-profiles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: ownerProfiles (e.g. ownerProfiles)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -2154,7 +2237,7 @@ export def "comments-relationships-owner-profiles get" [
   let full_url = (build-url $base $"/comments/($id)/relationships/ownerProfiles" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get owners relationship ("to-many").
@@ -2169,6 +2252,7 @@ export def "comments-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -2178,7 +2262,7 @@ export def "comments-relationships-owners get" [
   let full_url = (build-url $base $"/comments/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get parentComment relationship ("to-one").
@@ -2193,6 +2277,7 @@ export def "comments-relationships-parent-comment get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: parentComment (e.g. parentComment)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2201,7 +2286,7 @@ export def "comments-relationships-parent-comment get" [
   let full_url = (build-url $base $"/comments/($id)/relationships/parentComment" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple contentClaims.
@@ -2215,6 +2300,7 @@ export def "content-claims list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: claimedResource, claimingArtist, owners (e.g. claimedResource)
   --filterownersid: list # User id. Use `me` for the authenticated user
 ]: nothing -> any {
@@ -2224,7 +2310,7 @@ export def "content-claims list" [
   let full_url = (build-url $base "/contentClaims" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single contentClaim.
@@ -2238,6 +2324,7 @@ export def "content-claims post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -2250,7 +2337,7 @@ export def "content-claims post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get single contentClaim.
@@ -2265,6 +2352,7 @@ export def "content-claims get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: claimedResource, claimingArtist, owners (e.g. claimedResource)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2273,7 +2361,7 @@ export def "content-claims get" [
   let full_url = (build-url $base $"/contentClaims/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get claimedResource relationship ("to-one").
@@ -2288,6 +2376,7 @@ export def "content-claims-relationships-claimed-resource get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: claimedResource (e.g. claimedResource)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2296,7 +2385,7 @@ export def "content-claims-relationships-claimed-resource get" [
   let full_url = (build-url $base $"/contentClaims/($id)/relationships/claimedResource" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get claimingArtist relationship ("to-one").
@@ -2311,6 +2400,7 @@ export def "content-claims-relationships-claiming-artist get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: claimingArtist (e.g. claimingArtist)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2319,7 +2409,7 @@ export def "content-claims-relationships-claiming-artist get" [
   let full_url = (build-url $base $"/contentClaims/($id)/relationships/claimingArtist" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get owners relationship ("to-many").
@@ -2334,6 +2424,7 @@ export def "content-claims-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -2343,7 +2434,7 @@ export def "content-claims-relationships-owners get" [
   let full_url = (build-url $base $"/contentClaims/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single credit.
@@ -2358,6 +2449,7 @@ export def "credits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: artist, category (e.g. artist)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2366,7 +2458,7 @@ export def "credits get" [
   let full_url = (build-url $base $"/credits/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get artist relationship ("to-one").
@@ -2381,6 +2473,7 @@ export def "credits-relationships-artist get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: artist (e.g. artist)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2389,7 +2482,7 @@ export def "credits-relationships-artist get" [
   let full_url = (build-url $base $"/credits/($id)/relationships/artist" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get category relationship ("to-one").
@@ -2404,6 +2497,7 @@ export def "credits-relationships-category get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: category (e.g. category)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2412,7 +2506,7 @@ export def "credits-relationships-category get" [
   let full_url = (build-url $base $"/credits/($id)/relationships/category" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple downloads.
@@ -2426,6 +2520,7 @@ export def "downloads list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --filterid: list # Download id (e.g. `VFJBQ0tTOjEyMzQ1`)
 ]: nothing -> any {
@@ -2435,7 +2530,7 @@ export def "downloads list" [
   let full_url = (build-url $base "/downloads" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single download.
@@ -2450,6 +2545,7 @@ export def "downloads get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2458,7 +2554,7 @@ export def "downloads get" [
   let full_url = (build-url $base $"/downloads/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get owners relationship ("to-many").
@@ -2473,6 +2569,7 @@ export def "downloads-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -2482,7 +2579,7 @@ export def "downloads-relationships-owners get" [
   let full_url = (build-url $base $"/downloads/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple dspSharingLinks.
@@ -2496,6 +2593,7 @@ export def "dsp-sharing-links get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: subject (e.g. subject)
   --filtersubjectid: list # The id of the subject resource
   --filtersubjecttype: list # The type of the subject resource (e.g., albums, tracks, artists) (e.g. `tracks`)
@@ -2506,7 +2604,7 @@ export def "dsp-sharing-links get" [
   let full_url = (build-url $base "/dspSharingLinks" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get subject relationship ("to-one").
@@ -2521,6 +2619,7 @@ export def "dsp-sharing-links-relationships-subject get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: subject (e.g. subject)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2529,7 +2628,7 @@ export def "dsp-sharing-links-relationships-subject get" [
   let full_url = (build-url $base $"/dspSharingLinks/($id)/relationships/subject" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get items relationship ("to-many").
@@ -2544,6 +2643,7 @@ export def "dynamic-modules-relationships-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --refreshId: string
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
@@ -2559,7 +2659,7 @@ export def "dynamic-modules-relationships-items get" [
   let full_url = (build-url $base $"/dynamicModules/($id)/relationships/items" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple dynamicPages.
@@ -2573,6 +2673,7 @@ export def "dynamic-pages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --refreshId: string
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
@@ -2589,7 +2690,7 @@ export def "dynamic-pages get" [
   let full_url = (build-url $base "/dynamicPages" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get dynamicModules relationship ("to-many").
@@ -2604,6 +2705,7 @@ export def "dynamic-pages-relationships-dynamic-modules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --refreshId: string
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
@@ -2619,7 +2721,7 @@ export def "dynamic-pages-relationships-dynamic-modules get" [
   let full_url = (build-url $base $"/dynamicPages/($id)/relationships/dynamicModules" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get subject relationship ("to-one").
@@ -2634,6 +2736,7 @@ export def "dynamic-pages-relationships-subject get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: subject (e.g. subject)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2642,7 +2745,7 @@ export def "dynamic-pages-relationships-subject get" [
   let full_url = (build-url $base $"/dynamicPages/($id)/relationships/subject" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple genres.
@@ -2656,6 +2759,7 @@ export def "genres list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
   --filterid: list # Allows filtering by genre id(s). USER_SELECTABLE is special value used to return specific genres which users can select from (e.g. `'1,2,3' or 'USER_SELECTABLE'`)
@@ -2666,7 +2770,7 @@ export def "genres list" [
   let full_url = (build-url $base "/genres" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single genre.
@@ -2681,6 +2785,7 @@ export def "genres get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2689,7 +2794,7 @@ export def "genres get" [
   let full_url = (build-url $base $"/genres/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple installations.
@@ -2703,6 +2808,7 @@ export def "installations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --include: list # Allows the client to customize which related resources should be returned. Available options: offlineInventory, owners (e.g. offlineInventory)
   --filterclientProvidedInstallationId: list # Client-provided installation identifier to filter by (e.g. `a468bee88def`)
@@ -2714,7 +2820,7 @@ export def "installations list" [
   let full_url = (build-url $base "/installations" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single installation.
@@ -2728,6 +2834,7 @@ export def "installations post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -2740,7 +2847,7 @@ export def "installations post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get single installation.
@@ -2755,6 +2862,7 @@ export def "installations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: offlineInventory, owners (e.g. offlineInventory)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2763,7 +2871,7 @@ export def "installations get" [
   let full_url = (build-url $base $"/installations/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete from offlineInventory relationship ("to-many").
@@ -2778,6 +2886,7 @@ export def "installations-relationships-offline-inventory delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -2790,7 +2899,7 @@ export def "installations-relationships-offline-inventory delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get offlineInventory relationship ("to-many").
@@ -2805,6 +2914,7 @@ export def "installations-relationships-offline-inventory get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --include: list # Allows the client to customize which related resources should be returned. Available options: offlineInventory (e.g. offlineInventory)
   --filterid: list # Offline item id (e.g. `1234`)
@@ -2817,7 +2927,7 @@ export def "installations-relationships-offline-inventory get" [
   let full_url = (build-url $base $"/installations/($id)/relationships/offlineInventory" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add to offlineInventory relationship ("to-many").
@@ -2832,6 +2942,7 @@ export def "installations-relationships-offline-inventory post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -2844,7 +2955,7 @@ export def "installations-relationships-offline-inventory post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get owners relationship ("to-many").
@@ -2859,6 +2970,7 @@ export def "installations-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -2868,7 +2980,7 @@ export def "installations-relationships-owners get" [
   let full_url = (build-url $base $"/installations/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single lyric.
@@ -2882,6 +2994,7 @@ export def "lyrics post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -2894,7 +3007,7 @@ export def "lyrics post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete single lyric.
@@ -2909,6 +3022,7 @@ export def "lyrics delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2918,7 +3032,7 @@ export def "lyrics delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single lyric.
@@ -2933,6 +3047,7 @@ export def "lyrics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners, track (e.g. owners)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2941,7 +3056,7 @@ export def "lyrics get" [
   let full_url = (build-url $base $"/lyrics/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update single lyric.
@@ -2956,6 +3071,7 @@ export def "lyrics patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -2968,7 +3084,7 @@ export def "lyrics patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get owners relationship ("to-many").
@@ -2983,6 +3099,7 @@ export def "lyrics-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
@@ -2993,7 +3110,7 @@ export def "lyrics-relationships-owners get" [
   let full_url = (build-url $base $"/lyrics/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get track relationship ("to-one").
@@ -3008,6 +3125,7 @@ export def "lyrics-relationships-track get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: track (e.g. track)
 ]: nothing -> any {
@@ -3017,7 +3135,7 @@ export def "lyrics-relationships-track get" [
   let full_url = (build-url $base $"/lyrics/($id)/relationships/track" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single manualArtistClaim.
@@ -3031,6 +3149,7 @@ export def "manual-artist-claims post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -3043,7 +3162,7 @@ export def "manual-artist-claims post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get multiple offlineTasks.
@@ -3057,6 +3176,7 @@ export def "offline-tasks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --include: list # Allows the client to customize which related resources should be returned. Available options: collection, item, owners (e.g. collection)
   --filterinstallationid: list # List of offline task IDs (e.g. `a468bee88def`)
@@ -3067,7 +3187,7 @@ export def "offline-tasks list" [
   let full_url = (build-url $base "/offlineTasks" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single offlineTask.
@@ -3082,6 +3202,7 @@ export def "offline-tasks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: collection, item, owners (e.g. collection)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3090,7 +3211,7 @@ export def "offline-tasks get" [
   let full_url = (build-url $base $"/offlineTasks/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update single offlineTask.
@@ -3105,6 +3226,7 @@ export def "offline-tasks patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -3117,7 +3239,7 @@ export def "offline-tasks patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get collection relationship ("to-one").
@@ -3132,6 +3254,7 @@ export def "offline-tasks-relationships-collection get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: collection (e.g. collection)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3140,7 +3263,7 @@ export def "offline-tasks-relationships-collection get" [
   let full_url = (build-url $base $"/offlineTasks/($id)/relationships/collection" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get item relationship ("to-one").
@@ -3155,6 +3278,7 @@ export def "offline-tasks-relationships-item get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: item (e.g. item)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3163,7 +3287,7 @@ export def "offline-tasks-relationships-item get" [
   let full_url = (build-url $base $"/offlineTasks/($id)/relationships/item" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get owners relationship ("to-many").
@@ -3178,6 +3302,7 @@ export def "offline-tasks-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -3187,7 +3312,7 @@ export def "offline-tasks-relationships-owners get" [
   let full_url = (build-url $base $"/offlineTasks/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple playQueues.
@@ -3201,6 +3326,7 @@ export def "play-queues list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --include: list # Allows the client to customize which related resources should be returned. Available options: current, future, owners, past (e.g. current)
   --filterownersid: list # User id. Use `me` for the authenticated user
@@ -3211,7 +3337,7 @@ export def "play-queues list" [
   let full_url = (build-url $base "/playQueues" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single playQueue.
@@ -3225,6 +3351,7 @@ export def "play-queues post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -3237,7 +3364,7 @@ export def "play-queues post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete single playQueue.
@@ -3252,6 +3379,7 @@ export def "play-queues delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3261,7 +3389,7 @@ export def "play-queues delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single playQueue.
@@ -3276,6 +3404,7 @@ export def "play-queues get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: current, future, owners, past (e.g. current)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3284,7 +3413,7 @@ export def "play-queues get" [
   let full_url = (build-url $base $"/playQueues/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update single playQueue.
@@ -3299,6 +3428,7 @@ export def "play-queues patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -3311,7 +3441,7 @@ export def "play-queues patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get current relationship ("to-one").
@@ -3326,6 +3456,7 @@ export def "play-queues-relationships-current get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: current (e.g. current)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3334,7 +3465,7 @@ export def "play-queues-relationships-current get" [
   let full_url = (build-url $base $"/playQueues/($id)/relationships/current" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update current relationship ("to-one").
@@ -3349,6 +3480,7 @@ export def "play-queues-relationships-current patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -3361,7 +3493,7 @@ export def "play-queues-relationships-current patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete from future relationship ("to-many").
@@ -3376,6 +3508,7 @@ export def "play-queues-relationships-future delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -3388,7 +3521,7 @@ export def "play-queues-relationships-future delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get future relationship ("to-many").
@@ -3403,6 +3536,7 @@ export def "play-queues-relationships-future get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --include: list # Allows the client to customize which related resources should be returned. Available options: future (e.g. future)
 ]: nothing -> any {
@@ -3412,7 +3546,7 @@ export def "play-queues-relationships-future get" [
   let full_url = (build-url $base $"/playQueues/($id)/relationships/future" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update future relationship ("to-many").
@@ -3427,6 +3561,7 @@ export def "play-queues-relationships-future patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -3439,7 +3574,7 @@ export def "play-queues-relationships-future patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Add to future relationship ("to-many").
@@ -3454,6 +3589,7 @@ export def "play-queues-relationships-future post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -3466,7 +3602,7 @@ export def "play-queues-relationships-future post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get owners relationship ("to-many").
@@ -3481,6 +3617,7 @@ export def "play-queues-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -3490,7 +3627,7 @@ export def "play-queues-relationships-owners get" [
   let full_url = (build-url $base $"/playQueues/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get past relationship ("to-many").
@@ -3505,6 +3642,7 @@ export def "play-queues-relationships-past get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --include: list # Allows the client to customize which related resources should be returned. Available options: past (e.g. past)
 ]: nothing -> any {
@@ -3514,7 +3652,7 @@ export def "play-queues-relationships-past get" [
   let full_url = (build-url $base $"/playQueues/($id)/relationships/past" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple playlists.
@@ -3528,6 +3666,7 @@ export def "playlists list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --qp-sort: list # Values prefixed with "-" are sorted descending; values without it are sorted ascending.
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
@@ -3541,7 +3680,7 @@ export def "playlists list" [
   let full_url = (build-url $base "/playlists" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single playlist.
@@ -3555,6 +3694,7 @@ export def "playlists post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
@@ -3569,7 +3709,7 @@ export def "playlists post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete single playlist.
@@ -3584,6 +3724,7 @@ export def "playlists delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3593,7 +3734,7 @@ export def "playlists delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single playlist.
@@ -3608,6 +3749,7 @@ export def "playlists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: collaboratorProfiles, collaborators, coverArt, items, ownerProfiles, owners (e.g. collaboratorProfiles)
 ]: nothing -> any {
@@ -3617,7 +3759,7 @@ export def "playlists get" [
   let full_url = (build-url $base $"/playlists/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update single playlist.
@@ -3632,6 +3774,7 @@ export def "playlists patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
@@ -3646,7 +3789,7 @@ export def "playlists patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete from collaboratorProfiles relationship ("to-many").
@@ -3661,6 +3804,7 @@ export def "playlists-relationships-collaborator-profiles delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -3673,7 +3817,7 @@ export def "playlists-relationships-collaborator-profiles delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get collaboratorProfiles relationship ("to-many").
@@ -3688,6 +3832,7 @@ export def "playlists-relationships-collaborator-profiles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: collaboratorProfiles (e.g. collaboratorProfiles)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
@@ -3698,7 +3843,7 @@ export def "playlists-relationships-collaborator-profiles get" [
   let full_url = (build-url $base $"/playlists/($id)/relationships/collaboratorProfiles" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add to collaboratorProfiles relationship ("to-many").
@@ -3713,6 +3858,7 @@ export def "playlists-relationships-collaborator-profiles post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -3725,7 +3871,7 @@ export def "playlists-relationships-collaborator-profiles post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get collaborators relationship ("to-many").
@@ -3740,6 +3886,7 @@ export def "playlists-relationships-collaborators get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: collaborators (e.g. collaborators)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
@@ -3750,7 +3897,7 @@ export def "playlists-relationships-collaborators get" [
   let full_url = (build-url $base $"/playlists/($id)/relationships/collaborators" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get coverArt relationship ("to-many").
@@ -3765,6 +3912,7 @@ export def "playlists-relationships-cover-art get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: coverArt (e.g. coverArt)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
@@ -3775,7 +3923,7 @@ export def "playlists-relationships-cover-art get" [
   let full_url = (build-url $base $"/playlists/($id)/relationships/coverArt" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update coverArt relationship ("to-many").
@@ -3790,6 +3938,7 @@ export def "playlists-relationships-cover-art patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -3802,7 +3951,7 @@ export def "playlists-relationships-cover-art patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete from items relationship ("to-many").
@@ -3817,6 +3966,7 @@ export def "playlists-relationships-items delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -3829,7 +3979,7 @@ export def "playlists-relationships-items delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get items relationship ("to-many").
@@ -3844,6 +3994,7 @@ export def "playlists-relationships-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: items (e.g. items)
@@ -3854,7 +4005,7 @@ export def "playlists-relationships-items get" [
   let full_url = (build-url $base $"/playlists/($id)/relationships/items" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update items relationship ("to-many").
@@ -3869,6 +4020,7 @@ export def "playlists-relationships-items patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -3881,7 +4033,7 @@ export def "playlists-relationships-items patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Add to items relationship ("to-many").
@@ -3896,6 +4048,7 @@ export def "playlists-relationships-items post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
@@ -3910,7 +4063,7 @@ export def "playlists-relationships-items post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get ownerProfiles relationship ("to-many").
@@ -3925,6 +4078,7 @@ export def "playlists-relationships-owner-profiles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: ownerProfiles (e.g. ownerProfiles)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
@@ -3935,7 +4089,7 @@ export def "playlists-relationships-owner-profiles get" [
   let full_url = (build-url $base $"/playlists/($id)/relationships/ownerProfiles" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get owners relationship ("to-many").
@@ -3950,6 +4104,7 @@ export def "playlists-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
@@ -3960,7 +4115,7 @@ export def "playlists-relationships-owners get" [
   let full_url = (build-url $base $"/playlists/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple priceConfigurations.
@@ -3974,6 +4129,7 @@ export def "price-configurations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filterid: list # List of price configurations IDs (e.g. `cHJpY2UtY29uZmlnLTEyMzpVUw`)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3982,7 +4138,7 @@ export def "price-configurations list" [
   let full_url = (build-url $base "/priceConfigurations" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single priceConfiguration.
@@ -3996,6 +4152,7 @@ export def "price-configurations post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -4008,7 +4165,7 @@ export def "price-configurations post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get single priceConfiguration.
@@ -4023,13 +4180,14 @@ export def "price-configurations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/priceConfigurations/($id)")
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple providerOwners.
@@ -4043,6 +4201,7 @@ export def "provider-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners, provider (e.g. owners)
   --filterownersid: list # User id. Use `me` for the authenticated user
 ]: nothing -> any {
@@ -4052,7 +4211,7 @@ export def "provider-owners get" [
   let full_url = (build-url $base "/providerOwners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get owners relationship ("to-many").
@@ -4067,6 +4226,7 @@ export def "provider-owners-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -4076,7 +4236,7 @@ export def "provider-owners-relationships-owners get" [
   let full_url = (build-url $base $"/providerOwners/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get provider relationship ("to-one").
@@ -4091,6 +4251,7 @@ export def "provider-owners-relationships-provider get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: provider (e.g. provider)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4099,7 +4260,7 @@ export def "provider-owners-relationships-provider get" [
   let full_url = (build-url $base $"/providerOwners/($id)/relationships/provider" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple providerProductInfos.
@@ -4113,6 +4274,7 @@ export def "provider-product-infos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: provider, subject (e.g. provider)
   --filterbarcodeId: list # List of barcode IDs (EAN-13 or UPC-A) (e.g. `00602527336510`)
@@ -4124,7 +4286,7 @@ export def "provider-product-infos get" [
   let full_url = (build-url $base "/providerProductInfos" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get provider relationship ("to-one").
@@ -4139,6 +4301,7 @@ export def "provider-product-infos-relationships-provider get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: provider (e.g. provider)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4147,7 +4310,7 @@ export def "provider-product-infos-relationships-provider get" [
   let full_url = (build-url $base $"/providerProductInfos/($id)/relationships/provider" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get subject relationship ("to-one").
@@ -4162,6 +4325,7 @@ export def "provider-product-infos-relationships-subject get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: subject (e.g. subject)
 ]: nothing -> any {
@@ -4171,7 +4335,7 @@ export def "provider-product-infos-relationships-subject get" [
   let full_url = (build-url $base $"/providerProductInfos/($id)/relationships/subject" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single provider.
@@ -4186,13 +4350,14 @@ export def "providers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/providers/($id)")
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple purchases.
@@ -4206,6 +4371,7 @@ export def "purchases get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners, subject (e.g. owners)
   --filterownersid: list # User id. Use `me` for the authenticated user
@@ -4217,7 +4383,7 @@ export def "purchases get" [
   let full_url = (build-url $base "/purchases" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get owners relationship ("to-many").
@@ -4232,6 +4398,7 @@ export def "purchases-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -4241,7 +4408,7 @@ export def "purchases-relationships-owners get" [
   let full_url = (build-url $base $"/purchases/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get subject relationship ("to-one").
@@ -4256,6 +4423,7 @@ export def "purchases-relationships-subject get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: subject (e.g. subject)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4264,7 +4432,7 @@ export def "purchases-relationships-subject get" [
   let full_url = (build-url $base $"/purchases/($id)/relationships/subject" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple reactions.
@@ -4278,6 +4446,7 @@ export def "reactions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --stats: string@stats-completer
   --statsOnly: oneof<nothing, bool>
   --viewerContext: string
@@ -4293,7 +4462,7 @@ export def "reactions get" [
   let full_url = (build-url $base "/reactions" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single reaction.
@@ -4307,6 +4476,7 @@ export def "reactions post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -4319,7 +4489,7 @@ export def "reactions post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete single reaction.
@@ -4334,6 +4504,7 @@ export def "reactions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4343,7 +4514,7 @@ export def "reactions delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get ownerProfiles relationship ("to-many").
@@ -4358,6 +4529,7 @@ export def "reactions-relationships-owner-profiles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: ownerProfiles (e.g. ownerProfiles)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -4367,7 +4539,7 @@ export def "reactions-relationships-owner-profiles get" [
   let full_url = (build-url $base $"/reactions/($id)/relationships/ownerProfiles" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get owners relationship ("to-many").
@@ -4382,6 +4554,7 @@ export def "reactions-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -4391,7 +4564,7 @@ export def "reactions-relationships-owners get" [
   let full_url = (build-url $base $"/reactions/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single savedShare.
@@ -4405,6 +4578,7 @@ export def "saved-shares post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -4417,7 +4591,7 @@ export def "saved-shares post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get multiple scopes.
@@ -4431,6 +4605,7 @@ export def "scopes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filterrequiredAccessTier: list # Filters scopes by their `requiredAccessTier`. (e.g. `THIRD_PARTY`)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4439,7 +4614,7 @@ export def "scopes get" [
   let full_url = (build-url $base "/scopes" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete single searchHistoryEntrie.
@@ -4454,6 +4629,7 @@ export def "search-history-entries delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4463,7 +4639,7 @@ export def "search-history-entries delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single searchResult.
@@ -4478,6 +4654,7 @@ export def "search-results get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --explicitFilter: string@explicitFilter-completer # Explicit filter. Valid values: INCLUDE or EXCLUDE (default: INCLUDE, e.g. INCLUDE)
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: albums, artists, playlists, topHits, tracks, videos (e.g. albums)
@@ -4488,7 +4665,7 @@ export def "search-results get" [
   let full_url = (build-url $base $"/searchResults/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get albums relationship ("to-many").
@@ -4503,6 +4680,7 @@ export def "search-results-relationships-albums get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --explicitFilter: string@explicitFilter-completer # Explicit filter. Valid values: INCLUDE or EXCLUDE (default: INCLUDE, e.g. INCLUDE)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
@@ -4514,7 +4692,7 @@ export def "search-results-relationships-albums get" [
   let full_url = (build-url $base $"/searchResults/($id)/relationships/albums" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get artists relationship ("to-many").
@@ -4529,6 +4707,7 @@ export def "search-results-relationships-artists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --explicitFilter: string@explicitFilter-completer # Explicit filter. Valid values: INCLUDE or EXCLUDE (default: INCLUDE, e.g. INCLUDE)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
@@ -4540,7 +4719,7 @@ export def "search-results-relationships-artists get" [
   let full_url = (build-url $base $"/searchResults/($id)/relationships/artists" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get playlists relationship ("to-many").
@@ -4555,6 +4734,7 @@ export def "search-results-relationships-playlists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --explicitFilter: string@explicitFilter-completer # Explicit filter. Valid values: INCLUDE or EXCLUDE (default: INCLUDE, e.g. INCLUDE)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
@@ -4566,7 +4746,7 @@ export def "search-results-relationships-playlists get" [
   let full_url = (build-url $base $"/searchResults/($id)/relationships/playlists" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get topHits relationship ("to-many").
@@ -4581,6 +4761,7 @@ export def "search-results-relationships-top-hits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --explicitFilter: string@explicitFilter-completer # Explicit filter. Valid values: INCLUDE or EXCLUDE (default: INCLUDE, e.g. INCLUDE)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
@@ -4592,7 +4773,7 @@ export def "search-results-relationships-top-hits get" [
   let full_url = (build-url $base $"/searchResults/($id)/relationships/topHits" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tracks relationship ("to-many").
@@ -4607,6 +4788,7 @@ export def "search-results-relationships-tracks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --explicitFilter: string@explicitFilter-completer # Explicit filter. Valid values: INCLUDE or EXCLUDE (default: INCLUDE, e.g. INCLUDE)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
@@ -4618,7 +4800,7 @@ export def "search-results-relationships-tracks get" [
   let full_url = (build-url $base $"/searchResults/($id)/relationships/tracks" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get videos relationship ("to-many").
@@ -4633,6 +4815,7 @@ export def "search-results-relationships-videos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --explicitFilter: string@explicitFilter-completer # Explicit filter. Valid values: INCLUDE or EXCLUDE (default: INCLUDE, e.g. INCLUDE)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
@@ -4644,7 +4827,7 @@ export def "search-results-relationships-videos get" [
   let full_url = (build-url $base $"/searchResults/($id)/relationships/videos" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single searchSuggestion.
@@ -4659,6 +4842,7 @@ export def "search-suggestions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --explicitFilter: string@explicitFilter-completer # Explicit filter. Valid values: INCLUDE or EXCLUDE (default: INCLUDE, e.g. INCLUDE)
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: directHits, history (e.g. directHits)
@@ -4669,7 +4853,7 @@ export def "search-suggestions get" [
   let full_url = (build-url $base $"/searchSuggestions/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get directHits relationship ("to-many").
@@ -4684,6 +4868,7 @@ export def "search-suggestions-relationships-direct-hits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --explicitFilter: string@explicitFilter-completer # Explicit filter. Valid values: INCLUDE or EXCLUDE (default: INCLUDE, e.g. INCLUDE)
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: directHits (e.g. directHits)
@@ -4695,7 +4880,7 @@ export def "search-suggestions-relationships-direct-hits get" [
   let full_url = (build-url $base $"/searchSuggestions/($id)/relationships/directHits" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get history relationship ("to-many").
@@ -4710,6 +4895,7 @@ export def "search-suggestions-relationships-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --explicitFilter: string@explicitFilter-completer # Explicit filter. Valid values: INCLUDE or EXCLUDE (default: INCLUDE, e.g. INCLUDE)
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: history (e.g. history)
@@ -4721,7 +4907,7 @@ export def "search-suggestions-relationships-history get" [
   let full_url = (build-url $base $"/searchSuggestions/($id)/relationships/history" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple shares.
@@ -4735,6 +4921,7 @@ export def "shares list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners, sharedResources (e.g. owners)
   --filtercode: list # A share code (e.g. `xyz`)
 ]: nothing -> any {
@@ -4744,7 +4931,7 @@ export def "shares list" [
   let full_url = (build-url $base "/shares" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single share.
@@ -4758,6 +4945,7 @@ export def "shares post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -4770,7 +4958,7 @@ export def "shares post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get single share.
@@ -4785,6 +4973,7 @@ export def "shares get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners, sharedResources (e.g. owners)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4793,7 +4982,7 @@ export def "shares get" [
   let full_url = (build-url $base $"/shares/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get owners relationship ("to-many").
@@ -4808,6 +4997,7 @@ export def "shares-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -4817,7 +5007,7 @@ export def "shares-relationships-owners get" [
   let full_url = (build-url $base $"/shares/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get sharedResources relationship ("to-many").
@@ -4832,6 +5022,7 @@ export def "shares-relationships-shared-resources get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --include: list # Allows the client to customize which related resources should be returned. Available options: sharedResources (e.g. sharedResources)
 ]: nothing -> any {
@@ -4841,7 +5032,7 @@ export def "shares-relationships-shared-resources get" [
   let full_url = (build-url $base $"/shares/($id)/relationships/sharedResources" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single squareConnection.
@@ -4856,6 +5047,7 @@ export def "square-connections post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (DEPRECATED, e.g. US)
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
@@ -4870,7 +5062,7 @@ export def "square-connections post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get single squareConnection.
@@ -4885,13 +5077,14 @@ export def "square-connections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/squareConnections/($id)")
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple stripeConnections.
@@ -4905,6 +5098,7 @@ export def "stripe-connections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --filterownersid: list # User id. Use `me` for the authenticated user
 ]: nothing -> any {
@@ -4914,7 +5108,7 @@ export def "stripe-connections get" [
   let full_url = (build-url $base "/stripeConnections" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single stripeConnection.
@@ -4928,6 +5122,7 @@ export def "stripe-connections post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
@@ -4942,7 +5137,7 @@ export def "stripe-connections post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get owners relationship ("to-many").
@@ -4957,6 +5152,7 @@ export def "stripe-connections-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -4966,7 +5162,7 @@ export def "stripe-connections-relationships-owners get" [
   let full_url = (build-url $base $"/stripeConnections/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple stripeDashboardLinks.
@@ -4980,6 +5176,7 @@ export def "stripe-dashboard-links get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --filterownersid: list # User id. Use `me` for the authenticated user
 ]: nothing -> any {
@@ -4989,7 +5186,7 @@ export def "stripe-dashboard-links get" [
   let full_url = (build-url $base "/stripeDashboardLinks" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get owners relationship ("to-many").
@@ -5004,6 +5201,7 @@ export def "stripe-dashboard-links-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -5013,7 +5211,7 @@ export def "stripe-dashboard-links-relationships-owners get" [
   let full_url = (build-url $base $"/stripeDashboardLinks/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single temporaryUserToken.
@@ -5027,6 +5225,7 @@ export def "temporary-user-tokens post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -5039,7 +5238,7 @@ export def "temporary-user-tokens post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get single temporaryUserToken.
@@ -5054,6 +5253,7 @@ export def "temporary-user-tokens get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5062,7 +5262,7 @@ export def "temporary-user-tokens get" [
   let full_url = (build-url $base $"/temporaryUserTokens/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get owners relationship ("to-many").
@@ -5077,6 +5277,7 @@ export def "temporary-user-tokens-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -5086,7 +5287,7 @@ export def "temporary-user-tokens-relationships-owners get" [
   let full_url = (build-url $base $"/temporaryUserTokens/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple terms.
@@ -5100,6 +5301,7 @@ export def "terms list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filtercountryCode: list # Filter by countryCode
   --filterisLatestVersion: list # Filter by isLatestVersion
   --filtertermsType: list # One of: DEVELOPER, UPLOAD_MARKETPLACE (e.g. `DEVELOPER`)
@@ -5110,7 +5312,7 @@ export def "terms list" [
   let full_url = (build-url $base "/terms" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single term.
@@ -5125,13 +5327,14 @@ export def "terms get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/terms/($id)")
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single trackFile.
@@ -5146,6 +5349,7 @@ export def "track-files get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --formats: list
   --usage: string@usage-completer
 ]: nothing -> any {
@@ -5155,7 +5359,7 @@ export def "track-files get" [
   let full_url = (build-url $base $"/trackFiles/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single trackManifest.
@@ -5170,6 +5374,7 @@ export def "track-manifests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --manifestType: string@manifestType-completer
   --formats: list
   --uriScheme: string@uriScheme-completer
@@ -5183,7 +5388,7 @@ export def "track-manifests get" [
   let full_url = (build-url $base $"/trackManifests/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single trackSourceFile.
@@ -5197,6 +5402,7 @@ export def "track-source-files post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -5209,7 +5415,7 @@ export def "track-source-files post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get single trackSourceFile.
@@ -5224,6 +5430,7 @@ export def "track-source-files get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5232,7 +5439,7 @@ export def "track-source-files get" [
   let full_url = (build-url $base $"/trackSourceFiles/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get owners relationship ("to-many").
@@ -5247,6 +5454,7 @@ export def "track-source-files-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -5256,7 +5464,7 @@ export def "track-source-files-relationships-owners get" [
   let full_url = (build-url $base $"/trackSourceFiles/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single trackStatistic.
@@ -5271,6 +5479,7 @@ export def "track-statistics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5279,7 +5488,7 @@ export def "track-statistics get" [
   let full_url = (build-url $base $"/trackStatistics/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get owners relationship ("to-many").
@@ -5294,6 +5503,7 @@ export def "track-statistics-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -5303,7 +5513,7 @@ export def "track-statistics-relationships-owners get" [
   let full_url = (build-url $base $"/trackStatistics/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple tracks.
@@ -5317,6 +5527,7 @@ export def "tracks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --qp-sort: list # Values prefixed with "-" are sorted descending; values without it are sorted ascending.
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
@@ -5332,7 +5543,7 @@ export def "tracks list" [
   let full_url = (build-url $base "/tracks" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single track.
@@ -5346,6 +5557,7 @@ export def "tracks post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -5358,7 +5570,7 @@ export def "tracks post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete single track.
@@ -5373,6 +5585,7 @@ export def "tracks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5382,7 +5595,7 @@ export def "tracks delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single track.
@@ -5397,6 +5610,7 @@ export def "tracks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: albums, artists, credits, download, genres, lyrics, metadataStatus, owners, priceConfig, providers, radio, replacement, shares, similarTracks, sourceFile, suggestedTracks, trackStatistics, usageRules (e.g. albums)
   --shareCode: string # Share code that grants access to UNLISTED resources. When provided, allows non-owners to access resources that would otherwise be restricted. (e.g. xyz)
@@ -5407,7 +5621,7 @@ export def "tracks get" [
   let full_url = (build-url $base $"/tracks/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update single track.
@@ -5422,6 +5636,7 @@ export def "tracks patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -5434,7 +5649,7 @@ export def "tracks patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get albums relationship ("to-many").
@@ -5449,6 +5664,7 @@ export def "tracks-relationships-albums get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: albums (e.g. albums)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
@@ -5460,7 +5676,7 @@ export def "tracks-relationships-albums get" [
   let full_url = (build-url $base $"/tracks/($id)/relationships/albums" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update albums relationship ("to-many").
@@ -5475,6 +5691,7 @@ export def "tracks-relationships-albums patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -5487,7 +5704,7 @@ export def "tracks-relationships-albums patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get artists relationship ("to-many").
@@ -5502,6 +5719,7 @@ export def "tracks-relationships-artists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: artists (e.g. artists)
@@ -5513,7 +5731,7 @@ export def "tracks-relationships-artists get" [
   let full_url = (build-url $base $"/tracks/($id)/relationships/artists" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get credits relationship ("to-many").
@@ -5528,6 +5746,7 @@ export def "tracks-relationships-credits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --include: list # Allows the client to customize which related resources should be returned. Available options: credits (e.g. credits)
   --shareCode: string # Share code that grants access to UNLISTED resources. When provided, allows non-owners to access resources that would otherwise be restricted. (e.g. xyz)
@@ -5538,7 +5757,7 @@ export def "tracks-relationships-credits get" [
   let full_url = (build-url $base $"/tracks/($id)/relationships/credits" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get download relationship ("to-one").
@@ -5553,6 +5772,7 @@ export def "tracks-relationships-download get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: download (e.g. download)
   --shareCode: string # Share code that grants access to UNLISTED resources. When provided, allows non-owners to access resources that would otherwise be restricted. (e.g. xyz)
 ]: nothing -> any {
@@ -5562,7 +5782,7 @@ export def "tracks-relationships-download get" [
   let full_url = (build-url $base $"/tracks/($id)/relationships/download" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get genres relationship ("to-many").
@@ -5577,6 +5797,7 @@ export def "tracks-relationships-genres get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: genres (e.g. genres)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
@@ -5588,7 +5809,7 @@ export def "tracks-relationships-genres get" [
   let full_url = (build-url $base $"/tracks/($id)/relationships/genres" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get lyrics relationship ("to-many").
@@ -5603,6 +5824,7 @@ export def "tracks-relationships-lyrics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: lyrics (e.g. lyrics)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --shareCode: string # Share code that grants access to UNLISTED resources. When provided, allows non-owners to access resources that would otherwise be restricted. (e.g. xyz)
@@ -5613,7 +5835,7 @@ export def "tracks-relationships-lyrics get" [
   let full_url = (build-url $base $"/tracks/($id)/relationships/lyrics" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get metadataStatus relationship ("to-one").
@@ -5628,6 +5850,7 @@ export def "tracks-relationships-metadata-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: metadataStatus (e.g. metadataStatus)
   --shareCode: string # Share code that grants access to UNLISTED resources. When provided, allows non-owners to access resources that would otherwise be restricted. (e.g. xyz)
 ]: nothing -> any {
@@ -5637,7 +5860,7 @@ export def "tracks-relationships-metadata-status get" [
   let full_url = (build-url $base $"/tracks/($id)/relationships/metadataStatus" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get owners relationship ("to-many").
@@ -5652,6 +5875,7 @@ export def "tracks-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --shareCode: string # Share code that grants access to UNLISTED resources. When provided, allows non-owners to access resources that would otherwise be restricted. (e.g. xyz)
@@ -5662,7 +5886,7 @@ export def "tracks-relationships-owners get" [
   let full_url = (build-url $base $"/tracks/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get priceConfig relationship ("to-one").
@@ -5677,6 +5901,7 @@ export def "tracks-relationships-price-config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: priceConfig (e.g. priceConfig)
   --shareCode: string # Share code that grants access to UNLISTED resources. When provided, allows non-owners to access resources that would otherwise be restricted. (e.g. xyz)
@@ -5687,7 +5912,7 @@ export def "tracks-relationships-price-config get" [
   let full_url = (build-url $base $"/tracks/($id)/relationships/priceConfig" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get providers relationship ("to-many").
@@ -5702,6 +5927,7 @@ export def "tracks-relationships-providers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: providers (e.g. providers)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
@@ -5713,7 +5939,7 @@ export def "tracks-relationships-providers get" [
   let full_url = (build-url $base $"/tracks/($id)/relationships/providers" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get radio relationship ("to-many").
@@ -5728,6 +5954,7 @@ export def "tracks-relationships-radio get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: radio (e.g. radio)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --shareCode: string # Share code that grants access to UNLISTED resources. When provided, allows non-owners to access resources that would otherwise be restricted. (e.g. xyz)
@@ -5738,7 +5965,7 @@ export def "tracks-relationships-radio get" [
   let full_url = (build-url $base $"/tracks/($id)/relationships/radio" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get replacement relationship ("to-one").
@@ -5753,6 +5980,7 @@ export def "tracks-relationships-replacement get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: replacement (e.g. replacement)
   --shareCode: string # Share code that grants access to UNLISTED resources. When provided, allows non-owners to access resources that would otherwise be restricted. (e.g. xyz)
@@ -5763,7 +5991,7 @@ export def "tracks-relationships-replacement get" [
   let full_url = (build-url $base $"/tracks/($id)/relationships/replacement" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get shares relationship ("to-many").
@@ -5778,6 +6006,7 @@ export def "tracks-relationships-shares get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: shares (e.g. shares)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --shareCode: string # Share code that grants access to UNLISTED resources. When provided, allows non-owners to access resources that would otherwise be restricted. (e.g. xyz)
@@ -5788,7 +6017,7 @@ export def "tracks-relationships-shares get" [
   let full_url = (build-url $base $"/tracks/($id)/relationships/shares" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get similarTracks relationship ("to-many").
@@ -5803,6 +6032,7 @@ export def "tracks-relationships-similar-tracks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: similarTracks (e.g. similarTracks)
@@ -5814,7 +6044,7 @@ export def "tracks-relationships-similar-tracks get" [
   let full_url = (build-url $base $"/tracks/($id)/relationships/similarTracks" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get sourceFile relationship ("to-one").
@@ -5829,6 +6059,7 @@ export def "tracks-relationships-source-file get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: sourceFile (e.g. sourceFile)
   --shareCode: string # Share code that grants access to UNLISTED resources. When provided, allows non-owners to access resources that would otherwise be restricted. (e.g. xyz)
 ]: nothing -> any {
@@ -5838,7 +6069,7 @@ export def "tracks-relationships-source-file get" [
   let full_url = (build-url $base $"/tracks/($id)/relationships/sourceFile" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get suggestedTracks relationship ("to-many").
@@ -5853,6 +6084,7 @@ export def "tracks-relationships-suggested-tracks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: suggestedTracks (e.g. suggestedTracks)
@@ -5864,7 +6096,7 @@ export def "tracks-relationships-suggested-tracks get" [
   let full_url = (build-url $base $"/tracks/($id)/relationships/suggestedTracks" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get trackStatistics relationship ("to-one").
@@ -5879,6 +6111,7 @@ export def "tracks-relationships-track-statistics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: trackStatistics (e.g. trackStatistics)
   --shareCode: string # Share code that grants access to UNLISTED resources. When provided, allows non-owners to access resources that would otherwise be restricted. (e.g. xyz)
 ]: nothing -> any {
@@ -5888,7 +6121,7 @@ export def "tracks-relationships-track-statistics get" [
   let full_url = (build-url $base $"/tracks/($id)/relationships/trackStatistics" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get usageRules relationship ("to-one").
@@ -5903,6 +6136,7 @@ export def "tracks-relationships-usage-rules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: usageRules (e.g. usageRules)
   --shareCode: string # Share code that grants access to UNLISTED resources. When provided, allows non-owners to access resources that would otherwise be restricted. (e.g. xyz)
@@ -5913,7 +6147,7 @@ export def "tracks-relationships-usage-rules get" [
   let full_url = (build-url $base $"/tracks/($id)/relationships/usageRules" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single tracksMetadataStatu.
@@ -5928,13 +6162,14 @@ export def "tracks-metadata-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/tracksMetadataStatus/($id)")
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single usageRule.
@@ -5948,6 +6183,7 @@ export def "usage-rules post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -5960,7 +6196,7 @@ export def "usage-rules post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get single usageRule.
@@ -5975,13 +6211,14 @@ export def "usage-rules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/usageRules/($id)")
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single userCollectionAlbum.
@@ -5996,6 +6233,7 @@ export def "user-collection-albums get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: items, owners (e.g. items)
 ]: nothing -> any {
@@ -6005,7 +6243,7 @@ export def "user-collection-albums get" [
   let full_url = (build-url $base $"/userCollectionAlbums/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete from items relationship ("to-many").
@@ -6020,6 +6258,7 @@ export def "user-collection-albums-relationships-items delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -6032,7 +6271,7 @@ export def "user-collection-albums-relationships-items delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get items relationship ("to-many").
@@ -6047,6 +6286,7 @@ export def "user-collection-albums-relationships-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --qp-sort: list # Values prefixed with "-" are sorted descending; values without it are sorted ascending.
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
@@ -6058,7 +6298,7 @@ export def "user-collection-albums-relationships-items get" [
   let full_url = (build-url $base $"/userCollectionAlbums/($id)/relationships/items" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add to items relationship ("to-many").
@@ -6073,6 +6313,7 @@ export def "user-collection-albums-relationships-items post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -6085,7 +6326,7 @@ export def "user-collection-albums-relationships-items post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get owners relationship ("to-many").
@@ -6100,6 +6341,7 @@ export def "user-collection-albums-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -6109,7 +6351,7 @@ export def "user-collection-albums-relationships-owners get" [
   let full_url = (build-url $base $"/userCollectionAlbums/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single userCollectionArtist.
@@ -6124,6 +6366,7 @@ export def "user-collection-artists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: items, owners (e.g. items)
 ]: nothing -> any {
@@ -6133,7 +6376,7 @@ export def "user-collection-artists get" [
   let full_url = (build-url $base $"/userCollectionArtists/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete from items relationship ("to-many").
@@ -6148,6 +6391,7 @@ export def "user-collection-artists-relationships-items delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -6160,7 +6404,7 @@ export def "user-collection-artists-relationships-items delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get items relationship ("to-many").
@@ -6175,6 +6419,7 @@ export def "user-collection-artists-relationships-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --qp-sort: list # Values prefixed with "-" are sorted descending; values without it are sorted ascending.
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
@@ -6186,7 +6431,7 @@ export def "user-collection-artists-relationships-items get" [
   let full_url = (build-url $base $"/userCollectionArtists/($id)/relationships/items" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add to items relationship ("to-many").
@@ -6201,6 +6446,7 @@ export def "user-collection-artists-relationships-items post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -6213,7 +6459,7 @@ export def "user-collection-artists-relationships-items post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get owners relationship ("to-many").
@@ -6228,6 +6474,7 @@ export def "user-collection-artists-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -6237,7 +6484,7 @@ export def "user-collection-artists-relationships-owners get" [
   let full_url = (build-url $base $"/userCollectionArtists/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple userCollectionFolders.
@@ -6251,6 +6498,7 @@ export def "user-collection-folders list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: items, owners, userCollection (e.g. items)
   --filterid: list # Folder Id (e.g. `CBMHXUOuJZgroV2kWpeVLL1I7xdgvF6ocDEGCXov8SZq3WVhrOcOq5pjnGawKX`)
 ]: nothing -> any {
@@ -6260,7 +6508,7 @@ export def "user-collection-folders list" [
   let full_url = (build-url $base "/userCollectionFolders" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single userCollectionFolder.
@@ -6274,6 +6522,7 @@ export def "user-collection-folders post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -6286,7 +6535,7 @@ export def "user-collection-folders post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete single userCollectionFolder.
@@ -6301,6 +6550,7 @@ export def "user-collection-folders delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6310,7 +6560,7 @@ export def "user-collection-folders delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single userCollectionFolder.
@@ -6325,6 +6575,7 @@ export def "user-collection-folders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: items, owners, userCollection (e.g. items)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6333,7 +6584,7 @@ export def "user-collection-folders get" [
   let full_url = (build-url $base $"/userCollectionFolders/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update single userCollectionFolder.
@@ -6348,6 +6599,7 @@ export def "user-collection-folders patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -6360,7 +6612,7 @@ export def "user-collection-folders patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete from items relationship ("to-many").
@@ -6375,6 +6627,7 @@ export def "user-collection-folders-relationships-items delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -6387,7 +6640,7 @@ export def "user-collection-folders-relationships-items delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get items relationship ("to-many").
@@ -6402,6 +6655,7 @@ export def "user-collection-folders-relationships-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --qp-sort: list # Values prefixed with "-" are sorted descending; values without it are sorted ascending.
   --include: list # Allows the client to customize which related resources should be returned. Available options: items (e.g. items)
@@ -6412,7 +6666,7 @@ export def "user-collection-folders-relationships-items get" [
   let full_url = (build-url $base $"/userCollectionFolders/($id)/relationships/items" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add to items relationship ("to-many").
@@ -6427,6 +6681,7 @@ export def "user-collection-folders-relationships-items post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -6439,7 +6694,7 @@ export def "user-collection-folders-relationships-items post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get owners relationship ("to-many").
@@ -6454,6 +6709,7 @@ export def "user-collection-folders-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -6463,7 +6719,7 @@ export def "user-collection-folders-relationships-owners get" [
   let full_url = (build-url $base $"/userCollectionFolders/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get userCollection relationship ("to-one").
@@ -6478,6 +6734,7 @@ export def "user-collection-folders-relationships-user-collection get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: userCollection (e.g. userCollection)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6486,7 +6743,7 @@ export def "user-collection-folders-relationships-user-collection get" [
   let full_url = (build-url $base $"/userCollectionFolders/($id)/relationships/userCollection" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single userCollectionPlaylist.
@@ -6501,6 +6758,7 @@ export def "user-collection-playlists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: items, owners (e.g. items)
 ]: nothing -> any {
@@ -6510,7 +6768,7 @@ export def "user-collection-playlists get" [
   let full_url = (build-url $base $"/userCollectionPlaylists/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete from items relationship ("to-many").
@@ -6525,6 +6783,7 @@ export def "user-collection-playlists-relationships-items delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -6537,7 +6796,7 @@ export def "user-collection-playlists-relationships-items delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get items relationship ("to-many").
@@ -6552,6 +6811,7 @@ export def "user-collection-playlists-relationships-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --collectionView: string@collectionView-completer
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --qp-sort: list # Values prefixed with "-" are sorted descending; values without it are sorted ascending.
@@ -6563,7 +6823,7 @@ export def "user-collection-playlists-relationships-items get" [
   let full_url = (build-url $base $"/userCollectionPlaylists/($id)/relationships/items" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add to items relationship ("to-many").
@@ -6578,6 +6838,7 @@ export def "user-collection-playlists-relationships-items post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -6590,7 +6851,7 @@ export def "user-collection-playlists-relationships-items post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get owners relationship ("to-many").
@@ -6605,6 +6866,7 @@ export def "user-collection-playlists-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -6614,7 +6876,7 @@ export def "user-collection-playlists-relationships-owners get" [
   let full_url = (build-url $base $"/userCollectionPlaylists/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single userCollectionSaveForLater.
@@ -6629,6 +6891,7 @@ export def "user-collection-save-for-laters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: items, owners (e.g. items)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6637,7 +6900,7 @@ export def "user-collection-save-for-laters get" [
   let full_url = (build-url $base $"/userCollectionSaveForLaters/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete from items relationship ("to-many").
@@ -6652,6 +6915,7 @@ export def "user-collection-save-for-laters-relationships-items delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -6664,7 +6928,7 @@ export def "user-collection-save-for-laters-relationships-items delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get items relationship ("to-many").
@@ -6679,6 +6943,7 @@ export def "user-collection-save-for-laters-relationships-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --include: list # Allows the client to customize which related resources should be returned. Available options: items (e.g. items)
 ]: nothing -> any {
@@ -6688,7 +6953,7 @@ export def "user-collection-save-for-laters-relationships-items get" [
   let full_url = (build-url $base $"/userCollectionSaveForLaters/($id)/relationships/items" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add to items relationship ("to-many").
@@ -6703,6 +6968,7 @@ export def "user-collection-save-for-laters-relationships-items post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -6715,7 +6981,7 @@ export def "user-collection-save-for-laters-relationships-items post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get owners relationship ("to-many").
@@ -6730,6 +6996,7 @@ export def "user-collection-save-for-laters-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -6739,7 +7006,7 @@ export def "user-collection-save-for-laters-relationships-owners get" [
   let full_url = (build-url $base $"/userCollectionSaveForLaters/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single userCollectionTrack.
@@ -6754,6 +7021,7 @@ export def "user-collection-tracks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: items, owners (e.g. items)
 ]: nothing -> any {
@@ -6763,7 +7031,7 @@ export def "user-collection-tracks get" [
   let full_url = (build-url $base $"/userCollectionTracks/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete from items relationship ("to-many").
@@ -6778,6 +7046,7 @@ export def "user-collection-tracks-relationships-items delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -6790,7 +7059,7 @@ export def "user-collection-tracks-relationships-items delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get items relationship ("to-many").
@@ -6805,6 +7074,7 @@ export def "user-collection-tracks-relationships-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --qp-sort: list # Values prefixed with "-" are sorted descending; values without it are sorted ascending.
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
@@ -6816,7 +7086,7 @@ export def "user-collection-tracks-relationships-items get" [
   let full_url = (build-url $base $"/userCollectionTracks/($id)/relationships/items" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add to items relationship ("to-many").
@@ -6831,6 +7101,7 @@ export def "user-collection-tracks-relationships-items post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -6843,7 +7114,7 @@ export def "user-collection-tracks-relationships-items post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get owners relationship ("to-many").
@@ -6858,6 +7129,7 @@ export def "user-collection-tracks-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -6867,7 +7139,7 @@ export def "user-collection-tracks-relationships-owners get" [
   let full_url = (build-url $base $"/userCollectionTracks/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single userCollectionVideo.
@@ -6882,6 +7154,7 @@ export def "user-collection-videos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: items, owners (e.g. items)
 ]: nothing -> any {
@@ -6891,7 +7164,7 @@ export def "user-collection-videos get" [
   let full_url = (build-url $base $"/userCollectionVideos/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete from items relationship ("to-many").
@@ -6906,6 +7179,7 @@ export def "user-collection-videos-relationships-items delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -6918,7 +7192,7 @@ export def "user-collection-videos-relationships-items delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get items relationship ("to-many").
@@ -6933,6 +7207,7 @@ export def "user-collection-videos-relationships-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --qp-sort: list # Values prefixed with "-" are sorted descending; values without it are sorted ascending.
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
@@ -6944,7 +7219,7 @@ export def "user-collection-videos-relationships-items get" [
   let full_url = (build-url $base $"/userCollectionVideos/($id)/relationships/items" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add to items relationship ("to-many").
@@ -6959,6 +7234,7 @@ export def "user-collection-videos-relationships-items post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -6971,7 +7247,7 @@ export def "user-collection-videos-relationships-items post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get owners relationship ("to-many").
@@ -6986,6 +7262,7 @@ export def "user-collection-videos-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -6995,7 +7272,7 @@ export def "user-collection-videos-relationships-owners get" [
   let full_url = (build-url $base $"/userCollectionVideos/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single userCollection.
@@ -7012,6 +7289,7 @@ export def "user-collections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: albums, artists, owners, playlists, tracks, videos (e.g. albums)
 ]: nothing -> any {
@@ -7021,7 +7299,7 @@ export def "user-collections get" [
   let full_url = (build-url $base $"/userCollections/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete from albums relationship ("to-many").
@@ -7038,6 +7316,7 @@ export def "user-collections-relationships-albums delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -7050,7 +7329,7 @@ export def "user-collections-relationships-albums delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get albums relationship ("to-many").
@@ -7067,6 +7346,7 @@ export def "user-collections-relationships-albums get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --qp-sort: list # Values prefixed with "-" are sorted descending; values without it are sorted ascending.
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
@@ -7078,7 +7358,7 @@ export def "user-collections-relationships-albums get" [
   let full_url = (build-url $base $"/userCollections/($id)/relationships/albums" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add to albums relationship ("to-many").
@@ -7095,6 +7375,7 @@ export def "user-collections-relationships-albums post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -7107,7 +7388,7 @@ export def "user-collections-relationships-albums post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete from artists relationship ("to-many").
@@ -7124,6 +7405,7 @@ export def "user-collections-relationships-artists delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -7136,7 +7418,7 @@ export def "user-collections-relationships-artists delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get artists relationship ("to-many").
@@ -7153,6 +7435,7 @@ export def "user-collections-relationships-artists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --qp-sort: list # Values prefixed with "-" are sorted descending; values without it are sorted ascending.
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
@@ -7164,7 +7447,7 @@ export def "user-collections-relationships-artists get" [
   let full_url = (build-url $base $"/userCollections/($id)/relationships/artists" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add to artists relationship ("to-many").
@@ -7181,6 +7464,7 @@ export def "user-collections-relationships-artists post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -7193,7 +7477,7 @@ export def "user-collections-relationships-artists post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get owners relationship ("to-many").
@@ -7208,6 +7492,7 @@ export def "user-collections-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -7217,7 +7502,7 @@ export def "user-collections-relationships-owners get" [
   let full_url = (build-url $base $"/userCollections/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete from playlists relationship ("to-many").
@@ -7234,6 +7519,7 @@ export def "user-collections-relationships-playlists delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -7246,7 +7532,7 @@ export def "user-collections-relationships-playlists delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get playlists relationship ("to-many").
@@ -7263,6 +7549,7 @@ export def "user-collections-relationships-playlists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --collectionView: string@collectionView-completer-1
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --qp-sort: list # Values prefixed with "-" are sorted descending; values without it are sorted ascending.
@@ -7274,7 +7561,7 @@ export def "user-collections-relationships-playlists get" [
   let full_url = (build-url $base $"/userCollections/($id)/relationships/playlists" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add to playlists relationship ("to-many").
@@ -7291,6 +7578,7 @@ export def "user-collections-relationships-playlists post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -7303,7 +7591,7 @@ export def "user-collections-relationships-playlists post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete from tracks relationship ("to-many").
@@ -7320,6 +7608,7 @@ export def "user-collections-relationships-tracks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -7332,7 +7621,7 @@ export def "user-collections-relationships-tracks delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get tracks relationship ("to-many").
@@ -7349,6 +7638,7 @@ export def "user-collections-relationships-tracks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --qp-sort: list # Values prefixed with "-" are sorted descending; values without it are sorted ascending.
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
@@ -7360,7 +7650,7 @@ export def "user-collections-relationships-tracks get" [
   let full_url = (build-url $base $"/userCollections/($id)/relationships/tracks" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add to tracks relationship ("to-many").
@@ -7377,6 +7667,7 @@ export def "user-collections-relationships-tracks post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -7389,7 +7680,7 @@ export def "user-collections-relationships-tracks post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete from videos relationship ("to-many").
@@ -7406,6 +7697,7 @@ export def "user-collections-relationships-videos delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -7418,7 +7710,7 @@ export def "user-collections-relationships-videos delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get videos relationship ("to-many").
@@ -7435,6 +7727,7 @@ export def "user-collections-relationships-videos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --qp-sort: list # Values prefixed with "-" are sorted descending; values without it are sorted ascending.
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
@@ -7446,7 +7739,7 @@ export def "user-collections-relationships-videos get" [
   let full_url = (build-url $base $"/userCollections/($id)/relationships/videos" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add to videos relationship ("to-many").
@@ -7463,6 +7756,7 @@ export def "user-collections-relationships-videos post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -7475,7 +7769,7 @@ export def "user-collections-relationships-videos post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get single userDailyMixe.
@@ -7490,6 +7784,7 @@ export def "user-daily-mixes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: items (e.g. items)
 ]: nothing -> any {
@@ -7499,7 +7794,7 @@ export def "user-daily-mixes get" [
   let full_url = (build-url $base $"/userDailyMixes/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get items relationship ("to-many").
@@ -7514,6 +7809,7 @@ export def "user-daily-mixes-relationships-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: items (e.g. items)
@@ -7524,7 +7820,7 @@ export def "user-daily-mixes-relationships-items get" [
   let full_url = (build-url $base $"/userDailyMixes/($id)/relationships/items" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single userDataExportRequest.
@@ -7538,6 +7834,7 @@ export def "user-data-export-requests post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -7550,7 +7847,7 @@ export def "user-data-export-requests post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get single userDiscoveryMixe.
@@ -7565,6 +7862,7 @@ export def "user-discovery-mixes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: items (e.g. items)
 ]: nothing -> any {
@@ -7574,7 +7872,7 @@ export def "user-discovery-mixes get" [
   let full_url = (build-url $base $"/userDiscoveryMixes/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get items relationship ("to-many").
@@ -7589,6 +7887,7 @@ export def "user-discovery-mixes-relationships-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: items (e.g. items)
@@ -7599,7 +7898,7 @@ export def "user-discovery-mixes-relationships-items get" [
   let full_url = (build-url $base $"/userDiscoveryMixes/($id)/relationships/items" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single userNewReleaseMixe.
@@ -7614,6 +7913,7 @@ export def "user-new-release-mixes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: items (e.g. items)
 ]: nothing -> any {
@@ -7623,7 +7923,7 @@ export def "user-new-release-mixes get" [
   let full_url = (build-url $base $"/userNewReleaseMixes/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get items relationship ("to-many").
@@ -7638,6 +7938,7 @@ export def "user-new-release-mixes-relationships-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: items (e.g. items)
@@ -7648,7 +7949,7 @@ export def "user-new-release-mixes-relationships-items get" [
   let full_url = (build-url $base $"/userNewReleaseMixes/($id)/relationships/items" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single userOfflineMixe.
@@ -7663,6 +7964,7 @@ export def "user-offline-mixes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: items (e.g. items)
 ]: nothing -> any {
@@ -7672,7 +7974,7 @@ export def "user-offline-mixes get" [
   let full_url = (build-url $base $"/userOfflineMixes/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get items relationship ("to-many").
@@ -7687,6 +7989,7 @@ export def "user-offline-mixes-relationships-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: items (e.g. items)
@@ -7697,7 +8000,7 @@ export def "user-offline-mixes-relationships-items get" [
   let full_url = (build-url $base $"/userOfflineMixes/($id)/relationships/items" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single userRecommendationBlock.
@@ -7712,6 +8015,7 @@ export def "user-recommendation-blocks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: artists, owners, tracks, videos (e.g. artists)
 ]: nothing -> any {
@@ -7721,7 +8025,7 @@ export def "user-recommendation-blocks get" [
   let full_url = (build-url $base $"/userRecommendationBlocks/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete from artists relationship ("to-many").
@@ -7736,6 +8040,7 @@ export def "user-recommendation-blocks-relationships-artists delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -7748,7 +8053,7 @@ export def "user-recommendation-blocks-relationships-artists delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get artists relationship ("to-many").
@@ -7763,6 +8068,7 @@ export def "user-recommendation-blocks-relationships-artists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --include: list # Allows the client to customize which related resources should be returned. Available options: artists (e.g. artists)
 ]: nothing -> any {
@@ -7772,7 +8078,7 @@ export def "user-recommendation-blocks-relationships-artists get" [
   let full_url = (build-url $base $"/userRecommendationBlocks/($id)/relationships/artists" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add to artists relationship ("to-many").
@@ -7787,6 +8093,7 @@ export def "user-recommendation-blocks-relationships-artists post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -7799,7 +8106,7 @@ export def "user-recommendation-blocks-relationships-artists post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get owners relationship ("to-many").
@@ -7814,6 +8121,7 @@ export def "user-recommendation-blocks-relationships-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Allows the client to customize which related resources should be returned. Available options: owners (e.g. owners)
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
 ]: nothing -> any {
@@ -7823,7 +8131,7 @@ export def "user-recommendation-blocks-relationships-owners get" [
   let full_url = (build-url $base $"/userRecommendationBlocks/($id)/relationships/owners" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete from tracks relationship ("to-many").
@@ -7838,6 +8146,7 @@ export def "user-recommendation-blocks-relationships-tracks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -7850,7 +8159,7 @@ export def "user-recommendation-blocks-relationships-tracks delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get tracks relationship ("to-many").
@@ -7865,6 +8174,7 @@ export def "user-recommendation-blocks-relationships-tracks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --include: list # Allows the client to customize which related resources should be returned. Available options: tracks (e.g. tracks)
 ]: nothing -> any {
@@ -7874,7 +8184,7 @@ export def "user-recommendation-blocks-relationships-tracks get" [
   let full_url = (build-url $base $"/userRecommendationBlocks/($id)/relationships/tracks" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add to tracks relationship ("to-many").
@@ -7889,6 +8199,7 @@ export def "user-recommendation-blocks-relationships-tracks post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -7901,7 +8212,7 @@ export def "user-recommendation-blocks-relationships-tracks post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete from videos relationship ("to-many").
@@ -7916,6 +8227,7 @@ export def "user-recommendation-blocks-relationships-videos delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -7928,7 +8240,7 @@ export def "user-recommendation-blocks-relationships-videos delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get videos relationship ("to-many").
@@ -7943,6 +8255,7 @@ export def "user-recommendation-blocks-relationships-videos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --include: list # Allows the client to customize which related resources should be returned. Available options: videos (e.g. videos)
 ]: nothing -> any {
@@ -7952,7 +8265,7 @@ export def "user-recommendation-blocks-relationships-videos get" [
   let full_url = (build-url $base $"/userRecommendationBlocks/($id)/relationships/videos" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add to videos relationship ("to-many").
@@ -7967,6 +8280,7 @@ export def "user-recommendation-blocks-relationships-videos post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -7979,7 +8293,7 @@ export def "user-recommendation-blocks-relationships-videos post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get single userRecommendation.
@@ -7996,6 +8310,7 @@ export def "user-recommendations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: discoveryMixes, myMixes, newArrivalMixes, offlineMixes (e.g. discoveryMixes)
 ]: nothing -> any {
@@ -8005,7 +8320,7 @@ export def "user-recommendations get" [
   let full_url = (build-url $base $"/userRecommendations/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get discoveryMixes relationship ("to-many").
@@ -8022,6 +8337,7 @@ export def "user-recommendations-relationships-discovery-mixes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: discoveryMixes (e.g. discoveryMixes)
@@ -8032,7 +8348,7 @@ export def "user-recommendations-relationships-discovery-mixes get" [
   let full_url = (build-url $base $"/userRecommendations/($id)/relationships/discoveryMixes" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get myMixes relationship ("to-many").
@@ -8049,6 +8365,7 @@ export def "user-recommendations-relationships-my-mixes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: myMixes (e.g. myMixes)
@@ -8059,7 +8376,7 @@ export def "user-recommendations-relationships-my-mixes get" [
   let full_url = (build-url $base $"/userRecommendations/($id)/relationships/myMixes" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get newArrivalMixes relationship ("to-many").
@@ -8076,6 +8393,7 @@ export def "user-recommendations-relationships-new-arrival-mixes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: newArrivalMixes (e.g. newArrivalMixes)
@@ -8086,7 +8404,7 @@ export def "user-recommendations-relationships-new-arrival-mixes get" [
   let full_url = (build-url $base $"/userRecommendations/($id)/relationships/newArrivalMixes" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get offlineMixes relationship ("to-many").
@@ -8103,6 +8421,7 @@ export def "user-recommendations-relationships-offline-mixes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --locale: string # BCP 47 locale (e.g., en-US, nb-NO, pt-BR). Defaults to en-US if not provided or unsupported. (default: en-US, e.g. en-US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: offlineMixes (e.g. offlineMixes)
@@ -8113,7 +8432,7 @@ export def "user-recommendations-relationships-offline-mixes get" [
   let full_url = (build-url $base $"/userRecommendations/($id)/relationships/offlineMixes" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create single userReport.
@@ -8127,6 +8446,7 @@ export def "user-reports post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Idempotency-Key: string # Unique idempotency key for safe retry of mutation requests. If a duplicate key is sent with the same payload, the original response is replayed. If the payload differs, a 422 error is returned. (e.g. 79e1f37e-3e84-4c51-b5e2-7d9e1a2b3c4d)
   --body: record
 ]: any -> any {
@@ -8139,7 +8459,7 @@ export def "user-reports post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get single user.
@@ -8154,13 +8474,14 @@ export def "users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/($id)")
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single videoManifest.
@@ -8175,6 +8496,7 @@ export def "video-manifests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uriScheme: string@uriScheme-completer
   --usage: string@usage-completer
 ]: nothing -> any {
@@ -8184,7 +8506,7 @@ export def "video-manifests get" [
   let full_url = (build-url $base $"/videoManifests/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple videos.
@@ -8198,6 +8520,7 @@ export def "videos list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: albums, artists, credits, providers, replacement, similarVideos, suggestedVideos, thumbnailArt, usageRules (e.g. albums)
   --filterid: list # List of video IDs (e.g. `75623239`)
@@ -8209,7 +8532,7 @@ export def "videos list" [
   let full_url = (build-url $base "/videos" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get single video.
@@ -8224,6 +8547,7 @@ export def "videos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: albums, artists, credits, providers, replacement, similarVideos, suggestedVideos, thumbnailArt, usageRules (e.g. albums)
 ]: nothing -> any {
@@ -8233,7 +8557,7 @@ export def "videos get" [
   let full_url = (build-url $base $"/videos/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get albums relationship ("to-many").
@@ -8248,6 +8572,7 @@ export def "videos-relationships-albums get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: albums (e.g. albums)
@@ -8258,7 +8583,7 @@ export def "videos-relationships-albums get" [
   let full_url = (build-url $base $"/videos/($id)/relationships/albums" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get artists relationship ("to-many").
@@ -8273,6 +8598,7 @@ export def "videos-relationships-artists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: artists (e.g. artists)
@@ -8283,7 +8609,7 @@ export def "videos-relationships-artists get" [
   let full_url = (build-url $base $"/videos/($id)/relationships/artists" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get credits relationship ("to-many").
@@ -8298,6 +8624,7 @@ export def "videos-relationships-credits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --include: list # Allows the client to customize which related resources should be returned. Available options: credits (e.g. credits)
 ]: nothing -> any {
@@ -8307,7 +8634,7 @@ export def "videos-relationships-credits get" [
   let full_url = (build-url $base $"/videos/($id)/relationships/credits" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get providers relationship ("to-many").
@@ -8322,6 +8649,7 @@ export def "videos-relationships-providers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: providers (e.g. providers)
@@ -8332,7 +8660,7 @@ export def "videos-relationships-providers get" [
   let full_url = (build-url $base $"/videos/($id)/relationships/providers" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get replacement relationship ("to-one").
@@ -8347,6 +8675,7 @@ export def "videos-relationships-replacement get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: replacement (e.g. replacement)
 ]: nothing -> any {
@@ -8356,7 +8685,7 @@ export def "videos-relationships-replacement get" [
   let full_url = (build-url $base $"/videos/($id)/relationships/replacement" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get similarVideos relationship ("to-many").
@@ -8371,6 +8700,7 @@ export def "videos-relationships-similar-videos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: similarVideos (e.g. similarVideos)
@@ -8381,7 +8711,7 @@ export def "videos-relationships-similar-videos get" [
   let full_url = (build-url $base $"/videos/($id)/relationships/similarVideos" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get suggestedVideos relationship ("to-many").
@@ -8396,6 +8726,7 @@ export def "videos-relationships-suggested-videos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: suggestedVideos (e.g. suggestedVideos)
@@ -8406,7 +8737,7 @@ export def "videos-relationships-suggested-videos get" [
   let full_url = (build-url $base $"/videos/($id)/relationships/suggestedVideos" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get thumbnailArt relationship ("to-many").
@@ -8421,6 +8752,7 @@ export def "videos-relationships-thumbnail-art get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: thumbnailArt (e.g. thumbnailArt)
@@ -8431,7 +8763,7 @@ export def "videos-relationships-thumbnail-art get" [
   let full_url = (build-url $base $"/videos/($id)/relationships/thumbnailArt" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get usageRules relationship ("to-one").
@@ -8446,6 +8778,7 @@ export def "videos-relationships-usage-rules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --countryCode: string # ISO 3166-1 alpha-2 country code (e.g. US)
   --include: list # Allows the client to customize which related resources should be returned. Available options: usageRules (e.g. usageRules)
 ]: nothing -> any {
@@ -8455,5 +8788,5 @@ export def "videos-relationships-usage-rules get" [
   let full_url = (build-url $base $"/videos/($id)/relationships/usageRules" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

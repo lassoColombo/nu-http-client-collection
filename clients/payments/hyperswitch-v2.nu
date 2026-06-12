@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -77,7 +78,7 @@ def token-type-completer [] { ["payment_method_id" "payment_method_token" "token
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "organizations Create-an-Organization" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -110,6 +111,7 @@ export def "organizations Create-an-Organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organization_name: string # Name of the organization
   --organization-details: record # Details about the organization (nullable)
   --metadata: record # Metadata is useful for storing additional, unstructured information on an object. (nullable)
@@ -122,7 +124,7 @@ export def "organizations Create-an-Organization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Organization - Retrieve
@@ -138,13 +140,14 @@ export def "organizations Retrieve-an-Organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, organization_name: string, organization_details: record, metadata: record, modified_at: string, created_at: string, organization_type: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Organization - Update
@@ -160,6 +163,7 @@ export def "organizations Update-an-Organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --organization-name: string # Name of the organization (nullable)
   --organization-details: record # Details about the organization (nullable)
   --metadata: record # Metadata is useful for storing additional, unstructured information on an object. (nullable)
@@ -173,7 +177,7 @@ export def "organizations Update-an-Organization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Organization - Merchant Account - List
@@ -189,13 +193,14 @@ export def "organizations-merchant-accounts List-Merchant-Accounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, merchant_name: string, merchant_details: record<primary_contact_person: string, primary_phone: string, primary_email: string, secondary_contact_person: string, secondary_phone: string, secondary_email: string, website: string, about_business: string, address: record, merchant_tax_registration_id: string>, publishable_key: string, metadata: record, organization_id: string, recon_status: string, product_type: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/organizations/($id)/merchant-accounts")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Connector Account - Create
@@ -212,6 +217,7 @@ export def "connector-accounts Create-a-Merchant-Connector" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   connector_type: string@connector-type-completer # Type of the Connector for the financial use case. Could range from Payments to Accounting to Banking.
   connector_name: string@connector-name-completer
   --connector-label: string # This is an unique label you can generate and pass in order to identify this connector account on your Hyperswitch dashboard and reports, If not passed then if will take `connector_name`_`profile_name`. Eg: if your profile label is `default`, connector label can be `stripe_default` (nullable, e.g. stripe_US_travel)
@@ -236,7 +242,7 @@ export def "connector-accounts Create-a-Merchant-Connector" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Connector Account - Retrieve
@@ -252,13 +258,14 @@ export def "connector-accounts Retrieve-a-Merchant-Connector" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<connector_type: string, connector_name: string, connector_label: string, id: string, profile_id: string, connector_account_details: record<connector_account_details: record, metadata: record>, payment_methods_enabled: table<payment_method_type: string, payment_method_subtypes: list>, connector_webhook_details: record<merchant_secret: string, additional_secret: string>, metadata: record, disabled: bool, frm_configs: table<gateway: string, payment_methods: list>, applepay_verified_domains: list<string>, pm_auth_config: record, status: string, additional_merchant_data: record, connector_wallets_details: record<apple_pay_combined: record, apple_pay: record, amazon_pay: record, samsung_pay: record, paze: record, google_pay: record>, feature_metadata: record<revenue_recovery: record<max_retry_count: int, billing_connector_retry_threshold: int, billing_account_reference: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/connector-accounts/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Connector Account - Update
@@ -276,6 +283,7 @@ export def "connector-accounts Update-a-Merchant-Connector" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   connector_type: string@connector-type-completer # Type of the Connector for the financial use case. Could range from Payments to Accounting to Banking.
   --connector-label: string # This is an unique label you can generate and pass in order to identify this connector account on your Hyperswitch dashboard and reports, If not passed then if will take `connector_name`_`profile_name`. Eg: if your profile label is `default`, connector label can be `stripe_default` (nullable, e.g. stripe_US_travel)
   --connector-account-details: any # nullable
@@ -299,7 +307,7 @@ export def "connector-accounts Update-a-Merchant-Connector" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Merchant Connector - Delete
@@ -315,13 +323,14 @@ export def "connector-accounts Delete-a-Merchant-Connector" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<merchant_id: string, id: string, deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/connector-accounts/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Merchant Account - Create
@@ -336,6 +345,7 @@ export def "merchant-accounts Create-a-Merchant-Account" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Organization-Id: string # Organization ID for which the merchant account has to be created. (e.g. {X-Organization-Id: org_abcdefghijklmnop})
   merchant_name: string # Name of the Merchant Account, This will be used as a prefix to generate the id (e.g. NewAge Retailer)
   --merchant-details: any # nullable
@@ -352,7 +362,7 @@ export def "merchant-accounts Create-a-Merchant-Account" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Merchant Account - Retrieve
@@ -368,13 +378,14 @@ export def "merchant-accounts Retrieve-a-Merchant-Account" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, merchant_name: string, merchant_details: record<primary_contact_person: string, primary_phone: string, primary_email: string, secondary_contact_person: string, secondary_phone: string, secondary_email: string, website: string, about_business: string, address: record<city: string, country: record, line1: string, line2: string, line3: string, zip: string, state: string, first_name: string, last_name: string, origin_zip: string>, merchant_tax_registration_id: string>, publishable_key: string, metadata: record, organization_id: string, recon_status: string, product_type: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/merchant-accounts/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Merchant Account - Update
@@ -390,6 +401,7 @@ export def "merchant-accounts Update-a-Merchant-Account" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --merchant-name: string # Name of the Merchant Account (nullable, e.g. NewAge Retailer)
   --merchant-details: any # nullable
   --metadata: record # Metadata is useful for storing additional, unstructured information on an object. (nullable)
@@ -402,7 +414,7 @@ export def "merchant-accounts Update-a-Merchant-Account" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Merchant Account - Profile List
@@ -418,13 +430,14 @@ export def "merchant-accounts-profiles List-Profiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<merchant_id: string, id: string, profile_name: string, return_url: string, enable_payment_response_hash: bool, payment_response_hash_key: string, redirect_to_merchant_with_http_post: bool, webhook_details: record<webhook_version: string, webhook_username: string, webhook_password: string, webhook_url: string, payment_created_enabled: bool, payment_succeeded_enabled: bool, payment_failed_enabled: bool, payment_statuses_enabled: list, refund_statuses_enabled: list, payout_statuses_enabled: list>, metadata: record, applepay_verified_domains: list<string>, session_expiry: int, payment_link_config: record, authentication_connector_details: record<authentication_connectors: list, three_ds_requestor_url: string, three_ds_requestor_app_url: string>, use_billing_as_payment_method_billing: bool, extended_card_info_config: record<public_key: string, ttl_in_secs: int>, collect_shipping_details_from_wallet_connector_if_required: bool, collect_billing_details_from_wallet_connector_if_required: bool, always_collect_shipping_details_from_wallet_connector: bool, always_collect_billing_details_from_wallet_connector: bool, is_connector_agnostic_mit_enabled: bool, payout_link_config: record, outgoing_webhook_custom_http_headers: record, order_fulfillment_time: int, order_fulfillment_time_origin: record, tax_connector_id: string, is_tax_connector_enabled: bool, is_network_tokenization_enabled: bool, should_collect_cvv_during_payment: bool, is_click_to_pay_enabled: bool, authentication_product_ids: record, card_testing_guard_config: record<card_ip_blocking_status: string, card_ip_blocking_threshold: int, guest_user_card_blocking_status: string, guest_user_card_blocking_threshold: int, customer_id_blocking_status: string, customer_id_blocking_threshold: int, card_testing_guard_expiry: int>, is_clear_pan_retries_enabled: bool, is_debit_routing_enabled: bool, merchant_business_country: record, is_iframe_redirection_enabled: bool, is_external_vault_enabled: bool, external_vault_connector_details: record<vault_connector_id: string, vault_sdk: record, vault_token_selector: list>, merchant_category_code: record, merchant_country_code: record, split_txns_enabled: record, revenue_recovery_retry_algorithm_type: record, billing_processor_id: string, surcharge_connector_details: record<surcharge_connector_id: string>, is_l2_l3_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/merchant-accounts/($id)/profiles")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Profile - Create
@@ -439,6 +452,7 @@ export def "profiles Create-A-Profile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Merchant-Id: string # Merchant ID of the profile. (e.g. {X-Merchant-Id: abc_iG5VNjsN9xuCg7Xx0uWh})
   profile_name: string # The name of profile
   --return-url: string # The URL to redirect after the completion of the operation (nullable, e.g. https://www.example.com/success)
@@ -490,7 +504,7 @@ export def "profiles Create-A-Profile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Profile - Retrieve
@@ -506,6 +520,7 @@ export def "profiles Retrieve-a-Profile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Merchant-Id: string # Merchant ID of the profile. (e.g. {X-Merchant-Id: abc_iG5VNjsN9xuCg7Xx0uWh})
 ]: nothing -> record<merchant_id: string, id: string, profile_name: string, return_url: string, enable_payment_response_hash: bool, payment_response_hash_key: string, redirect_to_merchant_with_http_post: bool, webhook_details: record<webhook_version: string, webhook_username: string, webhook_password: string, webhook_url: string, payment_created_enabled: bool, payment_succeeded_enabled: bool, payment_failed_enabled: bool, payment_statuses_enabled: list<string>, refund_statuses_enabled: list<string>, payout_statuses_enabled: list<string>>, metadata: record, applepay_verified_domains: list<string>, session_expiry: int, payment_link_config: record, authentication_connector_details: record<authentication_connectors: list<string>, three_ds_requestor_url: string, three_ds_requestor_app_url: string>, use_billing_as_payment_method_billing: bool, extended_card_info_config: record<public_key: string, ttl_in_secs: int>, collect_shipping_details_from_wallet_connector_if_required: bool, collect_billing_details_from_wallet_connector_if_required: bool, always_collect_shipping_details_from_wallet_connector: bool, always_collect_billing_details_from_wallet_connector: bool, is_connector_agnostic_mit_enabled: bool, payout_link_config: record, outgoing_webhook_custom_http_headers: record, order_fulfillment_time: int, order_fulfillment_time_origin: record, tax_connector_id: string, is_tax_connector_enabled: bool, is_network_tokenization_enabled: bool, should_collect_cvv_during_payment: bool, is_click_to_pay_enabled: bool, authentication_product_ids: record, card_testing_guard_config: record<card_ip_blocking_status: string, card_ip_blocking_threshold: int, guest_user_card_blocking_status: string, guest_user_card_blocking_threshold: int, customer_id_blocking_status: string, customer_id_blocking_threshold: int, card_testing_guard_expiry: int>, is_clear_pan_retries_enabled: bool, is_debit_routing_enabled: bool, merchant_business_country: record, is_iframe_redirection_enabled: bool, is_external_vault_enabled: bool, external_vault_connector_details: record<vault_connector_id: string, vault_sdk: record, vault_token_selector: list<record>>, merchant_category_code: record, merchant_country_code: record, split_txns_enabled: record, revenue_recovery_retry_algorithm_type: record, billing_processor_id: string, surcharge_connector_details: record<surcharge_connector_id: string>, is_l2_l3_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -515,7 +530,7 @@ export def "profiles Retrieve-a-Profile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Profile - Update
@@ -531,6 +546,7 @@ export def "profiles Update-a-Profile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Merchant-Id: string # Merchant ID of the profile. (e.g. {X-Merchant-Id: abc_iG5VNjsN9xuCg7Xx0uWh})
   profile_name: string # The name of profile
   --return-url: string # The URL to redirect after the completion of the operation (nullable, e.g. https://www.example.com/success)
@@ -582,7 +598,7 @@ export def "profiles Update-a-Profile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Profile - Connector Accounts List
@@ -598,6 +614,7 @@ export def "profiles-connector-accounts List-all-Merchant-Connectors-for-Profile
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Merchant-Id: string # Merchant ID of the profile. (e.g. {X-Merchant-Id: abc_iG5VNjsN9xuCg7Xx0uWh})
 ]: nothing -> table<connector_type: string, connector_name: string, connector_label: string, id: string, profile_id: string, connector_account_details: record<connector_account_details: record, metadata: record>, payment_methods_enabled: list<record>, connector_webhook_details: record<merchant_secret: string, additional_secret: string>, metadata: record, disabled: bool, frm_configs: list<record>, applepay_verified_domains: list<string>, pm_auth_config: record, status: string, additional_merchant_data: record, connector_wallets_details: record<apple_pay_combined: record, apple_pay: record, amazon_pay: record, samsung_pay: record, paze: record, google_pay: record>, feature_metadata: record<revenue_recovery: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -607,7 +624,7 @@ export def "profiles-connector-accounts List-all-Merchant-Connectors-for-Profile
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Profile - Activate routing algorithm
@@ -623,6 +640,7 @@ export def "profiles-activate-routing-algorithm Activates-a-routing-algorithm-un
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   routing_algorithm_id: string
 ]: any -> record<id: string, profile_id: string, name: string, kind: string, description: string, created_at: int, modified_at: int, algorithm_for: record, decision_engine_routing_id: string> {
   let input = $in
@@ -633,7 +651,7 @@ export def "profiles-activate-routing-algorithm Activates-a-routing-algorithm-un
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Profile - Deactivate routing algorithm
@@ -649,13 +667,14 @@ export def "profiles-deactivate-routing-algorithm Deactivates-a-routing-algorith
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, profile_id: string, name: string, kind: string, description: string, created_at: int, modified_at: int, algorithm_for: record, decision_engine_routing_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/profiles/($id)/deactivate-routing-algorithm")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Profile - Update Default Fallback Routing Algorithm
@@ -671,6 +690,7 @@ export def "profiles-fallback-routing Update-the-default-fallback-routing-algori
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> table<connector: string, merchant_connector_id: string> {
   let input = $in
@@ -680,7 +700,7 @@ export def "profiles-fallback-routing Update-the-default-fallback-routing-algori
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Profile - Retrieve Default Fallback Routing Algorithm
@@ -696,13 +716,14 @@ export def "profiles-fallback-routing Retrieve-the-default-fallback-routing-algo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<connector: string, merchant_connector_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/profiles/($id)/fallback-routing")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Profile - Retrieve Active Routing Algorithm
@@ -718,6 +739,7 @@ export def "profiles-routing-algorithm Retrieve-the-active-routing-algorithm-und
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of records of the algorithms to be returned (nullable, format: int32)
   --offset: int # The record offset of the algorithm from which to start gathering the results (nullable, format: int32)
 ]: nothing -> any {
@@ -727,7 +749,7 @@ export def "profiles-routing-algorithm Retrieve-the-active-routing-algorithm-und
   let full_url = (build-url $base $"/v2/profiles/($id)/routing-algorithm" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Routing - Create
@@ -742,6 +764,7 @@ export def "routing-algorithms Create-a-routing-algorithm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   description: string
   algorithm: any
@@ -755,7 +778,7 @@ export def "routing-algorithms Create-a-routing-algorithm" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Routing - Retrieve
@@ -771,13 +794,14 @@ export def "routing-algorithms Retrieve-a-routing-algorithm-with-its-algorithm-i
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, profile_id: string, name: string, description: string, algorithm: any, created_at: int, modified_at: int, algorithm_for: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/routing-algorithms/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # API Key - Create
@@ -792,6 +816,7 @@ export def "api-keys Create-an-API-Key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # A unique name for the API Key to help you identify it. (e.g. Sandbox integration key)
   --description: string # A description to provide more context about the API Key. (nullable, e.g. Key used by our developers to integrate with the sandbox environment)
   expiration: any
@@ -804,7 +829,7 @@ export def "api-keys Create-an-API-Key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # API Key - Retrieve
@@ -820,13 +845,14 @@ export def "api-keys Retrieve-an-API-Key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key_id: string, merchant_id: string, name: string, description: string, prefix: string, created: string, expiration: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/api-keys/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # API Key - Update
@@ -842,6 +868,7 @@ export def "api-keys Update-an-API-Key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # A unique name for the API Key to help you identify it. (nullable, e.g. Sandbox integration key)
   --description: string # A description to provide more context about the API Key. (nullable, e.g. Key used by our developers to integrate with the sandbox environment)
   --expiration: any # nullable
@@ -854,7 +881,7 @@ export def "api-keys Update-an-API-Key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # API Key - Revoke
@@ -870,13 +897,14 @@ export def "api-keys Revoke-an-API-Key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<merchant_id: string, key_id: string, revoked: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/api-keys/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # API Key - List
@@ -891,6 +919,7 @@ export def "api-keys-list List-all-API-Keys-associated-with-a-merchant-account" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of API Keys to include in the response (nullable, format: int64)
   --skip: int # The number of API Keys to skip when retrieving the list of API keys. (nullable, format: int64)
 ]: nothing -> table<key_id: string, merchant_id: string, name: string, description: string, prefix: string, created: string, expiration: any> {
@@ -900,7 +929,7 @@ export def "api-keys-list List-all-API-Keys-associated-with-a-merchant-account" 
   let full_url = (build-url $base "/v2/api-keys/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Customers - Create
@@ -915,6 +944,7 @@ export def "customers Create-a-Customer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the customer (e.g. pro_abcdefghijklmnop)
   --merchant-reference-id: string # The merchant identifier for the customer object. (nullable, e.g. cus_y3oqhf46pyzuxjbcn2giaqnb44)
   name: string # The customer's name (e.g. Jon Test)
@@ -938,7 +968,7 @@ export def "customers Create-a-Customer" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Customers - Create
@@ -953,6 +983,7 @@ export def "customers Create-a-Customer-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the customer (e.g. pro_abcdefghijklmnop)
   --merchant-reference-id: string # The merchant identifier for the customer object. (nullable, e.g. cus_y3oqhf46pyzuxjbcn2giaqnb44)
   name: string # The customer's name (e.g. Jon Test)
@@ -976,7 +1007,7 @@ export def "customers Create-a-Customer-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Customers - Retrieve
@@ -992,6 +1023,7 @@ export def "customers Retrieve-a-Customer-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the customer (e.g. pro_abcdefghijklmnop)
 ]: nothing -> record<id: string, merchant_reference_id: string, connector_customer_ids: record, name: string, email: string, phone: string, phone_country_code: string, description: string, default_billing_address: record<city: string, country: record, line1: string, line2: string, line3: string, zip: string, state: string, first_name: string, last_name: string, origin_zip: string>, default_shipping_address: record<city: string, country: record, line1: string, line2: string, line3: string, zip: string, state: string, first_name: string, last_name: string, origin_zip: string>, created_at: string, metadata: record, default_payment_method_id: string, tax_registration_id: string, document_details: record<document_type: string, document_number: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1001,7 +1033,7 @@ export def "customers Retrieve-a-Customer-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Customers - Update
@@ -1017,6 +1049,7 @@ export def "customers Update-a-Customer-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the customer (e.g. pro_abcdefghijklmnop)
   name: string # The customer's name (e.g. Jon Test)
   email: string # The customer's email address (e.g. JonTest@test.com)
@@ -1040,7 +1073,7 @@ export def "customers Update-a-Customer-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Customers - Delete
@@ -1056,6 +1089,7 @@ export def "customers Delete-a-Customer-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the customer (e.g. pro_abcdefghijklmnop)
 ]: nothing -> record<id: string, merchant_reference_id: string, customer_deleted: bool, address_deleted: bool, payment_methods_deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1065,7 +1099,7 @@ export def "customers Delete-a-Customer-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Customers - Retrieve
@@ -1081,6 +1115,7 @@ export def "customers Retrieve-a-Customer-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the customer (e.g. pro_abcdefghijklmnop)
 ]: nothing -> record<id: string, merchant_reference_id: string, connector_customer_ids: record, name: string, email: string, phone: string, phone_country_code: string, description: string, default_billing_address: record<city: string, country: record, line1: string, line2: string, line3: string, zip: string, state: string, first_name: string, last_name: string, origin_zip: string>, default_shipping_address: record<city: string, country: record, line1: string, line2: string, line3: string, zip: string, state: string, first_name: string, last_name: string, origin_zip: string>, created_at: string, metadata: record, default_payment_method_id: string, tax_registration_id: string, document_details: record<document_type: string, document_number: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1090,7 +1125,7 @@ export def "customers Retrieve-a-Customer-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Customers - Update
@@ -1106,6 +1141,7 @@ export def "customers Update-a-Customer-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the customer (e.g. pro_abcdefghijklmnop)
   name: string # The customer's name (e.g. Jon Test)
   email: string # The customer's email address (e.g. JonTest@test.com)
@@ -1129,7 +1165,7 @@ export def "customers Update-a-Customer-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Customers - Delete
@@ -1145,6 +1181,7 @@ export def "customers Delete-a-Customer-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the customer (e.g. pro_abcdefghijklmnop)
 ]: nothing -> record<id: string, merchant_reference_id: string, customer_deleted: bool, address_deleted: bool, payment_methods_deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1154,7 +1191,7 @@ export def "customers Delete-a-Customer-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Customers - List
@@ -1169,6 +1206,7 @@ export def "customers-list List-all-Customers-for-a-Merchant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the customer (e.g. pro_abcdefghijklmnop)
 ]: nothing -> table<id: string, merchant_reference_id: string, connector_customer_ids: record, name: string, email: string, phone: string, phone_country_code: string, description: string, default_billing_address: record<city: string, country: record, line1: string, line2: string, line3: string, zip: string, state: string, first_name: string, last_name: string, origin_zip: string>, default_shipping_address: record<city: string, country: record, line1: string, line2: string, line3: string, zip: string, state: string, first_name: string, last_name: string, origin_zip: string>, created_at: string, metadata: record, default_payment_method_id: string, tax_registration_id: string, document_details: record<document_type: string, document_number: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1178,7 +1216,7 @@ export def "customers-list List-all-Customers-for-a-Merchant" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Customers - List
@@ -1193,6 +1231,7 @@ export def "customers-list List-all-Customers-for-a-Merchant-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the customer (e.g. pro_abcdefghijklmnop)
 ]: nothing -> table<id: string, merchant_reference_id: string, connector_customer_ids: record, name: string, email: string, phone: string, phone_country_code: string, description: string, default_billing_address: record<city: string, country: record, line1: string, line2: string, line3: string, zip: string, state: string, first_name: string, last_name: string, origin_zip: string>, default_shipping_address: record<city: string, country: record, line1: string, line2: string, line3: string, zip: string, state: string, first_name: string, last_name: string, origin_zip: string>, created_at: string, metadata: record, default_payment_method_id: string, tax_registration_id: string, document_details: record<document_type: string, document_number: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1202,7 +1241,7 @@ export def "customers-list List-all-Customers-for-a-Merchant-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Payments - Create Intent
@@ -1219,6 +1258,7 @@ export def "payments-create-intent Create-a-Payment-Intent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   amount_details: record # shape: {order_amount?: int, currency: "AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BHD"|"BIF"|"BMD"|"BND"|"BOB"|"BRL"|"BSD"|"BTN"|"BWP"|"BYN"|"BZD"|"CAD"|"CDF"|"CHF"|"CLF"|"CLP"|"CNY"|"COP"|"CRC"|"CUC"|"CUP"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ERN"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"IQD"|"IRR"|"ISK"|"JMD"|"JOD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KPW"|"KRW"|"KWD"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"LYD"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRU"|"MUR"|"MVR"|"MWK"|"MXN"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"OMR"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SDG"|"SEK"|"SGD"|"SHP"|"SLE"|"SLL"|"SOS"|"SRD"|"SSP"|"STD"|"STN"|"SVC"|"SYP"|"SZL"|"THB"|"TJS"|"TMT"|"TND"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"UYU"|"UZS"|"VES"|"VND"|"VUV"|"WST"|"XAF"|"XCD"|"XOF"|"XPF"|"YER"|"ZAR"|"ZMW"|"ZWL", shipping_cost?: any, order_tax_amount?: any, skip_external_tax_calculation?: "skip"|"calculate", skip_surcharge_calculation?: "skip"|"calculate", surcharge_amount?: any, tax_on_surcharge?: any}
   --merchant-reference-id: string # Unique identifier for the payment. This ensures idempotency for multiple payments that have been done by a single merchant. (nullable, e.g. pay_mbabizu24mvu3mela5njyhpit4)
   --routing-algorithm-id: string # The routing algorithm id to be used for the payment (nullable)
@@ -1256,7 +1296,7 @@ export def "payments-create-intent Create-a-Payment-Intent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Payments - Get Intent
@@ -1272,13 +1312,14 @@ export def "payments-get-intent Get-the-Payment-Intent-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, status: string, amount_details: record<order_amount: int, currency: string, shipping_cost: record, order_tax_amount: record, external_tax_calculation: string, surcharge_calculation: string, surcharge_amount: record, tax_on_surcharge: record, amount_captured: record>, client_secret: string, profile_id: string, merchant_reference_id: string, routing_algorithm_id: string, capture_method: string, authentication_type: record, billing: record<address: record<city: string, country: record, line1: string, line2: string, line3: string, zip: string, state: string, first_name: string, last_name: string, origin_zip: string>, phone: record<number: string, country_code: string>, email: string>, shipping: record<address: record<city: string, country: record, line1: string, line2: string, line3: string, zip: string, state: string, first_name: string, last_name: string, origin_zip: string>, phone: record<number: string, country_code: string>, email: string>, customer_id: string, customer_present: string, description: string, return_url: string, setup_future_usage: string, apply_mit_exemption: string, statement_descriptor: string, order_details: table<product_name: string, quantity: int, amount: int, tax_rate: float, total_tax_amount: int, requires_shipping: bool, product_img_link: string, product_id: string, category: string, sub_category: string, brand: string, product_type: record, product_tax_code: string, description: string, sku: string, upc: string, commodity_code: string, unit_of_measure: string, total_amount: int, unit_discount_amount: int>, allowed_payment_method_types: list<string>, metadata: record, connector_metadata: record<apple_pay: record<session_token_data: record>, airwallex: record<payload: string>, noon: record<order_category: string>, braintree: record<merchant_account_id: string, merchant_config_currency: string>, adyen: record<testing: record>, peachpayments: record<rrn: string>, santander: record<boleto: record>>, feature_metadata: record<redirect_response: record<param: string, json_payload: record>, search_tags: list<string>, apple_pay_recurring_details: record<payment_description: string, regular_billing: record, billing_agreement: string, management_url: string>, revenue_recovery: record<total_retry_count: int, payment_connector_transmission: record, billing_connector_id: string, active_attempt_payment_connector_id: string, billing_connector_payment_details: record, payment_method_type: string, payment_method_subtype: string, connector: string, billing_connector_payment_method_details: any, invoice_next_billing_time: string, invoice_billing_started_at_time: string, first_payment_attempt_pg_error_code: string, first_payment_attempt_network_decline_code: string, first_payment_attempt_network_advice_code: string>, pix_additional_details: record, boleto_additional_details: record<due_date: string, document_kind: record, payment_type: record, covenant_code: string, pix_key: record>, pix_automatico_additional_details: record, finix_additional_details: record<fraud_session_id: string>>, payment_link_enabled: string, payment_link_config: record<theme: string, logo: string, seller_name: string, sdk_layout: string, display_sdk_only: bool, enabled_saved_payment_method: bool, hide_card_nickname_field: bool, show_card_form_by_default: bool, transaction_details: list<record>, background_image: record<url: string, position: record, size: record>, details_layout: record, payment_button_text: string, custom_message_for_card_terms: string, custom_message_for_payment_method_types: record, payment_button_colour: string, skip_status_screen: bool, payment_button_text_colour: string, background_colour: string, sdk_ui_rules: record, payment_link_ui_rules: record, enable_button_only_on_form_ready: bool, payment_form_header_text: string, payment_form_label_type: record, show_card_terms: record, is_setup_mandate_flow: bool, color_icon_card_cvc_error: string, show_merchant_name: bool>, request_incremental_authorization: string, split_txns_enabled: record, expires_on: string, frm_metadata: record, request_external_three_ds_authentication: string, payment_type: string, enable_partial_authorization: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/payments/($id)/get-intent")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Payments - Update Intent
@@ -1295,6 +1336,7 @@ export def "payments-update-intent Update-a-Payment-Intent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment intent (e.g. pro_abcdefghijklmnop)
   --amount-details: any # nullable
   --routing-algorithm-id: string # The routing algorithm id to be used for the payment (nullable)
@@ -1331,7 +1373,7 @@ export def "payments-update-intent Update-a-Payment-Intent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Payments - Confirm Intent
@@ -1348,6 +1390,7 @@ export def "payments-confirm-intent Confirm-Payment-Intent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment intent (e.g. pro_abcdefghijklmnop)
   --return-url: string # The URL to which you want the user to be redirected after the completion of the payment operation If this url is not passed, the url configured in the business profile will be used (nullable, e.g. https://hyperswitch.io)
   payment_method_data: any # The payment method information provided for making a payment
@@ -1373,7 +1416,7 @@ export def "payments-confirm-intent Confirm-Payment-Intent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Payments - Get
@@ -1389,6 +1432,7 @@ export def "payments Retrieve-a-Payment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --force-sync: string@force-sync-completer # A boolean to indicate whether to force sync the payment status. Value can be true or false
 ]: nothing -> record<id: string, status: string, amount: record<order_amount: int, currency: string, shipping_cost: record, order_tax_amount: record, external_tax_calculation: string, surcharge_calculation: string, surcharge_amount: record, tax_on_surcharge: record, net_amount: int, amount_to_capture: record, amount_capturable: int, amount_captured: record>, customer_id: string, processor_merchant_id: string, initiator: record, connector: string, created: string, modified_at: string, payment_method_data: record, payment_method_type: record, payment_method_subtype: record, connector_transaction_id: string, connector_reference_id: string, merchant_connector_id: string, browser_info: record<color_depth: int, java_enabled: bool, java_script_enabled: bool, language: string, screen_height: int, screen_width: int, time_zone: int, ip_address: string, accept_header: string, user_agent: string, os_type: string, os_version: string, device_model: string, accept_language: string, referer: string>, error: record<code: string, message: string, reason: string, unified_code: string, unified_message: string, network_advice_code: string, network_decline_code: string, network_error_message: string>, shipping: record<address: record<city: string, country: record, line1: string, line2: string, line3: string, zip: string, state: string, first_name: string, last_name: string, origin_zip: string>, phone: record<number: string, country_code: string>, email: string>, billing: record<address: record<city: string, country: record, line1: string, line2: string, line3: string, zip: string, state: string, first_name: string, last_name: string, origin_zip: string>, phone: record<number: string, country_code: string>, email: string>, attempts: table<id: string, status: string, amount: record, connector: string, error: record, authentication_type: record, created_at: string, modified_at: string, cancellation_reason: string, payment_token: string, connector_metadata: record, payment_experience: record, payment_method_type: record, connector_reference_id: string, payment_method_subtype: record, connector_payment_id: string, payment_method_id: string, client_source: string, client_version: string, feature_metadata: record, payment_method_data: record>, connector_token_details: record<token: string, connector_token_request_reference_id: string>, payment_method_id: string, next_action: record, return_url: string, authentication_type: record, authentication_type_applied: record, is_iframe_redirection_enabled: bool, merchant_reference_id: string, raw_connector_response: string, feature_metadata: record<redirect_response: record<param: string, json_payload: record>, search_tags: list<string>, apple_pay_recurring_details: record<payment_description: string, regular_billing: record, billing_agreement: string, management_url: string>, revenue_recovery: record<total_retry_count: int, payment_connector_transmission: record, billing_connector_id: string, active_attempt_payment_connector_id: string, billing_connector_payment_details: record, payment_method_type: string, payment_method_subtype: string, connector: string, billing_connector_payment_method_details: any, invoice_next_billing_time: string, invoice_billing_started_at_time: string, first_payment_attempt_pg_error_code: string, first_payment_attempt_network_decline_code: string, first_payment_attempt_network_advice_code: string>, pix_additional_details: record, boleto_additional_details: record<due_date: string, document_kind: record, payment_type: record, covenant_code: string, pix_key: record>, pix_automatico_additional_details: record, finix_additional_details: record<fraud_session_id: string>>, metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1397,7 +1441,7 @@ export def "payments Retrieve-a-Payment" [
   let full_url = (build-url $base $"/v2/payments/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Payments - Create and Confirm Intent
@@ -1414,6 +1458,7 @@ export def "payments Create-and-Confirm-Payment-Intent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment intent (e.g. pro_abcdefghijklmnop)
   amount_details: record # shape: {order_amount?: int, currency: "AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BHD"|"BIF"|"BMD"|"BND"|"BOB"|"BRL"|"BSD"|"BTN"|"BWP"|"BYN"|"BZD"|"CAD"|"CDF"|"CHF"|"CLF"|"CLP"|"CNY"|"COP"|"CRC"|"CUC"|"CUP"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ERN"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"IQD"|"IRR"|"ISK"|"JMD"|"JOD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KPW"|"KRW"|"KWD"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"LYD"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRU"|"MUR"|"MVR"|"MWK"|"MXN"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"OMR"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SDG"|"SEK"|"SGD"|"SHP"|"SLE"|"SLL"|"SOS"|"SRD"|"SSP"|"STD"|"STN"|"SVC"|"SYP"|"SZL"|"THB"|"TJS"|"TMT"|"TND"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"UYU"|"UZS"|"VES"|"VND"|"VUV"|"WST"|"XAF"|"XCD"|"XOF"|"XPF"|"YER"|"ZAR"|"ZMW"|"ZWL", shipping_cost?: any, order_tax_amount?: any, skip_external_tax_calculation?: "skip"|"calculate", skip_surcharge_calculation?: "skip"|"calculate", surcharge_amount?: any, tax_on_surcharge?: any}
   --merchant-reference-id: string # Unique identifier for the payment. This ensures idempotency for multiple payments that have been done by a single merchant. (nullable, e.g. pay_mbabizu24mvu3mela5njyhpit4)
@@ -1463,7 +1508,7 @@ export def "payments Create-and-Confirm-Payment-Intent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Payments - Session token
@@ -1479,6 +1524,7 @@ export def "payments-create-external-sdk-tokens Create-V2-Session-tokens-for-a-P
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<payment_id: string, session_token: list<any>, vault_details: record<internal_vault: record<sdk_authorization: string>, external_vault_details: record>> {
   let input = $in
@@ -1488,7 +1534,7 @@ export def "payments-create-external-sdk-tokens Create-V2-Session-tokens-for-a-P
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Payments - Payment Methods List
@@ -1504,6 +1550,7 @@ export def "payments-payment-methods Retrieve-Payment-methods-for-a-Payment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment intent (e.g. pro_abcdefghijklmnop)
 ]: nothing -> record<payment_methods_enabled: table<payment_method_type: string, payment_method_subtype: string, payment_experience: list, required_fields: record, surcharge_details: record>, customer_payment_methods: table<payment_method_token: string, customer_id: string, payment_method_type: string, payment_method_subtype: string, recurring_enabled: bool, payment_method_data: record, bank: record, created: string, requires_cvv: bool, last_used_at: string, is_default: bool, billing: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1513,7 +1560,7 @@ export def "payments-payment-methods Retrieve-Payment-methods-for-a-Payment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Payments - List
@@ -1553,13 +1600,14 @@ export def "payments-list List-all-Payments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<count: int, total_count: int, data: table<id: string, merchant_id: string, profile_id: string, customer_id: string, payment_method_id: string, status: record, amount: record, created: string, payment_method_type: record, payment_method_subtype: record, connector: record, merchant_connector_id: string, customer: record, merchant_reference_id: string, connector_payment_id: string, connector_response_reference_id: string, metadata: record, description: string, authentication_type: record, capture_method: record, setup_future_usage: record, attempt_count: int, error: record, cancellation_reason: string, order_details: list, return_url: string, statement_descriptor: string, allowed_payment_method_types: list, authorization_count: int, modified_at: string, is_split_payment: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/payments/list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Payments - Check Balance and Apply PM Data
@@ -1575,6 +1623,7 @@ export def "payments-eligibility-check-balance-and-apply-pm-data Apply-Payment-M
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment intent (e.g. pro_abcdefghijklmnop)
   payment_methods: list
 ]: any -> record<balances: table<payment_method_data: any, eligibility: any>, remaining_amount: int, currency: string, requires_additional_pm_data: bool, surcharge_details: table<payment_method_type: string, payment_method_subtype: string, surcharge_details: record>> {
@@ -1588,7 +1637,7 @@ export def "payments-eligibility-check-balance-and-apply-pm-data Apply-Payment-M
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Payment Method - Create
@@ -1603,6 +1652,7 @@ export def "payment-methods Create-Payment-Method" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method (e.g. pro_abcdefghijklmnop)
   payment_method_type: string@payment-method-type-completer # Indicates the type of payment method. Eg: 'card', 'wallet', etc.
   --payment-method-subtype: any # nullable
@@ -1623,7 +1673,7 @@ export def "payment-methods Create-Payment-Method" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Payment Method - Create
@@ -1638,6 +1688,7 @@ export def "payment-methods Create-Payment-Method-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method (e.g. pro_abcdefghijklmnop)
   payment_method_type: string@payment-method-type-completer # Indicates the type of payment method. Eg: 'card', 'wallet', etc.
   --payment-method-subtype: any # nullable
@@ -1658,7 +1709,7 @@ export def "payment-methods Create-Payment-Method-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Payment Method - Create Intent
@@ -1674,6 +1725,7 @@ export def "payment-methods-create-intent Create-Payment-Method-Intent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method (e.g. pro_abcdefghijklmnop)
   --metadata: record # You can specify up to 50 keys, with key names up to 40 characters long and values up to 500 characters long. Metadata is useful for storing additional, structured information on an object. (nullable)
   --billing: any # nullable
@@ -1689,7 +1741,7 @@ export def "payment-methods-create-intent Create-Payment-Method-Intent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Payment Method - Confirm Intent
@@ -1705,6 +1757,7 @@ export def "payment-methods-confirm-intent Confirm-Payment-Method-Intent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method (e.g. pro_abcdefghijklmnop)
   --customer-id: string # The unique identifier of the customer. (nullable, e.g. cus_y3oqhf46pyzuxjbcn2giaqnb44)
   payment_method_data: any
@@ -1721,7 +1774,7 @@ export def "payment-methods-confirm-intent Confirm-Payment-Method-Intent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Payment Method - Update
@@ -1737,6 +1790,7 @@ export def "payment-methods-update-saved-payment-method Update-Payment-Method-by
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method (e.g. pro_abcdefghijklmnop)
   --payment-method-data: any # nullable
   --connector-token-details: any # nullable
@@ -1753,7 +1807,7 @@ export def "payment-methods-update-saved-payment-method Update-Payment-Method-by
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Payment Method - Update
@@ -1769,6 +1823,7 @@ export def "payment-methods-update-saved-payment-method Update-Payment-Method-by
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method (e.g. pro_abcdefghijklmnop)
   --payment-method-data: any # nullable
   --connector-token-details: any # nullable
@@ -1785,7 +1840,7 @@ export def "payment-methods-update-saved-payment-method Update-Payment-Method-by
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Payment Method - Retrieve
@@ -1801,6 +1856,7 @@ export def "payment-methods Retrieve-Payment-Method-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method (e.g. pro_abcdefghijklmnop)
 ]: nothing -> record<id: string, merchant_id: string, customer_id: string, payment_method_type: string, payment_method_subtype: record, recurring_enabled: bool, created: string, last_used_at: string, payment_method_data: record, connector_tokens: table<token: string, connector_token_request_reference_id: string>, network_token: record<payment_method_data: record<last4_digits: string, issuer_country: record, network_token_expiry_month: string, network_token_expiry_year: string, nick_name: string, card_holder_name: string, card_isin: string, card_issuer: string, card_network: record, card_type: string, saved_to_locker: bool, par: string>>, storage_type: string, card_cvc_token_storage: record<is_stored: bool, expires_at: string>, network_transaction_id: string, raw_payment_method_data: any, billing: record<address: record<city: string, country: record, line1: string, line2: string, line3: string, zip: string, state: string, first_name: string, last_name: string, origin_zip: string>, phone: record<number: string, country_code: string>, email: string>, acknowledgement_status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1810,7 +1866,7 @@ export def "payment-methods Retrieve-Payment-Method-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Payment Method - Delete
@@ -1826,6 +1882,7 @@ export def "payment-methods Delete-Payment-Method-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method (e.g. pro_abcdefghijklmnop)
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1835,7 +1892,7 @@ export def "payment-methods Delete-Payment-Method-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/payment-methods/{id}
@@ -1850,6 +1907,7 @@ export def "payment-methods Retrieve-Payment-Method-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method (e.g. pro_abcdefghijklmnop)
 ]: nothing -> record<id: string, merchant_id: string, customer_id: string, payment_method_type: string, payment_method_subtype: record, recurring_enabled: bool, created: string, last_used_at: string, payment_method_data: record, connector_tokens: table<token: string, connector_token_request_reference_id: string>, network_token: record<payment_method_data: record<last4_digits: string, issuer_country: record, network_token_expiry_month: string, network_token_expiry_year: string, nick_name: string, card_holder_name: string, card_isin: string, card_issuer: string, card_network: record, card_type: string, saved_to_locker: bool, par: string>>, storage_type: string, card_cvc_token_storage: record<is_stored: bool, expires_at: string>, network_transaction_id: string, raw_payment_method_data: any, billing: record<address: record<city: string, country: record, line1: string, line2: string, line3: string, zip: string, state: string, first_name: string, last_name: string, origin_zip: string>, phone: record<number: string, country_code: string>, email: string>, acknowledgement_status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1859,7 +1917,7 @@ export def "payment-methods Retrieve-Payment-Method-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Payment Method - Delete
@@ -1875,6 +1933,7 @@ export def "payment-methods Delete-Payment-Method-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method (e.g. pro_abcdefghijklmnop)
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1884,7 +1943,7 @@ export def "payment-methods Delete-Payment-Method-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Payment Method - Check Network Token Status
@@ -1901,13 +1960,14 @@ export def "payment-methods-check-network-token-status Check-Network-Token-Statu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/payment-methods/($payment_method_id)/check-network-token-status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Payment Method - List Customer Saved Payment Methods
@@ -1923,6 +1983,7 @@ export def "customers-saved-payment-methods List-Customer-Saved-Payment-Methods-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method (e.g. pro_abcdefghijklmnop)
 ]: nothing -> record<customer_payment_methods: table<id: string, customer_id: string, payment_method_type: string, payment_method_subtype: string, recurring_enabled: bool, payment_method_data: record, created: string, requires_cvv: bool, last_used_at: string, is_default: bool, billing: record, network_tokenization: record, connector_tokens: list, network_transaction_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1932,7 +1993,7 @@ export def "customers-saved-payment-methods List-Customer-Saved-Payment-Methods-
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Payment Method - List Customer Saved Payment Methods
@@ -1948,6 +2009,7 @@ export def "customers-saved-payment-methods List-Customer-Saved-Payment-Methods-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method (e.g. pro_abcdefghijklmnop)
 ]: nothing -> record<customer_payment_methods: table<id: string, customer_id: string, payment_method_type: string, payment_method_subtype: string, recurring_enabled: bool, payment_method_data: record, created: string, requires_cvv: bool, last_used_at: string, is_default: bool, billing: record, network_tokenization: record, connector_tokens: list, network_transaction_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1957,7 +2019,7 @@ export def "customers-saved-payment-methods List-Customer-Saved-Payment-Methods-
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Payment Method - Get Payment Method Token Data
@@ -1973,6 +2035,7 @@ export def "payment-methods-token-details Get-Payment-Method-Token-Data-by-payme
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method (e.g. pro_abcdefghijklmnop)
 ]: nothing -> record<id: string, payment_method_token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1982,7 +2045,7 @@ export def "payment-methods-token-details Get-Payment-Method-Token-Data-by-payme
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Payment Method - Get Payment Method Token Data
@@ -1998,6 +2061,7 @@ export def "payment-methods-token-details Get-Payment-Method-Token-Data-by-payme
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method (e.g. pro_abcdefghijklmnop)
 ]: nothing -> record<id: string, payment_method_token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2007,7 +2071,7 @@ export def "payment-methods-token-details Get-Payment-Method-Token-Data-by-payme
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Payment Method - Set Default Payment Method for Customer
@@ -2024,13 +2088,14 @@ export def "payment-methods-default Set-the-Payment-Method-as-Default" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<default_payment_method_id: string, customer_id: string, payment_method_type: string, payment_method_subtype: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/($customer_id)/payment-methods/($payment_method_id)/default")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Payment Method Session - Create
@@ -2045,6 +2110,7 @@ export def "payment-method-sessions Create-a-payment-method-session" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method session (e.g. pro_abcdefghijklmnop)
   --customer-id: string # The customer id for which the payment methods session is to be created (nullable, e.g. cus_y3oqhf46pyzuxjbcn2giaqnb44)
   --billing: any # nullable
@@ -2065,7 +2131,7 @@ export def "payment-method-sessions Create-a-payment-method-session" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Payment Method Session - Create
@@ -2080,6 +2146,7 @@ export def "payment-method-sessions Create-a-payment-method-session-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method session (e.g. pro_abcdefghijklmnop)
   --customer-id: string # The customer id for which the payment methods session is to be created (nullable, e.g. cus_y3oqhf46pyzuxjbcn2giaqnb44)
   --billing: any # nullable
@@ -2100,7 +2167,7 @@ export def "payment-method-sessions Create-a-payment-method-session-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Payment Method Session - Retrieve
@@ -2116,6 +2183,7 @@ export def "payment-method-sessions Retrieve-the-payment-method-session-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method session (e.g. pro_abcdefghijklmnop)
 ]: nothing -> record<id: string, customer_id: string, billing: record<address: record<city: string, country: record, line1: string, line2: string, line3: string, zip: string, state: string, first_name: string, last_name: string, origin_zip: string>, phone: record<number: string, country_code: string>, email: string>, network_tokenization: record<enable: string>, tokenization_data: any, expires_at: string, client_secret: string, return_url: string, next_action: record, authentication_details: record<status: string, error: record<code: string, message: string, reason: string, unified_code: string, unified_message: string, network_advice_code: string, network_decline_code: string, network_error_message: string>>, associated_payment_methods: table<payment_method_token: any>, associated_token_id: string, storage_type: string, card_cvc_token_storage: record<is_stored: bool, expires_at: string>, payment_method_data: record, sdk_authorization: string, keep_alive: bool, network_tokenization_data: record<payment_method_data: record<last4_digits: string, issuer_country: record, network_token_expiry_month: string, network_token_expiry_year: string, nick_name: string, card_holder_name: string, card_isin: string, card_issuer: string, card_network: record, card_type: string, saved_to_locker: bool, par: string>>, external_vault_details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2125,7 +2193,7 @@ export def "payment-method-sessions Retrieve-the-payment-method-session-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Payment Method Session - Delete a saved payment method
@@ -2141,6 +2209,7 @@ export def "payment-method-sessions Delete-a-saved-payment-method-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method session (e.g. pro_abcdefghijklmnop)
   payment_method_token: string # The payment method token associated with the payment method to be deleted (e.g. token_9wcXDRVkfEtLEsSnYKgQ)
 ]: any -> record<payment_method_token: string> {
@@ -2154,7 +2223,7 @@ export def "payment-method-sessions Delete-a-saved-payment-method-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Payment Method Session - Retrieve
@@ -2170,6 +2239,7 @@ export def "payment-method-sessions Retrieve-the-payment-method-session-by-id-1"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method session (e.g. pro_abcdefghijklmnop)
 ]: nothing -> record<id: string, customer_id: string, billing: record<address: record<city: string, country: record, line1: string, line2: string, line3: string, zip: string, state: string, first_name: string, last_name: string, origin_zip: string>, phone: record<number: string, country_code: string>, email: string>, network_tokenization: record<enable: string>, tokenization_data: any, expires_at: string, client_secret: string, return_url: string, next_action: record, authentication_details: record<status: string, error: record<code: string, message: string, reason: string, unified_code: string, unified_message: string, network_advice_code: string, network_decline_code: string, network_error_message: string>>, associated_payment_methods: table<payment_method_token: any>, associated_token_id: string, storage_type: string, card_cvc_token_storage: record<is_stored: bool, expires_at: string>, payment_method_data: record, sdk_authorization: string, keep_alive: bool, network_tokenization_data: record<payment_method_data: record<last4_digits: string, issuer_country: record, network_token_expiry_month: string, network_token_expiry_year: string, nick_name: string, card_holder_name: string, card_isin: string, card_issuer: string, card_network: record, card_type: string, saved_to_locker: bool, par: string>>, external_vault_details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2179,7 +2249,7 @@ export def "payment-method-sessions Retrieve-the-payment-method-session-by-id-1"
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Payment Method Session - Delete a saved payment method
@@ -2195,6 +2265,7 @@ export def "payment-method-sessions Delete-a-saved-payment-method-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method session (e.g. pro_abcdefghijklmnop)
   payment_method_token: string # The payment method token associated with the payment method to be deleted (e.g. token_9wcXDRVkfEtLEsSnYKgQ)
 ]: any -> record<payment_method_token: string> {
@@ -2208,7 +2279,7 @@ export def "payment-method-sessions Delete-a-saved-payment-method-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Payment Method Session - List Payment Methods
@@ -2224,6 +2295,7 @@ export def "payment-method-sessions-list-payment-methods List-Payment-methods-fo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method session (e.g. pro_abcdefghijklmnop)
 ]: nothing -> record<payment_methods_enabled: table<payment_method_type: string, payment_method_subtype: string, required_fields: list>, customer_payment_methods: table<payment_method_token: string, customer_id: string, payment_method_type: string, payment_method_subtype: string, recurring_enabled: bool, payment_method_data: record, bank: record, created: string, requires_cvv: bool, last_used_at: string, is_default: bool, billing: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2233,7 +2305,7 @@ export def "payment-method-sessions-list-payment-methods List-Payment-methods-fo
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Payment Method Session - List Payment Methods
@@ -2249,6 +2321,7 @@ export def "payment-method-sessions-list-payment-methods List-Payment-methods-fo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method session (e.g. pro_abcdefghijklmnop)
 ]: nothing -> record<payment_methods_enabled: table<payment_method_type: string, payment_method_subtype: string, required_fields: list>, customer_payment_methods: table<payment_method_token: string, customer_id: string, payment_method_type: string, payment_method_subtype: string, recurring_enabled: bool, payment_method_data: record, bank: record, created: string, requires_cvv: bool, last_used_at: string, is_default: bool, billing: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2258,7 +2331,7 @@ export def "payment-method-sessions-list-payment-methods List-Payment-methods-fo
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Payment Method Session - Update a saved payment method
@@ -2274,6 +2347,7 @@ export def "payment-method-sessions-update-saved-payment-method Update-a-saved-p
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method session (e.g. pro_abcdefghijklmnop)
   --payment-method-data: any # nullable
   --connector-token-details: any # nullable
@@ -2291,7 +2365,7 @@ export def "payment-method-sessions-update-saved-payment-method Update-a-saved-p
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Payment Method Session - Update a saved payment method
@@ -2307,6 +2381,7 @@ export def "payment-method-sessions-update-saved-payment-method Update-a-saved-p
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment method session (e.g. pro_abcdefghijklmnop)
   --payment-method-data: any # nullable
   --connector-token-details: any # nullable
@@ -2324,7 +2399,7 @@ export def "payment-method-sessions-update-saved-payment-method Update-a-saved-p
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Payment Method Session - Confirm a payment method session
@@ -2340,6 +2415,7 @@ export def "payment-method-sessions-confirm Confirm-the-payment-method-session-b
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment intent (e.g. pro_abcdefghijklmnop)
   payment_method_type: string@payment-method-type-completer # Indicates the type of payment method. Eg: 'card', 'wallet', etc.
   --payment-method-subtype: any # nullable
@@ -2357,7 +2433,7 @@ export def "payment-method-sessions-confirm Confirm-the-payment-method-session-b
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Payment Method Session - Confirm a payment method session
@@ -2373,6 +2449,7 @@ export def "payment-method-sessions-confirm Confirm-the-payment-method-session-b
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID associated to the payment intent (e.g. pro_abcdefghijklmnop)
   payment_method_type: string@payment-method-type-completer # Indicates the type of payment method. Eg: 'card', 'wallet', etc.
   --payment-method-subtype: any # nullable
@@ -2390,7 +2467,7 @@ export def "payment-method-sessions-confirm Confirm-the-payment-method-session-b
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Refunds - Create
@@ -2405,6 +2482,7 @@ export def "refunds Create-a-Refund" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   payment_id: string # The payment id against which refund is initiated (e.g. pay_mbabizu24mvu3mela5njyhpit4)
   merchant_reference_id: string # Unique Identifier for the Refund given by the Merchant. (e.g. ref_mbabizu24mvu3mela5njyhpit4)
   --merchant-id: string # The identifier for the Merchant Account (nullable, e.g. y3oqhf46pyzuxjbcn2giaqnb44)
@@ -2423,7 +2501,7 @@ export def "refunds Create-a-Refund" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Refunds - Metadata Update
@@ -2439,6 +2517,7 @@ export def "refunds-update-metadata Update-Refund-Metadata-and-Reason" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reason: string # An arbitrary string attached to the object. Often useful for displaying to users and your customer support executive (nullable, e.g. Customer returned the product)
   --metadata: record # You can specify up to 50 keys, with key names up to 40 characters long and values up to 500 characters long. Metadata is useful for storing additional, structured information on an object. (nullable)
 ]: any -> record<id: string, payment_id: string, merchant_reference_id: string, amount: int, currency: string, status: string, reason: string, metadata: record, error_details: record<code: string, message: string>, created_at: string, updated_at: string, connector: string, profile_id: string, merchant_connector_id: string, connector_refund_reference_id: string, raw_connector_response: string> {
@@ -2450,7 +2529,7 @@ export def "refunds-update-metadata Update-Refund-Metadata-and-Reason" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Refunds - Retrieve
@@ -2466,13 +2545,14 @@ export def "refunds Retrieve-a-Refund" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, payment_id: string, merchant_reference_id: string, amount: int, currency: string, status: string, reason: string, metadata: record, error_details: record<code: string, message: string>, created_at: string, updated_at: string, connector: string, profile_id: string, merchant_connector_id: string, connector_refund_reference_id: string, raw_connector_response: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/refunds/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Refunds - List
@@ -2487,6 +2567,7 @@ export def "refunds-list List-all-Refunds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --payment-id: string # The identifier for the payment (nullable)
   refund_id: string # The identifier for the refund
   --limit: int # Limit on the number of objects to return (nullable, format: int64)
@@ -2505,7 +2586,7 @@ export def "refunds-list List-all-Refunds" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revenue Recovery - Retrieve
@@ -2522,13 +2603,14 @@ export def "process-trackers-revenue-recovery-workflow Retrieve-Revenue-Recovery
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, schedule_time_for_payment: string, schedule_time_for_psync: string, status: string, business_status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/process-trackers/revenue-recovery-workflow/($revenue_recovery_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Proxy
@@ -2543,6 +2625,7 @@ export def "proxy Proxy-Request" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID for authentication
   request_body: any # The request body that needs to be forwarded
   destination_url: string # The destination URL where the request needs to be forwarded (e.g. https://api.example.com/endpoint)
@@ -2561,7 +2644,7 @@ export def "proxy Proxy-Request" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Proxy
@@ -2576,6 +2659,7 @@ export def "proxy Proxy-Request-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Profile-Id: string # Profile ID for authentication
   request_body: any # The request body that needs to be forwarded
   destination_url: string # The destination URL where the request needs to be forwarded (e.g. https://api.example.com/endpoint)
@@ -2594,7 +2678,7 @@ export def "proxy Proxy-Request-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Tokenization - Create
@@ -2609,6 +2693,7 @@ export def "tokenize api" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   customer_id: string # Customer ID for which the tokenization is requested (e.g. 0a_cus_01926c58bc6e77c09e809964e72af8c8)
   token_request: record # Request for tokenization which contains the data to be tokenized
 ]: any -> record<id: string, created_at: string, flag: string> {
@@ -2620,7 +2705,7 @@ export def "tokenize api" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Tokenization - Delete
@@ -2636,6 +2721,7 @@ export def "tokenize api-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   customer_id: string # Customer ID for which the tokenization is requested (e.g. 0a_cus_01926c58bc6e77c09e809964e72af8c8)
   session_id: string # Session ID associated with the tokenization request (e.g. 0a_pms_01926c58bc6e77c09e809964e72af8c8)
 ]: any -> record<id: string> {
@@ -2647,5 +2733,5 @@ export def "tokenize api-by-id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

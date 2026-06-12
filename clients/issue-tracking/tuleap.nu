@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -106,7 +107,7 @@ def predefined-time-period-completer [] { ["current_week" "last_7_days" "last_mo
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects createTuleapProjectRESTv1ProjectResource" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -140,8 +141,9 @@ export def "projects createTuleapProjectRESTv1ProjectResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dry-run: oneof<nothing, bool>
+  --qp-dry-run: oneof<nothing, bool>
   shortname: string # Name of the project
   --description: string # Full description of the project
   label: string # LA short description of the project
@@ -156,13 +158,13 @@ export def "projects createTuleapProjectRESTv1ProjectResource" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dry_run" $dry_run "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dry_run" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/projects" $qp)
   let body = {shortname: $shortname, description: $description, label: $label, is_public: $is_public, allow_restricted: $allow_restricted, template_id: $template_id, xml_template_name: $xml_template_name, categories: $categories, fields: $body_fields, from_archive: $from_archive} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get projects ◑
@@ -177,6 +179,7 @@ export def "projects retrieveTuleapProjectRESTv1ProjectResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
   --offset: int # Position of the first element to display (format: int64)
@@ -188,7 +191,7 @@ export def "projects retrieveTuleapProjectRESTv1ProjectResource" [
   let full_url = (build-url $base "/projects" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project ◑
@@ -204,6 +207,7 @@ export def "projects TuleapProjectRESTv1ProjectResourceRetrieveId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -211,7 +215,7 @@ export def "projects TuleapProjectRESTv1ProjectResourceRetrieveId" [
   let full_url = (build-url $base $"/projects/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Project partial update ◑
@@ -227,6 +231,7 @@ export def "projects TuleapProjectRESTv1ProjectResourceModifyProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   status: string@status-completer # status to apply
 ]: any -> list<string> {
@@ -238,7 +243,7 @@ export def "projects TuleapProjectRESTv1ProjectResourceModifyProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get heartbeats ◑
@@ -254,6 +259,7 @@ export def "projects-heartbeats TuleapProjectRESTv1ProjectResourceRetrieveHeartb
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -261,7 +267,7 @@ export def "projects-heartbeats TuleapProjectRESTv1ProjectResourceRetrieveHeartb
   let full_url = (build-url $base $"/projects/($id)/heartbeats")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get labels ◑
@@ -277,6 +283,7 @@ export def "projects-labels TuleapProjectRESTv1ProjectResourceRetrieveLabels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # Search particular label, if not used, returns all project labels
   --limit: int # Number of elements displayed per page (format: int64, default: 50)
@@ -288,7 +295,7 @@ export def "projects-labels TuleapProjectRESTv1ProjectResourceRetrieveLabels" [
   let full_url = (build-url $base $"/projects/($id)/labels" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user_groups ◑
@@ -304,6 +311,7 @@ export def "projects-user-groups TuleapProjectRESTv1ProjectResourceRetrieveUserG
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # JSON object of filtering options
 ]: nothing -> list<any> {
@@ -313,7 +321,7 @@ export def "projects-user-groups TuleapProjectRESTv1ProjectResourceRetrieveUserG
   let full_url = (build-url $base $"/projects/($id)/user_groups" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get svn ◑
@@ -329,6 +337,7 @@ export def "projects-svn TuleapProjectRESTv1ProjectResourceRetrieveSvn" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # Optional search string in json format
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
@@ -340,7 +349,7 @@ export def "projects-svn TuleapProjectRESTv1ProjectResourceRetrieveSvn" [
   let full_url = (build-url $base $"/projects/($id)/svn" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Put banner 🔐
@@ -356,6 +365,7 @@ export def "projects-banner TuleapProjectRESTv1ProjectResourceUpdateBanner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   message: string
 ]: any -> string {
@@ -367,7 +377,7 @@ export def "projects-banner TuleapProjectRESTv1ProjectResourceUpdateBanner" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete the banner message 🔐
@@ -383,6 +393,7 @@ export def "projects-banner TuleapProjectRESTv1ProjectResourceRemoveBanner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -390,7 +401,7 @@ export def "projects-banner TuleapProjectRESTv1ProjectResourceRemoveBanner" [
   let full_url = (build-url $base $"/projects/($id)/banner")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get banner ◑
@@ -406,6 +417,7 @@ export def "projects-banner TuleapProjectRESTv1ProjectResourceRetrieveBanner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -413,7 +425,7 @@ export def "projects-banner TuleapProjectRESTv1ProjectResourceRetrieveBanner" [
   let full_url = (build-url $base $"/projects/($id)/banner")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Put a header background to the project 🔐
@@ -429,6 +441,7 @@ export def "projects-header-background TuleapProjectRESTv1ProjectResourceUpdateB
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   identifier: string@identifier-completer
 ]: any -> string {
@@ -440,7 +453,7 @@ export def "projects-header-background TuleapProjectRESTv1ProjectResourceUpdateB
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete the header background 🔐
@@ -456,6 +469,7 @@ export def "projects-header-background TuleapProjectRESTv1ProjectResourceRemoveH
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -463,7 +477,7 @@ export def "projects-header-background TuleapProjectRESTv1ProjectResourceRemoveH
   let full_url = (build-url $base $"/projects/($id)/header_background")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get PhpWiki pages ◑
@@ -479,6 +493,7 @@ export def "projects-phpwiki TuleapProjectRESTv1ProjectResourceRetrievePhpWiki" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
   --offset: int # Position of the first element to display (format: int64)
@@ -490,7 +505,7 @@ export def "projects-phpwiki TuleapProjectRESTv1ProjectResourceRetrievePhpWiki" 
   let full_url = (build-url $base $"/projects/($id)/phpwiki" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get services ◑
@@ -506,6 +521,7 @@ export def "projects-project-services TuleapProjectRESTv1ProjectResourceRetrieve
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
   --offset: int # Position of the first element to display (format: int64)
@@ -516,7 +532,7 @@ export def "projects-project-services TuleapProjectRESTv1ProjectResourceRetrieve
   let full_url = (build-url $base $"/projects/($id)/project_services" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Extract references ◑
@@ -532,6 +548,7 @@ export def "projects-extract-references TuleapProjectRESTv1ProjectResourceExtrac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   text: string # the text to add Tuleap references
 ]: any -> list<string> {
@@ -543,7 +560,7 @@ export def "projects-extract-references TuleapProjectRESTv1ProjectResourceExtrac
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get data needed for third party integration ◑
@@ -559,6 +576,7 @@ export def "projects-3rd-party-integration-data TuleapProjectRESTv1ProjectResour
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --currently-active-service: string # The currently active service name
 ]: nothing -> record<project_sidebar: record<is_collapsed: bool, config: string>, styles: record<content: string, variant_name: string, should_display_favicon_variant: bool>, references: list<string>> {
@@ -568,7 +586,7 @@ export def "projects-3rd-party-integration-data TuleapProjectRESTv1ProjectResour
   let full_url = (build-url $base $"/projects/($id)/3rd_party_integration_data" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get docman metadata ◑
@@ -584,6 +602,7 @@ export def "projects-docman-metadata tuleapDocmanRESTv1ProjectMetadataResourceRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
   --offset: int # Position of the first element to display (format: int64)
@@ -594,7 +613,7 @@ export def "projects-docman-metadata tuleapDocmanRESTv1ProjectMetadataResourceRe
   let full_url = (build-url $base $"/projects/($id)/docman_metadata" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get document manager service ◑
@@ -610,6 +629,7 @@ export def "projects-docman-service tuleapDocmanRESTv1ServiceDocmanServiceResour
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<permissions_for_groups: record<can_admin: list<any>>, root_item: record<id: int, title: string, description: string, post_processed_description: string, owner: string, last_update_date: string, creation_date: string, user_can_write: bool, user_can_delete: bool, type: string, file_properties: string, embedded_file_properties: string, link_properties: string, wiki_properties: string, parent_id: int, is_expanded: bool, can_user_manage: bool, lock_info: string, metadata: list<any>, has_approval_table: bool, is_approval_table_enabled: bool, approval_table: string, permissions_for_groups: record<can_read: list, can_write: list, can_manage: list>, folder_properties: string, other_type_properties: string, item_icon: string, move_uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -617,7 +637,7 @@ export def "projects-docman-service tuleapDocmanRESTv1ServiceDocmanServiceResour
   let full_url = (build-url $base $"/projects/($id)/docman_service")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get git ◑
@@ -633,6 +653,7 @@ export def "projects-git tuleapGitRESTv1GitProjectResourceRetrieveGit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
   --offset: int # Position of the first element to display (format: int64)
@@ -646,7 +667,7 @@ export def "projects-git tuleapGitRESTv1GitProjectResourceRetrieveGit" [
   let full_url = (build-url $base $"/projects/($id)/git" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get trackers ◑
@@ -662,6 +683,7 @@ export def "projects-trackers tuleapTrackerRESTv1ProjectTrackersResourceRetrieve
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --representation: string@representation-completer # Whether you want to fetch full or reference only representations (default: full)
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
@@ -675,7 +697,7 @@ export def "projects-trackers tuleapTrackerRESTv1ProjectTrackersResourceRetrieve
   let full_url = (build-url $base $"/projects/($id)/trackers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get plannings ◑
@@ -691,6 +713,7 @@ export def "projects-plannings TuleapAgileDashboardRESTv1AgileDashboardProjectRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
   --offset: int # Position of the first element to display (format: int64)
@@ -701,7 +724,7 @@ export def "projects-plannings TuleapAgileDashboardRESTv1AgileDashboardProjectRe
   let full_url = (build-url $base $"/projects/($id)/plannings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get milestones ◑
@@ -717,6 +740,7 @@ export def "projects-milestones TuleapAgileDashboardRESTv1AgileDashboardProjectR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: string@fields-completer-1 # Set of fields to return in the result (default: all)
   --qp-query: string # JSON object of search criteria properties
@@ -730,7 +754,7 @@ export def "projects-milestones TuleapAgileDashboardRESTv1AgileDashboardProjectR
   let full_url = (build-url $base $"/projects/($id)/milestones" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get backlog ◑
@@ -746,6 +770,7 @@ export def "projects-backlog TuleapAgileDashboardRESTv1AgileDashboardProjectReso
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
   --offset: int # Position of the first element to display (format: int64)
@@ -756,7 +781,7 @@ export def "projects-backlog TuleapAgileDashboardRESTv1AgileDashboardProjectReso
   let full_url = (build-url $base $"/projects/($id)/backlog" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set order of all backlog items ◑
@@ -772,6 +797,7 @@ export def "projects-backlog TuleapAgileDashboardRESTv1AgileDashboardProjectReso
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   ids: list # Ids of backlog items
 ]: any -> string {
@@ -783,7 +809,7 @@ export def "projects-backlog TuleapAgileDashboardRESTv1AgileDashboardProjectReso
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Re-order backlog items relative to others ◑
@@ -800,6 +826,7 @@ export def "projects-backlog TuleapAgileDashboardRESTv1AgileDashboardProjectReso
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --order: any # shape: {ids: list, direction: string, compared_to: int}
   --add: list # Add (move) item to the backlog
@@ -813,7 +840,7 @@ export def "projects-backlog TuleapAgileDashboardRESTv1AgileDashboardProjectReso
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all Git Jenkins servers that are available in the projects 🔐
@@ -829,6 +856,7 @@ export def "projects-git-jenkins-servers tuleapHudsonGitRESTv1GitJenkinsServersR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
   --offset: int # Position of the first element to display (format: int64)
@@ -839,7 +867,7 @@ export def "projects-git-jenkins-servers tuleapHudsonGitRESTv1GitJenkinsServersR
   let full_url = (build-url $base $"/projects/($id)/git_jenkins_servers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get FRS packages ◑
@@ -855,6 +883,7 @@ export def "projects-frs-packages tuleapFRSRESTv1ProjectResourceRetrieveFRSPacka
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
   --offset: int # Position of the first element to display (format: int64)
@@ -865,7 +894,7 @@ export def "projects-frs-packages tuleapFRSRESTv1ProjectResourceRetrieveFRSPacka
   let full_url = (build-url $base $"/projects/($id)/frs_packages" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get File Release System service ◑
@@ -881,6 +910,7 @@ export def "projects-frs-service tuleapFRSRESTv1ProjectResourceRetrieveService" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<permissions_for_groups: record<can_admin: list<any>, can_read: list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -888,7 +918,7 @@ export def "projects-frs-service tuleapFRSRESTv1ProjectResourceRetrieveService" 
   let full_url = (build-url $base $"/projects/($id)/frs_service")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Labeled Items ◑
@@ -904,6 +934,7 @@ export def "projects-labeled-items TuleapLabelRESTv1ProjectResourceRetrieveLabel
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # Search string in json format
   --limit: int # Number of elements displayed per page (format: int64, default: 50)
@@ -915,7 +946,7 @@ export def "projects-labeled-items TuleapLabelRESTv1ProjectResourceRetrieveLabel
   let full_url = (build-url $base $"/projects/($id)/labeled_items" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get campaigns ◑
@@ -931,6 +962,7 @@ export def "projects-testmanagement-campaigns tuleapTestManagementRESTv1ProjectR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # JSON object of search criteria properties
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
@@ -942,7 +974,7 @@ export def "projects-testmanagement-campaigns tuleapTestManagementRESTv1ProjectR
   let full_url = (build-url $base $"/projects/($id)/testmanagement_campaigns" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get test definitions 🔐
@@ -958,6 +990,7 @@ export def "projects-testmanagement-definitions tuleapTestManagementRESTv1Projec
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
   --offset: int # Position of the first element to display (format: int64)
@@ -969,7 +1002,7 @@ export def "projects-testmanagement-definitions tuleapTestManagementRESTv1Projec
   let full_url = (build-url $base $"/projects/($id)/testmanagement_definitions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Mediawiki permissions of the current user ◑
@@ -985,6 +1018,7 @@ export def "projects-mediawiki-standalone-permissions tuleapMediawikiStandaloneR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<permissions: record<is_bot: bool, is_reader: bool, is_writer: bool, is_admin: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -992,7 +1026,7 @@ export def "projects-mediawiki-standalone-permissions tuleapMediawikiStandaloneR
   let full_url = (build-url $base $"/projects/($id)/mediawiki_standalone_permissions")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get baselines ◑
@@ -1008,6 +1042,7 @@ export def "projects-baselines tuleapBaselineRESTProjectBaselinesResourceRetriev
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements to fetch (not authorized element are hidden, so you may get less element than requested) (format: int64, default: 10)
   --offset: int # Position of the first element to display (first position is 0). Baselines are sorted by snapshot date (most recent first) (format: int64)
@@ -1018,7 +1053,7 @@ export def "projects-baselines tuleapBaselineRESTProjectBaselinesResourceRetriev
   let full_url = (build-url $base $"/projects/($id)/baselines" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get baselines comparisons ◑
@@ -1034,6 +1069,7 @@ export def "projects-baselines-comparisons tuleapBaselineRESTProjectComparisonsR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements to fetch (not authorized element are hidden, so you may get less element than requested) (format: int64, default: 50)
   --offset: int # Position of the first element to display (first position is 0). Comparisons are sorted by creation date (most recent first) (format: int64)
@@ -1044,7 +1080,7 @@ export def "projects-baselines-comparisons tuleapBaselineRESTProjectComparisonsR
   let full_url = (build-url $base $"/projects/($id)/baselines_comparisons" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET Gitlab Integrations. ◑
@@ -1060,6 +1096,7 @@ export def "projects-gitlab-repositories tuleapGitlabRESTv1GitlabProjectResource
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
   --offset: int # Position of the first element to display (format: int64)
@@ -1070,7 +1107,7 @@ export def "projects-gitlab-repositories tuleapGitlabRESTv1GitlabProjectResource
   let full_url = (build-url $base $"/projects/($id)/gitlab_repositories" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Define a program plan 🔐
@@ -1088,6 +1125,7 @@ export def "projects-program-plan tuleapProgramManagementRESTv1ProjectResourceUp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   program_increment_tracker_id: int # format: int64
   plannable_tracker_ids: list
@@ -1104,7 +1142,7 @@ export def "projects-program-plan tuleapProgramManagementRESTv1ProjectResourceUp
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Define team projects of a program 🔐
@@ -1120,6 +1158,7 @@ export def "projects-program-teams tuleapProgramManagementRESTv1ProjectResourceU
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   team_ids: list
 ]: any -> string {
@@ -1131,7 +1170,7 @@ export def "projects-program-teams tuleapProgramManagementRESTv1ProjectResourceU
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get program backlog ◑
@@ -1147,6 +1186,7 @@ export def "projects-program-backlog tuleapProgramManagementRESTv1ProjectResourc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 50)
   --offset: int # Position of the first element to display (format: int64)
@@ -1157,7 +1197,7 @@ export def "projects-program-backlog tuleapProgramManagementRESTv1ProjectResourc
   let full_url = (build-url $base $"/projects/($id)/program_backlog" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Manipulate the program backlog 🔐
@@ -1174,6 +1214,7 @@ export def "projects-program-backlog tuleapProgramManagementRESTv1ProjectResourc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   add: list
   remove: list
@@ -1188,7 +1229,7 @@ export def "projects-program-backlog tuleapProgramManagementRESTv1ProjectResourc
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get program increments ◑
@@ -1204,6 +1245,7 @@ export def "projects-program-increments tuleapProgramManagementRESTv1ProjectReso
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 50)
   --offset: int # Position of the first element to display (format: int64)
@@ -1214,7 +1256,7 @@ export def "projects-program-increments tuleapProgramManagementRESTv1ProjectReso
   let full_url = (build-url $base $"/projects/($id)/program_increments" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate a token 🔓
@@ -1229,6 +1271,7 @@ export def "tokens createTuleapTokenRESTv1TokenResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   username: string # The username of the user
   password: string # The password of the user
@@ -1241,7 +1284,7 @@ export def "tokens createTuleapTokenRESTv1TokenResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Expire all tokens 🔐
@@ -1256,6 +1299,7 @@ export def "tokens tuleapTokenRESTv1TokenResourceRemoveAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -1263,7 +1307,7 @@ export def "tokens tuleapTokenRESTv1TokenResourceRemoveAll" [
   let full_url = (build-url $base "/tokens")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Expire a token 🔐
@@ -1279,6 +1323,7 @@ export def "tokens removeTuleapTokenRESTv1TokenResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -1286,7 +1331,7 @@ export def "tokens removeTuleapTokenRESTv1TokenResource" [
   let full_url = (build-url $base $"/tokens/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user_group ◑
@@ -1302,6 +1347,7 @@ export def "user-groups tuleapProjectRESTv1UserGroupResourceRetrieveId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: string, uri: string, label: string, users_uri: string, short_name: string, key: string, project: string, additional_information: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -1309,7 +1355,7 @@ export def "user-groups tuleapProjectRESTv1UserGroupResourceRetrieveId" [
   let full_url = (build-url $base $"/user_groups/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get users of a user_group 🔐
@@ -1325,6 +1371,7 @@ export def "user-groups-users tuleapProjectRESTv1UserGroupResourceRetrieveUsers"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
   --offset: int # Position of the first element to display (format: int64)
@@ -1336,7 +1383,7 @@ export def "user-groups-users tuleapProjectRESTv1UserGroupResourceRetrieveUsers"
   let full_url = (build-url $base $"/user_groups/($id)/users" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Define users of a user_group 🔐
@@ -1352,6 +1399,7 @@ export def "user-groups-users tuleapProjectRESTv1UserGroupResourceUpdateUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   user_references: list
 ]: any -> list<string> {
@@ -1363,7 +1411,7 @@ export def "user-groups-users tuleapProjectRESTv1UserGroupResourceUpdateUsers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST user_groups 🔐
@@ -1378,6 +1426,7 @@ export def "user-groups tuleapProjectRESTv1UserGroupResourceCreateUgroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   project_id: int # format: int64
   short_name: string
@@ -1391,7 +1440,7 @@ export def "user-groups tuleapProjectRESTv1UserGroupResourceCreateUgroups" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a user ◑
@@ -1407,6 +1456,7 @@ export def "users tuleapUserRESTv1UserResourceRetrieveId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -1414,7 +1464,7 @@ export def "users tuleapUserRESTv1UserResourceRetrieveId" [
   let full_url = (build-url $base $"/users/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Partial update of user details 🔐
@@ -1430,6 +1480,7 @@ export def "users tuleapUserRESTv1UserResourceModifyUserDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   values: list # User fields values
 ]: any -> list<string> {
@@ -1441,7 +1492,7 @@ export def "users tuleapUserRESTv1UserResourceModifyUserDetails" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get users ◑
@@ -1456,6 +1507,7 @@ export def "users retrieveTuleapUserRESTv1UserResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # Search string (3 chars min in length)
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
@@ -1467,7 +1519,7 @@ export def "users retrieveTuleapUserRESTv1UserResource" [
   let full_url = (build-url $base "/users" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the list of user groups the given user is member of 🔐
@@ -1483,6 +1535,7 @@ export def "users-membership tuleapUserRESTv1UserResourceRetrieveMembership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --scope: string@scope-completer # null $scope Scope to project permissions or platform permissions
   --format: string@format-completer # null $format Special format to display the groups, only works with project scope
@@ -1493,7 +1546,7 @@ export def "users-membership tuleapUserRESTv1UserResourceRetrieveMembership" [
   let full_url = (build-url $base $"/users/($id)/membership" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get dashboards ◑
@@ -1509,6 +1562,7 @@ export def "users-dashboards tuleapUserRESTv1UserResourceRetrieveDashboards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of dashboards displayed per page (format: int64, default: 50)
   --offset: int # Position of the first dashboard to display (format: int64)
@@ -1519,7 +1573,7 @@ export def "users-dashboards tuleapUserRESTv1UserResourceRetrieveDashboards" [
   let full_url = (build-url $base $"/users/($id)/dashboards" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user preference ◑
@@ -1535,6 +1589,7 @@ export def "users-preferences tuleapUserRESTv1UserResourceRetrievePreferences" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --key: string # Preference key
 ]: nothing -> record<key: string, value: string> {
@@ -1544,7 +1599,7 @@ export def "users-preferences tuleapUserRESTv1UserResourceRetrievePreferences" [
   let full_url = (build-url $base $"/users/($id)/preferences" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a user preference ◑
@@ -1560,6 +1615,7 @@ export def "users-preferences tuleapUserRESTv1UserResourceRemovePreferences" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --key: string # Preference key
 ]: nothing -> list<string> {
@@ -1569,7 +1625,7 @@ export def "users-preferences tuleapUserRESTv1UserResourceRemovePreferences" [
   let full_url = (build-url $base $"/users/($id)/preferences" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set a user preference ◑
@@ -1585,6 +1641,7 @@ export def "users-preferences tuleapUserRESTv1UserResourceModifyPreferences" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   key: string
   value: string # | false
@@ -1597,7 +1654,7 @@ export def "users-preferences tuleapUserRESTv1UserResourceModifyPreferences" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the history of a user ◑
@@ -1613,6 +1670,7 @@ export def "users-history tuleapUserRESTv1UserResourceRetrieveHistory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<entries: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -1620,7 +1678,7 @@ export def "users-history tuleapUserRESTv1UserResourceRetrieveHistory" [
   let full_url = (build-url $base $"/users/($id)/history")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Clear the history of a user ◑
@@ -1636,6 +1694,7 @@ export def "users-history tuleapUserRESTv1UserResourceUpdateHistory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   history_entries: list # History entries representation
 ]: any -> list<string> {
@@ -1647,7 +1706,7 @@ export def "users-history tuleapUserRESTv1UserResourceUpdateHistory" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the access keys of a user 🔐
@@ -1663,6 +1722,7 @@ export def "users-access-keys tuleapUserRESTv1UserResourceRetrieveAccessKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed (format: int64, default: 50)
   --offset: int # Position of the first element to display (format: int64)
@@ -1673,7 +1733,7 @@ export def "users-access-keys tuleapUserRESTv1UserResourceRetrieveAccessKeys" [
   let full_url = (build-url $base $"/users/($id)/access_keys" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user's artifacts 🔐
@@ -1689,6 +1749,7 @@ export def "users-artifacts tuleapTrackerRESTArtifactUsersArtifactsResourceRetri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # What artifacts to retrieve
   --offset: int # Offset in the collection (format: int64)
@@ -1700,7 +1761,7 @@ export def "users-artifacts tuleapTrackerRESTArtifactUsersArtifactsResourceRetri
   let full_url = (build-url $base $"/users/($id)/artifacts" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Timetracking times 🔐
@@ -1716,6 +1777,7 @@ export def "users-timetracking tuleapTimetrackingRESTv1UserTimetrackingUserResou
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # JSON object of search criteria properties
   --limit: int # Number of elements displayed per page (format: int64, default: 100)
@@ -1727,7 +1789,7 @@ export def "users-timetracking tuleapTimetrackingRESTv1UserTimetrackingUserResou
   let full_url = (build-url $base $"/users/($id)/timetracking" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create dashboard 🔐
@@ -1742,6 +1804,7 @@ export def "user-dashboards createTuleapUserRESTv1UserDashboardsResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # Name of the dashboard
 ]: any -> record<id: int, name: string> {
@@ -1753,7 +1816,7 @@ export def "user-dashboards createTuleapUserRESTv1UserDashboardsResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve membership information for a set of users 🔐
@@ -1768,6 +1831,7 @@ export def "users-memberships retrieveTuleapUserRESTv1UserMembershipResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string@query-completer # Criterion to filter the results
   --offset: int # Number of elements displayed per page (format: int64)
@@ -1779,7 +1843,7 @@ export def "users-memberships retrieveTuleapUserRESTv1UserMembershipResource" [
   let full_url = (build-url $base "/users_memberships" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve fields for project creation 🔐
@@ -1794,6 +1858,7 @@ export def "project-fields retrieveTuleapRESTv1ProjectFieldsResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
   --offset: int # Position of the first element to display (format: int64)
@@ -1804,7 +1869,7 @@ export def "project-fields retrieveTuleapRESTv1ProjectFieldsResource" [
   let full_url = (build-url $base "/project_fields" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a PhpWiki page representation ◑
@@ -1820,6 +1885,7 @@ export def "phpwiki retrieveTuleapPhpWikiRESTv1PhpWikiResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<last_version: int, versions: list<any>, id: int, uri: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -1827,7 +1893,7 @@ export def "phpwiki retrieveTuleapPhpWikiRESTv1PhpWikiResource" [
   let full_url = (build-url $base $"/phpwiki/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a PhpWiki page version representation ◑
@@ -1843,6 +1909,7 @@ export def "phpwiki-versions tuleapPhpWikiRESTv1PhpWikiResourceRetrieveVersions"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --version-id: int # Id of the version to filter the collection. If version_id=0, we return the last version. (format: int64)
 ]: nothing -> list<any> {
@@ -1852,7 +1919,7 @@ export def "phpwiki-versions tuleapPhpWikiRESTv1PhpWikiResourceRetrieveVersions"
   let full_url = (build-url $base $"/phpwiki/($id)/versions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the list of items referencing the given wiki page ◑
@@ -1868,6 +1935,7 @@ export def "phpwiki-items-referencing-wiki-page tuleapPhpWikiRESTv1PhpWikiResour
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -1875,7 +1943,7 @@ export def "phpwiki-items-referencing-wiki-page tuleapPhpWikiRESTv1PhpWikiResour
   let full_url = (build-url $base $"/phpwiki/($id)/items_referencing_wiki_page")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # To have a json web token 🔓
@@ -1890,6 +1958,7 @@ export def "jwt retrieveTuleapJWTRESTv1JWTResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -1897,7 +1966,7 @@ export def "jwt retrieveTuleapJWTRESTv1JWTResource" [
   let full_url = (build-url $base "/jwt")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get system events 🔐
@@ -1912,6 +1981,7 @@ export def "system-event retrieveTuleapSystemEventRESTv1SystemEventResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --status: string@status-completer-1 # Number of elements displayed per page
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
@@ -1923,7 +1993,7 @@ export def "system-event retrieveTuleapSystemEventRESTv1SystemEventResource" [
   let full_url = (build-url $base "/system_event" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new access key 🔐
@@ -1938,6 +2008,7 @@ export def "access-keys createTuleapUserAccessKeyRESTAccessKeyResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   description: string
   --expiration-date: string
@@ -1951,7 +2022,7 @@ export def "access-keys createTuleapUserAccessKeyRESTAccessKeyResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get information about an access key 🔐
@@ -1967,6 +2038,7 @@ export def "access-keys retrieveTuleapUserAccessKeyRESTAccessKeyResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: int, creation_date: string, expiration_date: string, description: string, last_used_on: string, last_used_by: string, scopes: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -1974,7 +2046,7 @@ export def "access-keys retrieveTuleapUserAccessKeyRESTAccessKeyResource" [
   let full_url = (build-url $base $"/access_keys/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke an access key 🔐
@@ -1990,6 +2062,7 @@ export def "access-keys removeTuleapUserAccessKeyRESTAccessKeyResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -1997,7 +2070,7 @@ export def "access-keys removeTuleapUserAccessKeyRESTAccessKeyResource" [
   let full_url = (build-url $base $"/access_keys/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update service ◑
@@ -2013,6 +2086,7 @@ export def "project-services tuleapProjectRESTv1ServiceResourceUpdateId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --is-enabled: oneof<nothing, bool> # Enable or disable the service
 ]: any -> string {
@@ -2024,7 +2098,7 @@ export def "project-services tuleapProjectRESTv1ServiceResourceUpdateId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new invitation 🔐
@@ -2039,6 +2113,7 @@ export def "invitations createTuleapInviteBuddyRESTv1InvitationsResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   emails: list
   --custom-message: string
@@ -2052,7 +2127,7 @@ export def "invitations createTuleapInviteBuddyRESTv1InvitationsResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Put banner 🔐
@@ -2067,6 +2142,7 @@ export def "banner tuleapPlatformBannerRESTv1BannerResourceUpdateBanner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   message: string
   importance: string@importance-completer
@@ -2080,7 +2156,7 @@ export def "banner tuleapPlatformBannerRESTv1BannerResourceUpdateBanner" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete the banner message 🔐
@@ -2095,6 +2171,7 @@ export def "banner tuleapPlatformBannerRESTv1BannerResourceRemoveBanner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -2102,7 +2179,7 @@ export def "banner tuleapPlatformBannerRESTv1BannerResourceRemoveBanner" [
   let full_url = (build-url $base "/banner")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get banner ◑
@@ -2117,6 +2194,7 @@ export def "banner tuleapPlatformBannerRESTv1BannerResourceRetrieveBanner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<message: string, importance: string, expiration_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -2124,7 +2202,7 @@ export def "banner tuleapPlatformBannerRESTv1BannerResourceRetrieveBanner" [
   let full_url = (build-url $base "/banner")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the Tuleap build version 🔓
@@ -2139,6 +2217,7 @@ export def "version retrieveTuleapBuildVersionRESTv1VersionResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<flavor_name: string, version_number: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -2146,7 +2225,7 @@ export def "version retrieveTuleapBuildVersionRESTv1VersionResource" [
   let full_url = (build-url $base "/version")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get item ◑
@@ -2162,6 +2241,7 @@ export def "docman-items tuleapDocmanRESTv1DocmanItemsResourceRetrieveId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --with-size: oneof<nothing, bool> # <b>Only for folders</b>. When true, the size of the folder in Bytes is returned in the representation. <div class="tlp-alert-info"> Please note <ul> <li>The size of a folder is computed on the documents of type "file", that is to say files and embedded files.</li> <li>The number of files is the sum of the number of files, embedded files and folders.</li> </ul> </div>
 ]: nothing -> record<id: int, title: string, description: string, post_processed_description: string, owner: string, last_update_date: string, creation_date: string, user_can_write: bool, user_can_delete: bool, type: string, file_properties: string, embedded_file_properties: string, link_properties: string, wiki_properties: string, parent_id: int, is_expanded: bool, can_user_manage: bool, lock_info: string, metadata: list<any>, has_approval_table: bool, is_approval_table_enabled: bool, approval_table: string, permissions_for_groups: record<can_read: list<any>, can_write: list<any>, can_manage: list<any>>, folder_properties: string, other_type_properties: string, item_icon: string, move_uri: string> {
@@ -2171,7 +2251,7 @@ export def "docman-items tuleapDocmanRESTv1DocmanItemsResourceRetrieveId" [
   let full_url = (build-url $base $"/docman_items/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the content of a folder ◑
@@ -2187,6 +2267,7 @@ export def "docman-items-docman-items tuleapDocmanRESTv1DocmanItemsResourceRetri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed (format: int64, default: 50)
   --offset: int # Position of the first element to display (format: int64)
@@ -2197,7 +2278,7 @@ export def "docman-items-docman-items tuleapDocmanRESTv1DocmanItemsResourceRetri
   let full_url = (build-url $base $"/docman_items/($id)/docman_items" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the parents of an item ◑
@@ -2213,6 +2294,7 @@ export def "docman-items-parents tuleapDocmanRESTv1DocmanItemsResourceRetrievePa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed (format: int64, default: 50)
   --offset: int # Position of the first element to display (format: int64)
@@ -2223,7 +2305,7 @@ export def "docman-items-parents tuleapDocmanRESTv1DocmanItemsResourceRetrievePa
   let full_url = (build-url $base $"/docman_items/($id)/parents" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the logs of an item ◑
@@ -2239,6 +2321,7 @@ export def "docman-items-logs tuleapDocmanRESTv1DocmanItemsResourceRetrieveLogs"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed (format: int64, default: 50)
   --offset: int # Position of the first element to display (format: int64)
@@ -2249,7 +2332,7 @@ export def "docman-items-logs tuleapDocmanRESTv1DocmanItemsResourceRetrieveLogs"
   let full_url = (build-url $base $"/docman_items/($id)/logs" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all item approval tables ◑
@@ -2265,6 +2348,7 @@ export def "docman-items-approval-tables tuleapDocmanRESTv1DocmanItemsApprovalTa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements to fetch (format: int64, default: 50)
   --offset: int # Position of the first element to fetch (format: int64)
@@ -2275,7 +2359,7 @@ export def "docman-items-approval-tables tuleapDocmanRESTv1DocmanItemsApprovalTa
   let full_url = (build-url $base $"/docman_items/($id)/approval_tables" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get specific item approval table ◑
@@ -2292,6 +2376,7 @@ export def "docman-items-approval-table tuleapDocmanRESTv1DocmanItemsApprovalTab
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: int, table_owner: record<id: int, uri: string, user_url: string, real_name: string, display_name: string, username: string, ldap_id: string, avatar_url: string, is_anonymous: bool, has_avatar: bool>, approval_state: string, approval_request_date: string, has_been_approved: bool, version_id: int, version_number: int, version_label: string, notification_type: string, state: string, is_closed: bool, description: string, post_processed_description: string, reviewers: list<string>, reminder_occurence: int, version_open_href: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -2299,7 +2384,7 @@ export def "docman-items-approval-table tuleapDocmanRESTv1DocmanItemsApprovalTab
   let full_url = (build-url $base $"/docman_items/($id)/approval_table/($version)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an approval table for item if none exists ◑
@@ -2315,6 +2400,7 @@ export def "docman-items-approval-table tuleapDocmanRESTv1DocmanItemsApprovalTab
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   users: list # List for reviewer users ids
   user_groups: list # List of reviewer user groups ids
@@ -2327,7 +2413,7 @@ export def "docman-items-approval-table tuleapDocmanRESTv1DocmanItemsApprovalTab
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update the current approval table of the document ◑
@@ -2343,6 +2429,7 @@ export def "docman-items-approval-table tuleapDocmanRESTv1DocmanItemsApprovalTab
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   owner: int # ID of the table owner (format: int64)
   status: string@status-completer-2 # Status of the table
@@ -2360,7 +2447,7 @@ export def "docman-items-approval-table tuleapDocmanRESTv1DocmanItemsApprovalTab
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Perform asked action on approval table ◑
@@ -2376,6 +2463,7 @@ export def "docman-items-approval-table tuleapDocmanRESTv1DocmanItemsApprovalTab
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   action: string@action-completer # Which action to perform on document approval table
 ]: any -> string {
@@ -2387,7 +2475,7 @@ export def "docman-items-approval-table tuleapDocmanRESTv1DocmanItemsApprovalTab
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete the last approval table for item ◑
@@ -2403,6 +2491,7 @@ export def "docman-items-approval-table tuleapDocmanRESTv1DocmanItemsApprovalTab
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -2410,7 +2499,7 @@ export def "docman-items-approval-table tuleapDocmanRESTv1DocmanItemsApprovalTab
   let full_url = (build-url $base $"/docman_items/($id)/approval_table")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change user review on approval table ◑
@@ -2426,6 +2515,7 @@ export def "docman-items-approval-table-review tuleapDocmanRESTv1DocmanItemsAppr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   review: string@review-completer # Review state of user
   --comment: string # Review comment
@@ -2439,7 +2529,7 @@ export def "docman-items-approval-table-review tuleapDocmanRESTv1DocmanItemsAppr
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send a reminder to all approvers according to table notification type ◑
@@ -2455,6 +2545,7 @@ export def "docman-items-approval-table-reminder tuleapDocmanRESTv1DocmanItemsAp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -2462,7 +2553,7 @@ export def "docman-items-approval-table-reminder tuleapDocmanRESTv1DocmanItemsAp
   let full_url = (build-url $base $"/docman_items/($id)/approval_table/reminder")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Force send a reminder to a specific approver ◑
@@ -2479,6 +2570,7 @@ export def "docman-items-approval-table-reminder tuleapDocmanRESTv1DocmanItemsAp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -2486,7 +2578,7 @@ export def "docman-items-approval-table-reminder tuleapDocmanRESTv1DocmanItemsAp
   let full_url = (build-url $base $"/docman_items/($id)/approval_table/reminder/($reviewer_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  🔓
@@ -2502,6 +2594,7 @@ export def "docman-items-buildfromitemidforapprovaltables tuleapDocmanRESTv1Docm
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -2509,7 +2602,7 @@ export def "docman-items-buildfromitemidforapprovaltables tuleapDocmanRESTv1Docm
   let full_url = (build-url $base $"/docman_items/buildfromitemidforapprovaltables/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Move an existing file document ◑
@@ -2526,6 +2619,7 @@ export def "docman-files modifyTuleapDocmanRESTv1DocmanFilesResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   move: any # shape: {destination_folder_id: int}
 ]: any -> string {
@@ -2537,7 +2631,7 @@ export def "docman-files modifyTuleapDocmanRESTv1DocmanFilesResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an existing file document ◑
@@ -2553,6 +2647,7 @@ export def "docman-files removeTuleapDocmanRESTv1DocmanFilesResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -2560,7 +2655,7 @@ export def "docman-files removeTuleapDocmanRESTv1DocmanFilesResource" [
   let full_url = (build-url $base $"/docman_files/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lock a specific file document ◑
@@ -2576,6 +2671,7 @@ export def "docman-files-lock tuleapDocmanRESTv1DocmanFilesResourceCreateLock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -2583,7 +2679,7 @@ export def "docman-files-lock tuleapDocmanRESTv1DocmanFilesResourceCreateLock" [
   let full_url = (build-url $base $"/docman_files/($id)/lock")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unlock an already locked file document ◑
@@ -2599,6 +2695,7 @@ export def "docman-files-lock tuleapDocmanRESTv1DocmanFilesResourceRemoveLock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -2606,7 +2703,7 @@ export def "docman-files-lock tuleapDocmanRESTv1DocmanFilesResourceRemoveLock" [
   let full_url = (build-url $base $"/docman_files/($id)/lock")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a version of a file 🔐
@@ -2623,6 +2720,7 @@ export def "docman-files-versions tuleapDocmanRESTv1DocmanFilesResourceCreateVer
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --version-title: string # Title of version
   --change-log: string # Description of changes
@@ -2638,7 +2736,7 @@ export def "docman-files-versions tuleapDocmanRESTv1DocmanFilesResourceCreateVer
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the versions of an item ◑
@@ -2654,6 +2752,7 @@ export def "docman-files-versions tuleapDocmanRESTv1DocmanFilesResourceRetrieveV
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed (format: int64, default: 50)
   --offset: int # Position of the first element to display (format: int64)
@@ -2664,7 +2763,7 @@ export def "docman-files-versions tuleapDocmanRESTv1DocmanFilesResourceRetrieveV
   let full_url = (build-url $base $"/docman_files/($id)/versions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the file document metadata ◑
@@ -2680,6 +2779,7 @@ export def "docman-files-metadata tuleapDocmanRESTv1DocmanFilesResourceUpdateMet
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --status: string@status-completer-3 # Item status
   --obsolescence-date: string # | null Obsolescence date
@@ -2696,7 +2796,7 @@ export def "docman-files-metadata tuleapDocmanRESTv1DocmanFilesResourceUpdateMet
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update permissions of a file document ◑
@@ -2712,6 +2812,7 @@ export def "docman-files-permissions tuleapDocmanRESTv1DocmanFilesResourceUpdate
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   can_read: list
   can_write: list
@@ -2725,7 +2826,7 @@ export def "docman-files-permissions tuleapDocmanRESTv1DocmanFilesResourceUpdate
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Move an existing folder ◑
@@ -2742,6 +2843,7 @@ export def "docman-folders modifyTuleapDocmanRESTv1DocmanFoldersResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   move: any # shape: {destination_folder_id: int}
 ]: any -> string {
@@ -2753,7 +2855,7 @@ export def "docman-folders modifyTuleapDocmanRESTv1DocmanFoldersResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an existing folder and its content ◑
@@ -2769,6 +2871,7 @@ export def "docman-folders removeTuleapDocmanRESTv1DocmanFoldersResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -2776,7 +2879,7 @@ export def "docman-folders removeTuleapDocmanRESTv1DocmanFoldersResource" [
   let full_url = (build-url $base $"/docman_folders/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new file document ◑
@@ -2795,6 +2898,7 @@ export def "docman-folders-files tuleapDocmanRESTv1DocmanFoldersResourceCreateFi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --title: string # Item title Mandatory if copy is not set
   --description: string # Item description
@@ -2813,7 +2917,7 @@ export def "docman-folders-files tuleapDocmanRESTv1DocmanFoldersResourceCreateFi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create new folder ◑
@@ -2831,6 +2935,7 @@ export def "docman-folders-folders tuleapDocmanRESTv1DocmanFoldersResourceCreate
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --title: string # Item title Mandatory if copy is not set
   --description: string # Item description
@@ -2847,7 +2952,7 @@ export def "docman-folders-folders tuleapDocmanRESTv1DocmanFoldersResourceCreate
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create new empty document ◑
@@ -2865,6 +2970,7 @@ export def "docman-folders-empties tuleapDocmanRESTv1DocmanFoldersResourceCreate
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --title: string # Item title Mandatory if copy is not set
   --description: string # Item description
@@ -2882,7 +2988,7 @@ export def "docman-folders-empties tuleapDocmanRESTv1DocmanFoldersResourceCreate
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create new wiki document ◑
@@ -2901,6 +3007,7 @@ export def "docman-folders-wikis tuleapDocmanRESTv1DocmanFoldersResourceCreateWi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --title: string # Item title Mandatory if copy is not set
   --description: string # Item description
@@ -2919,7 +3026,7 @@ export def "docman-folders-wikis tuleapDocmanRESTv1DocmanFoldersResourceCreateWi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create new embedded document ◑
@@ -2938,6 +3045,7 @@ export def "docman-folders-embedded-files tuleapDocmanRESTv1DocmanFoldersResourc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --title: string # Item title Mandatory if copy is not set
   --description: string # Item description
@@ -2956,7 +3064,7 @@ export def "docman-folders-embedded-files tuleapDocmanRESTv1DocmanFoldersResourc
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create new link document ◑
@@ -2975,6 +3083,7 @@ export def "docman-folders-links tuleapDocmanRESTv1DocmanFoldersResourceCreateLi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --title: string # Item title Mandatory if copy is not set
   --description: string # Item description
@@ -2993,7 +3102,7 @@ export def "docman-folders-links tuleapDocmanRESTv1DocmanFoldersResourceCreateLi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create new other type document ◑
@@ -3011,6 +3120,7 @@ export def "docman-folders-others tuleapDocmanRESTv1DocmanFoldersResourceCreateO
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --title: string # Item title Mandatory if copy is not set
   --description: string # Item description
@@ -3029,7 +3139,7 @@ export def "docman-folders-others tuleapDocmanRESTv1DocmanFoldersResourceCreateO
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update the folder metadata and apply this changes to its children ◑
@@ -3046,6 +3156,7 @@ export def "docman-folders-metadata tuleapDocmanRESTv1DocmanFoldersResourceUpdat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   status: any # shape: {value?: "none"|"draft"|"approved"|"rejected", recursion: "none"|"folders"|"all_items"}
   --metadata: list # | null
@@ -3060,7 +3171,7 @@ export def "docman-folders-metadata tuleapDocmanRESTv1DocmanFoldersResourceUpdat
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update permissions of a folder ◑
@@ -3076,6 +3187,7 @@ export def "docman-folders-permissions tuleapDocmanRESTv1DocmanFoldersResourceUp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --apply-permissions-on-children: oneof<nothing, bool>
   can_read: list
@@ -3090,7 +3202,7 @@ export def "docman-folders-permissions tuleapDocmanRESTv1DocmanFoldersResourceUp
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Move an existing embedded file document ◑
@@ -3107,6 +3219,7 @@ export def "docman-embedded-files modifyTuleapDocmanRESTv1DocmanEmbeddedFilesRes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   move: any # shape: {destination_folder_id: int}
 ]: any -> string {
@@ -3118,7 +3231,7 @@ export def "docman-embedded-files modifyTuleapDocmanRESTv1DocmanEmbeddedFilesRes
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an existing embedded file document ◑
@@ -3134,6 +3247,7 @@ export def "docman-embedded-files removeTuleapDocmanRESTv1DocmanEmbeddedFilesRes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -3141,7 +3255,7 @@ export def "docman-embedded-files removeTuleapDocmanRESTv1DocmanEmbeddedFilesRes
   let full_url = (build-url $base $"/docman_embedded_files/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lock a specific embedded file document ◑
@@ -3157,6 +3271,7 @@ export def "docman-embedded-files-lock tuleapDocmanRESTv1DocmanEmbeddedFilesReso
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -3164,7 +3279,7 @@ export def "docman-embedded-files-lock tuleapDocmanRESTv1DocmanEmbeddedFilesReso
   let full_url = (build-url $base $"/docman_embedded_files/($id)/lock")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unlock an already locked embedded file document ◑
@@ -3180,6 +3295,7 @@ export def "docman-embedded-files-lock tuleapDocmanRESTv1DocmanEmbeddedFilesReso
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -3187,7 +3303,7 @@ export def "docman-embedded-files-lock tuleapDocmanRESTv1DocmanEmbeddedFilesReso
   let full_url = (build-url $base $"/docman_embedded_files/($id)/lock")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get versions ◑
@@ -3203,6 +3319,7 @@ export def "docman-embedded-files-versions tuleapDocmanRESTv1DocmanEmbeddedFiles
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed (format: int64, default: 50)
   --offset: int # Position of the first element to display (format: int64)
@@ -3213,7 +3330,7 @@ export def "docman-embedded-files-versions tuleapDocmanRESTv1DocmanEmbeddedFiles
   let full_url = (build-url $base $"/docman_embedded_files/($id)/versions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a version of an embedded file document 🔐
@@ -3230,6 +3347,7 @@ export def "docman-embedded-files-versions tuleapDocmanRESTv1DocmanEmbeddedFiles
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --version-title: string # Title of version
   --change-log: string # Description of changes
@@ -3245,7 +3363,7 @@ export def "docman-embedded-files-versions tuleapDocmanRESTv1DocmanEmbeddedFiles
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update the embedded file document metadata ◑
@@ -3261,6 +3379,7 @@ export def "docman-embedded-files-metadata tuleapDocmanRESTv1DocmanEmbeddedFiles
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --status: string@status-completer-3 # Item status
   --obsolescence-date: string # | null Obsolescence date
@@ -3277,7 +3396,7 @@ export def "docman-embedded-files-metadata tuleapDocmanRESTv1DocmanEmbeddedFiles
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update permissions of an embedded file document ◑
@@ -3293,6 +3412,7 @@ export def "docman-embedded-files-permissions tuleapDocmanRESTv1DocmanEmbeddedFi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   can_read: list
   can_write: list
@@ -3306,7 +3426,7 @@ export def "docman-embedded-files-permissions tuleapDocmanRESTv1DocmanEmbeddedFi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Move an existing wiki document ◑
@@ -3323,6 +3443,7 @@ export def "docman-wikis modifyTuleapDocmanRESTv1DocmanWikiResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   move: any # shape: {destination_folder_id: int}
 ]: any -> string {
@@ -3334,7 +3455,7 @@ export def "docman-wikis modifyTuleapDocmanRESTv1DocmanWikiResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an existing wiki document ◑
@@ -3350,6 +3471,7 @@ export def "docman-wikis removeTuleapDocmanRESTv1DocmanWikiResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --delete-associated-wiki-page: oneof<nothing, bool>
 ]: nothing -> string {
@@ -3359,7 +3481,7 @@ export def "docman-wikis removeTuleapDocmanRESTv1DocmanWikiResource" [
   let full_url = (build-url $base $"/docman_wikis/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a version of a wiki document 🔐
@@ -3376,6 +3498,7 @@ export def "docman-wikis-versions tuleapDocmanRESTv1DocmanWikiResourceCreateVers
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --version-title: string # Title of version
   --change-log: string # Description of changes
@@ -3390,7 +3513,7 @@ export def "docman-wikis-versions tuleapDocmanRESTv1DocmanWikiResourceCreateVers
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update the wiki document metadata ◑
@@ -3406,6 +3529,7 @@ export def "docman-wikis-metadata tuleapDocmanRESTv1DocmanWikiResourceUpdateMeta
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --status: string@status-completer-3 # Item status
   --obsolescence-date: string # | null Obsolescence date
@@ -3422,7 +3546,7 @@ export def "docman-wikis-metadata tuleapDocmanRESTv1DocmanWikiResourceUpdateMeta
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lock a specific wiki document ◑
@@ -3438,6 +3562,7 @@ export def "docman-wikis-lock tuleapDocmanRESTv1DocmanWikiResourceCreateLock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -3445,7 +3570,7 @@ export def "docman-wikis-lock tuleapDocmanRESTv1DocmanWikiResourceCreateLock" [
   let full_url = (build-url $base $"/docman_wikis/($id)/lock")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unlock an already locked wiki document ◑
@@ -3461,6 +3586,7 @@ export def "docman-wikis-lock tuleapDocmanRESTv1DocmanWikiResourceRemoveLock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -3468,7 +3594,7 @@ export def "docman-wikis-lock tuleapDocmanRESTv1DocmanWikiResourceRemoveLock" [
   let full_url = (build-url $base $"/docman_wikis/($id)/lock")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update permissions of a wiki document ◑
@@ -3484,6 +3610,7 @@ export def "docman-wikis-permissions tuleapDocmanRESTv1DocmanWikiResourceUpdateP
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   can_read: list
   can_write: list
@@ -3497,7 +3624,7 @@ export def "docman-wikis-permissions tuleapDocmanRESTv1DocmanWikiResourceUpdateP
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Move an existing link document ◑
@@ -3514,6 +3641,7 @@ export def "docman-links modifyTuleapDocmanRESTv1DocmanLinksResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   move: any # shape: {destination_folder_id: int}
 ]: any -> string {
@@ -3525,7 +3653,7 @@ export def "docman-links modifyTuleapDocmanRESTv1DocmanLinksResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an existing link document ◑
@@ -3541,6 +3669,7 @@ export def "docman-links removeTuleapDocmanRESTv1DocmanLinksResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -3548,7 +3677,7 @@ export def "docman-links removeTuleapDocmanRESTv1DocmanLinksResource" [
   let full_url = (build-url $base $"/docman_links/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lock a specific link document ◑
@@ -3564,6 +3693,7 @@ export def "docman-links-lock tuleapDocmanRESTv1DocmanLinksResourceCreateLock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -3571,7 +3701,7 @@ export def "docman-links-lock tuleapDocmanRESTv1DocmanLinksResourceCreateLock" [
   let full_url = (build-url $base $"/docman_links/($id)/lock")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unlock an already locked link document ◑
@@ -3587,6 +3717,7 @@ export def "docman-links-lock tuleapDocmanRESTv1DocmanLinksResourceRemoveLock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -3594,7 +3725,7 @@ export def "docman-links-lock tuleapDocmanRESTv1DocmanLinksResourceRemoveLock" [
   let full_url = (build-url $base $"/docman_links/($id)/lock")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a version of a link 🔐
@@ -3611,6 +3742,7 @@ export def "docman-links-versions tuleapDocmanRESTv1DocmanLinksResourceCreateVer
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --version-title: string # Title of version
   --change-log: string # Description of changes
@@ -3626,7 +3758,7 @@ export def "docman-links-versions tuleapDocmanRESTv1DocmanLinksResourceCreateVer
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the versions of a link ◑
@@ -3642,6 +3774,7 @@ export def "docman-links-versions tuleapDocmanRESTv1DocmanLinksResourceRetrieveV
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed (format: int64, default: 50)
   --offset: int # Position of the first element to display (format: int64)
@@ -3652,7 +3785,7 @@ export def "docman-links-versions tuleapDocmanRESTv1DocmanLinksResourceRetrieveV
   let full_url = (build-url $base $"/docman_links/($id)/versions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the link document metadata ◑
@@ -3668,6 +3801,7 @@ export def "docman-links-metadata tuleapDocmanRESTv1DocmanLinksResourceUpdateMet
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --status: string@status-completer-3 # Item status
   --obsolescence-date: string # | null Obsolescence date
@@ -3684,7 +3818,7 @@ export def "docman-links-metadata tuleapDocmanRESTv1DocmanLinksResourceUpdateMet
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update permissions of a link document ◑
@@ -3700,6 +3834,7 @@ export def "docman-links-permissions tuleapDocmanRESTv1DocmanLinksResourceUpdate
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   can_read: list
   can_write: list
@@ -3713,7 +3848,7 @@ export def "docman-links-permissions tuleapDocmanRESTv1DocmanLinksResourceUpdate
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Move an existing empty document ◑
@@ -3730,6 +3865,7 @@ export def "docman-empty-documents modifyTuleapDocmanRESTv1DocmanEmptyDocumentsR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   move: any # shape: {destination_folder_id: int}
 ]: any -> string {
@@ -3741,7 +3877,7 @@ export def "docman-empty-documents modifyTuleapDocmanRESTv1DocmanEmptyDocumentsR
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an existing empty document ◑
@@ -3757,6 +3893,7 @@ export def "docman-empty-documents removeTuleapDocmanRESTv1DocmanEmptyDocumentsR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -3764,7 +3901,7 @@ export def "docman-empty-documents removeTuleapDocmanRESTv1DocmanEmptyDocumentsR
   let full_url = (build-url $base $"/docman_empty_documents/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lock a specific empty document ◑
@@ -3780,6 +3917,7 @@ export def "docman-empty-documents-lock tuleapDocmanRESTv1DocmanEmptyDocumentsRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -3787,7 +3925,7 @@ export def "docman-empty-documents-lock tuleapDocmanRESTv1DocmanEmptyDocumentsRe
   let full_url = (build-url $base $"/docman_empty_documents/($id)/lock")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unlock an already locked empty document ◑
@@ -3803,6 +3941,7 @@ export def "docman-empty-documents-lock tuleapDocmanRESTv1DocmanEmptyDocumentsRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -3810,7 +3949,7 @@ export def "docman-empty-documents-lock tuleapDocmanRESTv1DocmanEmptyDocumentsRe
   let full_url = (build-url $base $"/docman_empty_documents/($id)/lock")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the empty document metadata ◑
@@ -3826,6 +3965,7 @@ export def "docman-empty-documents-metadata tuleapDocmanRESTv1DocmanEmptyDocumen
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --status: string@status-completer-3 # Item status
   --obsolescence-date: string # | null Obsolescence date
@@ -3842,7 +3982,7 @@ export def "docman-empty-documents-metadata tuleapDocmanRESTv1DocmanEmptyDocumen
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an embedded file document ◑
@@ -3858,6 +3998,7 @@ export def "docman-empty-documents-embedded-file tuleapDocmanRESTv1DocmanEmptyDo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --content: string
 ]: any -> string {
@@ -3869,7 +4010,7 @@ export def "docman-empty-documents-embedded-file tuleapDocmanRESTv1DocmanEmptyDo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a link document ◑
@@ -3885,6 +4026,7 @@ export def "docman-empty-documents-link tuleapDocmanRESTv1DocmanEmptyDocumentsRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   link_url: string
 ]: any -> string {
@@ -3896,7 +4038,7 @@ export def "docman-empty-documents-link tuleapDocmanRESTv1DocmanEmptyDocumentsRe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a file document ◑
@@ -3912,6 +4054,7 @@ export def "docman-empty-documents-file tuleapDocmanRESTv1DocmanEmptyDocumentsRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   file_name: string # Name of the file
   file_size: int # Size of the file (format: int64)
@@ -3924,7 +4067,7 @@ export def "docman-empty-documents-file tuleapDocmanRESTv1DocmanEmptyDocumentsRe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update permissions of an empty document ◑
@@ -3940,6 +4083,7 @@ export def "docman-empty-documents-permissions tuleapDocmanRESTv1DocmanEmptyDocu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   can_read: list
   can_write: list
@@ -3953,7 +4097,7 @@ export def "docman-empty-documents-permissions tuleapDocmanRESTv1DocmanEmptyDocu
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an existing other type document ◑
@@ -3969,6 +4113,7 @@ export def "docman-other-type-documents removeTuleapDocmanRESTv1DocmanOtherTypeD
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -3976,7 +4121,7 @@ export def "docman-other-type-documents removeTuleapDocmanRESTv1DocmanOtherTypeD
   let full_url = (build-url $base $"/docman_other_type_documents/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the other type document metadata ◑
@@ -3992,6 +4137,7 @@ export def "docman-other-type-documents-metadata tuleapDocmanRESTv1DocmanOtherTy
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --status: string@status-completer-3 # Item status
   --obsolescence-date: string # | null Obsolescence date
@@ -4008,7 +4154,7 @@ export def "docman-other-type-documents-metadata tuleapDocmanRESTv1DocmanOtherTy
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update permissions of the document ◑
@@ -4024,6 +4170,7 @@ export def "docman-other-type-documents-permissions tuleapDocmanRESTv1DocmanOthe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   can_read: list
   can_write: list
@@ -4037,7 +4184,7 @@ export def "docman-other-type-documents-permissions tuleapDocmanRESTv1DocmanOthe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search items ◑
@@ -4053,6 +4200,7 @@ export def "docman-search tuleapDocmanRESTv1SearchResourceSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --global-search: string # search in all string properties
   --properties: list
@@ -4068,7 +4216,7 @@ export def "docman-search tuleapDocmanRESTv1SearchResourceSearch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete version 🔐
@@ -4084,6 +4232,7 @@ export def "docman-file-versions tuleapDocmanRESTv1FilesFileVersionsResourceRemo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -4091,7 +4240,7 @@ export def "docman-file-versions tuleapDocmanRESTv1FilesFileVersionsResourceRemo
   let full_url = (build-url $base $"/docman_file_versions/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete version 🔐
@@ -4107,6 +4256,7 @@ export def "docman-embedded-file-versions tuleapDocmanRESTv1EmbeddedFilesEmbedde
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -4114,7 +4264,7 @@ export def "docman-embedded-file-versions tuleapDocmanRESTv1EmbeddedFilesEmbedde
   let full_url = (build-url $base $"/docman_embedded_file_versions/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get content ◑
@@ -4130,6 +4280,7 @@ export def "docman-embedded-file-versions-content tuleapDocmanRESTv1EmbeddedFile
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<version_number: int, content: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -4137,7 +4288,7 @@ export def "docman-embedded-file-versions-content tuleapDocmanRESTv1EmbeddedFile
   let full_url = (build-url $base $"/docman_embedded_file_versions/($id)/content")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  ◑
@@ -4153,6 +4304,7 @@ export def "git retrieveTuleapGitRESTv1RepositoryResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: int, uri: string, name: string, label: string, path: string, path_without_project: string, description: string, last_update_date: string, permissions: string, server: string, html_url: string, default_branch: string, additional_information: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -4160,7 +4312,7 @@ export def "git retrieveTuleapGitRESTv1RepositoryResource" [
   let full_url = (build-url $base $"/git/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Patch Git repository 🔐
@@ -4177,6 +4329,7 @@ export def "git TuleapGitRESTv1RepositoryResourceModifyId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --migrate-to-gerrit: any # shape: {server: int, permissions: "default"|" none"}
   --disconnect-from-gerrit: string@disconnect-from-gerrit-completer
@@ -4190,7 +4343,7 @@ export def "git TuleapGitRESTv1RepositoryResourceModifyId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Post ◑
@@ -4205,6 +4358,7 @@ export def "git createTuleapGitRESTv1RepositoryResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   project_id: int # project id (format: int64)
   name: string # Repository name
@@ -4217,7 +4371,7 @@ export def "git createTuleapGitRESTv1RepositoryResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Post a commit status ◑
@@ -4234,6 +4388,7 @@ export def "git-statuses TuleapGitRESTv1RepositoryResourceCreateCommitStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   state: string@state-completer
   --body-token: string
@@ -4246,7 +4401,7 @@ export def "git-statuses TuleapGitRESTv1RepositoryResourceCreateCommitStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the tree of a git repository. ◑
@@ -4262,6 +4417,7 @@ export def "git-tree TuleapGitRESTv1RepositoryResourceRetrieveTree" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --ref: string # reference
   --path: string # path of the file
@@ -4274,7 +4430,7 @@ export def "git-tree TuleapGitRESTv1RepositoryResourceRetrieveTree" [
   let full_url = (build-url $base $"/git/($id)/tree" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the content of a specific file from a git repository. ◑
@@ -4290,6 +4446,7 @@ export def "git-files TuleapGitRESTv1RepositoryResourceRetrieveFileContent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --path-to-file: string # path of the file
   --ref: string # reference (default: master)
@@ -4300,7 +4457,7 @@ export def "git-files TuleapGitRESTv1RepositoryResourceRetrieveFileContent" [
   let full_url = (build-url $base $"/git/($id)/files" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all the branches of a git repository ◑
@@ -4316,6 +4473,7 @@ export def "git-branches TuleapGitRESTv1RepositoryResourceRetrieveBranches" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --offset: int # Position of the first element to display (format: int64)
   --limit: int # Number of elements displayed (format: int64, default: 50)
@@ -4327,7 +4485,7 @@ export def "git-branches TuleapGitRESTv1RepositoryResourceRetrieveBranches" [
   let full_url = (build-url $base $"/git/($id)/branches" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Git branch 🔐
@@ -4343,6 +4501,7 @@ export def "git-branches TuleapGitRESTv1RepositoryResourceCreateBranch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   branch_name: string
   reference: string
@@ -4355,7 +4514,7 @@ export def "git-branches TuleapGitRESTv1RepositoryResourceCreateBranch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all the tags of a git repository ◑
@@ -4371,6 +4530,7 @@ export def "git-tags TuleapGitRESTv1RepositoryResourceRetrieveTags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --offset: int # Position of the first element to display (format: int64)
   --limit: int # Number of elements displayed (format: int64, default: 50)
@@ -4382,7 +4542,7 @@ export def "git-tags TuleapGitRESTv1RepositoryResourceRetrieveTags" [
   let full_url = (build-url $base $"/git/($id)/tags" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a commit ◑
@@ -4399,6 +4559,7 @@ export def "git-commits TuleapGitRESTv1RepositoryResourceRetrieveCommits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<author_name: string, authored_date: string, committed_date: string, title: string, message: string, author_email: string, author: record<id: int, uri: string, user_url: string, real_name: string, display_name: string, username: string, ldap_id: string, avatar_url: string, is_anonymous: bool, has_avatar: bool>, html_url: string, commit_status: record<name: string, date: string>, verification: record<signature: string>, cross_references: list<any>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -4406,7 +4567,7 @@ export def "git-commits TuleapGitRESTv1RepositoryResourceRetrieveCommits" [
   let full_url = (build-url $base $"/git/($id)/commits/($commit_reference)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pull requests 🔐
@@ -4422,6 +4583,7 @@ export def "git-pull-requests tuleapPullRequestRESTv1RepositoryResourceRetrieveP
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # JSON object of search criteria properties
   --order: string@order-completer # Sort order by pull request creation date (default: desc)
@@ -4434,7 +4596,7 @@ export def "git-pull-requests tuleapPullRequestRESTv1RepositoryResourceRetrieveP
   let full_url = (build-url $base $"/git/($id)/pull_requests" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pull requests authors in a given git repository 🔐
@@ -4450,6 +4612,7 @@ export def "git-pull-requests-authors tuleapPullRequestRESTv1RepositoryResourceR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 50)
   --offset: int # Position of the first element to display (format: int64)
@@ -4460,7 +4623,7 @@ export def "git-pull-requests-authors tuleapPullRequestRESTv1RepositoryResourceR
   let full_url = (build-url $base $"/git/($id)/pull_requests_authors" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pull requests reviewers in a given git repository 🔐
@@ -4476,6 +4639,7 @@ export def "git-pull-requests-reviewers tuleapPullRequestRESTv1RepositoryResourc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 50)
   --offset: int # Position of the first element to display (format: int64)
@@ -4486,7 +4650,7 @@ export def "git-pull-requests-reviewers tuleapPullRequestRESTv1RepositoryResourc
   let full_url = (build-url $base $"/git/($id)/pull_requests_reviewers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Gerrit servers 🔐
@@ -4501,6 +4665,7 @@ export def "gerrit retrieveTuleapGitRESTv1GerritResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --for-project: int # The project ID to search in (format: int64)
 ]: nothing -> list<any> {
@@ -4510,7 +4675,7 @@ export def "gerrit retrieveTuleapGitRESTv1GerritResource" [
   let full_url = (build-url $base "/gerrit" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get tracker ◑
@@ -4526,6 +4691,7 @@ export def "trackers tuleapTrackerRESTv1TrackersResourceRetrieveId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -4533,7 +4699,7 @@ export def "trackers tuleapTrackerRESTv1TrackersResourceRetrieveId" [
   let full_url = (build-url $base $"/trackers/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Partial update of a tracker. 🔐
@@ -4549,6 +4715,7 @@ export def "trackers tuleapTrackerRESTv1TrackersResourceModifyWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # JSON object of search criteria properties
 ]: nothing -> string {
@@ -4558,7 +4725,7 @@ export def "trackers tuleapTrackerRESTv1TrackersResourceModifyWorkflow" [
   let full_url = (build-url $base $"/trackers/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all reports of a given tracker ◑
@@ -4574,6 +4741,7 @@ export def "trackers-tracker-reports tuleapTrackerRESTv1TrackersResourceRetrieve
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
   --offset: int # Position of the first element to display (format: int64)
@@ -4584,7 +4752,7 @@ export def "trackers-tracker-reports tuleapTrackerRESTv1TrackersResourceRetrieve
   let full_url = (build-url $base $"/trackers/($id)/tracker_reports" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all artifacts of a given tracker ◑
@@ -4600,6 +4768,7 @@ export def "trackers-artifacts tuleapTrackerRESTv1TrackersResourceRetrieveArtifa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --values: string@values-completer # Which fields to include in the response. Default is no field values
   --limit: int # Number of elements displayed per page (format: int64, default: 100)
@@ -4614,7 +4783,7 @@ export def "trackers-artifacts tuleapTrackerRESTv1TrackersResourceRetrieveArtifa
   let full_url = (build-url $base $"/trackers/($id)/artifacts" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all possible parent artifacts for a given tracker ◑
@@ -4630,6 +4799,7 @@ export def "trackers-parent-artifacts tuleapTrackerRESTv1TrackersResourceRetriev
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 100)
   --offset: int # Position of the first element to display (format: int64)
@@ -4640,7 +4810,7 @@ export def "trackers-parent-artifacts tuleapTrackerRESTv1TrackersResourceRetriev
   let full_url = (build-url $base $"/trackers/($id)/parent_artifacts" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all currently used artifact link types in a tracker ◑
@@ -4656,6 +4826,7 @@ export def "trackers-used-artifact-links tuleapTrackerRESTv1TrackersResourceRetr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
   --offset: int # Position of the first element to display (format: int64)
@@ -4666,7 +4837,7 @@ export def "trackers-used-artifact-links tuleapTrackerRESTv1TrackersResourceRetr
   let full_url = (build-url $base $"/trackers/($id)/used_artifact_links" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get artifacts ◑
@@ -4681,6 +4852,7 @@ export def "artifacts tuleapTrackerRESTv1ArtifactsResourceRetrieveArtifacts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # JSON object of search criteria properties
   --limit: int # Number of elements displayed per page (format: int64, default: 100)
@@ -4692,7 +4864,7 @@ export def "artifacts tuleapTrackerRESTv1ArtifactsResourceRetrieveArtifacts" [
   let full_url = (build-url $base "/artifacts" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create artifact 🔐
@@ -4709,6 +4881,7 @@ export def "artifacts createTuleapTrackerRESTv1ArtifactsResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   tracker: any # shape: {id: int, uri?: string, label?: string, color?: string, project?: string}
   --values: list # Artifact fields values
@@ -4723,7 +4896,7 @@ export def "artifacts createTuleapTrackerRESTv1ArtifactsResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get artifact ◑
@@ -4739,6 +4912,7 @@ export def "artifacts tuleapTrackerRESTv1ArtifactsResourceRetrieveId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --values-format: string@values-format-completer # The format of the value
   --tracker-structure-format: string@tracker-structure-format-completer # The format of the structure (default: minimal)
@@ -4749,7 +4923,7 @@ export def "artifacts tuleapTrackerRESTv1ArtifactsResourceRetrieveId" [
   let full_url = (build-url $base $"/artifacts/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an artifact given its id ◑
@@ -4765,6 +4939,7 @@ export def "artifacts tuleapTrackerRESTv1ArtifactsResourceRemoveArtifact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -4772,7 +4947,7 @@ export def "artifacts tuleapTrackerRESTv1ArtifactsResourceRemoveArtifact" [
   let full_url = (build-url $base $"/artifacts/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Artifact partial update 🔐
@@ -4789,6 +4964,7 @@ export def "artifacts tuleapTrackerRESTv1ArtifactsResourceModifyArtifact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   move: any # shape: {tracker_id: int, dry_run?: bool, should_populate_feedback_on_success?: bool}
 ]: any -> record<dry_run: record<fields: record<fields_migrated: list, fields_not_migrated: list, fields_partially_migrated: list>>> {
@@ -4800,7 +4976,7 @@ export def "artifacts tuleapTrackerRESTv1ArtifactsResourceModifyArtifact" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update artifact 🔐
@@ -4817,6 +4993,7 @@ export def "artifacts tuleapTrackerRESTv1ArtifactsResourceUpdateId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   values: list # Artifact fields values
   --comment: any # shape: {body?: string, format: string}
@@ -4829,7 +5006,7 @@ export def "artifacts tuleapTrackerRESTv1ArtifactsResourceUpdateId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get possible types for an artifact ◑
@@ -4845,6 +5022,7 @@ export def "artifacts-links tuleapTrackerRESTv1ArtifactsResourceRetrieveArtifact
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -4852,7 +5030,7 @@ export def "artifacts-links tuleapTrackerRESTv1ArtifactsResourceRetrieveArtifact
   let full_url = (build-url $base $"/artifacts/($id)/links")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all artifacts linked by type ◑
@@ -4868,6 +5046,7 @@ export def "artifacts-linked-artifacts tuleapTrackerRESTv1ArtifactsResourceRetri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --direction: string@direction-completer # The artifact link direction
   --nature: string # The artifact link type to filter
@@ -4881,7 +5060,7 @@ export def "artifacts-linked-artifacts tuleapTrackerRESTv1ArtifactsResourceRetri
   let full_url = (build-url $base $"/artifacts/($id)/linked_artifacts" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get changesets ◑
@@ -4897,6 +5076,7 @@ export def "artifacts-changesets tuleapTrackerRESTv1ArtifactsResourceRetrieveArt
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: string@fields-completer-2 # Whether you want to fetch all fields or just comments (default: all)
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
@@ -4909,7 +5089,7 @@ export def "artifacts-changesets tuleapTrackerRESTv1ArtifactsResourceRetrieveArt
   let full_url = (build-url $base $"/artifacts/($id)/changesets" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a chunk of a file 🔐
@@ -4925,6 +5105,7 @@ export def "artifact-files tuleapTrackerRESTv1ArtifactFilesResourceRetrieveId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --offset: int # Where to start to read the file (format: int64)
   --limit: int # How much to read the file (format: int64, default: 1048576)
@@ -4935,7 +5116,7 @@ export def "artifact-files tuleapTrackerRESTv1ArtifactFilesResourceRetrieveId" [
   let full_url = (build-url $base $"/artifact_files/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get files representation 🔐
@@ -4950,6 +5131,7 @@ export def "artifact-temporary-files retrieveTuleapTrackerRESTv1ArtifactTemporar
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
   --offset: int # Position of the first element to display (format: int64)
@@ -4960,7 +5142,7 @@ export def "artifact-temporary-files retrieveTuleapTrackerRESTv1ArtifactTemporar
   let full_url = (build-url $base "/artifact_temporary_files" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a temporary file 🔐
@@ -4975,6 +5157,7 @@ export def "artifact-temporary-files createTuleapTrackerRESTv1ArtifactTemporaryF
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # Name of the file
   mimetype: string # Mime-Type of the file
@@ -4989,7 +5172,7 @@ export def "artifact-temporary-files createTuleapTrackerRESTv1ArtifactTemporaryF
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a chunk of a file 🔐
@@ -5005,6 +5188,7 @@ export def "artifact-temporary-files tuleapTrackerRESTv1ArtifactTemporaryFilesRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --offset: int # Where to start to read the file (format: int64)
   --limit: int # How much to read the file (format: int64, default: 1048576)
@@ -5015,7 +5199,7 @@ export def "artifact-temporary-files tuleapTrackerRESTv1ArtifactTemporaryFilesRe
   let full_url = (build-url $base $"/artifact_temporary_files/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Append a chunk to a temporary file (not attached to any artifact) 🔐
@@ -5031,6 +5215,7 @@ export def "artifact-temporary-files tuleapTrackerRESTv1ArtifactTemporaryFilesRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   content: string # Chunk of the file (base64-encoded)
   offset: int # Used to check that the chunk uploaded is the next one (minimum value is 2) (format: int64)
@@ -5043,7 +5228,7 @@ export def "artifact-temporary-files tuleapTrackerRESTv1ArtifactTemporaryFilesRe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a temporary file 🔐
@@ -5059,6 +5244,7 @@ export def "artifact-temporary-files tuleapTrackerRESTv1ArtifactTemporaryFilesRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -5066,7 +5252,7 @@ export def "artifact-temporary-files tuleapTrackerRESTv1ArtifactTemporaryFilesRe
   let full_url = (build-url $base $"/artifact_temporary_files/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get report ◑
@@ -5082,6 +5268,7 @@ export def "tracker-reports tuleapTrackerRESTv1ReportsResourceRetrieveId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --with-unsaved-changes: oneof<nothing, bool> # Enable to take into account unsaved changes made to the report on your ongoing session
 ]: nothing -> record<id: int, uri: string, label: string, is_public: bool, is_default: bool, resources: list<string>> {
@@ -5091,7 +5278,7 @@ export def "tracker-reports tuleapTrackerRESTv1ReportsResourceRetrieveId" [
   let full_url = (build-url $base $"/tracker_reports/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get artifacts ◑
@@ -5107,6 +5294,7 @@ export def "tracker-reports-artifacts tuleapTrackerRESTv1ReportsResourceRetrieve
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --with-unsaved-changes: oneof<nothing, bool> # Enable to take into account unsaved changes made to the report on your ongoing session
   --values: string@values-completer-1 # Which fields to include in the response. Default is no field values
@@ -5121,7 +5309,7 @@ export def "tracker-reports-artifacts tuleapTrackerRESTv1ReportsResourceRetrieve
   let full_url = (build-url $base $"/tracker_reports/($id)/artifacts" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Partial update of a tracker field 🔐
@@ -5138,6 +5326,7 @@ export def "tracker-fields modifyTuleapTrackerRESTv1TrackerFieldsResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --label: string # | null The new label of the form element
   --description: string # | null The new description of the form element
@@ -5154,7 +5343,7 @@ export def "tracker-fields modifyTuleapTrackerRESTv1TrackerFieldsResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete permanently tracker field 🔐
@@ -5170,6 +5359,7 @@ export def "tracker-fields removeTuleapTrackerRESTv1TrackerFieldsResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -5177,7 +5367,7 @@ export def "tracker-fields removeTuleapTrackerRESTv1TrackerFieldsResource" [
   let full_url = (build-url $base $"/tracker_fields/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create file 🔐
@@ -5193,6 +5383,7 @@ export def "tracker-fields-files tuleapTrackerRESTv1TrackerFieldsResourceCreateF
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # The file name
   file_size: int # The file size (format: int64)
@@ -5207,7 +5398,7 @@ export def "tracker-fields-files tuleapTrackerRESTv1TrackerFieldsResourceCreateF
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a new transition for a tracker workflow 🔐
@@ -5222,6 +5413,7 @@ export def "tracker-workflow-transitions tuleapTrackerRESTv1WorkflowTransitionsR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   tracker_id: int # Id of the tracker (format: int64)
   from_id: int # Transition source as a field value id (format: int64)
@@ -5235,7 +5427,7 @@ export def "tracker-workflow-transitions tuleapTrackerRESTv1WorkflowTransitionsR
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a transition from a workflow 🔐
@@ -5251,6 +5443,7 @@ export def "tracker-workflow-transitions tuleapTrackerRESTv1WorkflowTransitionsR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -5258,7 +5451,7 @@ export def "tracker-workflow-transitions tuleapTrackerRESTv1WorkflowTransitionsR
   let full_url = (build-url $base $"/tracker_workflow_transitions/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Patch a transition from a workflow 🔐
@@ -5274,6 +5467,7 @@ export def "tracker-workflow-transitions tuleapTrackerRESTv1WorkflowTransitionsR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   authorized_user_group_ids: list # Authorized user group id
   not_empty_field_ids: list # Ids of not empty fields
@@ -5287,7 +5481,7 @@ export def "tracker-workflow-transitions tuleapTrackerRESTv1WorkflowTransitionsR
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a transition 🔐
@@ -5303,6 +5497,7 @@ export def "tracker-workflow-transitions tuleapTrackerRESTv1WorkflowTransitionsR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: int, from_id: int, to_id: int, authorized_user_group_ids: list<any>, not_empty_field_ids: list<int>, is_comment_required: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -5310,7 +5505,7 @@ export def "tracker-workflow-transitions tuleapTrackerRESTv1WorkflowTransitionsR
   let full_url = (build-url $base $"/tracker_workflow_transitions/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all post actions of a transition 🔐
@@ -5326,6 +5521,7 @@ export def "tracker-workflow-transitions-actions tuleapTrackerRESTv1WorkflowTran
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -5333,7 +5529,7 @@ export def "tracker-workflow-transitions-actions tuleapTrackerRESTv1WorkflowTran
   let full_url = (build-url $base $"/tracker_workflow_transitions/($id)/actions")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update all post actions of a transition. 🔐
@@ -5349,6 +5545,7 @@ export def "tracker-workflow-transitions-actions tuleapTrackerRESTv1WorkflowTran
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   post_actions: list # $post_actions
 ]: any -> list<string> {
@@ -5360,7 +5557,7 @@ export def "tracker-workflow-transitions-actions tuleapTrackerRESTv1WorkflowTran
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Put children in a given milestone 🔐
@@ -5376,6 +5573,7 @@ export def "milestones-milestones TuleapAgileDashboardRESTv1MilestoneResourceUpd
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   ids: list # Ids of the new milestones
 ]: any -> list<string> {
@@ -5387,7 +5585,7 @@ export def "milestones-milestones TuleapAgileDashboardRESTv1MilestoneResourceUpd
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Patch children of a given milestone 🔐
@@ -5403,6 +5601,7 @@ export def "milestones-milestones TuleapAgileDashboardRESTv1MilestoneResourceMod
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --add: list # Submilestones to add in milestone
 ]: any -> list<string> {
@@ -5414,7 +5613,7 @@ export def "milestones-milestones TuleapAgileDashboardRESTv1MilestoneResourceMod
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get sub-milestones ◑
@@ -5430,6 +5629,7 @@ export def "milestones-milestones TuleapAgileDashboardRESTv1MilestoneResourceRet
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-fields: string@fields-completer-1 # Set of fields to return in the result (default: all)
   --qp-query: string # JSON object of search criteria properties
@@ -5443,7 +5643,7 @@ export def "milestones-milestones TuleapAgileDashboardRESTv1MilestoneResourceRet
   let full_url = (build-url $base $"/milestones/($id)/milestones" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get milestone ◑
@@ -5459,6 +5659,7 @@ export def "milestones TuleapAgileDashboardRESTv1MilestoneResourceRetrieveId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: int, description: string, post_processed_description: string, uri: string, label: string, submitted_by: int, submitted_on: string, planning: string, project: string, start_date: string, end_date: string, number_days_since_start: int, number_days_until_end: int, capacity: float, remaining_effort: float, status_value: string, semantic_status: string, parent: string, artifact: string, sub_milestones_uri: string, sub_milestone_type: string, backlog_uri: string, content_uri: string, cardwall_uri: string, burndown_uri: string, last_modified_date: string, status_count: list<string>, has_user_priority_change_permission: bool, resources: list<string>, original_project_provider: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -5466,7 +5667,7 @@ export def "milestones TuleapAgileDashboardRESTv1MilestoneResourceRetrieveId" [
   let full_url = (build-url $base $"/milestones/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Siblings ◑
@@ -5482,6 +5683,7 @@ export def "milestones-siblings TuleapAgileDashboardRESTv1MilestoneResourceRetri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # JSON object of search criteria properties
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
@@ -5493,7 +5695,7 @@ export def "milestones-siblings TuleapAgileDashboardRESTv1MilestoneResourceRetri
   let full_url = (build-url $base $"/milestones/($id)/siblings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get content ◑
@@ -5509,6 +5711,7 @@ export def "milestones-content TuleapAgileDashboardRESTv1MilestoneResourceRetrie
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
   --offset: int # Position of the first element to display (format: int64)
@@ -5519,7 +5722,7 @@ export def "milestones-content TuleapAgileDashboardRESTv1MilestoneResourceRetrie
   let full_url = (build-url $base $"/milestones/($id)/content" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Put content in a given milestone 🔐
@@ -5535,6 +5738,7 @@ export def "milestones-content TuleapAgileDashboardRESTv1MilestoneResourceUpdate
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   ids: list # Ids of backlog items
 ]: any -> list<string> {
@@ -5546,7 +5750,7 @@ export def "milestones-content TuleapAgileDashboardRESTv1MilestoneResourceUpdate
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partial re-order of milestone content relative to one element 🔐
@@ -5563,6 +5767,7 @@ export def "milestones-content TuleapAgileDashboardRESTv1MilestoneResourceModify
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --order: any # shape: {ids: list, direction: string, compared_to: int}
   --add: list # Ids to add/move to milestone content
@@ -5575,7 +5780,7 @@ export def "milestones-content TuleapAgileDashboardRESTv1MilestoneResourceModify
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get backlog ◑
@@ -5591,6 +5796,7 @@ export def "milestones-backlog TuleapAgileDashboardRESTv1MilestoneResourceRetrie
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # JSON object of search criteria properties
   --include: string # What to include in results (default: not_planned)
@@ -5603,7 +5809,7 @@ export def "milestones-backlog TuleapAgileDashboardRESTv1MilestoneResourceRetrie
   let full_url = (build-url $base $"/milestones/($id)/backlog" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update backlog items priorities 🔐
@@ -5619,6 +5825,7 @@ export def "milestones-backlog TuleapAgileDashboardRESTv1MilestoneResourceUpdate
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   ids: list # Ids of backlog items
 ]: any -> list<string> {
@@ -5630,7 +5837,7 @@ export def "milestones-backlog TuleapAgileDashboardRESTv1MilestoneResourceUpdate
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Partial re-order of milestone backlog relative to one element. 🔐
@@ -5647,6 +5854,7 @@ export def "milestones-backlog TuleapAgileDashboardRESTv1MilestoneResourceModify
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --order: any # shape: {ids: list, direction: string, compared_to: int}
   --add: list # Ids to add/move to milestone backlog
@@ -5659,7 +5867,7 @@ export def "milestones-backlog TuleapAgileDashboardRESTv1MilestoneResourceModify
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add an item to the backlog of a milestone 🔐
@@ -5675,6 +5883,7 @@ export def "milestones-backlog TuleapAgileDashboardRESTv1MilestoneResourceCreate
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   artifact: list # Identification of the backlog item
 ]: any -> list<string> {
@@ -5686,7 +5895,7 @@ export def "milestones-backlog TuleapAgileDashboardRESTv1MilestoneResourceCreate
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a Cardwall ◑
@@ -5702,6 +5911,7 @@ export def "milestones-cardwall TuleapAgileDashboardRESTv1MilestoneResourceRetri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -5709,7 +5919,7 @@ export def "milestones-cardwall TuleapAgileDashboardRESTv1MilestoneResourceRetri
   let full_url = (build-url $base $"/milestones/($id)/cardwall")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Burdown data ◑
@@ -5725,6 +5935,7 @@ export def "milestones-burndown TuleapAgileDashboardRESTv1MilestoneResourceRetri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<start_date: string, duration: int, capacity: float, points: list<float>, is_under_calculation: bool, opening_days: list<int>, points_with_date: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -5732,7 +5943,7 @@ export def "milestones-burndown TuleapAgileDashboardRESTv1MilestoneResourceRetri
   let full_url = (build-url $base $"/milestones/($id)/burndown")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get content ◑
@@ -5748,6 +5959,7 @@ export def "milestones-testplan tuleapTestPlanRESTv1MilestoneResourceRetrieveTes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
   --offset: int # Position of the first element to display (format: int64)
@@ -5758,7 +5970,7 @@ export def "milestones-testplan tuleapTestPlanRESTv1MilestoneResourceRetrieveTes
   let full_url = (build-url $base $"/milestones/($id)/testplan" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get milestones ◑
@@ -5774,6 +5986,7 @@ export def "plannings-milestones TuleapAgileDashboardRESTv1PlanningResourceRetri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
   --offset: int # Position of the first element to display (format: int64)
@@ -5784,7 +5997,7 @@ export def "plannings-milestones TuleapAgileDashboardRESTv1PlanningResourceRetri
   let full_url = (build-url $base $"/plannings/($id)/milestones" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get backlog item ◑
@@ -5800,6 +6013,7 @@ export def "backlog-items retrieveTuleapAgileDashboardRESTv1BacklogItemResource"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -5807,7 +6021,7 @@ export def "backlog-items retrieveTuleapAgileDashboardRESTv1BacklogItemResource"
   let full_url = (build-url $base $"/backlog_items/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get children ◑
@@ -5823,6 +6037,7 @@ export def "backlog-items-children TuleapAgileDashboardRESTv1BacklogItemResource
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
   --offset: int # Position of the first element to display (format: int64)
@@ -5833,7 +6048,7 @@ export def "backlog-items-children TuleapAgileDashboardRESTv1BacklogItemResource
   let full_url = (build-url $base $"/backlog_items/($id)/children" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Partial re-order of backlog items plus update of children 🔐
@@ -5850,6 +6065,7 @@ export def "backlog-items-children modifyTuleapAgileDashboardRESTv1BacklogItemRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --order: any # shape: {ids: list, direction: string, compared_to: int}
   --add: list # Ids to add to backlog_items content
@@ -5862,7 +6078,7 @@ export def "backlog-items-children modifyTuleapAgileDashboardRESTv1BacklogItemRe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get test definitions ◑
@@ -5878,6 +6094,7 @@ export def "backlog-items-test-definitions tuleapTestPlanRESTv1BacklogItemResour
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --milestone-id: int # ID of the milestone (format: int64)
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
@@ -5889,7 +6106,7 @@ export def "backlog-items-test-definitions tuleapTestPlanRESTv1BacklogItemResour
   let full_url = (build-url $base $"/backlog_items/($id)/test_definitions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update card content 🔐
@@ -5905,6 +6122,7 @@ export def "cards TuleapCardwallRESTv1CardsResourceUpdateId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   label: string # Label of the card
   values: list # Card's fields values
@@ -5918,7 +6136,7 @@ export def "cards TuleapCardwallRESTv1CardsResourceUpdateId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create PullRequest 🔐
@@ -5933,6 +6151,7 @@ export def "pull-requests createTuleapPullRequestRESTv1PullRequestsResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   repository_id: int # format: int64
   repository_dest_id: int # format: int64
@@ -5947,7 +6166,7 @@ export def "pull-requests createTuleapPullRequestRESTv1PullRequestsResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get pull request 🔐
@@ -5963,6 +6182,7 @@ export def "pull-requests retrieveTuleapPullRequestRESTv1PullRequestsResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<description: string, reference_src: string, reference_dest: string, head_reference: string, resources: list<any>, user_can_merge: bool, user_can_abandon: bool, user_can_update_labels: bool, user_can_update_reviewers: bool, merge_status: string, short_stat: record<files_changed: string, lines_added: string, lines_removed: string>, last_build_status: string, last_build_date: string, raw_title: string, raw_description: string, user_can_reopen: bool, status_info: record<status_type: string, status_date: string, status_updater: record<id: int, uri: string, user_url: string, real_name: string, display_name: string, username: string, ldap_id: string, avatar_url: string, is_anonymous: bool, has_avatar: bool>>, user_can_update_title_and_description: bool, description_format: string, post_processed_description: string, id: int, title: string, uri: string, repository: record<name: string, project: string, clone_http_url: string, clone_ssh_url: string, id: int, uri: string>, repository_dest: record<name: string, project: string, clone_http_url: string, clone_ssh_url: string, id: int, uri: string>, user_id: int, creator: record<id: int, uri: string, user_url: string, real_name: string, display_name: string, username: string, ldap_id: string, avatar_url: string, is_anonymous: bool, has_avatar: bool>, creation_date: string, branch_src: string, branch_dest: string, status: string, head: record<id: string>, is_git_reference_broken: bool, reviewers: table<id: int, uri: string, user_url: string, real_name: string, display_name: string, username: string, ldap_id: string, avatar_url: string, is_anonymous: bool, has_avatar: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -5970,7 +6190,7 @@ export def "pull-requests retrieveTuleapPullRequestRESTv1PullRequestsResource" [
   let full_url = (build-url $base $"/pull_requests/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Partial update of a pull request 🔐
@@ -5986,6 +6206,7 @@ export def "pull-requests modifyTuleapPullRequestRESTv1PullRequestsResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --status: string
   --title: string
@@ -6000,7 +6221,7 @@ export def "pull-requests modifyTuleapPullRequestRESTv1PullRequestsResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get pull request commits ◑
@@ -6016,6 +6237,7 @@ export def "pull-requests-commits TuleapPullRequestRESTv1PullRequestsResourceRet
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of fetched comments (format: int64, default: 50)
   --offset: int # Position of the first comment to fetch (format: int64)
@@ -6026,7 +6248,7 @@ export def "pull-requests-commits TuleapPullRequestRESTv1PullRequestsResourceRet
   let full_url = (build-url $base $"/pull_requests/($id)/commits" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get labels 🔐
@@ -6042,6 +6264,7 @@ export def "pull-requests-labels TuleapPullRequestRESTv1PullRequestsResourceRetr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # format: int64, default: 50
   --offset: int # format: int64
@@ -6052,7 +6275,7 @@ export def "pull-requests-labels TuleapPullRequestRESTv1PullRequestsResourceRetr
   let full_url = (build-url $base $"/pull_requests/($id)/labels" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update labels 🔐
@@ -6068,6 +6291,7 @@ export def "pull-requests-labels TuleapPullRequestRESTv1PullRequestsResourceModi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --add: list
   --remove: list
@@ -6080,7 +6304,7 @@ export def "pull-requests-labels TuleapPullRequestRESTv1PullRequestsResourceModi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get pull request's impacted files 🔐
@@ -6096,6 +6320,7 @@ export def "pull-requests-files TuleapPullRequestRESTv1PullRequestsResourceRetri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -6103,7 +6328,7 @@ export def "pull-requests-files TuleapPullRequestRESTv1PullRequestsResourceRetri
   let full_url = (build-url $base $"/pull_requests/($id)/files")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the diff of a given file in a pull request 🔐
@@ -6119,6 +6344,7 @@ export def "pull-requests-file-diff TuleapPullRequestRESTv1PullRequestsResourceR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --path: string # File path
 ]: nothing -> record<lines: list<any>, inline_comments: list<any>, mime_type: string, charset: string, special_format: string> {
@@ -6128,7 +6354,7 @@ export def "pull-requests-file-diff TuleapPullRequestRESTv1PullRequestsResourceR
   let full_url = (build-url $base $"/pull_requests/($id)/file_diff" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Post a new inline comment 🔐
@@ -6144,6 +6370,7 @@ export def "pull-requests-inline-comments TuleapPullRequestRESTv1PullRequestsRes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   content: string
   --format: string@format-completer-2 # | null
@@ -6160,7 +6387,7 @@ export def "pull-requests-inline-comments TuleapPullRequestRESTv1PullRequestsRes
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get pull request's timeline 🔐
@@ -6176,6 +6403,7 @@ export def "pull-requests-timeline TuleapPullRequestRESTv1PullRequestsResourceRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of fetched comments (format: int64, default: 10)
   --offset: int # Position of the first comment to fetch (format: int64)
@@ -6186,7 +6414,7 @@ export def "pull-requests-timeline TuleapPullRequestRESTv1PullRequestsResourceRe
   let full_url = (build-url $base $"/pull_requests/($id)/timeline" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pull request's comments 🔐
@@ -6202,6 +6430,7 @@ export def "pull-requests-comments TuleapPullRequestRESTv1PullRequestsResourceRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of fetched comments (format: int64, default: 10)
   --offset: int # Position of the first comment to fetch (format: int64)
@@ -6213,7 +6442,7 @@ export def "pull-requests-comments TuleapPullRequestRESTv1PullRequestsResourceRe
   let full_url = (build-url $base $"/pull_requests/($id)/comments" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Post a new comment 🔐
@@ -6229,6 +6458,7 @@ export def "pull-requests-comments TuleapPullRequestRESTv1PullRequestsResourceCr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   content: string
   --parent-id: int # | null $parent_id (format: int64)
@@ -6242,7 +6472,7 @@ export def "pull-requests-comments TuleapPullRequestRESTv1PullRequestsResourceCr
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get pull request's reviewers ◑
@@ -6258,6 +6488,7 @@ export def "pull-requests-reviewers TuleapPullRequestRESTv1PullRequestsResourceR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<users: table<id: int, uri: string, user_url: string, real_name: string, display_name: string, username: string, ldap_id: string, avatar_url: string, is_anonymous: bool, has_avatar: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -6265,7 +6496,7 @@ export def "pull-requests-reviewers TuleapPullRequestRESTv1PullRequestsResourceR
   let full_url = (build-url $base $"/pull_requests/($id)/reviewers")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set pull request's reviewers 🔐
@@ -6281,6 +6512,7 @@ export def "pull-requests-reviewers TuleapPullRequestRESTv1PullRequestsResourceU
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   users: list
 ]: any -> string {
@@ -6292,7 +6524,7 @@ export def "pull-requests-reviewers TuleapPullRequestRESTv1PullRequestsResourceU
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an existing comment 🔐
@@ -6308,6 +6540,7 @@ export def "pull-request-comments tuleapPullRequestRESTv1PullRequestCommentsReso
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   content: string # The new content of the comment
 ]: any -> record<id: int, post_date: string, last_edition_date: string, content: string, raw_content: string, post_processed_content: string, type: string, parent_id: int, format: string, color: string, user: record<id: int, uri: string, user_url: string, real_name: string, display_name: string, username: string, ldap_id: string, avatar_url: string, is_anonymous: bool, has_avatar: bool>> {
@@ -6319,7 +6552,7 @@ export def "pull-request-comments tuleapPullRequestRESTv1PullRequestCommentsReso
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an existing comment 🔐
@@ -6335,6 +6568,7 @@ export def "pull-request-inline-comments tuleapPullRequestRESTv1PullRequestInlin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   content: string # The new content of the comment
 ]: any -> record<id: int, file_path: string, unidiff_offset: int, position: string, post_date: string, last_edition_date: string, content: string, raw_content: string, post_processed_content: string, is_outdated: bool, type: string, parent_id: int, format: string, color: string, user: record<id: int, uri: string, user_url: string, real_name: string, display_name: string, username: string, ldap_id: string, avatar_url: string, is_anonymous: bool, has_avatar: bool>> {
@@ -6346,7 +6580,7 @@ export def "pull-request-inline-comments tuleapPullRequestRESTv1PullRequestInlin
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reply to a given inline comment 🔐
@@ -6362,6 +6596,7 @@ export def "pull-request-inline-comments-reply tuleapPullRequestRESTv1PullReques
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   content: string # The content of the reply
   format: string@format-completer-2 # The format of the reply
@@ -6374,7 +6609,7 @@ export def "pull-request-inline-comments-reply tuleapPullRequestRESTv1PullReques
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get release ◑
@@ -6390,6 +6625,7 @@ export def "frs-release tuleapFRSRESTv1ReleaseResourceRetrieveId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<STATUS: list<string>, id: int, uri: string, name: string, files: list<list<any>>, links: list<list<any>>, changelog: string, release_note: string, resources: list<list<any>>, project: string, artifact: string, license_approval: bool, package: string, status: string, permissions_for_groups: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -6397,7 +6633,7 @@ export def "frs-release tuleapFRSRESTv1ReleaseResourceRetrieveId" [
   let full_url = (build-url $base $"/frs_release/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update release 🔐
@@ -6413,6 +6649,7 @@ export def "frs-release tuleapFRSRESTv1ReleaseResourceModifyId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --name: string
   --release-note: string
@@ -6427,7 +6664,7 @@ export def "frs-release tuleapFRSRESTv1ReleaseResourceModifyId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get files ◑
@@ -6443,6 +6680,7 @@ export def "frs-release-files tuleapFRSRESTv1ReleaseResourceRetrieveFiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of files displayed per page (format: int64, default: 10)
   --offset: int # Position of the first file to display (format: int64)
@@ -6453,7 +6691,7 @@ export def "frs-release-files tuleapFRSRESTv1ReleaseResourceRetrieveFiles" [
   let full_url = (build-url $base $"/frs_release/($id)/files" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create release 🔐
@@ -6468,6 +6706,7 @@ export def "frs-release createTuleapFRSRESTv1ReleaseResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   package_id: int # format: int64
   name: string
@@ -6483,7 +6722,7 @@ export def "frs-release createTuleapFRSRESTv1ReleaseResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a package 🔐
@@ -6498,6 +6737,7 @@ export def "frs-packages createTuleapFRSRESTv1PackageResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   project_id: int # The id of the project where we should create the package (format: int64)
   label: string # Label of the package
@@ -6510,7 +6750,7 @@ export def "frs-packages createTuleapFRSRESTv1PackageResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get FRS package ◑
@@ -6526,6 +6766,7 @@ export def "frs-packages tuleapFRSRESTv1PackageResourceRetrieveId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<project: string, resources: list<string>, permissions_for_groups: string, id: int, uri: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -6533,7 +6774,7 @@ export def "frs-packages tuleapFRSRESTv1PackageResourceRetrieveId" [
   let full_url = (build-url $base $"/frs_packages/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get FRS releases ◑
@@ -6549,6 +6790,7 @@ export def "frs-packages-frs-release tuleapFRSRESTv1PackageResourceRetrieveRelea
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
   --offset: int # Position of the first element to display (format: int64)
@@ -6559,7 +6801,7 @@ export def "frs-packages-frs-release tuleapFRSRESTv1PackageResourceRetrieveRelea
   let full_url = (build-url $base $"/frs_packages/($id)/frs_release" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get file ◑
@@ -6575,6 +6817,7 @@ export def "frs-files tuleapFRSRESTv1FileResourceRetrieveId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: int, uri: string, name: string, download_url: string, file_size: int, nb_download: int, arch: string, type: string, date: string, reference_md5: string, computed_md5: string, owner: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -6582,7 +6825,7 @@ export def "frs-files tuleapFRSRESTv1FileResourceRetrieveId" [
   let full_url = (build-url $base $"/frs_files/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete file 🔐
@@ -6598,6 +6841,7 @@ export def "frs-files tuleapFRSRESTv1FileResourceRemoveId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -6605,7 +6849,7 @@ export def "frs-files tuleapFRSRESTv1FileResourceRemoveId" [
   let full_url = (build-url $base $"/frs_files/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create file 🔐
@@ -6620,6 +6864,7 @@ export def "frs-files createTuleapFRSRESTv1FileResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   release_id: int # The id of the release (format: int64)
   name: string # The file name
@@ -6633,7 +6878,7 @@ export def "frs-files createTuleapFRSRESTv1FileResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a CrossTracker widget ◑
@@ -6649,6 +6894,7 @@ export def "crosstracker-widget tuleapCrossTrackerRESTv1CrossTrackerWidgetResour
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<queries: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -6656,7 +6902,7 @@ export def "crosstracker-widget tuleapCrossTrackerRESTv1CrossTrackerWidgetResour
   let full_url = (build-url $base $"/crosstracker_widget/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get forward links ◑
@@ -6672,6 +6918,7 @@ export def "crosstracker-widget-forward-links tuleapCrossTrackerRESTv1CrossTrack
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --tql-query: string # TQL query
   --source-artifact-id: int # ID of the artifact (format: int64)
@@ -6684,7 +6931,7 @@ export def "crosstracker-widget-forward-links tuleapCrossTrackerRESTv1CrossTrack
   let full_url = (build-url $base $"/crosstracker_widget/($id)/forward_links" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get reverse links ◑
@@ -6700,6 +6947,7 @@ export def "crosstracker-widget-reverse-links tuleapCrossTrackerRESTv1CrossTrack
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --tql-query: string # TQL query
   --target-artifact-id: int # ID of the artifact (format: int64)
@@ -6712,7 +6960,7 @@ export def "crosstracker-widget-reverse-links tuleapCrossTrackerRESTv1CrossTrack
   let full_url = (build-url $base $"/crosstracker_widget/($id)/reverse_links" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get results of the CrossTracker query ◑
@@ -6727,6 +6975,7 @@ export def "crosstracker-query-content tuleapCrossTrackerRESTv1CrossTrackerQuery
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # The query to execute on the widget
   --limit: int # Number of elements displayed per page (format: int64, default: 50)
@@ -6738,7 +6987,7 @@ export def "crosstracker-query-content tuleapCrossTrackerRESTv1CrossTrackerQuery
   let full_url = (build-url $base "/crosstracker_query/content" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get results of the CrossTracker query ◑
@@ -6754,6 +7003,7 @@ export def "crosstracker-query-content tuleapCrossTrackerRESTv1CrossTrackerQuery
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 50)
   --offset: int # Position of the first element to display (format: int64)
@@ -6764,7 +7014,7 @@ export def "crosstracker-query-content tuleapCrossTrackerRESTv1CrossTrackerQuery
   let full_url = (build-url $base $"/crosstracker_query/($id)/content" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a CrossTracker query 🔐
@@ -6780,6 +7030,7 @@ export def "crosstracker-query updateTuleapCrossTrackerRESTv1CrossTrackerQueryRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   tql_query: string # The TQL query
   title: string # The query title
@@ -6795,7 +7046,7 @@ export def "crosstracker-query updateTuleapCrossTrackerRESTv1CrossTrackerQueryRe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a query from its widget 🔐
@@ -6811,6 +7062,7 @@ export def "crosstracker-query removeTuleapCrossTrackerRESTv1CrossTrackerQueryRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -6818,7 +7070,7 @@ export def "crosstracker-query removeTuleapCrossTrackerRESTv1CrossTrackerQueryRe
   let full_url = (build-url $base $"/crosstracker_query/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new query in the widget 🔐
@@ -6833,6 +7085,7 @@ export def "crosstracker-query createTuleapCrossTrackerRESTv1CrossTrackerQueryRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   widget_id: int # ID of the widget (format: int64)
   tql_query: string # The TQL query
@@ -6848,7 +7101,7 @@ export def "crosstracker-query createTuleapCrossTrackerRESTv1CrossTrackerQueryRe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new set of credential 🔓
@@ -6863,6 +7116,7 @@ export def "dynamic-credentials createTuleapDynamicCredentialsRESTDynamicCredent
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   username: string # Username must be formatted as forge__dynamic_credential-&lt;identifier&gt; where &lt;identifier&gt; is a chosen value
   password: string
@@ -6877,7 +7131,7 @@ export def "dynamic-credentials createTuleapDynamicCredentialsRESTDynamicCredent
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revoke a set of credential 🔓
@@ -6893,6 +7147,7 @@ export def "dynamic-credentials tuleapDynamicCredentialsRESTDynamicCredentialsRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --signature: string # Base64 encoded signature associated with the request
 ]: nothing -> list<string> {
@@ -6902,7 +7157,7 @@ export def "dynamic-credentials tuleapDynamicCredentialsRESTDynamicCredentialsRe
   let full_url = (build-url $base $"/dynamic_credentials/($username)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get SVN ◑
@@ -6918,6 +7173,7 @@ export def "svn retrieveTuleapSVNRESTv1RepositoryResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<settings: record<commit_rules: record<is_reference_mandatory: string, is_commit_message_change_allowed: string>, immutable_tags: record<paths: list, whitelist: list>, access_file: string, email_notifications: list<any>, has_default_permissions: bool>, id: int, project: record<id: int, uri: string, label: string, label_without_icon: string, shortname: string, status: string, access: string, is_template: bool>, uri: string, name: string, svn_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -6925,7 +7181,7 @@ export def "svn retrieveTuleapSVNRESTv1RepositoryResource" [
   let full_url = (build-url $base $"/svn/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT SVN 🔐
@@ -6943,6 +7199,7 @@ export def "svn updateTuleapSVNRESTv1RepositoryResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   commit_rules: any # shape: {is_reference_mandatory: string, is_commit_message_change_allowed: string}
   immutable_tags: any # shape: {paths: list, whitelist: list}
@@ -6958,7 +7215,7 @@ export def "svn updateTuleapSVNRESTv1RepositoryResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete SVN repository 🔐
@@ -6974,6 +7231,7 @@ export def "svn removeTuleapSVNRESTv1RepositoryResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -6981,7 +7239,7 @@ export def "svn removeTuleapSVNRESTv1RepositoryResource" [
   let full_url = (build-url $base $"/svn/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a SVN repository 🔐
@@ -6997,6 +7255,7 @@ export def "svn createTuleapSVNRESTv1RepositoryResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   project_id: int # project id (format: int64)
   name: string # Repository name
@@ -7010,7 +7269,7 @@ export def "svn createTuleapSVNRESTv1RepositoryResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get campaign ◑
@@ -7026,6 +7285,7 @@ export def "testmanagement-campaigns tuleapTestManagementRESTv1CampaignsResource
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<total: int, id: string, label: string, status: string, uri: string, nb_of_notrun: string, nb_of_passed: string, nb_of_failed: string, nb_of_blocked: string, resources: string, job_configuration: string, user_can_update: string, is_open: bool, user_can_close: bool, user_can_open: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -7033,7 +7293,7 @@ export def "testmanagement-campaigns tuleapTestManagementRESTv1CampaignsResource
   let full_url = (build-url $base $"/testmanagement_campaigns/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PATCH campaign 🔐
@@ -7051,6 +7311,7 @@ export def "testmanagement-campaigns modifyTuleapTestManagementRESTv1CampaignsRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --label: string # New label of the campaign
   --job-configuration: any # shape: {url?: string, token?: string}
@@ -7065,7 +7326,7 @@ export def "testmanagement-campaigns modifyTuleapTestManagementRESTv1CampaignsRe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get executions ◑
@@ -7081,6 +7342,7 @@ export def "testmanagement-campaigns-testmanagement-executions tuleapTestManagem
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
   --offset: int # Position of the first element to display (format: int64)
@@ -7092,7 +7354,7 @@ export def "testmanagement-campaigns-testmanagement-executions tuleapTestManagem
   let full_url = (build-url $base $"/testmanagement_campaigns/($id)/testmanagement_executions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PATCH test executions 🔐
@@ -7108,6 +7370,7 @@ export def "testmanagement-campaigns-testmanagement-executions tuleapTestManagem
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   definition_ids_to_add: list # Test definition ids for which test executions should be created
   execution_ids_to_remove: list # Test execution ids which should be unlinked from the campaign
@@ -7120,7 +7383,7 @@ export def "testmanagement-campaigns-testmanagement-executions tuleapTestManagem
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST campaign 🔐
@@ -7135,6 +7398,7 @@ export def "testmanagement-campaigns createTuleapTestManagementRESTv1CampaignsRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --test-selector: string@test-selector-completer # The method used to set initial test definitions for campaign (default: all)
   --milestone-id: int # Id of the milestone with which the campaign will be linked (format: int64)
@@ -7151,7 +7415,7 @@ export def "testmanagement-campaigns createTuleapTestManagementRESTv1CampaignsRe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST automated tests 🔐
@@ -7167,6 +7431,7 @@ export def "testmanagement-campaigns-automated-tests tuleapTestManagementRESTv1C
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -7174,7 +7439,7 @@ export def "testmanagement-campaigns-automated-tests tuleapTestManagementRESTv1C
   let full_url = (build-url $base $"/testmanagement_campaigns/($id)/automated_tests")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a definition 🔐
@@ -7190,6 +7455,7 @@ export def "testmanagement-definitions tuleapTestManagementRESTv1DefinitionsReso
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -7197,7 +7463,7 @@ export def "testmanagement-definitions tuleapTestManagementRESTv1DefinitionsReso
   let full_url = (build-url $base $"/testmanagement_definitions/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a test execution 🔐
@@ -7213,6 +7479,7 @@ export def "testmanagement-executions createTuleapTestManagementRESTv1Executions
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   tracker_reference: any # shape: {id: int, uri?: string, label?: string, color?: string, project?: string}
   definition_id: int # Definition of the execution (format: int64)
@@ -7228,7 +7495,7 @@ export def "testmanagement-executions createTuleapTestManagementRESTv1Executions
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # User views a test execution 🔐
@@ -7244,6 +7511,7 @@ export def "testmanagement-executions-presences tuleapTestManagementRESTv1Execut
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   uuid: string # Uuid of current user
   --remove-from: string # Id of the old artifact
@@ -7256,7 +7524,7 @@ export def "testmanagement-executions-presences tuleapTestManagementRESTv1Execut
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an artifact link between an issue and a test execution 🔐
@@ -7273,6 +7541,7 @@ export def "testmanagement-executions-issues tuleapTestManagementRESTv1Execution
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   issue_id: string # Id of the issue artifact
   --comment: any # shape: {body?: string, format: string}
@@ -7285,7 +7554,7 @@ export def "testmanagement-executions-issues tuleapTestManagementRESTv1Execution
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get execution 🔐
@@ -7301,6 +7570,7 @@ export def "testmanagement-executions tuleapTestManagementRESTv1ExecutionsResour
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: int, uri: string, results: string, status: string, last_update_date: string, assigned_to: string, previous_result: string, definition: string, linked_bugs: list<any>, time: int, steps_results: list<any>, upload_url: string, max_size_upload: int, attachments: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -7308,7 +7578,7 @@ export def "testmanagement-executions tuleapTestManagementRESTv1ExecutionsResour
   let full_url = (build-url $base $"/testmanagement_executions/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update part of a test execution 🔐
@@ -7324,6 +7594,7 @@ export def "testmanagement-executions tuleapTestManagementRESTv1ExecutionsResour
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --force-use-latest-definition-version: oneof<nothing, bool> # True to update the execution to use latest version of definition
   --steps-results: list # Results of steps
@@ -7336,7 +7607,7 @@ export def "testmanagement-executions tuleapTestManagementRESTv1ExecutionsResour
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a test execution 🔐
@@ -7352,6 +7623,7 @@ export def "testmanagement-executions tuleapTestManagementRESTv1ExecutionsResour
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   status: string@status-completer-5 # Status of the execution
   --uploaded-file-ids: list # files_ids to add during the execution
@@ -7367,7 +7639,7 @@ export def "testmanagement-executions tuleapTestManagementRESTv1ExecutionsResour
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a node representation /!\ EXPERIMENTAL DO NOT USE IT/!\ 🔐
@@ -7383,6 +7655,7 @@ export def "testmanagement-nodes tuleapTestManagementRESTv1NodeResourceRetrieveI
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<links: list<string>, reverse_links: list<string>, id: int, uri: string, ref_name: string, ref_label: string, color: string, title: string, url: string, status_semantic: string, status_label: string, nature: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -7390,7 +7663,7 @@ export def "testmanagement-nodes tuleapTestManagementRESTv1NodeResourceRetrieveI
   let full_url = (build-url $base $"/testmanagement_nodes/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get top-level cards ◑
@@ -7406,6 +7679,7 @@ export def "taskboard-cards tuleapTaskboardRESTv1TaskboardResourceRetrieveCards"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 100)
   --offset: int # Position of the first element to display (format: int64)
@@ -7416,7 +7690,7 @@ export def "taskboard-cards tuleapTaskboardRESTv1TaskboardResourceRetrieveCards"
   let full_url = (build-url $base $"/taskboard/($id)/cards" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get columns ◑
@@ -7432,6 +7706,7 @@ export def "taskboard-columns tuleapTaskboardRESTv1TaskboardResourceRetrieveColu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -7439,7 +7714,7 @@ export def "taskboard-columns tuleapTaskboardRESTv1TaskboardResourceRetrieveColu
   let full_url = (build-url $base $"/taskboard/($id)/columns")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get card children ◑
@@ -7455,6 +7730,7 @@ export def "taskboard-cards-children tuleapTaskboardRESTv1TaskboardCardResourceR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --milestone-id: int # Id of the milestone (format: int64)
   --limit: int # Number of elements per page (format: int64, default: 100)
@@ -7466,7 +7742,7 @@ export def "taskboard-cards-children tuleapTaskboardRESTv1TaskboardCardResourceR
   let full_url = (build-url $base $"/taskboard_cards/($id)/children" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get card ◑
@@ -7482,6 +7758,7 @@ export def "taskboard-cards tuleapTaskboardRESTv1TaskboardCardResourceRetrieveId
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --milestone-id: int # Id of the milestone (format: int64)
 ]: nothing -> record<id: int, tracker_id: int, label: string, xref: string, rank: int, color: string, background_color: string, artifact_html_uri: string, has_children: bool, assignees: table<id: int, uri: string, user_url: string, real_name: string, display_name: string, username: string, ldap_id: string, avatar_url: string, is_anonymous: bool, has_avatar: bool>, mapped_list_value: string, initial_effort: float, remaining_effort: string, is_open: bool, is_collapsed: bool> {
@@ -7491,7 +7768,7 @@ export def "taskboard-cards tuleapTaskboardRESTv1TaskboardCardResourceRetrieveId
   let full_url = (build-url $base $"/taskboard_cards/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Patch card 🔐
@@ -7507,6 +7784,7 @@ export def "taskboard-cards tuleapTaskboardRESTv1TaskboardCardResourceModifyId" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   remaining_effort: float # format: double
 ]: any -> string {
@@ -7518,7 +7796,7 @@ export def "taskboard-cards tuleapTaskboardRESTv1TaskboardCardResourceModifyId" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Patch Taskboard cell 🔐
@@ -7536,6 +7814,7 @@ export def "taskboard-cells-column modifyTuleapTaskboardRESTv1CellCellResource" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --add: int # | null $add (format: int64)
   --order: any # shape: {ids: list, direction: string, compared_to: int}
@@ -7548,7 +7827,7 @@ export def "taskboard-cells-column modifyTuleapTaskboardRESTv1CellCellResource" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get items related to a search ◑
@@ -7563,6 +7842,7 @@ export def "search tuleapFullTextSearchCommonRESTv1SearchResourceRetrieveSearchI
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # format: int64, default: 50
   --offset: int # format: int64
@@ -7577,7 +7857,7 @@ export def "search tuleapFullTextSearchCommonRESTv1SearchResourceRetrieveSearchI
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the tasks ◑
@@ -7593,6 +7873,7 @@ export def "roadmaps-tasks tuleapRoadmapRESTv1RoadmapResourceRetrieveTasks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --offset: int # Position of the first element to display (format: int64)
   --limit: int # Number of elements displayed per page (format: int64, default: 100)
@@ -7603,7 +7884,7 @@ export def "roadmaps-tasks tuleapRoadmapRESTv1RoadmapResourceRetrieveTasks" [
   let full_url = (build-url $base $"/roadmaps/($id)/tasks" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the iterations ◑
@@ -7619,6 +7900,7 @@ export def "roadmaps-iterations tuleapRoadmapRESTv1RoadmapResourceRetrieveIterat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --level: int # Level of the iteration (format: int64)
   --offset: int # Position of the first element to display (format: int64)
@@ -7630,7 +7912,7 @@ export def "roadmaps-iterations tuleapRoadmapRESTv1RoadmapResourceRetrieveIterat
   let full_url = (build-url $base $"/roadmaps/($id)/iterations" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the subtasks ◑
@@ -7646,6 +7928,7 @@ export def "roadmap-tasks-subtasks tuleapRoadmapRESTv1TasksResourceRetrieveSubta
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --offset: int # Position of the first element to display (format: int64)
   --limit: int # Number of elements displayed per page (format: int64, default: 100)
@@ -7656,7 +7939,7 @@ export def "roadmap-tasks-subtasks tuleapRoadmapRESTv1TasksResourceRetrieveSubta
   let full_url = (build-url $base $"/roadmap_tasks/($id)/subtasks" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get kanban ◑
@@ -7672,6 +7955,7 @@ export def "kanban TuleapKanbanRESTv1KanbanResourceRetrieveId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: int, tracker_id: int, tracker: string, uri: string, label: string, columns: table<id: int, label: string, is_open: bool, limit: int, color: string, user_can_add_in_place: bool, user_can_remove_column: bool, user_can_edit_label: bool>, resources: list<string>, backlog: string, archive: string, user_can_add_columns: bool, user_can_reorder_columns: bool, user_can_add_artifact: bool, is_promoted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -7679,7 +7963,7 @@ export def "kanban TuleapKanbanRESTv1KanbanResourceRetrieveId" [
   let full_url = (build-url $base $"/kanban/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Patch kanban 🔐
@@ -7696,6 +7980,7 @@ export def "kanban TuleapKanbanRESTv1KanbanResourceModifyId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --label: string # The new label
   --is-promoted: oneof<nothing, bool> # Is the kanban promoted?
@@ -7711,7 +7996,7 @@ export def "kanban TuleapKanbanRESTv1KanbanResourceModifyId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Kanban 🔐
@@ -7727,6 +8012,7 @@ export def "kanban removeTuleapKanbanRESTv1KanbanResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -7734,7 +8020,7 @@ export def "kanban removeTuleapKanbanRESTv1KanbanResource" [
   let full_url = (build-url $base $"/kanban/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get backlog ◑
@@ -7750,6 +8036,7 @@ export def "kanban-backlog TuleapKanbanRESTv1KanbanResourceRetrieveBacklog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # Search string in json format
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
@@ -7761,7 +8048,7 @@ export def "kanban-backlog TuleapKanbanRESTv1KanbanResourceRetrieveBacklog" [
   let full_url = (build-url $base $"/kanban/($id)/backlog" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Partial re-order of Kanban backlog items 🔐
@@ -7779,6 +8066,7 @@ export def "kanban-backlog TuleapKanbanRESTv1KanbanResourceModifyBacklog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --order: any # shape: {ids: list, direction: string, compared_to: int}
   --add: any # shape: {ids: list}
@@ -7792,7 +8080,7 @@ export def "kanban-backlog TuleapKanbanRESTv1KanbanResourceModifyBacklog" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get archive ◑
@@ -7808,6 +8096,7 @@ export def "kanban-archive TuleapKanbanRESTv1KanbanResourceRetrieveArchive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # Search string in json format
   --limit: int # Number of elements displayed per page (format: int64, default: 10)
@@ -7819,7 +8108,7 @@ export def "kanban-archive TuleapKanbanRESTv1KanbanResourceRetrieveArchive" [
   let full_url = (build-url $base $"/kanban/($id)/archive" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Partial re-order of Kanban archive items 🔐
@@ -7837,6 +8126,7 @@ export def "kanban-archive TuleapKanbanRESTv1KanbanResourceModifyArchive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --order: any # shape: {ids: list, direction: string, compared_to: int}
   --add: any # shape: {ids: list}
@@ -7850,7 +8140,7 @@ export def "kanban-archive TuleapKanbanRESTv1KanbanResourceModifyArchive" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get items ◑
@@ -7866,6 +8156,7 @@ export def "kanban-items TuleapKanbanRESTv1KanbanResourceRetrieveItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --column-id: int # Id of the column the item belongs to (format: int64)
   --qp-query: string # Search string in json format
@@ -7878,7 +8169,7 @@ export def "kanban-items TuleapKanbanRESTv1KanbanResourceRetrieveItems" [
   let full_url = (build-url $base $"/kanban/($id)/items" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Partial re-order of Kanban items 🔐
@@ -7896,6 +8187,7 @@ export def "kanban-items TuleapKanbanRESTv1KanbanResourceModifyItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --column-id: int # Id of the column the item belongs to (format: int64)
   --order: any # shape: {ids: list, direction: string, compared_to: int}
@@ -7911,7 +8203,7 @@ export def "kanban-items TuleapKanbanRESTv1KanbanResourceModifyItems" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a new column 🔐
@@ -7927,6 +8219,7 @@ export def "kanban-columns TuleapKanbanRESTv1KanbanResourceCreateColumns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   label: string
 ]: any -> record<id: int, label: string, is_open: bool, limit: int, color: string, user_can_add_in_place: bool, user_can_remove_column: bool, user_can_edit_label: bool> {
@@ -7938,7 +8231,7 @@ export def "kanban-columns TuleapKanbanRESTv1KanbanResourceCreateColumns" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reorder Kanban columns 🔐
@@ -7954,6 +8247,7 @@ export def "kanban-columns TuleapKanbanRESTv1KanbanResourceUpdateColumns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   column_ids: list # The created kanban column
 ]: any -> string {
@@ -7965,7 +8259,7 @@ export def "kanban-columns TuleapKanbanRESTv1KanbanResourceUpdateColumns" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get cumulative flow ◑
@@ -7981,6 +8275,7 @@ export def "kanban-cumulative-flow TuleapKanbanRESTv1KanbanResourceRetrieveCumul
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --start-date: string # Start date of the cumulative flow in ISO format (YYYY-MM-DD) (format: date)
   --end-date: string # End date of the cumulative flow in ISO format (YYYY-MM-DD) (format: date)
@@ -7993,7 +8288,7 @@ export def "kanban-cumulative-flow TuleapKanbanRESTv1KanbanResourceRetrieveCumul
   let full_url = (build-url $base $"/kanban/($id)/cumulative_flow" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add list of report available for filters 🔐
@@ -8009,6 +8304,7 @@ export def "kanban-tracker-reports TuleapKanbanRESTv1KanbanResourceUpdateTracker
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   tracker_report_ids: list # List of selected report ids
 ]: any -> string {
@@ -8020,7 +8316,7 @@ export def "kanban-tracker-reports TuleapKanbanRESTv1KanbanResourceUpdateTracker
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update column 🔐
@@ -8036,6 +8332,7 @@ export def "kanban-columns modifyTuleapKanbanRESTv1KanbanColumnsResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --kanban-id: int # Id of the Kanban (format: int64)
   --label: string
@@ -8050,7 +8347,7 @@ export def "kanban-columns modifyTuleapKanbanRESTv1KanbanColumnsResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete column 🔐
@@ -8066,6 +8363,7 @@ export def "kanban-columns removeTuleapKanbanRESTv1KanbanColumnsResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --kanban-id: int # Id of the Kanban (format: int64)
 ]: nothing -> string {
@@ -8075,7 +8373,7 @@ export def "kanban-columns removeTuleapKanbanRESTv1KanbanColumnsResource" [
   let full_url = (build-url $base $"/kanban_columns/($id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add new Kanban Item 🔐
@@ -8090,6 +8388,7 @@ export def "kanban-items createTuleapKanbanRESTv1KanbanItemsResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   kanban_id: int # format: int64
   label: string
@@ -8103,7 +8402,7 @@ export def "kanban-items createTuleapKanbanRESTv1KanbanItemsResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a Kanban item 🔐
@@ -8119,6 +8418,7 @@ export def "kanban-items retrieveTuleapKanbanRESTv1KanbanItemsResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: int, item_name: string, label: string, color: string, card_fields: string, timeinfo: string, in_column: string, background_color_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -8126,7 +8426,7 @@ export def "kanban-items retrieveTuleapKanbanRESTv1KanbanItemsResource" [
   let full_url = (build-url $base $"/kanban_items/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Move an existing artidoc document ◑
@@ -8143,6 +8443,7 @@ export def "artidoc modifyTuleapArtidocRESTv1ArtidocResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   move: any # shape: {destination_folder_id: int}
 ]: any -> string {
@@ -8154,7 +8455,7 @@ export def "artidoc modifyTuleapArtidocRESTv1ArtidocResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get sections ◑
@@ -8170,6 +8471,7 @@ export def "artidoc-sections tuleapArtidocRESTv1ArtidocResourceRetrieveSections"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed (format: int64, default: 50)
   --offset: int # Position of the first element to display (format: int64)
@@ -8180,7 +8482,7 @@ export def "artidoc-sections tuleapArtidocRESTv1ArtidocResourceRetrieveSections"
   let full_url = (build-url $base $"/artidoc/($id)/sections" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reorder sections ◑
@@ -8196,6 +8498,7 @@ export def "artidoc-sections tuleapArtidocRESTv1ArtidocResourceModifySections" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   ids: list # List of section identifier
   direction: string # before|after
@@ -8209,7 +8512,7 @@ export def "artidoc-sections tuleapArtidocRESTv1ArtidocResourceModifySections" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set configuration ◑
@@ -8225,6 +8528,7 @@ export def "artidoc-configuration tuleapArtidocRESTv1ArtidocResourceUpdateConfig
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   selected_tracker_ids: list # Selected trackers for the document
   --body-fields: list # Selected artifact fields for the document
@@ -8237,7 +8541,7 @@ export def "artidoc-configuration tuleapArtidocRESTv1ArtidocResourceUpdateConfig
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get content of a section ◑
@@ -8253,6 +8557,7 @@ export def "artidoc-sections retrieveTuleapArtidocRESTv1ArtidocSectionsResource"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -8260,7 +8565,7 @@ export def "artidoc-sections retrieveTuleapArtidocRESTv1ArtidocSectionsResource"
   let full_url = (build-url $base $"/artidoc_sections/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update section ◑
@@ -8276,6 +8581,7 @@ export def "artidoc-sections updateTuleapArtidocRESTv1ArtidocSectionsResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --description: string
   title: string
@@ -8290,7 +8596,7 @@ export def "artidoc-sections updateTuleapArtidocRESTv1ArtidocSectionsResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete section ◑
@@ -8306,6 +8612,7 @@ export def "artidoc-sections removeTuleapArtidocRESTv1ArtidocSectionsResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -8313,7 +8620,7 @@ export def "artidoc-sections removeTuleapArtidocRESTv1ArtidocSectionsResource" [
   let full_url = (build-url $base $"/artidoc_sections/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create section ◑
@@ -8329,6 +8636,7 @@ export def "artidoc-sections tuleapArtidocRESTv1ArtidocSectionsResourceCreateSec
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   artidoc_id: int # Id of the document (format: int64)
   section: any # shape: {import?: any, content?: any, position?: any}
@@ -8341,7 +8649,7 @@ export def "artidoc-sections tuleapArtidocRESTv1ArtidocSectionsResourceCreateSec
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create file 🔐
@@ -8356,6 +8664,7 @@ export def "artidoc-files createTuleapArtidocRESTv1ArtidocFilesResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   artidoc_id: int # The id of the document (format: int64)
   name: string # The file name
@@ -8370,7 +8679,7 @@ export def "artidoc-files createTuleapArtidocRESTv1ArtidocFilesResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new Baseline 🔐
@@ -8385,6 +8694,7 @@ export def "baselines createTuleapBaselineRESTBaselinesResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # Name of the baseline
   artifact_id: int # Id of an artifact (format: int64)
@@ -8398,7 +8708,7 @@ export def "baselines createTuleapBaselineRESTBaselinesResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Baseline 🔐
@@ -8414,6 +8724,7 @@ export def "baselines removeTuleapBaselineRESTBaselinesResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -8421,7 +8732,7 @@ export def "baselines removeTuleapBaselineRESTBaselinesResource" [
   let full_url = (build-url $base $"/baselines/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Baseline ◑
@@ -8437,6 +8748,7 @@ export def "baselines TuleapBaselineRESTBaselinesResourceRetrieveById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: string, name: string, artifact_id: string, snapshot_date: string, author_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -8444,7 +8756,7 @@ export def "baselines TuleapBaselineRESTBaselinesResourceRetrieveById" [
   let full_url = (build-url $base $"/baselines/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get artifacts ◑
@@ -8460,6 +8772,7 @@ export def "baselines-artifacts tuleapBaselineRESTBaselineArtifactsResourceRetri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # JSON object of search criteria properties
 ]: nothing -> record<artifacts: string> {
@@ -8469,7 +8782,7 @@ export def "baselines-artifacts tuleapBaselineRESTBaselineArtifactsResourceRetri
   let full_url = (build-url $base $"/baselines/($id)/artifacts" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new baseline comparison. 🔐
@@ -8484,6 +8797,7 @@ export def "baselines-comparisons createTuleapBaselineRESTComparisonsResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   base_baseline_id: int # Id of the baseline used as base comparison (format: int64)
   compared_to_baseline_id: int # Id of the baseline to be compared (format: int64)
@@ -8498,7 +8812,7 @@ export def "baselines-comparisons createTuleapBaselineRESTComparisonsResource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a Comparison ◑
@@ -8514,6 +8828,7 @@ export def "baselines-comparisons tuleapBaselineRESTComparisonsResourceRetrieveB
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: string, name: string, comment: string, base_baseline_id: string, compared_to_baseline_id: string, author_id: string, creation_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -8521,7 +8836,7 @@ export def "baselines-comparisons tuleapBaselineRESTComparisonsResourceRetrieveB
   let full_url = (build-url $base $"/baselines_comparisons/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a Comparison 🔐
@@ -8537,6 +8852,7 @@ export def "baselines-comparisons removeTuleapBaselineRESTComparisonsResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -8544,7 +8860,7 @@ export def "baselines-comparisons removeTuleapBaselineRESTComparisonsResource" [
   let full_url = (build-url $base $"/baselines_comparisons/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Integrate a GitLab repository into a project. 🔐
@@ -8559,6 +8875,7 @@ export def "gitlab-repositories tuleapGitlabRESTv1GitlabRepositoryResourceCreate
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   project_id: int # format: int64
   gitlab_server_url: string
@@ -8574,7 +8891,7 @@ export def "gitlab-repositories tuleapGitlabRESTv1GitlabRepositoryResourceCreate
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Gitlab Integrations. 🔐
@@ -8590,6 +8907,7 @@ export def "gitlab-repositories tuleapGitlabRESTv1GitlabRepositoryResourceRemove
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -8597,7 +8915,7 @@ export def "gitlab-repositories tuleapGitlabRESTv1GitlabRepositoryResourceRemove
   let full_url = (build-url $base $"/gitlab_repositories/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update GitLab integration 🔐
@@ -8614,6 +8932,7 @@ export def "gitlab-repositories tuleapGitlabRESTv1GitlabRepositoryResourceModify
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --update-bot-api-token: any # shape: {gitlab_api_token: string}
   --generate-new-secret: oneof<nothing, bool> # | null
@@ -8628,7 +8947,7 @@ export def "gitlab-repositories tuleapGitlabRESTv1GitlabRepositoryResourceModify
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get information on branches of the GitLab repository 🔐
@@ -8644,6 +8963,7 @@ export def "gitlab-repositories-branches tuleapGitlabRESTv1GitlabRepositoryResou
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<default_branch: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -8651,7 +8971,7 @@ export def "gitlab-repositories-branches tuleapGitlabRESTv1GitlabRepositoryResou
   let full_url = (build-url $base $"/gitlab_repositories/($id)/branches")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a GitLab branch. 🔐
@@ -8666,6 +8986,7 @@ export def "gitlab-branch tuleapGitlabRESTv1GitlabBranchResourceCreateGitlabBran
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   gitlab_integration_id: int # format: int64
   artifact_id: int # format: int64
@@ -8679,7 +9000,7 @@ export def "gitlab-branch tuleapGitlabRESTv1GitlabBranchResourceCreateGitlabBran
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a GitLab merge request. 🔐
@@ -8694,6 +9015,7 @@ export def "gitlab-merge-request tuleapGitlabRESTv1GitlabMergeRequestResourceCre
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   gitlab_integration_id: int # format: int64
   artifact_id: int # format: int64
@@ -8707,7 +9029,7 @@ export def "gitlab-merge-request tuleapGitlabRESTv1GitlabMergeRequestResourceCre
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Link a GitLab group to a Tuleap project. 🔐
@@ -8722,6 +9044,7 @@ export def "gitlab-groups tuleapGitlabRESTv1GitlabGroupResourceCreateGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   gitlab_server_url: string
   --create-branch-prefix: string # | null $create_branch_prefix
@@ -8738,7 +9061,7 @@ export def "gitlab-groups tuleapGitlabRESTv1GitlabGroupResourceCreateGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a GitLab group linked with Tuleap. 🔐
@@ -8754,6 +9077,7 @@ export def "gitlab-groups tuleapGitlabRESTv1GitlabGroupResourceUpdateGroupLink" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --create-branch-prefix: string # | null
   --allow-artifact-closure: oneof<nothing, bool> # | null
@@ -8767,7 +9091,7 @@ export def "gitlab-groups tuleapGitlabRESTv1GitlabGroupResourceUpdateGroupLink" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unlink the Tuleap Project and the GitLab group. 🔐
@@ -8783,6 +9107,7 @@ export def "gitlab-groups tuleapGitlabRESTv1GitlabGroupResourceRemoveGroupLink" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -8790,7 +9115,7 @@ export def "gitlab-groups tuleapGitlabRESTv1GitlabGroupResourceRemoveGroupLink" 
   let full_url = (build-url $base $"/gitlab_groups/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Synchronize GitLab projects of a group with Tuleap 🔐
@@ -8806,6 +9131,7 @@ export def "gitlab-groups-synchronize tuleapGitlabRESTv1GitlabGroupResourceCreat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: int, number_of_integrations: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -8813,7 +9139,7 @@ export def "gitlab-groups-synchronize tuleapGitlabRESTv1GitlabGroupResourceCreat
   let full_url = (build-url $base $"/gitlab_groups/($id)/synchronize")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get content of a program increment ◑
@@ -8829,6 +9155,7 @@ export def "program-increment-content tuleapProgramManagementRESTv1ProgramIncrem
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 50)
   --offset: int # Position of the first element to display (format: int64)
@@ -8839,7 +9166,7 @@ export def "program-increment-content tuleapProgramManagementRESTv1ProgramIncrem
   let full_url = (build-url $base $"/program_increment/($id)/content" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change the program increment's contents 🔐
@@ -8856,6 +9183,7 @@ export def "program-increment-content tuleapProgramManagementRESTv1ProgramIncrem
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   add: list
   --order: any # shape: {ids: list, direction: "after"|"before", compared_to: int}
@@ -8868,7 +9196,7 @@ export def "program-increment-content tuleapProgramManagementRESTv1ProgramIncrem
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get iterations linked to a program increment ◑
@@ -8884,6 +9212,7 @@ export def "program-increment-iterations tuleapProgramManagementRESTv1ProgramInc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 50)
   --offset: int # Position of the first element to display (format: int64)
@@ -8894,7 +9223,7 @@ export def "program-increment-iterations tuleapProgramManagementRESTv1ProgramInc
   let full_url = (build-url $base $"/program_increment/($id)/iterations" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the backlog of the program increment ◑
@@ -8910,6 +9239,7 @@ export def "program-increment-backlog tuleapProgramManagementRESTv1ProgramIncrem
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 50)
   --offset: int # Position of the first element to display (format: int64)
@@ -8920,7 +9250,7 @@ export def "program-increment-backlog tuleapProgramManagementRESTv1ProgramIncrem
   let full_url = (build-url $base $"/program_increment/($id)/backlog" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get content of a feature ◑
@@ -8936,6 +9266,7 @@ export def "program-backlog-items-children tuleapProgramManagementRESTv1ProgramB
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 50)
   --offset: int # Position of the first element to display (format: int64)
@@ -8946,7 +9277,7 @@ export def "program-backlog-items-children tuleapProgramManagementRESTv1ProgramB
   let full_url = (build-url $base $"/program_backlog_items/($id)/children" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the user stories linked to an iteration in team projects ◑
@@ -8962,6 +9293,7 @@ export def "iteration-content tuleapProgramManagementRESTv1IterationResourceRetr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of elements displayed per page (format: int64, default: 50)
   --offset: int # Position of the first element to display (format: int64)
@@ -8972,7 +9304,7 @@ export def "iteration-content tuleapProgramManagementRESTv1IterationResourceRetr
   let full_url = (build-url $base $"/iteration/($id)/content" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve time recorded on something 🔐
@@ -8987,6 +9319,7 @@ export def "timetracking tuleapTimetrackingRESTv1TimetrackingResourceRetrieveTra
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # A query
 ]: nothing -> list<any> {
@@ -8996,7 +9329,7 @@ export def "timetracking tuleapTimetrackingRESTv1TimetrackingResourceRetrieveTra
   let full_url = (build-url $base "/timetracking" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a Time 🔐
@@ -9011,6 +9344,7 @@ export def "timetracking tuleapTimetrackingRESTv1TimetrackingResourceAddTime" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   date_time: string
   artifact_id: int # format: int64
@@ -9025,7 +9359,7 @@ export def "timetracking tuleapTimetrackingRESTv1TimetrackingResourceAddTime" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a Time 🔐
@@ -9041,6 +9375,7 @@ export def "timetracking tuleapTimetrackingRESTv1TimetrackingResourceUpdateTime"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   date_time: string
   time_value: string
@@ -9054,7 +9389,7 @@ export def "timetracking tuleapTimetrackingRESTv1TimetrackingResourceUpdateTime"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete time 🔐
@@ -9070,6 +9405,7 @@ export def "timetracking removeTuleapTimetrackingRESTv1TimetrackingResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -9077,7 +9413,7 @@ export def "timetracking removeTuleapTimetrackingRESTv1TimetrackingResource" [
   let full_url = (build-url $base $"/timetracking/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get timetracking report 🔐
@@ -9093,6 +9429,7 @@ export def "timetracking-reports tuleapTimetrackingRESTv1TimetrackingReportResou
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<id: int, uri: string, trackers: list<any>, invalid_trackers: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -9100,7 +9437,7 @@ export def "timetracking-reports tuleapTimetrackingRESTv1TimetrackingReportResou
   let full_url = (build-url $base $"/timetracking_reports/($id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a timetracking report 🔐
@@ -9116,6 +9453,7 @@ export def "timetracking-reports updateTuleapTimetrackingRESTv1TimetrackingRepor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   trackers_id: list # Tracker id to link to report
 ]: any -> record<id: int, uri: string, trackers: list<any>, invalid_trackers: list<any>> {
@@ -9127,7 +9465,7 @@ export def "timetracking-reports updateTuleapTimetrackingRESTv1TimetrackingRepor
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get times of the report's trackers 🔐
@@ -9143,6 +9481,7 @@ export def "timetracking-reports-times tuleapTimetrackingRESTv1TimetrackingRepor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # With a property "trackers_id","start_date" and "end_date" to search trackers' times.
   --limit: int # format: int64, default: 50
@@ -9154,7 +9493,7 @@ export def "timetracking-reports-times tuleapTimetrackingRESTv1TimetrackingRepor
   let full_url = (build-url $base $"/timetracking_reports/($id)/times" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create widget 🔐
@@ -9169,6 +9508,7 @@ export def "timetracking-people-widget createTuleapTimetrackingRESTv1PeopleTimet
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   dashboard_id: int # The id of the dashboard (format: int64)
   dashboard_type: string@dashboard-type-completer # The type of the dashboard
@@ -9181,7 +9521,7 @@ export def "timetracking-people-widget createTuleapTimetrackingRESTv1PeopleTimet
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a widget 🔐
@@ -9197,6 +9537,7 @@ export def "timetracking-people-widget updateTuleapTimetrackingRESTv1PeopleTimet
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --start-date: string # | null $start_date
   --end-date: string # | null $end_date
@@ -9211,7 +9552,7 @@ export def "timetracking-people-widget updateTuleapTimetrackingRESTv1PeopleTimet
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get times 🔐
@@ -9227,6 +9568,7 @@ export def "timetracking-people-widget-times tuleapTimetrackingRESTv1PeopleTimet
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --limit: int # Number of users displayed per page (format: int64, default: 50)
   --offset: int # Position of the first user to display (format: int64)
@@ -9237,7 +9579,7 @@ export def "timetracking-people-widget-times tuleapTimetrackingRESTv1PeopleTimet
   let full_url = (build-url $base $"/timetracking_people_widget/($id)/times" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get users 🔐
@@ -9252,6 +9594,7 @@ export def "timetracking-people-users retrieveTuleapTimetrackingRESTv1PeopleTime
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-query: string # Search string (3 chars min in length)
 ]: nothing -> list<any> {
@@ -9261,5 +9604,5 @@ export def "timetracking-people-users retrieveTuleapTimetrackingRESTv1PeopleTime
   let full_url = (build-url $base "/timetracking_people_users" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -68,7 +69,7 @@ def auth-scheme-completer [] { ["query-api-key" "x-api-key"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "search-news searchNews" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -102,6 +103,7 @@ export def "search-news searchNews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --text: string # The text to match in the news content (at least 3 characters, maximum 100 characters). By default all query terms are expected, you can use an uppercase OR to search for any terms, e.g. tesla OR ford. You can also exclude terms by putting a minus sign (-) in front of the term, e.g. tesla -ford. For exact matches just put your term in quotes, e.g. "elon musk". (e.g. tesla)
   --text-match-indexes: string # If a "text" is given to search for, you can specify where this text is searched for. Possible values are title, content, or both separated by a comma. By default, both title and content are searched. (e.g. title,content)
   --source-country: string # The ISO 3166 country code from which the news should originate. (e.g. us)
@@ -126,7 +128,7 @@ export def "search-news searchNews" [
   let full_url = (build-url $base "/search-news" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Top News
@@ -142,6 +144,7 @@ export def "top-news topNews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --source-country: string # The ISO 3166 country code of the country for which top news should be retrieved. (e.g. us)
   --language: string # The ISO 6391 language code of the top news. The language must be one spoken in the source-country. (e.g. en)
   --date: string # The date for which the top news should be retrieved. If no date is given, the current day is assumed. (e.g. 2024-05-30)
@@ -153,7 +156,7 @@ export def "top-news topNews" [
   let full_url = (build-url $base "/top-news" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve Newspaper Front Page
@@ -169,6 +172,7 @@ export def "retrieve-front-page retrieveNewspaperFrontPage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --source-country: string # The ISO 3166 country code of the newspaper publication. (e.g. au)
   --source-name: string # The identifier of the publication see attached list. (e.g. herald-sun)
   --date: string # The date for which the front page should be retrieved. You can also go into the past, the earliest date is 2024-07-09. (e.g. 2024-07-09)
@@ -179,7 +183,7 @@ export def "retrieve-front-page retrieveNewspaperFrontPage" [
   let full_url = (build-url $base "/retrieve-front-page" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve News Articles by Ids
@@ -195,6 +199,7 @@ export def "retrieve-news retrieveNewsArticlesByIds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: string # A comma separated list of news ids. (e.g. 2352,2354)
 ]: nothing -> record<news: table<summary: string, image: string, sentiment: float, language: string, title: string, url: string, source_country: string, id: int, text: string, category: string, publish_date: string, authors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
@@ -203,7 +208,7 @@ export def "retrieve-news retrieveNewsArticlesByIds" [
   let full_url = (build-url $base "/retrieve-news" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Extract News
@@ -219,6 +224,7 @@ export def "extract-news extractNews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-url: string # The url of the news. (e.g. https://www.bbc.com/news/world-us-canada-59340789)
   --analyze: oneof<nothing, bool> # Whether to analyze the extracted news (extract entities, detect sentiment etc.) (e.g. true)
 ]: nothing -> record<title: string, text: string, url: string, image: string, images: table<width: int, title: string, url: string, height: int>, video: string, videos: table<summary: string, duration: int, thumbnail: string, title: string, url: string>, publish_date: string, author: string, authors: list<string>, language: string> {
@@ -228,7 +234,7 @@ export def "extract-news extractNews" [
   let full_url = (build-url $base "/extract-news" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Extract News Links
@@ -244,6 +250,7 @@ export def "extract-news-links extractNewsLinks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-url: string # The url of the news. (e.g. https://www.bbc.com/news/world-us-canada-59340789)
   --analyze: oneof<nothing, bool> # Whether to analyze the extracted news (extract entities, detect sentiment etc.) (e.g. true)
 ]: nothing -> record<news_links: list<string>> {
@@ -253,7 +260,7 @@ export def "extract-news-links extractNewsLinks" [
   let full_url = (build-url $base "/extract-news-links" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search News Sources
@@ -269,6 +276,7 @@ export def "search-news-sources searchNewsSources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The (partial) name of the source. (e.g. bbc)
 ]: nothing -> record<available: int, sources: table<name: string, url: string, language: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
@@ -277,7 +285,7 @@ export def "search-news-sources searchNewsSources" [
   let full_url = (build-url $base "/search-news-sources" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # News Website to RSS Feed
@@ -293,6 +301,7 @@ export def "feedrss newsWebsiteToRSSFeed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-url: string # The url of the site for which an RSS feed should be created. (e.g. https://www.bbc.com/)
   --extract-news: oneof<nothing, bool> # Whether to extract the news for each link instead of just returning the link. (e.g. true)
 ]: nothing -> any {
@@ -302,7 +311,7 @@ export def "feedrss newsWebsiteToRSSFeed" [
   let full_url = (build-url $base "/feed.rss" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Geo Coordinates
@@ -318,6 +327,7 @@ export def "geo-coordinates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --location: string # The address or name of the location. (e.g. Tokyo, Japan)
 ]: nothing -> record<latitude: float, longitude: float, city: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
@@ -326,5 +336,5 @@ export def "geo-coordinates get" [
   let full_url = (build-url $base "/geo-coordinates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

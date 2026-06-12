@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -87,7 +88,7 @@ def format-completer [] { ["markdown" "plaintext"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "oauth2-access-token accessToken" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -120,6 +121,7 @@ export def "oauth2-access-token accessToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --grant-type: string # This value must be set to `authorization_code`. (default: authorization_code)
   --client-id: string # Client ID that is automatically generated after application creation in the Developer Dashboard. (e.g. 479a3c7ba4a8d3cf28702)
   --client-secret: string # Client secret that is automatically generated after application creation in the Developer Dashboard. (e.g. a66515d3caf9183b8cad3eee546bcba892b45b01)
@@ -135,7 +137,7 @@ export def "oauth2-access-token accessToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List Documents
@@ -150,6 +152,7 @@ export def "public-documents listDocuments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --template-id: string # Filters by parent template. This Parameter can't be used with form_id. (e.g. BhVzRcxH9Z2LgfPPGXFUBa)
   --form-id: string # Filters by parent form. This parameter can't be used with template_id. (e.g. BhVzRcxH9Z2LgfPPGXFUBa)
   --folder-uuid: string # Filters by the folder where the documents are stored. (e.g. BhVzRcxH9Z2LgfPPGXFUBa)
@@ -178,7 +181,7 @@ export def "public-documents listDocuments" [
   let full_url = (build-url $base "/public/v1/documents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Document
@@ -201,6 +204,7 @@ export def "public-documents createDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --editor-ver: string # Set this parameter as `ev1` if you want to create a document from PDF with Classic Editor when both editors are enabled for the workspace. (DEPRECATED, e.g. ev2)
   --use-form-field-properties: string # Set this parameter as `yes` or `1` or `true` (only when upload pdf with form fields) if you want to  respect form fields properties, like `required`. (e.g. true)
   --template-uuid: string # The ID of a template you want to use. You can copy it from an in app template url such as `https://app.pandadoc.com/a/#/templates/{ID}/content`. A template ID is also obtained by listing templates. (e.g. hryJY9mqYZHjQCYQuSjRQg)
@@ -228,7 +232,7 @@ export def "public-documents createDocument" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete documents (bulk)
@@ -243,6 +247,7 @@ export def "public-documents bulkDeleteDocuments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<id: list<string>> {
   let input = $in
@@ -252,7 +257,7 @@ export def "public-documents bulkDeleteDocuments" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Document from File Upload
@@ -269,6 +274,7 @@ export def "public-documents-upload createDocumentFromUpload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --editor-ver: string # Set this parameter as `ev1` if you want to create a document from PDF with Classic Editor when both editors are enabled for the workspace. (DEPRECATED, e.g. ev2)
   --use-form-field-properties: string # Set this parameter as `yes` or `1` or `true` (only when upload pdf with form fields) if you want to  respect form fields properties, like `required`. (e.g. true)
   --file: string # Binary PDF File (format: binary)
@@ -283,7 +289,7 @@ export def "public-documents-upload createDocumentFromUpload" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Create Document from Markdown File Upload
@@ -299,6 +305,7 @@ export def "public-documents-upload-markdown createDocumentFromMarkdownUpload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # The Markdown file to upload.  Accepted content types: `text/markdown`, `text/x-markdown`.  (format: binary)
   --data: record # Request body for creating a document from an uploaded Markdown file.  > **Alpha:** Markdown file upload is currently in alpha. This functionality may change or be removed without notice. — shape: {name: string, folder_uuid?: string, owner?: record, recipients?: list, tokens?: list, metadata?: record, tags?: list, fields_mapping?: record}
 ]: any -> record<id: string, name: string, status: string, date_created: string, date_modified: string, expiration_date: string, version: string, uuid: string, links: table<rel: string, href: string, type: string>, info_message: string> {
@@ -310,7 +317,7 @@ export def "public-documents-upload-markdown createDocumentFromMarkdownUpload" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Document Status
@@ -326,13 +333,14 @@ export def "public-documents statusDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, status: string, date_created: string, date_modified: string, date_completed: string, expiration_date: string, version: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/documents/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Document
@@ -348,13 +356,14 @@ export def "public-documents delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/documents/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Document
@@ -375,6 +384,7 @@ export def "public-documents updateDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the document. (e.g. Contract)
   --recipients: list # The list of recipients you're sending the document to. The ID or email are required. If the ID is passed, an existing recipient will be updated. If the email is passed, a new recipient will be added to CC.
   --body-fields: record # Set specific values to the fields. This object maps merge field names to their corresponding values.  Each key represents a merge field name, and each value is an object containing the data to populate that field with. The structure allows you to pre-populate various field types including text inputs, checkboxes, dropdowns, and date fields.  **Key Points:** - Keys must match the exact merge field names from your template or file. - Values must be wrapped in an object with a `value` property. - Supported value types: string, number, boolean. - Date fields should use RFC 3339 format (e.g., '2019-12-31T00:00:00.000Z'). - Signature fields cannot be pre-filled.  **Example Usage:** - Text field: `"CustomerName": {"value": "John Doe"}` - Checkbox: `"AgreeToTerms": {"value": true}` - Date field: `"DeliveryDate": {"value": "2019-12-31T00:00:00.000Z"}`  (e.g. {Like: {value: true}, Delivery: {value: Same Day Delivery}, Date: {value: 2019-12-31T00:00:00.000Z}})
@@ -394,7 +404,7 @@ export def "public-documents updateDocument" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Document Auto Reminder Settings
@@ -410,6 +420,7 @@ export def "public-documents-auto-reminders updateDocumentAutoReminderSettings" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Toggles auto-reminders for the document.  If `true`, reminders are scheduled based on the configuration.
   --delivery-method: string@delivery-method-completer # The method used to deliver reminders (e.g., email, SMS).
   --initial-delay-days: int # Number of days to wait after sending the document before the first reminder is sent.
@@ -424,7 +435,7 @@ export def "public-documents-auto-reminders updateDocumentAutoReminderSettings" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Document Auto Reminder Settings
@@ -440,13 +451,14 @@ export def "public-documents-auto-reminders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<enabled: bool, delivery_method: string, initial_delay_days: int, is_recurring: bool, recurrence_frequency_days: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/documents/($document_id)/auto-reminders")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Document Auto Reminder Status
@@ -462,13 +474,14 @@ export def "public-documents-auto-reminders-status statusDocumentAutoReminder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: table<recipient_id: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/documents/($document_id)/auto-reminders/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Document eSign disclosure
@@ -484,13 +497,14 @@ export def "public-documents-esign-disclosure documentESignDisclosure" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<is_enabled: bool, company_name: string, esign_disclosure_text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/documents/($document_id)/esign-disclosure")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Document Status Change
@@ -506,6 +520,7 @@ export def "public-documents-status changeDocumentStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   status: int@status-completer-1 # Number code for the target document status. See notes for the codes corresponding to each status. (e.g. 12)
   --note: string # Provide “private notes” regarding the manual status change. (e.g. A private note)
   --notify-recipients: oneof<nothing, bool> # Send a notification email about the status change to all recipients.
@@ -518,7 +533,7 @@ export def "public-documents-status changeDocumentStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Document Status Change with Upload
@@ -534,6 +549,7 @@ export def "public-documents-status-upload changeDocumentStatusWithUpload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # Binary attachment file (format: binary)
   --data: any
 ]: any -> any {
@@ -545,7 +561,7 @@ export def "public-documents-status-upload changeDocumentStatusWithUpload" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Move Document to Draft
@@ -561,13 +577,14 @@ export def "public-documents-draft documentRevertToDraft" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, status: string, date_created: string, date_modified: string, expiration_date: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/documents/($id)/draft")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Document Details
@@ -583,13 +600,14 @@ export def "public-documents-details detailsDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, autonumbering_sequence_name_prefix: any, folder_uuid: string, date_created: string, date_modified: string, date_completed: string, content_date_modified: string, date_sent: string, ref_number: string, created_by: record<id: string, membership_id: string, email: string, first_name: string, last_name: string, avatar: string>, template: record<id: string, name: string>, expiration_date: string, metadata: record, tokens: list<record>, fields: list<any>, pricing: record<tables: list<record>, quotes: list<record>, total: string>, tables: table<name: string>, images: table<name: string>, texts: table<name: string>, tags: list<string>, sent_by: any, recipients: list<record>, grand_total: record<amount: string, currency: string>, linked_objects: table<provider: string, entity_type: string, entity_id: string, id: string, children: list>, status: string, approval_execution: record<document_uuid: string, revision_number: int>, version: string, lock: record<locked_by_user_id: string, lock_type: string, expires_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/documents/($id)/details")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send Document
@@ -608,6 +626,7 @@ export def "public-documents-send sendDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --message: string # A message that will be sent by email with a link to a document to sign. (e.g. Hello! This document was sent from the PandaDoc API)
   --subject: string # Value that will be used as the email subject. (e.g. Please check this test API document from PandaDoc)
   --silent: oneof<nothing, bool> # If set to `true`, disables email notifications for document recipients and the document sender. Also disables scheduled reminders (manual reminders still possible). Doesn't affect "Approve document" email notification sent to the Approver.
@@ -624,7 +643,7 @@ export def "public-documents-send sendDocument" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Document Editing Session
@@ -640,6 +659,7 @@ export def "public-documents-editing-sessions createDocumentEditingSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string # Email of the user to create the editing session for (format: email, e.g. john.doe@pandadoc.com)
   --lifetime: int # Lifetime of the E-Token in seconds. (format: int32, default: 3600, e.g. 3600)
 ]: any -> record<id: string, email: string, expires_at: string, key: string, token: string, document_id: string> {
@@ -651,7 +671,7 @@ export def "public-documents-editing-sessions createDocumentEditingSession" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Document Session for Embedded Sign
@@ -667,6 +687,7 @@ export def "public-documents-session createDocumentLink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   recipient: string # Email address of the person who will receive access to the document. (e.g. josh@example.com)
   --lifetime: float # The duration in seconds for which the document link will remain valid. The link will expire and become inaccessible after this time period. For security, we recommend setting the lifetime to less than one year (e.g., `"lifetime": 31535999`). If not specified, the default value is 1 hour (3600 seconds).  (default: 3600, e.g. 900)
 ]: any -> record<id: string, expires_at: string> {
@@ -678,7 +699,7 @@ export def "public-documents-session createDocumentLink" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Document Download
@@ -694,6 +715,7 @@ export def "public-documents-download downloadDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --watermark-color: string # HEX code (for example `#FF5733`). (e.g. #FF5733)
   --watermark-font-size: int # Font size of the watermark. (e.g. 12)
   --watermark-opacity: float # In range 0.0-1.0 (format: float, e.g. 0.5)
@@ -706,7 +728,7 @@ export def "public-documents-download downloadDocument" [
   let full_url = (build-url $base $"/public/v1/documents/($id)/download" $qp)
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download Completed Document
@@ -722,6 +744,7 @@ export def "public-documents-download-protected downloadProtectedDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --separate-files: oneof<nothing, bool> # Download document bundle as a zip-archive of separate PDFs (1 file per section). (default: false, e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -730,7 +753,7 @@ export def "public-documents-download-protected downloadProtectedDocument" [
   let full_url = (build-url $base $"/public/v1/documents/($id)/download-protected" $qp)
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Documents by Linked Object
@@ -745,6 +768,7 @@ export def "public-documents-linked-objects listDocumentsByLinkedObject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --entity-id: string # You can get entity id from your integration, for example, from a url of a HubSpot deal. (e.g. 12345)
   --entity-type: string # See the available entity types: https://developers.pandadoc.com/reference/link-service#examples-of-the-most-popular-crms  (e.g. deal)
   --provider: string # See the available providers: https://developers.pandadoc.com/reference/link-service#examples-of-the-most-popular-crms  (e.g. hubspot)
@@ -757,7 +781,7 @@ export def "public-documents-linked-objects listDocumentsByLinkedObject" [
   let full_url = (build-url $base "/public/v1/documents/linked-objects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Linked Objects
@@ -773,13 +797,14 @@ export def "public-documents-linked-objects listLinkedObjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<linked_objects: table<id: string, provider: string, entity_type: string, entity_id: string, children: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/documents/($id)/linked-objects")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Linked Object
@@ -795,6 +820,7 @@ export def "public-documents-linked-objects createLinkedObject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   provider: string # CRM name (lowercase).  See the list of available providers: https://developers.pandadoc.com/reference/link-service#examples-of-the-most-popular-crms  (e.g. pipedrive)
   entity_type: string # Entity type.  See the available entity types: https://developers.pandadoc.com/reference/link-service#examples-of-the-most-popular-crms  (e.g. deal)
   entity_id: string # Entity unique identifier. The system validates if the entity exists. (e.g. 9372)
@@ -807,7 +833,7 @@ export def "public-documents-linked-objects createLinkedObject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Linked Object
@@ -824,13 +850,14 @@ export def "public-documents-linked-objects delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/documents/($id)/linked-objects/($linked_object_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Document Attachments
@@ -846,13 +873,14 @@ export def "public-documents-attachments listDocumentAttachments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<uuid: string, date_created: string, created_by: record<id: string, email: string, first_name: string, last_name: string, avatar: string>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/documents/($id)/attachments")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Document Attachment
@@ -868,6 +896,7 @@ export def "public-documents-attachments createDocumentAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-source: string # URL link to the file to be attached to a document (e.g. https://is3-ssl.mzstatic.com/1e7fbd74-d10c-8e3a-63c3-0beb3ea231a5/512x512bb.jpg)
   --name: string # Optional name to set for uploaded file (e.g. Additional agreement)
 ]: any -> record<uuid: string, date_created: string, created_by: record<id: string, email: string, first_name: string, last_name: string, avatar: string>, name: string> {
@@ -879,7 +908,7 @@ export def "public-documents-attachments createDocumentAttachment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Document Attachment From Upload
@@ -895,6 +924,7 @@ export def "public-documents-attachments-upload createDocumentAttachmentFromFile
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # Binary file to be attached to a document (format: binary)
   --name: string # Optional name to set for uploaded file (e.g. Additional agreement)
 ]: any -> record<uuid: string, date_created: string, created_by: record<id: string, email: string, first_name: string, last_name: string, avatar: string>, name: string> {
@@ -906,7 +936,7 @@ export def "public-documents-attachments-upload createDocumentAttachmentFromFile
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Document Attachment Details
@@ -923,13 +953,14 @@ export def "public-documents-attachments detailsDocumentAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uuid: string, date_created: string, created_by: record<id: string, email: string, first_name: string, last_name: string, avatar: string>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/documents/($id)/attachments/($attachment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Document Attachment
@@ -946,13 +977,14 @@ export def "public-documents-attachments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/documents/($id)/attachments/($attachment_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download Document Attachment
@@ -969,13 +1001,14 @@ export def "public-documents-attachments-download downloadDocumentAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/documents/($id)/attachments/($attachment_id)/download")
   let accept_val = "application/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Document Fields
@@ -991,13 +1024,14 @@ export def "public-documents-fields listDocumentFields" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fields: table<uuid: string, name: string, title: string, value: any, field_id: string, type: string, placeholder: string, assigned_to: record, layout: record, section_uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/documents/($id)/fields")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Document Fields Assignment
@@ -1014,6 +1048,7 @@ export def "public-documents-fields updateDocumentFieldsAssignment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-fields: list # An array of field assignment operations. Each item specifies a field and the recipient it should be assigned to. — item shape: {field_id: string, assigned_to: string}
 ]: any -> any {
   let input = $in
@@ -1024,7 +1059,7 @@ export def "public-documents-fields updateDocumentFieldsAssignment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Document Fields
@@ -1041,6 +1076,7 @@ export def "public-documents-fields createDocumentFields" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-fields: list # An array of fields to place on a document. — item shape: {field_id?: string, merge_field?: string, type: "checkbox"|"collect_file"|"date"|"dropdown"|"initials"|"payment_details"|"radio_buttons"|"signature"|"stamp"|"text", placeholder?: string, assigned_to?: string, layout: record}
 ]: any -> record<fields: table<uuid: string, name: string, title: string, value: any, field_id: string, type: string, placeholder: string, assigned_to: record, layout: record, section_uuid: string>> {
   let input = $in
@@ -1051,7 +1087,7 @@ export def "public-documents-fields createDocumentFields" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Document Audit Trail
@@ -1067,6 +1103,7 @@ export def "public-documents-audit-trail listDocumentAuditTrail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of items to return. (default: 20, e.g. 20)
   --offset: int # Number of items to skip before starting to collect the result set. (default: 0, e.g. 0)
 ]: nothing -> record<count: int, results: table<id: string, user: record, action: int, reason: string, date_created: string, ip_address: string>> {
@@ -1076,7 +1113,7 @@ export def "public-documents-audit-trail listDocumentAuditTrail" [
   let full_url = (build-url $base $"/public/v2/documents/($document_id)/audit-trail" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get document settings
@@ -1092,13 +1129,14 @@ export def "public-documents-settings documentSettingsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<language: string, qualified_electronic_signature: bool, expires_in: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v2/documents/($document_id)/settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update document settings
@@ -1114,6 +1152,7 @@ export def "public-documents-settings documentSettingsUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --language: string@language-completer # Document language code (e.g., 'en-US', 'fr-FR').
   --qualified-electronic-signature: oneof<nothing, bool> # Indicates whether the document requires a Qualified Electronic Signature (QES) during the signing process. If `true`, signers must complete the document using a third-party qualified electronic signature provider according to supported verification rules.
   --expires-in: int # Document expiration in days. Minimum is 1 day.  (format: int32)
@@ -1126,7 +1165,7 @@ export def "public-documents-settings documentSettingsUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update document ownership
@@ -1142,6 +1181,7 @@ export def "public-documents-ownership transferDocumentOwnership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --membership-id: string # A unique identifier of a workspace member. (e.g. radQBiBkU7MBk59NSgaGfd)
 ]: any -> any {
   let input = $in
@@ -1152,7 +1192,7 @@ export def "public-documents-ownership transferDocumentOwnership" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Transfer all documents ownership
@@ -1167,6 +1207,7 @@ export def "public-documents-ownership transferAllDocumentsOwnership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --from-membership-id: string # A unique identifier of a workspace member from whom you want to transfer ownership. (e.g. Dqsxp4jNnFcS63tJEgLJGN)
   --to-membership-id: string # A unique identifier of a workspace member to whom you want to transfer ownership. (e.g. radQBiBkU7MBk59NSgaGfd)
 ]: any -> any {
@@ -1178,7 +1219,7 @@ export def "public-documents-ownership transferAllDocumentsOwnership" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Document move to folder
@@ -1195,13 +1236,14 @@ export def "public-documents-move-to-folder documentMoveToFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/documents/($id)/move-to-folder/($folder_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Append Content Library Item to a document
@@ -1218,6 +1260,7 @@ export def "public-documents-append-content-library-item appendContentLibraryIte
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cli: record # Settings to append a CLI to a document, with ability to change some parameters — shape: {id: string, pages?: list}
 ]: any -> record<cli: record<id: string, pages: list<record>>, block_mapping: record<tables: list<record>, pricing_tables: list<record>, images: list<record>, texts: list<record>>> {
   let input = $in
@@ -1228,7 +1271,7 @@ export def "public-documents-append-content-library-item appendContentLibraryIte
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add Document Recipient
@@ -1244,6 +1287,7 @@ export def "public-documents-recipients addDocumentRecipient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-id: string # Contact uuid. (e.g. 2eWSKSvVqmuVCnuUK3iWwD)
   kind: string@kind-completer # default: contact, e.g. contact
 ]: any -> record<recipient_id: string> {
@@ -1255,7 +1299,7 @@ export def "public-documents-recipients addDocumentRecipient" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Document Recipient
@@ -1272,13 +1316,14 @@ export def "public-documents-recipients delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/documents/($id)/recipients/($recipient_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Document Recipient
@@ -1298,6 +1343,7 @@ export def "public-documents-recipients-recipient editDocumentRecipient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # You cannot use the email of another contact when updating a recipient contact. (nullable, e.g. user01@pandadoc.com)
   --phone: string # nullable, e.g. +14842634627
   --delivery-methods: record # nullable — shape: {email?: bool, sms?: bool}
@@ -1320,7 +1366,7 @@ export def "public-documents-recipients-recipient editDocumentRecipient" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Change Signer (Reassign Document Recipient)
@@ -1337,6 +1383,7 @@ export def "public-documents-recipients-reassign reassignDocumentRecipient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-id: string # Contact uuid. (e.g. 2eWSKSvVqmuVCnuUK3iWwD)
   kind: string@kind-completer # default: contact, e.g. contact
 ]: any -> record<recipient_id: string> {
@@ -1348,7 +1395,7 @@ export def "public-documents-recipients-reassign reassignDocumentRecipient" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send Manual Reminder
@@ -1365,6 +1412,7 @@ export def "public-documents-send-reminder createManualReminder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reminders: list # A list of reminders to be sent to specified recipients. Use this field to specify which recipients should receive a reminder and through which delivery methods.  Each email reminder contains document sender in the From field,  ensuring the recipient always sees consistent sender details and branding. — item shape: {recipient_id?: string, delivery_methods?: record, email_customization?: record}
 ]: any -> record<result: table<recipient_id: string, sms: record, email: record, email_customization: record>> {
   let input = $in
@@ -1375,7 +1423,7 @@ export def "public-documents-send-reminder createManualReminder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Document Sections
@@ -1391,13 +1439,14 @@ export def "public-documents-sections listSections" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<results: table<uuid: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/documents/($document_id)/sections")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Document Section
@@ -1413,6 +1462,7 @@ export def "public-documents-sections-uploads uploadSection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --merge-field-scope: string@merge-field-scope-completer # Determines how the fields are mapped when creating a section.   * document: Default value. The fields of the entire document are updated.   * upload: Only the fields from the created section are updated. The merge field is appended with the upload ID.  (e.g. document)
   --body: record
 ]: any -> record<uuid: string, name: string, document_uuid: string, status: string, date_created: string, date_modified: string, date_completed: string, info_message: string> {
@@ -1424,7 +1474,7 @@ export def "public-documents-sections-uploads uploadSection" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Document Section from File Upload
@@ -1440,6 +1490,7 @@ export def "public-documents-sections-uploads-upload uploadSectionWithUpload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --merge-field-scope: string@merge-field-scope-completer # Determines how the fields are mapped when creating a section.   * document: Default value. The fields of the entire document are updated.   * upload: Only the fields from the created section are updated. The merge field is appended with the upload ID.  (e.g. document)
   --file: string # Binary PDF/DocX/RTF File. (format: binary)
   --data: any
@@ -1453,7 +1504,7 @@ export def "public-documents-sections-uploads-upload uploadSectionWithUpload" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "multipart/form-data"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Document Section Upload Status
@@ -1470,13 +1521,14 @@ export def "public-documents-sections-uploads sectionDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uuid: string, document_uuid: string, status: string, name: string, sections_uuids: list<string>, date_created: string, date_modified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/documents/($document_id)/sections/uploads/($upload_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Document Section Details
@@ -1493,13 +1545,14 @@ export def "public-documents-sections sectionInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uuid: string, name: string, document_uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/documents/($document_id)/sections/($section_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Document Section
@@ -1516,13 +1569,14 @@ export def "public-documents-sections delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/documents/($document_id)/sections/($section_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add DSV Named Items to a Document
@@ -1539,6 +1593,7 @@ export def "public-dsv-add-named-items addDsvNamedItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   items: list # List of named items representing structural elements of the document. — item shape: {name: string, level: int, page_name: string}
 ]: any -> record<results: table<id: string, name: string, level: int, page_name: string, page_uuid: string>, count: float> {
   let input = $in
@@ -1549,7 +1604,7 @@ export def "public-dsv-add-named-items addDsvNamedItems" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Content Library Item
@@ -1564,6 +1619,7 @@ export def "public-content-library-items listContentLibraryItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Search query. Filter by content library item name. (e.g. Sample Pricing Table)
   --id: string # Specify content library item ID. (e.g. UXdP7Lnbvvr4WEb2wzM2hc)
   --deleted: oneof<nothing, bool> # Returns only the deleted content library items. (e.g. false)
@@ -1578,7 +1634,7 @@ export def "public-content-library-items listContentLibraryItems" [
   let full_url = (build-url $base "/public/v1/content-library-items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Content Library Item
@@ -1593,6 +1649,7 @@ export def "public-content-library-items createContentLibraryItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-url: string # Secure (HTTPS) and publicly accessible URL to the PDF document. (e.g. https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf)
   --name: string # The name of the Content Library Item. (e.g. CLI name example)
 ]: any -> record<id: string, name: string, date_created: string, date_modified: string, version: string, status: string> {
@@ -1604,7 +1661,7 @@ export def "public-content-library-items createContentLibraryItem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Content Library Item from File Upload
@@ -1619,6 +1676,7 @@ export def "public-content-library-items-upload createContentLibraryItemFromUplo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # Binary PDF File (format: binary)
   --data: any
 ]: any -> record<id: string, name: string, date_created: string, date_modified: string, version: string, status: string> {
@@ -1630,7 +1688,7 @@ export def "public-content-library-items-upload createContentLibraryItemFromUplo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Content Library Item Status
@@ -1646,13 +1704,14 @@ export def "public-content-library-items statusContentLibraryItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, date_created: string, date_modified: string, version: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/content-library-items/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Content Library Item Details
@@ -1668,13 +1727,14 @@ export def "public-content-library-items-details detailsContentLibraryItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, date_created: string, date_modified: string, content_date_modified: string, created_by: record<id: string, email: string, first_name: string, last_name: string, avatar: string>, metadata: record, tokens: list<record>, fields: list<record>, pricing: record<tables: list<record>, quotes: list<record>, total: string>, tags: list<string>, roles: list<record>, version: string, content_placeholders: list<record>, tables: table<name: string>, images: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/content-library-items/($id)/details")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Templates
@@ -1689,6 +1749,7 @@ export def "public-templates listTemplates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Search query. Filter by template name. (e.g. Sample onboarding template)
   --shared: oneof<nothing, bool> # Returns only the shared templates. (e.g. false)
   --deleted: oneof<nothing, bool> # Returns only the deleted templates. (e.g. false)
@@ -1705,7 +1766,7 @@ export def "public-templates listTemplates" [
   let full_url = (build-url $base "/public/v1/templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Template
@@ -1722,6 +1783,7 @@ export def "public-templates createTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of additional fields to include in the response. (e.g. [content_date_modified])
   --body-url: string # Secure (HTTPS) and publicly accessible URL to the PDF document. (e.g. https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf)
   --name: string # The name of the template. (e.g. Template name example)
@@ -1739,7 +1801,7 @@ export def "public-templates createTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Template from File Upload
@@ -1754,6 +1816,7 @@ export def "public-templates-upload createTemplateWithUpload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A comma-separated list of additional fields to include in the response. (e.g. [content_date_modified])
   --file: string # Binary PDF/DocX/RTF File. (format: binary)
   --data: any
@@ -1767,7 +1830,7 @@ export def "public-templates-upload createTemplateWithUpload" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Template Details
@@ -1783,13 +1846,14 @@ export def "public-templates-details detailsTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, folder_uuid: string, date_created: string, date_modified: string, content_date_modified: string, created_by: record<id: string, email: string, first_name: string, last_name: string, avatar: string>, metadata: record, tokens: table<name: string, value: string>, fields: list<record>, pricing: record<tables: list<record>, quotes: list<record>, total: string>, tags: list<string>, roles: table<id: string, name: string, signing_order: string, preassigned_person: record>, version: string, content_placeholders: table<uuid: string, block_id: string, description: string>, tables: table<name: string>, images: table<name: string, block_uuid: string, urls: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/templates/($id)/details")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Template
@@ -1805,13 +1869,14 @@ export def "public-templates delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/templates/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Template Status
@@ -1827,13 +1892,14 @@ export def "public-templates statusTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, date_created: string, date_modified: string, version: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/templates/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Template Update
@@ -1851,6 +1917,7 @@ export def "public-templates updateTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tokens: list # Create or initialize multiple CUSTOM variables with their values using tokens/values list. Template's predefined variables are read-only. Any attempts to do so will be ignored. (e.g. [{name: Favorite.Pet, value: Panda}]) — item shape: {name: string, value: string}
   --roles: list # Replace the full set of template roles. Items with an existing `id` are updated, items without an `id` are created as new roles, and existing roles whose `id` is not present in the list are deleted. (e.g. [{id: BqL3PVsB2tPLfaSqUiQQRf, name: Client, signing_order: 1}, {name: Manager, signing_order: 2}]) — item shape: {id?: string, name: string, signing_order?: int}
 ]: any -> any {
@@ -1862,7 +1929,7 @@ export def "public-templates updateTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Template Editing Session
@@ -1878,6 +1945,7 @@ export def "public-templates-editing-sessions createTemplateEditingSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string # Email of the user to create the editing session for (format: email, e.g. john.doe@pandadoc.com)
   --lifetime: int # Lifetime of the E-Token in seconds. (format: int32, default: 3600, e.g. 3600)
 ]: any -> record<id: string, email: string, expires_at: string, key: string, token: string, template_id: string> {
@@ -1889,7 +1957,7 @@ export def "public-templates-editing-sessions createTemplateEditingSession" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get template settings
@@ -1905,13 +1973,14 @@ export def "public-templates-settings templateSettingsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<language: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v2/templates/($template_id)/settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update template settings
@@ -1927,6 +1996,7 @@ export def "public-templates-settings templateSettingsUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --language: string@language-completer # Document language code (e.g., 'en-US', 'fr-FR').
 ]: any -> record<language: string> {
   let input = $in
@@ -1937,7 +2007,7 @@ export def "public-templates-settings templateSettingsUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Forms
@@ -1952,6 +2022,7 @@ export def "public-forms listForm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # Specify how many forms to return. Default is 50 forms, maximum is 100 forms. (format: int32, e.g. 10)
   --page: int # Specify which page of the dataset to return. (format: int32, e.g. 1)
   --status: list # Specify which status of the forms dataset to return. (e.g. [draft, active])
@@ -1965,7 +2036,7 @@ export def "public-forms listForm" [
   let full_url = (build-url $base "/public/v1/forms" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Documents Folders
@@ -1980,6 +2051,7 @@ export def "public-documents-folders listDocumentFolders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --parent-uuid: string # The UUID of the folder containing folders. To list the folders located in the root folder, remove this parameter in the request. (e.g. Nq8htXxFssmhRxAPSP4SBP)
   --count: int # Optionally, specify how many folders to return. (format: int32, default: 50, e.g. 50)
   --page: int # Optionally, specify which page of the dataset to return. (format: int32, e.g. 1)
@@ -1990,7 +2062,7 @@ export def "public-documents-folders listDocumentFolders" [
   let full_url = (build-url $base "/public/v1/documents/folders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Documents Folder
@@ -2005,6 +2077,7 @@ export def "public-documents-folders createDocumentFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Name the folder for the Documents you are creating. (e.g. A new document folder)
   --parent-uuid: string # ID of the parent folder. To create a new folder in the root folder, remove this parameter in the request. (e.g. Nq8htXxFssmhRxAPSP4SBP)
 ]: any -> record<uuid: string, name: string, date_created: string> {
@@ -2016,7 +2089,7 @@ export def "public-documents-folders createDocumentFolder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Rename Documents Folder
@@ -2032,6 +2105,7 @@ export def "public-documents-folders renameDocumentFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Provide a new name for the folder. (e.g. Another document folder')
 ]: any -> record<uuid: string, name: string, date_created: string> {
   let input = $in
@@ -2042,7 +2116,7 @@ export def "public-documents-folders renameDocumentFolder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Templates Folders
@@ -2057,6 +2131,7 @@ export def "public-templates-folders listTemplateFolders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --parent-uuid: string # The UUID of the folder containing folders. To list the folders located in the root folder, remove this parameter in the request. (e.g. Nq8htXxFssmhRxAPSP4SBP)
   --count: int # Optionally, specify how many folders to return. (format: int32, default: 50, e.g. 50)
   --page: int # Optionally, specify which page of the dataset to return. (format: int32, e.g. 1)
@@ -2067,7 +2142,7 @@ export def "public-templates-folders listTemplateFolders" [
   let full_url = (build-url $base "/public/v1/templates/folders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Templates Folder
@@ -2082,6 +2157,7 @@ export def "public-templates-folders createTemplateFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Name the folder for Templates you are creating. (e.g. A new template folder)
   --parent-uuid: string # ID of the parent folder. To create a new folder in the root folder, remove this parameter in the request. (e.g. Nq8htXxFssmhRxAPSP4SBP)
 ]: any -> record<uuid: string, name: string, date_created: string> {
@@ -2093,7 +2169,7 @@ export def "public-templates-folders createTemplateFolder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Rename Templates Folder
@@ -2109,6 +2185,7 @@ export def "public-templates-folders renameTemplateFolder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Provide a new name for the folder. (e.g. Another template folder)
 ]: any -> record<uuid: string, name: string, date_created: string> {
   let input = $in
@@ -2119,7 +2196,7 @@ export def "public-templates-folders renameTemplateFolder" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List API Log
@@ -2136,6 +2213,7 @@ export def "public-logs listLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since: string # Determines a point in time from which logs should be fetched. Either a specific ISO 8601 datetime or a relative identifier such as "-90d" (for past 90 days). (default: -90d, e.g. -7d)
   --qp-to: string # Determines a point in time from which logs should be fetched. Either a specific ISO 8601 datetime or a relative identifier such as "-10d" (for past 10 days) or a special "now" value. (e.g. now)
   --count: int # The amount of items on each page. The total number of accessible items (`count × page`) must not exceed 10,000. (format: int32, default: 100, e.g. 10)
@@ -2151,7 +2229,7 @@ export def "public-logs listLogs" [
   let full_url = (build-url $base "/public/v1/logs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # API Log Details
@@ -2169,13 +2247,14 @@ export def "public-logs detailsLog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, url: string, method: string, status: int, request_time: string, response_time: string, response_body: record, query_params_string: string, query_params_object: record, request_body: record, token_type: string, application: string, key: string, request_id: string, user_email: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/logs/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List API Log
@@ -2190,6 +2269,7 @@ export def "public-logs listLogsV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since: string # Determines a point in time from which logs should be fetched. Either a specific ISO 8601 datetime or a relative identifier such as "-90d" (for past 90 days). (default: -90d, e.g. -7d)
   --qp-to: string # Determines a point in time from which logs should be fetched. Either a specific ISO 8601 datetime or a relative identifier such as "-10d" (for past 10 days) or a special "now" value. (e.g. now)
   --count: int # The amount of items on each page. The total number of accessible items (`count × page`) must not exceed 10,000. (format: int32, default: 100, e.g. 10)
@@ -2205,7 +2285,7 @@ export def "public-logs listLogsV2" [
   let full_url = (build-url $base "/public/v2/logs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # API Log Details
@@ -2221,13 +2301,14 @@ export def "public-logs detailsLogV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, url: string, method: string, status: int, request_time: string, response_time: string, response_body: record, query_params_string: string, query_params_object: record, request_body: record, token_type: string, application: string, key: string, request_id: string, user_email: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v2/logs/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List contacts
@@ -2242,6 +2323,7 @@ export def "public-contacts listContacts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Optional search parameter. Filter results by exact match.
 ]: nothing -> record<results: table<id: string, email: string, first_name: string, last_name: string, company: string, job_title: string, phone: string, country: string, state: string, street_address: string, city: string, postal_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2250,7 +2332,7 @@ export def "public-contacts listContacts" [
   let full_url = (build-url $base "/public/v1/contacts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create contact
@@ -2265,6 +2347,7 @@ export def "public-contacts createContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # An email address of the contact (nullable, e.g. user01@pandadoc.com)
   --first-name: string # Contact's first name (nullable, e.g. John)
   --last-name: string # Contact's last name (nullable, e.g. Doe)
@@ -2285,7 +2368,7 @@ export def "public-contacts createContact" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Contact Details
@@ -2301,13 +2384,14 @@ export def "public-contacts detailsContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, email: string, first_name: string, last_name: string, company: string, job_title: string, phone: string, country: string, state: string, street_address: string, city: string, postal_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/contacts/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Contact
@@ -2323,13 +2407,14 @@ export def "public-contacts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/contacts/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Contact
@@ -2345,6 +2430,7 @@ export def "public-contacts updateContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --first-name: string # nullable, e.g. John
   --last-name: string # nullable, e.g. Doe
   --company: string # nullable, e.g. John Doe Inc.
@@ -2363,7 +2449,7 @@ export def "public-contacts updateContact" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Members
@@ -2378,13 +2464,14 @@ export def "public-members listMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<results: table<user_id: string, membership_id: string, email: string, first_name: string, last_name: string, is_active: bool, workspace: string, workspace_name: string, emails_verified: bool, role: string, user_license: string, date_created: string, date_modified: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/public/v1/members")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Current Member Details
@@ -2399,13 +2486,14 @@ export def "public-members-current detailsCurrentMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<user_id: string, membership_id: string, email: string, first_name: string, last_name: string, is_active: bool, workspace: string, workspace_name: string, emails_verified: bool, role: string, user_license: string, date_created: string, date_modified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/public/v1/members/current")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Member Details
@@ -2421,13 +2509,14 @@ export def "public-members detailsMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<user_id: string, membership_id: string, email: string, first_name: string, last_name: string, is_active: bool, workspace: string, workspace_name: string, emails_verified: bool, role: string, user_license: string, date_created: string, date_modified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/members/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Member Token
@@ -2443,6 +2532,7 @@ export def "public-members-token createMemberToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --lifetime: int # Token lifetime in seconds. (default: 3600)
 ]: any -> record<token: string> {
   let input = $in
@@ -2453,7 +2543,7 @@ export def "public-members-token createMemberToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Webhook Subscriptions
@@ -2468,13 +2558,14 @@ export def "public-webhook-subscriptions listWebhookSubscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<items: table<uuid: string, name: string, url: string, active: bool, payload: list, triggers: list, workspace_id: string, shared_key: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/public/v1/webhook-subscriptions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Webhook Subscription
@@ -2489,6 +2580,7 @@ export def "public-webhook-subscriptions createWebhookSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Set a name for the Webhooks subscription. (e.g. My Subscription)
   --body-url: string # Set the Webhooks subscription URL. (format: url, e.g. https://example.com)
   --active: oneof<nothing, bool> # Set the status of the Webhooks subscription. (default: true)
@@ -2503,7 +2595,7 @@ export def "public-webhook-subscriptions createWebhookSubscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Webhook Subscription Details
@@ -2519,13 +2611,14 @@ export def "public-webhook-subscriptions detailsWebhookSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uuid: string, name: string, url: string, active: bool, payload: list<string>, triggers: list<string>, workspace_id: string, shared_key: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/webhook-subscriptions/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Webhook Subscription
@@ -2541,6 +2634,7 @@ export def "public-webhook-subscriptions updateWebhookSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Set a new name for the Webhooks subscription. (e.g. My Subscription)
   --body-url: string # Set the new Webhooks subscription URL. (format: url, e.g. https://example.com)
   --active: oneof<nothing, bool> # Set the status of the Webhooks subscription. (default: true, e.g. true)
@@ -2555,7 +2649,7 @@ export def "public-webhook-subscriptions updateWebhookSubscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Webhook Subscription
@@ -2571,13 +2665,14 @@ export def "public-webhook-subscriptions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/webhook-subscriptions/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Webhook Subscription Shared Key
@@ -2593,13 +2688,14 @@ export def "public-webhook-subscriptions-shared-key updateWebhookSubscriptionSha
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<shared_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/webhook-subscriptions/($id)/shared-key")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Webhook Events
@@ -2614,6 +2710,7 @@ export def "public-webhook-events listWebhookEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # Specify how many event results to return. (format: int32, e.g. 10)
   --page: int # Specify which page of the dataset to return. (format: int32, e.g. 1)
   --since: string # Return results where the event creation time is greater than or equal to this value. (format: date-time, e.g. 2022-06-01T00:00:00Z)
@@ -2628,7 +2725,7 @@ export def "public-webhook-events listWebhookEvent" [
   let full_url = (build-url $base "/public/v1/webhook-events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Webhook Event Details
@@ -2644,13 +2741,14 @@ export def "public-webhook-events detailsWebhookEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uuid: string, name: string, type: string, http_status_code: int, error: string, delivery_time: string, url: string, signature: string, request_body: string, response_body: string, response_headers: string, event_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/webhook-events/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Notaries
@@ -2665,6 +2763,7 @@ export def "public-notary-notaries listNotaries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: list # Filter by status (comma-separated values supported). Valid values are INVITED, UNDER_REVIEW, ACTIVE, REJECTED, INACTIVE (e.g. [ACTIVE, UNDER_REVIEW])
   --commission-state: list # Filter by commission state (comma-separated values supported) (e.g. [California, Arizona])
   --offset: int # Number of results to skip (default: 0, e.g. 0)
@@ -2677,7 +2776,7 @@ export def "public-notary-notaries listNotaries" [
   let full_url = (build-url $base "/public/v2/notary/notaries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Notarization Requests
@@ -2692,6 +2791,7 @@ export def "public-notary-notarization-requests listNotarizationRequests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: list # Filter by status (comma-separated values supported). (e.g. [SENT])
   --created-by-user-id: list # Filter by creator user ID (comma-separated values supported). (e.g. [nyAnVpY7pZ23FBve8s9xgk])
   --document-id: list # Filter by document ID (comma-separated values supported). (e.g. [D3okRfgHRX7NEhavcACReB])
@@ -2705,7 +2805,7 @@ export def "public-notary-notarization-requests listNotarizationRequests" [
   let full_url = (build-url $base "/public/v2/notary/notarization-requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Notarization Request
@@ -2722,6 +2822,7 @@ export def "public-notary-notarization-requests createNotarizationRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   document_id: string # ID of the Document for notarization. (e.g. 8DstGmLJDBXBKrh3wnqzpe)
   --disable-invitees-notifications: oneof<nothing, bool> # Disable all notifications for invitees including email with invitation for notarization. This is useful when you are using alternative delivery methods. (nullable, default: false, e.g. true)
   invitation: record # shape: {message?: string, invitees?: list}
@@ -2735,7 +2836,7 @@ export def "public-notary-notarization-requests createNotarizationRequest" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Notarization Request Details
@@ -2751,13 +2852,14 @@ export def "public-notary-notarization-requests notarizationRequestDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, status: string, document_id: string, date_created: string, date_started: string, date_completed: string, created_by: record<user_id: string, email: string, first_name: string, last_name: string>, invitees: table<id: string, email: string, first_name: string, last_name: string>, signed_documents: table<url: string, document_name: string, size: float, document_type: string>, recording: record<url: string, name: string, size: float>, termination_reason: string, termination_details: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v2/notary/notarization-requests/($session_request_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Notarization Request
@@ -2773,13 +2875,14 @@ export def "public-notary-notarization-requests delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v2/notary/notarization-requests/($session_request_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Catalog Items Search
@@ -2794,6 +2897,7 @@ export def "public-product-catalog-items-search searchCatalogItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # Page number. (e.g. 1)
   --per-page: float # Items per page. (e.g. 10)
   --qp-query: string # Search query. Searches the following fields: Title, SKU, description, category name, custom fields name and value.  (e.g. coffee)
@@ -2810,7 +2914,7 @@ export def "public-product-catalog-items-search searchCatalogItems" [
   let full_url = (build-url $base "/public/v2/product-catalog/items/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Catalog Item
@@ -2829,6 +2933,7 @@ export def "public-product-catalog-items createCatalogItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   title: string
   --category-id: string # nullable
   --sku: string # nullable
@@ -2847,7 +2952,7 @@ export def "public-product-catalog-items createCatalogItem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Catalog Item Details
@@ -2863,13 +2968,14 @@ export def "public-product-catalog-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uuid: string, title: string, date_created: string, date_modified: string, created_by: string, modified_by: string, category_id: string, category_name: string, type: string, bundle_items: table<quantity: int, item: any>, default_price_configuration: record<currency: string, price: float, cost: float, billing_type: string, billing_cycle: string, tiers: list<record>, pricing_method: float, uuid: string>, variants: table<uuid: string, sku: string, description: string, custom_fields: list, images: list, date_created: string, date_modified: string, status: float, price_configurations: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v2/product-catalog/items/($item_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Catalog Item
@@ -2887,6 +2993,7 @@ export def "public-product-catalog-items updateCatalogItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --title: string
   --category-id: string # nullable
   --type: string@type-completer # default: regular, e.g. regular
@@ -2901,7 +3008,7 @@ export def "public-product-catalog-items updateCatalogItem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Catalog Item
@@ -2917,13 +3024,14 @@ export def "public-product-catalog-items delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v2/product-catalog/items/($item_uuid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Quote update
@@ -2943,6 +3051,7 @@ export def "public-documents-quotes quoteUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --currency: string # Currency code (ISO 4217) (e.g. USD)
   --summary: record # Summary settings containing adjustments (discounts, fees, taxes) and custom columns that apply to the entire quote / section total. — shape: {custom_columns?: record, discounts?: record, fees?: record, taxes?: record}
   --sections: list # Quote sections - this property overrides existing sections in the specified order. If you want to change only one section, you must still pass other sections IDs. Otherwise these sections will be removed. — item shape: {id?: string, name?: string, summary?: record, items?: list, settings?: record}
@@ -2956,7 +3065,7 @@ export def "public-documents-quotes quoteUpdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Workspaces
@@ -2971,6 +3080,7 @@ export def "public-workspaces get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # Number of elements in page. (format: int32, default: 50, e.g. 10)
   --page: int # Page number. (format: int32, default: 1, e.g. 1)
 ]: nothing -> record<total: int, results: table<id: string, name: string, date_created: string, owner: string>> {
@@ -2980,7 +3090,7 @@ export def "public-workspaces get" [
   let full_url = (build-url $base "/public/v1/workspaces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Workspace
@@ -2995,6 +3105,7 @@ export def "public-workspaces createWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # A name for the new workspace. (e.g. A new workspace)
 ]: any -> record<id: string, name: string> {
   let input = $in
@@ -3005,7 +3116,7 @@ export def "public-workspaces createWorkspace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deactivate Workspace
@@ -3021,6 +3132,7 @@ export def "public-workspaces-deactivate deactivateWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record {
   let input = $in
@@ -3030,7 +3142,7 @@ export def "public-workspaces-deactivate deactivateWorkspace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Users
@@ -3045,6 +3157,7 @@ export def "public-users listUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # Number of elements in page. (format: int32, default: 50, e.g. 10)
   --page: int # Page number. (format: int32, default: 1, e.g. 1)
   --show-removed: oneof<nothing, bool> # Filter option - show users with removed memberships. (default: true, e.g. false)
@@ -3055,7 +3168,7 @@ export def "public-users listUsers" [
   let full_url = (build-url $base "/public/v1/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create User
@@ -3072,6 +3185,7 @@ export def "public-users createUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --notify-user: oneof<nothing, bool> # Send a confirmation email to the user that was added to workspace(s). (e.g. true)
   --notify-ws-admins: oneof<nothing, bool> # Send a confirmation email to all workspace admins indicating that the user has been added to the workspace. (e.g. false)
   user: record # User info — shape: {email?: string, first_name?: string, last_name?: string, phone_number?: string}
@@ -3087,7 +3201,7 @@ export def "public-users createUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get User Details by ID
@@ -3103,13 +3217,14 @@ export def "public-users detailsUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<user_id: string, email: string, first_name: string, last_name: string, phone_number: string, license: string, is_organization_owner: bool, workspaces: table<role: string, workspace_id: string, membership_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/users/($user_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Member to Workspace
@@ -3125,6 +3240,7 @@ export def "public-workspaces-members addMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --notify-user: oneof<nothing, bool> # Send a confirmation email to the user that was added to workspace(s). (e.g. true)
   --notify-ws-admins: oneof<nothing, bool> # Send a confirmation email to all workspace admins indicating that the user has been added to the workspace. (e.g. false)
   user_id: string # User id. (e.g. 2eWSKSvVqmuVCnuUK3iWwD)
@@ -3139,7 +3255,7 @@ export def "public-workspaces-members addMember" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove Member from Workspace
@@ -3156,13 +3272,14 @@ export def "public-workspaces-members removeMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/v1/workspaces/($workspace_id)/members/($member_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change Member Role in Workspace
@@ -3179,6 +3296,7 @@ export def "public-workspaces-members-role changeMemberRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   role: string@role-completer # Role for a member. (e.g. Member)
 ]: any -> record<member_id: string, workspace_id: string, role: string, email: string> {
   let input = $in
@@ -3189,7 +3307,7 @@ export def "public-workspaces-members-role changeMemberRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create API Key
@@ -3205,6 +3323,7 @@ export def "public-workspaces-api-keys createApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # e.g. 2eWSKSvVqmuVCnuUK3iWwD
   type: string@type-completer-1 # A type of API key. (default: sandbox, e.g. sandbox)
 ]: any -> record<user_id: string, type: string, workspace_id: string, key: string> {
@@ -3216,7 +3335,7 @@ export def "public-workspaces-api-keys createApiKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Recent SMS Opt-out
@@ -3231,6 +3350,7 @@ export def "public-sms-opt-outs listRecentSmsOptOuts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --timestamp-from: string # The start of the timestamp.   If no timestamp is provided, 1 hour before the current time will be used.  (format: date-time, e.g. 2025-01-28T00:00:00Z)
   --timestamp-to: string # The end of the timestamp range.   If no timestamp is provided the current time will be used.  (format: date-time, e.g. 2025-01-28T23:59:59Z)
 ]: nothing -> record<results: table<phone_number: string, status: string, opt_out_changed: string>> {
@@ -3240,7 +3360,7 @@ export def "public-sms-opt-outs listRecentSmsOptOuts" [
   let full_url = (build-url $base "/public/v1/sms-opt-outs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # [Beta] Create DOCX Export Task
@@ -3256,13 +3376,14 @@ export def "public-beta-documents-docx-export-tasks createExportDocxTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, document_id: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/beta/documents/($document_id)/docx-export-tasks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # [Beta] DOCX Export Task
@@ -3279,13 +3400,14 @@ export def "public-beta-documents-docx-export-tasks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, document_id: string, status: string, docx_items: table<section_title: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/public/beta/documents/($document_id)/docx-export-tasks/($task_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # [Beta] Document Summary
@@ -3301,6 +3423,7 @@ export def "public-beta-documents-summary get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-2 # Document summary granularity to return.  (e.g. detailed)
 ]: nothing -> record<type: string, summary: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3309,7 +3432,7 @@ export def "public-beta-documents-summary get" [
   let full_url = (build-url $base $"/public/beta/documents/($document_id)/summary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # [Beta] Document Content
@@ -3325,6 +3448,7 @@ export def "public-beta-documents-content get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer # Document content representation to return.  (e.g. plaintext)
 ]: nothing -> record<format: string, content: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3333,7 +3457,7 @@ export def "public-beta-documents-content get" [
   let full_url = (build-url $base $"/public/beta/documents/($document_id)/content" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # [Beta] Get AI Metadata for a Document
@@ -3349,6 +3473,7 @@ export def "public-beta-documents-ai-metadata get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of fields to return in one response. (default: 100, e.g. 100)
   --offset: int # Number of fields to skip before starting to collect the result set. For predictable paging, use multiples of `limit`.  (default: 0, e.g. 0)
 ]: nothing -> record<count: int, results: table<id: string, key: string, field_type: string, settings: record, value: record>> {
@@ -3358,7 +3483,7 @@ export def "public-beta-documents-ai-metadata get" [
   let full_url = (build-url $base $"/public/beta/documents/($document_id)/ai-metadata" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # [Beta] List Documents Search
@@ -3373,6 +3498,7 @@ export def "public-beta-documents-search searchDocumentsAi" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Natural-language search query. Supports filtering by status, owner, dates, and folder. Also supports keyword content search across document titles and body text.
 ]: nothing -> record<results: table<document_id: string, name: string, status: string, date_created: string, owner: record, folder: record, extra_fields: record>, count: int, suggestions: table<text: string>, message: string, intent: table<field: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3381,5 +3507,5 @@ export def "public-beta-documents-search searchDocumentsAi" [
   let full_url = (build-url $base "/public/beta/documents/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

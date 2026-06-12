@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -84,7 +85,7 @@ def grant-type-completer [] { ["authorization_code" "refresh_token"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "organizations organizations" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -117,6 +118,7 @@ export def "organizations organizations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, name: string, billing_email: string, created_at: string, updated_at: string, plan: string, valid_billing_info: bool, sso: bool, sso_directory: bool, single_tenancy: bool, managed_tenancy: bool, has_past_due_invoices: bool, database_count: int, sso_portal_url: string, features: record, idp_managed_roles: bool, invoice_budget_amount: string, keyspace_shard_limit: int, has_card: bool, payment_info_required: bool>> {
@@ -126,7 +128,7 @@ export def "organizations organizations" [
   let full_url = (build-url $base "/organizations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an organization
@@ -142,13 +144,14 @@ export def "organizations organization-by-organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, billing_email: string, created_at: string, updated_at: string, plan: string, valid_billing_info: bool, sso: bool, sso_directory: bool, single_tenancy: bool, managed_tenancy: bool, has_past_due_invoices: bool, database_count: int, sso_portal_url: string, features: record, idp_managed_roles: bool, invoice_budget_amount: string, keyspace_shard_limit: int, has_card: bool, payment_info_required: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an organization
@@ -164,6 +167,7 @@ export def "organizations organization-by-organization-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --billing-email: string # The billing email for the organization
   --idp-managed-roles: oneof<nothing, bool> # Whether or not the IdP provider is be responsible for managing roles in PlanetScale
   --invoice-budget-amount: int # The expected monthly budget for the organization
@@ -176,7 +180,7 @@ export def "organizations organization-by-organization-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List audit logs
@@ -192,6 +196,7 @@ export def "organizations-audit-log logs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --starting-after: string # If provided, returns results after the specified cursor
   --ending-before: string # If provided, returns results before the specified cursor
   --limit: int # If provided, specifies the number of returned results (max 100) (default: 25)
@@ -202,7 +207,7 @@ export def "organizations-audit-log logs" [
   let full_url = (build-url $base $"/organizations/($organization)/audit-log" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List available cluster sizes
@@ -218,6 +223,7 @@ export def "organizations-cluster-size-skus skus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --engine: string@engine-completer # The database engine to filter by. Defaults to 'mysql'.
   --rates: oneof<nothing, bool> # Whether to include pricing rates in the response. Defaults to false.
   --region: string # The region slug to get rates for. If not specified, uses the organization's default region.
@@ -228,7 +234,7 @@ export def "organizations-cluster-size-skus skus" [
   let full_url = (build-url $base $"/organizations/($organization)/cluster-size-skus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List databases
@@ -244,6 +250,7 @@ export def "organizations-databases databases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Search term to filter databases by name
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
@@ -254,7 +261,7 @@ export def "organizations-databases databases" [
   let full_url = (build-url $base $"/organizations/($organization)/databases" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a database
@@ -271,6 +278,7 @@ export def "organizations-databases database-by-organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Name of the database
   --region: string # The region the database will be deployed in. If left blank, defaults to the organization's default region.
   cluster_size: string # The database cluster size name (e.g., 'PS_10', 'PS_80'). Use the 'List available cluster sizes' endpoint to get available options for your organization. /v1/organizations/:organization/cluster-size-skus
@@ -287,7 +295,7 @@ export def "organizations-databases database-by-organization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a database
@@ -304,13 +312,14 @@ export def "organizations-databases database-by-organization-database" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, url: string, branches_url: string, branches_count: int, open_schema_recommendations_count: int, development_branches_count: int, production_branches_count: int, issues_count: int, multiple_admins_required_for_deletion: bool, ready: bool, at_backup_restore_branches_limit: bool, at_development_branch_usage_limit: bool, data_import: record<state: string, import_check_errors: string, started_at: string, finished_at: string, data_source: record<hostname: string, port: int, database: string>>, region: record<id: string, provider: string, enabled: bool, public_ip_addresses: list<string>, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>, html_url: string, name: string, state: string, sharded: bool, default_branch_shard_count: int, default_branch_read_only_regions_count: int, default_branch_table_count: int, default_branch: string, require_approval_for_deploy: bool, resizing: bool, resize_queued: bool, config_changing: bool, config_change_queued: bool, allow_data_branching: bool, foreign_keys_enabled: bool, automatic_migrations: bool, restrict_branch_region: bool, insights_raw_queries: bool, plan: string, insights_enabled: bool, production_branch_web_console: bool, migration_table_name: string, migration_framework: string, created_at: string, updated_at: string, schema_last_updated_at: string, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update database settings
@@ -327,6 +336,7 @@ export def "organizations-databases settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --new-name: string # The name to update the database to
   --automatic-migrations: oneof<nothing, bool> # Whether or not to copy migration data to new branches and in deploy requests. (Vitess only)
   --migration-framework: string # A migration framework to use on the database. (Vitess only)
@@ -347,7 +357,7 @@ export def "organizations-databases settings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a database
@@ -364,13 +374,14 @@ export def "organizations-databases database-by-organization-database-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List backup policies
@@ -387,6 +398,7 @@ export def "organizations-databases-backup-policies policies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, display_name: string, name: string, target: string, retention_value: int, retention_unit: string, frequency_value: int, frequency_unit: string, schedule_time: string, schedule_day: int, schedule_week: int, created_at: string, updated_at: string, last_ran_at: string, next_run_at: string, required: bool>> {
@@ -396,7 +408,7 @@ export def "organizations-databases-backup-policies policies" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/backup-policies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a backup policy
@@ -413,6 +425,7 @@ export def "organizations-databases-backup-policies policy-by-organization-datab
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the backup policy
   --target: string@target-completer # Whether the policy is for production or development branches
   --retention-value: int # A number value for the retention period of the backup policy
@@ -431,7 +444,7 @@ export def "organizations-databases-backup-policies policy-by-organization-datab
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a backup policy
@@ -449,13 +462,14 @@ export def "organizations-databases-backup-policies policy-by-id-organization-da
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, display_name: string, name: string, target: string, retention_value: int, retention_unit: string, frequency_value: int, frequency_unit: string, schedule_time: string, schedule_day: int, schedule_week: int, created_at: string, updated_at: string, last_ran_at: string, next_run_at: string, required: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/backup-policies/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a backup policy
@@ -473,6 +487,7 @@ export def "organizations-databases-backup-policies policy-by-id-organization-da
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the backup policy
   --target: string@target-completer # Whether the policy is for production or development branches
   --retention-value: int # A number value for the retention period of the backup policy
@@ -491,7 +506,7 @@ export def "organizations-databases-backup-policies policy-by-id-organization-da
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a backup policy
@@ -509,13 +524,14 @@ export def "organizations-databases-backup-policies policy-by-id-organization-da
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/backup-policies/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List branches
@@ -532,20 +548,21 @@ export def "organizations-databases-branches branches" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Search branches by name
   --production: oneof<nothing, bool> # Filter branches by production status
   --safe-migrations: oneof<nothing, bool> # Filter branches by safe migrations (DDL protection)
   --order: string@order-completer # Order branches by created_at time
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
-]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, name: string, created_at: string, updated_at: string, deleted_at: string, restore_checklist_completed_at: string, schema_last_updated_at: string, kind: string, mysql_address: string, mysql_edge_address: string, state: string, direct_vtgate: bool, vtgate_size: string, vtgate_count: int, cluster_name: string, cluster_iops: int, ready: bool, schema_ready: bool, metal: bool, production: bool, safe_migrations: bool, sharded: bool, shard_count: int, stale_schema: bool, actor: record, restored_from_branch: record, private_edge_connectivity: bool, has_replicas: bool, has_read_only_replicas: bool, html_url: string, url: string, region: record, parent_branch: string, vtgate_options: record>> {
+]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, name: string, created_at: string, updated_at: string, deleted_at: string, restore_checklist_completed_at: string, schema_last_updated_at: string, kind: string, mysql_address: string, mysql_edge_address: string, state: string, direct_vtgate: bool, vtgate_size: string, vtgate_count: int, cluster_name: string, cluster_iops: int, ready: bool, schema_ready: bool, metal: bool, production: bool, safe_migrations: bool, sharded: bool, shard_count: int, keyspace_count: int, stale_schema: bool, actor: record, restored_from_branch: record, private_edge_connectivity: bool, has_replicas: bool, has_read_only_replicas: bool, html_url: string, url: string, region: record, parent_branch: string, vtgate_options: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "production" $production "scalar") (serialize-qp "safe_migrations" $safe_migrations "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a branch
@@ -563,6 +580,7 @@ export def "organizations-databases-branches branch-by-organization-database" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the branch to create
   --parent-branch: string # The name of the parent branch. Defaults to the database's default branch if not provided.
   --backup-id: string # If provided, restores the backup's schema and data to the new branch. Must have `restore_production_branch_backup(s)` or `restore_backup(s)` access to do this.
@@ -574,7 +592,7 @@ export def "organizations-databases-branches branch-by-organization-database" [
   --major-version: string # For PostgreSQL databases, the PostgreSQL major version to use for the branch. Defaults to the major version of the parent branch if it exists or the database's default branch major version. Ignored for branches restored from backups.
   --create-database-if-missing: oneof<nothing, bool> # Create a new database for the branch if the database does not exist. Defaults to false.
   --kind: string@kind-completer # The kind of branch to create. Required when create_database_if_missing is set.
-]: any -> record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string, restore_checklist_completed_at: string, schema_last_updated_at: string, kind: string, mysql_address: string, mysql_edge_address: string, state: string, direct_vtgate: bool, vtgate_size: string, vtgate_count: int, cluster_name: string, cluster_iops: int, ready: bool, schema_ready: bool, metal: bool, production: bool, safe_migrations: bool, sharded: bool, shard_count: int, stale_schema: bool, actor: record<id: string, display_name: string, avatar_url: string>, restored_from_branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, private_edge_connectivity: bool, has_replicas: bool, has_read_only_replicas: bool, html_url: string, url: string, region: record<id: string, provider: string, enabled: bool, public_ip_addresses: list<string>, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>, parent_branch: string, vtgate_options: record> {
+]: any -> record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string, restore_checklist_completed_at: string, schema_last_updated_at: string, kind: string, mysql_address: string, mysql_edge_address: string, state: string, direct_vtgate: bool, vtgate_size: string, vtgate_count: int, cluster_name: string, cluster_iops: int, ready: bool, schema_ready: bool, metal: bool, production: bool, safe_migrations: bool, sharded: bool, shard_count: int, keyspace_count: int, stale_schema: bool, actor: record<id: string, display_name: string, avatar_url: string>, restored_from_branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, private_edge_connectivity: bool, has_replicas: bool, has_read_only_replicas: bool, html_url: string, url: string, region: record<id: string, provider: string, enabled: bool, public_ip_addresses: list<string>, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>, parent_branch: string, vtgate_options: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -583,7 +601,7 @@ export def "organizations-databases-branches branch-by-organization-database" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a branch
@@ -601,13 +619,14 @@ export def "organizations-databases-branches branch-by-organization-database-bra
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string, restore_checklist_completed_at: string, schema_last_updated_at: string, kind: string, mysql_address: string, mysql_edge_address: string, state: string, direct_vtgate: bool, vtgate_size: string, vtgate_count: int, cluster_name: string, cluster_iops: int, ready: bool, schema_ready: bool, metal: bool, production: bool, safe_migrations: bool, sharded: bool, shard_count: int, stale_schema: bool, actor: record<id: string, display_name: string, avatar_url: string>, restored_from_branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, private_edge_connectivity: bool, has_replicas: bool, has_read_only_replicas: bool, html_url: string, url: string, region: record<id: string, provider: string, enabled: bool, public_ip_addresses: list<string>, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>, parent_branch: string, vtgate_options: record> {
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string, restore_checklist_completed_at: string, schema_last_updated_at: string, kind: string, mysql_address: string, mysql_edge_address: string, state: string, direct_vtgate: bool, vtgate_size: string, vtgate_count: int, cluster_name: string, cluster_iops: int, ready: bool, schema_ready: bool, metal: bool, production: bool, safe_migrations: bool, sharded: bool, shard_count: int, keyspace_count: int, stale_schema: bool, actor: record<id: string, display_name: string, avatar_url: string>, restored_from_branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, private_edge_connectivity: bool, has_replicas: bool, has_read_only_replicas: bool, html_url: string, url: string, region: record<id: string, provider: string, enabled: bool, public_ip_addresses: list<string>, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>, parent_branch: string, vtgate_options: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a branch
@@ -625,8 +644,9 @@ export def "organizations-databases-branches branch-by-organization-database-bra
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   new_name: string # The name to update the branch
-]: any -> record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string, restore_checklist_completed_at: string, schema_last_updated_at: string, kind: string, mysql_address: string, mysql_edge_address: string, state: string, direct_vtgate: bool, vtgate_size: string, vtgate_count: int, cluster_name: string, cluster_iops: int, ready: bool, schema_ready: bool, metal: bool, production: bool, safe_migrations: bool, sharded: bool, shard_count: int, stale_schema: bool, actor: record<id: string, display_name: string, avatar_url: string>, restored_from_branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, private_edge_connectivity: bool, has_replicas: bool, has_read_only_replicas: bool, html_url: string, url: string, region: record<id: string, provider: string, enabled: bool, public_ip_addresses: list<string>, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>, parent_branch: string, vtgate_options: record> {
+]: any -> record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string, restore_checklist_completed_at: string, schema_last_updated_at: string, kind: string, mysql_address: string, mysql_edge_address: string, state: string, direct_vtgate: bool, vtgate_size: string, vtgate_count: int, cluster_name: string, cluster_iops: int, ready: bool, schema_ready: bool, metal: bool, production: bool, safe_migrations: bool, sharded: bool, shard_count: int, keyspace_count: int, stale_schema: bool, actor: record<id: string, display_name: string, avatar_url: string>, restored_from_branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, private_edge_connectivity: bool, has_replicas: bool, has_read_only_replicas: bool, html_url: string, url: string, region: record<id: string, provider: string, enabled: bool, public_ip_addresses: list<string>, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>, parent_branch: string, vtgate_options: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -635,7 +655,7 @@ export def "organizations-databases-branches branch-by-organization-database-bra
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a branch
@@ -653,6 +673,7 @@ export def "organizations-databases-branches branch-by-organization-database-bra
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --delete-descendants: oneof<nothing, bool> # If true, recursively delete all descendant branches along with this branch
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -661,7 +682,7 @@ export def "organizations-databases-branches branch-by-organization-database-bra
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List backups
@@ -679,6 +700,7 @@ export def "organizations-databases-branches-backups backups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --all: oneof<nothing, bool> # Whether to include all backups, including deleted ones
   --state: string@state-completer # Filter backups by state
   --policy: string # Filter backups by backup policy ID
@@ -695,7 +717,7 @@ export def "organizations-databases-branches-backups backups" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/backups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a backup
@@ -713,6 +735,7 @@ export def "organizations-databases-branches-backups backup-by-organization-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name for the backup
   --retention-unit: string@retention-unit-completer # Unit for the retention period of the backup
   --retention-value: int # Value between `1` and `1000` for the retention period of the backup (i.e retention_value `6` and retention_unit `hour` means 6 hours)
@@ -726,7 +749,7 @@ export def "organizations-databases-branches-backups backup-by-organization-data
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a backup
@@ -745,13 +768,14 @@ export def "organizations-databases-branches-backups backup-by-id-organization-d
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, state: string, size: int, estimated_storage_cost: float, created_at: string, updated_at: string, started_at: string, expires_at: string, completed_at: string, deleted_at: string, pvc_size: int, protected: bool, required: bool, restored_branches: table<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, actor: record<id: string, display_name: string, avatar_url: string>, backup_policy: record<id: string, display_name: string, name: string, target: string, retention_value: int, retention_unit: string, frequency_value: int, frequency_unit: string, schedule_time: string, schedule_day: int, schedule_week: int, created_at: string, updated_at: string, last_ran_at: string, next_run_at: string, required: bool>, schema_snapshot: record<id: string, name: string, created_at: string, updated_at: string, linted_at: string, url: string>, database_branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/backups/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a backup
@@ -770,6 +794,7 @@ export def "organizations-databases-branches-backups backup-by-id-organization-d
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --protected: oneof<nothing, bool> # Whether the backup is protected from deletion or not
 ]: any -> record<id: string, name: string, state: string, size: int, estimated_storage_cost: float, created_at: string, updated_at: string, started_at: string, expires_at: string, completed_at: string, deleted_at: string, pvc_size: int, protected: bool, required: bool, restored_branches: table<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, actor: record<id: string, display_name: string, avatar_url: string>, backup_policy: record<id: string, display_name: string, name: string, target: string, retention_value: int, retention_unit: string, frequency_value: int, frequency_unit: string, schedule_time: string, schedule_day: int, schedule_week: int, created_at: string, updated_at: string, last_ran_at: string, next_run_at: string, required: bool>, schema_snapshot: record<id: string, name: string, created_at: string, updated_at: string, linted_at: string, url: string>, database_branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>> {
   let input = $in
@@ -780,7 +805,7 @@ export def "organizations-databases-branches-backups backup-by-id-organization-d
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a backup
@@ -799,13 +824,14 @@ export def "organizations-databases-branches-backups backup-by-id-organization-d
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/backups/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get bouncer resize requests
@@ -823,6 +849,7 @@ export def "organizations-databases-branches-bouncer-resizes requests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, state: string, replicas_per_cell: int, parameters: record, previous_replicas_per_cell: int, previous_parameters: record, started_at: string, completed_at: string, created_at: string, updated_at: string, actor: record, bouncer: record, sku: record, previous_sku: record>> {
@@ -832,7 +859,7 @@ export def "organizations-databases-branches-bouncer-resizes requests" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/bouncer-resizes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List bouncers
@@ -850,6 +877,7 @@ export def "organizations-databases-branches-bouncers bouncers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, name: string, sku: record, target: string, replicas_per_cell: int, created_at: string, updated_at: string, deleted_at: string, actor: record, branch: record, parameters: list>> {
@@ -859,7 +887,7 @@ export def "organizations-databases-branches-bouncers bouncers" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/bouncers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a bouncer
@@ -877,6 +905,7 @@ export def "organizations-databases-branches-bouncers bouncer-by-organization-da
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The bouncer name
   --target: string # The type of server the bouncer targets
   --bouncer-size: string # The size SKU for the bouncer
@@ -890,7 +919,7 @@ export def "organizations-databases-branches-bouncers bouncer-by-organization-da
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a bouncer
@@ -909,13 +938,14 @@ export def "organizations-databases-branches-bouncers bouncer-by-organization-da
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, sku: record<name: string, display_name: string, cpu: string, ram: int, sort_order: int>, target: string, replicas_per_cell: int, created_at: string, updated_at: string, deleted_at: string, actor: record<id: string, display_name: string, avatar_url: string>, branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, parameters: table<id: string, namespace: string, name: string, display_name: string, category: string, description: string, immutable: bool, parameter_type: string, default_value: string, value: string, required: bool, created_at: string, updated_at: string, restart: bool, max: float, min: float, step: float, url: string, options: list, actor: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/bouncers/($bouncer)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a bouncer
@@ -934,13 +964,14 @@ export def "organizations-databases-branches-bouncers bouncer-by-organization-da
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/bouncers/($bouncer)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get bouncer resize requests
@@ -959,6 +990,7 @@ export def "organizations-databases-branches-bouncers-resizes requests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, state: string, replicas_per_cell: int, parameters: record, previous_replicas_per_cell: int, previous_parameters: record, started_at: string, completed_at: string, created_at: string, updated_at: string, actor: record, bouncer: record, sku: record, previous_sku: record>> {
@@ -968,7 +1000,7 @@ export def "organizations-databases-branches-bouncers-resizes requests" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/bouncers/($bouncer)/resizes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upsert a bouncer resize request
@@ -987,6 +1019,7 @@ export def "organizations-databases-branches-bouncers-resizes request-by-organiz
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bouncer-size: string # The bouncer size SKU name (e.g., 'PGB_5', 'PGB_10', 'PGB_20', 'PGB_40', 'PGB_80', 'PGB_160'). Defaults to 'PGB_5'.
   --replicas-per-cell: int # The number of PgBouncers per availability zone. Defaults to 1.
   --parameters: record # Bouncer configuration parameters nested by namespace (e.g., {"pgbouncer": {"default_pool_size": "100"}}). Use the 'List cluster parameters' endpoint to retrieve available parameters. Only parameters with namespace 'pgbouncer' can be updated.
@@ -999,7 +1032,7 @@ export def "organizations-databases-branches-bouncers-resizes request-by-organiz
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel a resize request
@@ -1018,13 +1051,14 @@ export def "organizations-databases-branches-bouncers-resizes request-by-organiz
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/bouncers/($bouncer)/resizes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get branch change requests
@@ -1042,6 +1076,7 @@ export def "organizations-databases-branches-changes requests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, restart: list, state: string, started_at: string, completed_at: string, created_at: string, updated_at: string, actor: record, cluster_name: string, cluster_display_name: string, cluster_metal: bool, replicas: int, parameters: record, previous_cluster_name: string, previous_cluster_display_name: string, previous_cluster_metal: bool, previous_replicas: int, previous_parameters: record, minimum_storage_bytes: int, maximum_storage_bytes: int, storage_autoscaling: bool, storage_shrinking: bool, storage_type: string, storage_iops: int, storage_throughput_mibs: int, previous_minimum_storage_bytes: int, previous_maximum_storage_bytes: int, previous_storage_autoscaling: bool, previous_storage_shrinking: bool, previous_storage_type: string, previous_storage_iops: int, previous_storage_throughput_mibs: int>> {
@@ -1051,7 +1086,7 @@ export def "organizations-databases-branches-changes requests" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/changes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upsert a change request
@@ -1069,6 +1104,7 @@ export def "organizations-databases-branches-changes request-by-organization-dat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-size: string # The size of the cluster. Available sizes can be found using the 'List cluster sizes' endpoint.
   --replicas: int # The total number of replicas
   --parameters: record # Cluster configuration parameters nested by namespace (e.g., {"pgconf": {"max_connections": "200"}}). Use the 'List cluster parameters' endpoint to retrieve available parameters. Supported namespaces include 'patroni', 'pgconf', and 'pgbouncer'.
@@ -1081,7 +1117,7 @@ export def "organizations-databases-branches-changes request-by-organization-dat
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a branch change request
@@ -1100,13 +1136,14 @@ export def "organizations-databases-branches-changes request-by-organization-dat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, restart: list<int>, state: string, started_at: string, completed_at: string, created_at: string, updated_at: string, actor: record<id: string, display_name: string, avatar_url: string>, cluster_name: string, cluster_display_name: string, cluster_metal: bool, replicas: int, parameters: record, previous_cluster_name: string, previous_cluster_display_name: string, previous_cluster_metal: bool, previous_replicas: int, previous_parameters: record, minimum_storage_bytes: int, maximum_storage_bytes: int, storage_autoscaling: bool, storage_shrinking: bool, storage_type: string, storage_iops: int, storage_throughput_mibs: int, previous_minimum_storage_bytes: int, previous_maximum_storage_bytes: int, previous_storage_autoscaling: bool, previous_storage_shrinking: bool, previous_storage_type: string, previous_storage_iops: int, previous_storage_throughput_mibs: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/changes/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change a branch cluster configuration
@@ -1124,6 +1161,7 @@ export def "organizations-databases-branches-cluster config" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   cluster_size: string # The new size of the database cluster: PS_10, PS_20,…
 ]: any -> any {
   let input = $in
@@ -1134,7 +1172,7 @@ export def "organizations-databases-branches-cluster config" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Demote a branch
@@ -1152,13 +1190,14 @@ export def "organizations-databases-branches-demote branch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string, restore_checklist_completed_at: string, schema_last_updated_at: string, kind: string, mysql_address: string, mysql_edge_address: string, state: string, direct_vtgate: bool, vtgate_size: string, vtgate_count: int, cluster_name: string, cluster_iops: int, ready: bool, schema_ready: bool, metal: bool, production: bool, safe_migrations: bool, sharded: bool, shard_count: int, stale_schema: bool, actor: record<id: string, display_name: string, avatar_url: string>, restored_from_branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, private_edge_connectivity: bool, has_replicas: bool, has_read_only_replicas: bool, html_url: string, url: string, region: record<id: string, provider: string, enabled: bool, public_ip_addresses: list<string>, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>, parent_branch: string, vtgate_options: record> {
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string, restore_checklist_completed_at: string, schema_last_updated_at: string, kind: string, mysql_address: string, mysql_edge_address: string, state: string, direct_vtgate: bool, vtgate_size: string, vtgate_count: int, cluster_name: string, cluster_iops: int, ready: bool, schema_ready: bool, metal: bool, production: bool, safe_migrations: bool, sharded: bool, shard_count: int, keyspace_count: int, stale_schema: bool, actor: record<id: string, display_name: string, avatar_url: string>, restored_from_branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, private_edge_connectivity: bool, has_replicas: bool, has_read_only_replicas: bool, html_url: string, url: string, region: record<id: string, provider: string, enabled: bool, public_ip_addresses: list<string>, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>, parent_branch: string, vtgate_options: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/demote")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List cluster extensions
@@ -1176,13 +1215,14 @@ export def "organizations-databases-branches-extensions extensions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, name: string, description: string, internal: bool, loader: string, url: string, available: bool, unavailable_reason: string, parameters: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/extensions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get keyspaces
@@ -1200,6 +1240,7 @@ export def "organizations-databases-branches-keyspaces keyspaces" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, name: string, shards: int, sharded: bool, replicas: int, extra_replicas: int, created_at: string, updated_at: string, cluster_name: string, cluster_display_name: string, resizing: bool, resize_pending: bool, config_change_in_progress: bool, ready: bool, metal: bool, default: bool, imported: bool, vector_pool_allocation: float, node_ttl_strategy: string, replication_durability_constraints: record, vreplication_flags: record, mysqld_options: record, vttablet_options: record>> {
@@ -1209,7 +1250,7 @@ export def "organizations-databases-branches-keyspaces keyspaces" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/keyspaces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a keyspace
@@ -1227,6 +1268,7 @@ export def "organizations-databases-branches-keyspaces keyspace-by-organization-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the keyspace
   cluster_size: string # The database cluster size name (e.g., 'PS_10', 'PS_80'). Use the 'List available cluster sizes' endpoint to get available options for your organization. /v1/organizations/:organization/cluster-size-skus
   --extra-replicas: int # The number of additional replicas beyond the included default
@@ -1240,7 +1282,7 @@ export def "organizations-databases-branches-keyspaces keyspace-by-organization-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a keyspace
@@ -1259,13 +1301,14 @@ export def "organizations-databases-branches-keyspaces keyspace-by-organization-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, shards: int, sharded: bool, replicas: int, extra_replicas: int, created_at: string, updated_at: string, cluster_name: string, cluster_display_name: string, resizing: bool, resize_pending: bool, config_change_in_progress: bool, ready: bool, metal: bool, default: bool, imported: bool, vector_pool_allocation: float, node_ttl_strategy: string, replication_durability_constraints: record<strategy: string>, vreplication_flags: record<optimize_inserts: bool, allow_no_blob_binlog_row_image: bool, vplayer_batching: bool>, mysqld_options: record, vttablet_options: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/keyspaces/($keyspace)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Configure keyspace settings
@@ -1284,13 +1327,14 @@ export def "organizations-databases-branches-keyspaces keyspace-by-organization-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, shards: int, sharded: bool, replicas: int, extra_replicas: int, created_at: string, updated_at: string, cluster_name: string, cluster_display_name: string, resizing: bool, resize_pending: bool, config_change_in_progress: bool, ready: bool, metal: bool, default: bool, imported: bool, vector_pool_allocation: float, node_ttl_strategy: string, replication_durability_constraints: record<strategy: string>, vreplication_flags: record<optimize_inserts: bool, allow_no_blob_binlog_row_image: bool, vplayer_batching: bool>, mysqld_options: record, vttablet_options: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/keyspaces/($keyspace)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a keyspace
@@ -1309,13 +1353,14 @@ export def "organizations-databases-branches-keyspaces keyspace-by-organization-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/keyspaces/($keyspace)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get keyspace rollout status
@@ -1334,13 +1379,14 @@ export def "organizations-databases-branches-keyspaces-rollout-status status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, state: string, shards: table<name: string, last_rollout_started_at: string, last_rollout_finished_at: string, state: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/keyspaces/($keyspace)/rollout-status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the VSchema for the keyspace
@@ -1359,13 +1405,14 @@ export def "organizations-databases-branches-keyspaces-vschema vschema-by-organi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<raw: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/keyspaces/($keyspace)/vschema")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the VSchema for the keyspace
@@ -1384,6 +1431,7 @@ export def "organizations-databases-branches-keyspaces-vschema vschema-by-organi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   vschema: string # The new VSchema for the keyspace
 ]: any -> record<raw: string> {
   let input = $in
@@ -1394,7 +1442,7 @@ export def "organizations-databases-branches-keyspaces-vschema vschema-by-organi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List cluster parameters
@@ -1412,13 +1460,14 @@ export def "organizations-databases-branches-parameters parameters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, name: string, display_name: string, namespace: string, category: string, description: string, extension: bool, immutable: bool, parameter_type: string, default_value: string, value: string, required: bool, created_at: string, updated_at: string, restart: bool, max: float, min: float, step: float, url: string, options: list<string>, actor: record<id: string, display_name: string, avatar_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/parameters")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List passwords
@@ -1436,6 +1485,7 @@ export def "organizations-databases-branches-passwords passwords" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --read-only-region-id: string # A read-only region of the database branch. If present, the password results will be filtered to only those in the region
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
@@ -1446,7 +1496,7 @@ export def "organizations-databases-branches-passwords passwords" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/passwords" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a password
@@ -1464,6 +1514,7 @@ export def "organizations-databases-branches-passwords password-by-organization-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Optional name of the password
   --role: string@role-completer # The database role of the password (i.e. admin)
   --replica: oneof<nothing, bool> # Whether the password is for a read replica
@@ -1479,7 +1530,7 @@ export def "organizations-databases-branches-passwords password-by-organization-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a password
@@ -1498,13 +1549,14 @@ export def "organizations-databases-branches-passwords password-by-organization-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, role: string, cidrs: list<string>, created_at: string, deleted_at: string, expires_at: string, last_used_at: string, expired: bool, direct_vtgate: bool, direct_vtgate_addresses: list<string>, ttl_seconds: int, access_host_url: string, access_host_regional_url: string, access_host_regional_urls: list<string>, actor: record<id: string, display_name: string, avatar_url: string>, region: record<id: string, provider: string, enabled: bool, public_ip_addresses: list<string>, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>, username: string, plain_text: string, replica: bool, renewable: bool, database_branch: record<name: string, id: string, production: bool, mysql_edge_address: string, private_edge_connectivity: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/passwords/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a password
@@ -1523,6 +1575,7 @@ export def "organizations-databases-branches-passwords password-by-organization-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name for the password
   --cidrs: list # List of IP addresses or CIDR ranges that can use this password
 ]: any -> record<id: string, name: string, role: string, cidrs: list<string>, created_at: string, deleted_at: string, expires_at: string, last_used_at: string, expired: bool, direct_vtgate: bool, direct_vtgate_addresses: list<string>, ttl_seconds: int, access_host_url: string, access_host_regional_url: string, access_host_regional_urls: list<string>, actor: record<id: string, display_name: string, avatar_url: string>, region: record<id: string, provider: string, enabled: bool, public_ip_addresses: list<string>, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>, username: string, plain_text: string, replica: bool, renewable: bool, database_branch: record<name: string, id: string, production: bool, mysql_edge_address: string, private_edge_connectivity: bool>> {
@@ -1534,7 +1587,7 @@ export def "organizations-databases-branches-passwords password-by-organization-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a password
@@ -1553,13 +1606,14 @@ export def "organizations-databases-branches-passwords password-by-organization-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/passwords/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Renew a password
@@ -1578,13 +1632,14 @@ export def "organizations-databases-branches-passwords-renew password" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, role: string, cidrs: list<string>, created_at: string, deleted_at: string, expires_at: string, last_used_at: string, expired: bool, direct_vtgate: bool, direct_vtgate_addresses: list<string>, ttl_seconds: int, access_host_url: string, access_host_regional_url: string, access_host_regional_urls: list<string>, actor: record<id: string, display_name: string, avatar_url: string>, region: record<id: string, provider: string, enabled: bool, public_ip_addresses: list<string>, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>, username: string, plain_text: string, replica: bool, renewable: bool, database_branch: record<name: string, id: string, production: bool, mysql_edge_address: string, private_edge_connectivity: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/passwords/($id)/renew")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Promote a branch
@@ -1602,13 +1657,14 @@ export def "organizations-databases-branches-promote branch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string, restore_checklist_completed_at: string, schema_last_updated_at: string, kind: string, mysql_address: string, mysql_edge_address: string, state: string, direct_vtgate: bool, vtgate_size: string, vtgate_count: int, cluster_name: string, cluster_iops: int, ready: bool, schema_ready: bool, metal: bool, production: bool, safe_migrations: bool, sharded: bool, shard_count: int, stale_schema: bool, actor: record<id: string, display_name: string, avatar_url: string>, restored_from_branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, private_edge_connectivity: bool, has_replicas: bool, has_read_only_replicas: bool, html_url: string, url: string, region: record<id: string, provider: string, enabled: bool, public_ip_addresses: list<string>, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>, parent_branch: string, vtgate_options: record> {
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string, restore_checklist_completed_at: string, schema_last_updated_at: string, kind: string, mysql_address: string, mysql_edge_address: string, state: string, direct_vtgate: bool, vtgate_size: string, vtgate_count: int, cluster_name: string, cluster_iops: int, ready: bool, schema_ready: bool, metal: bool, production: bool, safe_migrations: bool, sharded: bool, shard_count: int, keyspace_count: int, stale_schema: bool, actor: record<id: string, display_name: string, avatar_url: string>, restored_from_branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, private_edge_connectivity: bool, has_replicas: bool, has_read_only_replicas: bool, html_url: string, url: string, region: record<id: string, provider: string, enabled: bool, public_ip_addresses: list<string>, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>, parent_branch: string, vtgate_options: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/promote")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List generated query patterns reports
@@ -1626,6 +1682,7 @@ export def "organizations-databases-branches-query-patterns reports" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --starting-after: string # If provided, returns results after the specified cursor
   --ending-before: string # If provided, returns results before the specified cursor
   --limit: int # If provided, specifies the number of returned results (max 100) (default: 25)
@@ -1636,7 +1693,7 @@ export def "organizations-databases-branches-query-patterns reports" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/query-patterns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new query patterns report
@@ -1654,13 +1711,14 @@ export def "organizations-databases-branches-query-patterns report-by-organizati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, state: string, created_at: string, finished_at: string, url: string, download_url: string, actor: record<id: string, display_name: string, avatar_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/query-patterns")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Show the status of a query patterns report
@@ -1679,13 +1737,14 @@ export def "organizations-databases-branches-query-patterns status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, state: string, created_at: string, finished_at: string, url: string, download_url: string, actor: record<id: string, display_name: string, avatar_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/query-patterns/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a query patterns report
@@ -1704,13 +1763,14 @@ export def "organizations-databases-branches-query-patterns report-by-organizati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/query-patterns/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download a finished query patterns report
@@ -1729,13 +1789,14 @@ export def "organizations-databases-branches-query-patterns-download report" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/query-patterns/($id)/download")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel a change request
@@ -1753,13 +1814,14 @@ export def "organizations-databases-branches-resizes request" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/resizes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List roles
@@ -1777,6 +1839,7 @@ export def "organizations-databases-branches-roles roles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
   --status: string # Filter roles by status
@@ -1788,7 +1851,7 @@ export def "organizations-databases-branches-roles roles" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/roles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create role credentials
@@ -1806,6 +1869,7 @@ export def "organizations-databases-branches-roles role-by-organization-database
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the role
   --ttl: int # Time to live in seconds
   --inherited-roles: list # Roles to inherit from
@@ -1820,7 +1884,7 @@ export def "organizations-databases-branches-roles role-by-organization-database
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the default postgres role
@@ -1838,13 +1902,14 @@ export def "organizations-databases-branches-roles-default role" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, access_host_url: string, private_access_host_url: string, private_connection_service_name: string, username: string, base_username: string, password: string, database_name: string, created_at: string, updated_at: string, deleted_at: string, expires_at: string, dropped_at: string, disabled_at: string, drop_failed: string, expired: bool, default: bool, ttl: int, inherited_roles: list<string>, branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, actor: record<id: string, display_name: string, avatar_url: string>, query_safety_settings: record<require_where_on_delete: string, require_where_on_update: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/roles/default")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reset default credentials
@@ -1862,13 +1927,14 @@ export def "organizations-databases-branches-roles-reset-default role" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, access_host_url: string, private_access_host_url: string, private_connection_service_name: string, username: string, base_username: string, password: string, database_name: string, created_at: string, updated_at: string, deleted_at: string, expires_at: string, dropped_at: string, disabled_at: string, drop_failed: string, expired: bool, default: bool, ttl: int, inherited_roles: list<string>, branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, actor: record<id: string, display_name: string, avatar_url: string>, query_safety_settings: record<require_where_on_delete: string, require_where_on_update: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/roles/reset-default")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a role
@@ -1887,13 +1953,14 @@ export def "organizations-databases-branches-roles role-by-organization-database
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, access_host_url: string, private_access_host_url: string, private_connection_service_name: string, username: string, base_username: string, password: string, database_name: string, created_at: string, updated_at: string, deleted_at: string, expires_at: string, dropped_at: string, disabled_at: string, drop_failed: string, expired: bool, default: bool, ttl: int, inherited_roles: list<string>, branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, actor: record<id: string, display_name: string, avatar_url: string>, query_safety_settings: record<require_where_on_delete: string, require_where_on_update: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/roles/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update role name
@@ -1912,6 +1979,7 @@ export def "organizations-databases-branches-roles role-by-organization-database
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The new name of the role
   --require-where-on-delete: string # Require WHERE clause on DELETE statements
   --require-where-on-update: string # Require WHERE clause on UPDATE statements
@@ -1924,7 +1992,7 @@ export def "organizations-databases-branches-roles role-by-organization-database
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete role credentials
@@ -1943,6 +2011,7 @@ export def "organizations-databases-branches-roles role-by-organization-database
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --successor: string # The optional role to reassign ownership to before dropping
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1951,7 +2020,7 @@ export def "organizations-databases-branches-roles role-by-organization-database
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/roles/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reassign objects owned by one role to another role
@@ -1970,6 +2039,7 @@ export def "organizations-databases-branches-roles-reassign objects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   successor: string # The role to reassign ownership to
 ]: any -> any {
   let input = $in
@@ -1980,7 +2050,7 @@ export def "organizations-databases-branches-roles-reassign objects" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Renew role expiration
@@ -1999,13 +2069,14 @@ export def "organizations-databases-branches-roles-renew role" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, access_host_url: string, private_access_host_url: string, private_connection_service_name: string, username: string, base_username: string, password: string, database_name: string, created_at: string, updated_at: string, deleted_at: string, expires_at: string, dropped_at: string, disabled_at: string, drop_failed: string, expired: bool, default: bool, ttl: int, inherited_roles: list<string>, branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, actor: record<id: string, display_name: string, avatar_url: string>, query_safety_settings: record<require_where_on_delete: string, require_where_on_update: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/roles/($id)/renew")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reset a role's password
@@ -2024,13 +2095,14 @@ export def "organizations-databases-branches-roles-reset role" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, access_host_url: string, private_access_host_url: string, private_connection_service_name: string, username: string, base_username: string, password: string, database_name: string, created_at: string, updated_at: string, deleted_at: string, expires_at: string, dropped_at: string, disabled_at: string, drop_failed: string, expired: bool, default: bool, ttl: int, inherited_roles: list<string>, branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, actor: record<id: string, display_name: string, avatar_url: string>, query_safety_settings: record<require_where_on_delete: string, require_where_on_update: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/roles/($id)/reset")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable safe migrations for a branch
@@ -2048,13 +2120,14 @@ export def "organizations-databases-branches-safe-migrations migrations-by-organ
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string, restore_checklist_completed_at: string, schema_last_updated_at: string, kind: string, mysql_address: string, mysql_edge_address: string, state: string, direct_vtgate: bool, vtgate_size: string, vtgate_count: int, cluster_name: string, cluster_iops: int, ready: bool, schema_ready: bool, metal: bool, production: bool, safe_migrations: bool, sharded: bool, shard_count: int, stale_schema: bool, actor: record<id: string, display_name: string, avatar_url: string>, restored_from_branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, private_edge_connectivity: bool, has_replicas: bool, has_read_only_replicas: bool, html_url: string, url: string, region: record<id: string, provider: string, enabled: bool, public_ip_addresses: list<string>, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>, parent_branch: string, vtgate_options: record> {
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string, restore_checklist_completed_at: string, schema_last_updated_at: string, kind: string, mysql_address: string, mysql_edge_address: string, state: string, direct_vtgate: bool, vtgate_size: string, vtgate_count: int, cluster_name: string, cluster_iops: int, ready: bool, schema_ready: bool, metal: bool, production: bool, safe_migrations: bool, sharded: bool, shard_count: int, keyspace_count: int, stale_schema: bool, actor: record<id: string, display_name: string, avatar_url: string>, restored_from_branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, private_edge_connectivity: bool, has_replicas: bool, has_read_only_replicas: bool, html_url: string, url: string, region: record<id: string, provider: string, enabled: bool, public_ip_addresses: list<string>, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>, parent_branch: string, vtgate_options: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/safe-migrations")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disable safe migrations for a branch
@@ -2072,13 +2145,14 @@ export def "organizations-databases-branches-safe-migrations migrations-by-organ
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string, restore_checklist_completed_at: string, schema_last_updated_at: string, kind: string, mysql_address: string, mysql_edge_address: string, state: string, direct_vtgate: bool, vtgate_size: string, vtgate_count: int, cluster_name: string, cluster_iops: int, ready: bool, schema_ready: bool, metal: bool, production: bool, safe_migrations: bool, sharded: bool, shard_count: int, stale_schema: bool, actor: record<id: string, display_name: string, avatar_url: string>, restored_from_branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, private_edge_connectivity: bool, has_replicas: bool, has_read_only_replicas: bool, html_url: string, url: string, region: record<id: string, provider: string, enabled: bool, public_ip_addresses: list<string>, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>, parent_branch: string, vtgate_options: record> {
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string, restore_checklist_completed_at: string, schema_last_updated_at: string, kind: string, mysql_address: string, mysql_edge_address: string, state: string, direct_vtgate: bool, vtgate_size: string, vtgate_count: int, cluster_name: string, cluster_iops: int, ready: bool, schema_ready: bool, metal: bool, production: bool, safe_migrations: bool, sharded: bool, shard_count: int, keyspace_count: int, stale_schema: bool, actor: record<id: string, display_name: string, avatar_url: string>, restored_from_branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, private_edge_connectivity: bool, has_replicas: bool, has_read_only_replicas: bool, html_url: string, url: string, region: record<id: string, provider: string, enabled: bool, public_ip_addresses: list<string>, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>, parent_branch: string, vtgate_options: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/safe-migrations")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a branch schema
@@ -2096,6 +2170,7 @@ export def "organizations-databases-branches-schema schema" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --keyspace: string # Return the schema for a single Vitess keyspace
   --namespace: string # Return the schema for a PostgreSQL catalog namespace in `<database>.<schema>` format (e.g. public.schema1)
 ]: nothing -> record<data: table<name: string, html: string, raw: string>> {
@@ -2105,7 +2180,7 @@ export def "organizations-databases-branches-schema schema" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/schema" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lint a branch schema
@@ -2123,6 +2198,7 @@ export def "organizations-databases-branches-schema-lint schema" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<lint_error: string, subject_type: string, keyspace_name: string, table_name: string, error_description: string, docs_url: string, column_name: string, foreign_key_column_names: list, auto_increment_column_names: list, charset_name: string, engine_name: string, vindex_name: string, json_path: string, check_constraint_name: string, enum_value: string, partitioning_type: string, partition_name: string>> {
@@ -2132,7 +2208,7 @@ export def "organizations-databases-branches-schema-lint schema" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/schema/lint" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List traffic budgets
@@ -2150,6 +2226,7 @@ export def "organizations-databases-branches-traffic-budgets budgets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
   --period: string # Time period filter (e.g., '1h', '24h', '7d')
@@ -2162,7 +2239,7 @@ export def "organizations-databases-branches-traffic-budgets budgets" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/traffic/budgets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a traffic budget
@@ -2180,6 +2257,7 @@ export def "organizations-databases-branches-traffic-budgets budget-by-organizat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the traffic budget
   --mode: string@mode-completer # The mode of the traffic budget
   --capacity: int # The maximum capacity that can be banked, measured as a percentage of seconds of full server usage (0-6000). Unlimited when not set.
@@ -2197,7 +2275,7 @@ export def "organizations-databases-branches-traffic-budgets budget-by-organizat
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a traffic rule
@@ -2216,6 +2294,7 @@ export def "organizations-databases-branches-traffic-budgets-rules rule-by-organ
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string@kind-completer-1 # Kind of rule
   --keyspace: string # The keyspace to apply a query pattern rule to
   --fingerprint: string # Query pattern fingerprint to apply rule to
@@ -2229,7 +2308,7 @@ export def "organizations-databases-branches-traffic-budgets-rules rule-by-organ
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a traffic rule
@@ -2249,13 +2328,14 @@ export def "organizations-databases-branches-traffic-budgets-rules rule-by-organ
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/traffic/budgets/($budget_id)/rules/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a traffic budget
@@ -2274,13 +2354,14 @@ export def "organizations-databases-branches-traffic-budgets budget-by-organizat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, mode: string, capacity: float, rate: float, burst: float, concurrency: float, warning_threshold: float, actor: record<id: string, display_name: string, avatar_url: string>, rules: table<id: string, kind: string, tags: list, fingerprint: string, keyspace: string, actor: record, syntax_highlighted_sql: string, created_at: string, updated_at: string>, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/traffic/budgets/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a traffic budget
@@ -2299,6 +2380,7 @@ export def "organizations-databases-branches-traffic-budgets budget-by-organizat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the traffic budget
   --mode: string@mode-completer # The mode of the traffic budget
   --capacity: int # The maximum capacity that can be banked, measured as a percentage of seconds of full server usage (0-6000). Unlimited when not set.
@@ -2316,7 +2398,7 @@ export def "organizations-databases-branches-traffic-budgets budget-by-organizat
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a traffic budget
@@ -2335,13 +2417,14 @@ export def "organizations-databases-branches-traffic-budgets budget-by-organizat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/branches/($branch)/traffic/budgets/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List IP restriction entries
@@ -2358,6 +2441,7 @@ export def "organizations-databases-cidrs cidrs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, schema: string, role: string, cidrs: list, created_at: string, updated_at: string, deleted_at: string, actor: record>> {
@@ -2367,7 +2451,7 @@ export def "organizations-databases-cidrs cidrs" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/cidrs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an IP restriction entry
@@ -2384,6 +2468,7 @@ export def "organizations-databases-cidrs cidr-by-organization-database" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --schema: string # The PostgreSQL schema to restrict access to. Leave empty or omit to allow access to all schemas.
   --role: string # The PostgreSQL role to restrict access to. Leave empty or omit to allow access for all roles.
   cidrs: list # List of IPv4 CIDR ranges (e.g., ['192.168.1.0/24', '192.168.1.1/32']). Must contain at least one valid IPv4 address or range.
@@ -2396,7 +2481,7 @@ export def "organizations-databases-cidrs cidr-by-organization-database" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an IP restriction entry
@@ -2414,13 +2499,14 @@ export def "organizations-databases-cidrs cidr-by-organization-database-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, schema: string, role: string, cidrs: list<string>, created_at: string, updated_at: string, deleted_at: string, actor: record<id: string, display_name: string, avatar_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/cidrs/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an IP restriction entry
@@ -2438,6 +2524,7 @@ export def "organizations-databases-cidrs cidr-by-organization-database-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --schema: string # The PostgreSQL schema to restrict access to. Leave empty to allow access to all schemas.
   --role: string # The PostgreSQL role to restrict access to. Leave empty to allow access for all roles.
   --cidrs: list # List of IPv4 CIDR ranges (e.g., ['192.168.1.0/24', '192.168.1.1/32']). Only provided fields will be updated.
@@ -2450,7 +2537,7 @@ export def "organizations-databases-cidrs cidr-by-organization-database-id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an IP restriction entry
@@ -2468,13 +2555,14 @@ export def "organizations-databases-cidrs cidr-by-organization-database-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/cidrs/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the deploy queue
@@ -2491,6 +2579,7 @@ export def "organizations-databases-deploy-queue queue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list, deploy_operations: list, deploy_operation_summaries: list, lint_errors: list, sequential_diff_dependencies: list, lookup_vindex_operations: list, throttler_configurations: record, deployment_revert_request: record, actor: record, cutover_actor: record, cancelled_actor: record, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>> {
@@ -2500,7 +2589,7 @@ export def "organizations-databases-deploy-queue queue" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/deploy-queue" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List deploy requests
@@ -2517,6 +2606,7 @@ export def "organizations-databases-deploy-requests requests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string # Filter by state of the deploy request (open, closed, deployed)
   --branch: string # Filter by the name of the branch the deploy request is created from
   --into-branch: string # Filter by the name of the branch the deploy request will be merged into
@@ -2524,14 +2614,14 @@ export def "organizations-databases-deploy-requests requests" [
   --running-at: string # Filter deploy requests by the date they were running. (e.g. 2023-01-01T00:00:00Z..2023-01-31T23:59:59Z)
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
-]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, number: int, actor: record, closed_by: record, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, approved: bool, state: string, deployment_state: string, deployment: record, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string>> {
+]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, number: int, actor: record, closed_by: record, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, into_branch_keyspace_count: int, approved: bool, state: string, deployment_state: string, deployment: record, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "branch" $branch "scalar") (serialize-qp "into_branch" $into_branch "scalar") (serialize-qp "deployed_at" $deployed_at "scalar") (serialize-qp "running_at" $running_at "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/deploy-requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a deploy request
@@ -2548,12 +2638,13 @@ export def "organizations-databases-deploy-requests request-by-organization-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   branch: string # The name of the branch the deploy request is created from
   into_branch: string # The name of the branch the deploy request will be merged into
   --notes: string # Notes about the deploy request
   --auto-cutover: oneof<nothing, bool> # Whether or not to enable auto_cutover for the deploy request. When enabled, will auto cutover to the new schema as soon as it is ready.
   --auto-delete-branch: oneof<nothing, bool> # Whether or not to enable auto_delete_branch for the deploy request. When enabled, will delete the branch once the DR successfully completes.
-]: any -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
+]: any -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, into_branch_keyspace_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2562,7 +2653,7 @@ export def "organizations-databases-deploy-requests request-by-organization-data
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a deploy request
@@ -2580,13 +2671,14 @@ export def "organizations-databases-deploy-requests request-by-organization-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, into_branch_keyspace_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/deploy-requests/($number)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Close a deploy request
@@ -2604,8 +2696,9 @@ export def "organizations-databases-deploy-requests request-by-organization-data
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string@state-completer-1 # The deploy request will be updated to this state
-]: any -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
+]: any -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, into_branch_keyspace_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2614,7 +2707,7 @@ export def "organizations-databases-deploy-requests request-by-organization-data
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Complete a gated deploy request
@@ -2632,13 +2725,14 @@ export def "organizations-databases-deploy-requests-apply-deploy request" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, into_branch_keyspace_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/deploy-requests/($number)/apply-deploy")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update auto-apply for deploy request
@@ -2656,8 +2750,9 @@ export def "organizations-databases-deploy-requests-auto-apply apply" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enable: oneof<nothing, bool> # Whether or not to enable auto-apply for the deploy request
-]: any -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
+]: any -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, into_branch_keyspace_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2666,7 +2761,7 @@ export def "organizations-databases-deploy-requests-auto-apply apply" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update auto-delete branch for deploy request
@@ -2684,8 +2779,9 @@ export def "organizations-databases-deploy-requests-auto-delete-branch branch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enable: oneof<nothing, bool> # Whether or not to enable auto-delete branch for the deploy request
-]: any -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
+]: any -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, into_branch_keyspace_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2694,7 +2790,7 @@ export def "organizations-databases-deploy-requests-auto-delete-branch branch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel a queued deploy request
@@ -2712,13 +2808,14 @@ export def "organizations-databases-deploy-requests-cancel request" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, into_branch_keyspace_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/deploy-requests/($number)/cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Complete an errored deploy
@@ -2736,13 +2833,14 @@ export def "organizations-databases-deploy-requests-complete-deploy deploy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, into_branch_keyspace_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/deploy-requests/($number)/complete-deploy")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Queue a deploy request
@@ -2760,8 +2858,9 @@ export def "organizations-databases-deploy-requests-deploy request" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --instant-ddl: oneof<nothing, bool> # Whether or not to deploy the request with instant DDL. Defaults to false.
-]: any -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
+]: any -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, into_branch_keyspace_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2770,7 +2869,7 @@ export def "organizations-databases-deploy-requests-deploy request" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a deployment
@@ -2788,13 +2887,14 @@ export def "organizations-databases-deploy-requests-deployment deployment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: table<id: string, state: string, keyspace_name: string, table_name: string, operation_name: string, eta_seconds: float, progress_percentage: float, deploy_error_docs_url: string, ddl_statement: string, syntax_highlighted_ddl: string, created_at: string, updated_at: string, throttled_at: string, can_drop_data: bool, table_locked: bool, table_recently_used: bool, table_recently_used_at: string, removed_foreign_key_names: list, deploy_errors: string>, deploy_operation_summaries: table<id: string, created_at: string, deploy_errors: string, ddl_statement: string, eta_seconds: int, keyspace_name: string, operation_name: string, progress_percentage: float, state: string, syntax_highlighted_ddl: string, table_name: string, table_recently_used_at: string, throttled_at: string, removed_foreign_key_names: list, shard_count: int, shard_names: list, can_drop_data: bool, table_recently_used: bool, sharded: bool, operations: list>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/deploy-requests/($number)/deployment")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable force cutover for a deploy request
@@ -2812,13 +2912,14 @@ export def "organizations-databases-deploy-requests-force-cutover request" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, into_branch_keyspace_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/deploy-requests/($number)/force-cutover")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List deploy operations
@@ -2836,6 +2937,7 @@ export def "organizations-databases-deploy-requests-operations operations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, state: string, keyspace_name: string, table_name: string, operation_name: string, eta_seconds: float, progress_percentage: float, deploy_error_docs_url: string, ddl_statement: string, syntax_highlighted_ddl: string, created_at: string, updated_at: string, throttled_at: string, can_drop_data: bool, table_locked: bool, table_recently_used: bool, table_recently_used_at: string, removed_foreign_key_names: list, deploy_errors: string>> {
@@ -2845,7 +2947,7 @@ export def "organizations-databases-deploy-requests-operations operations" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/deploy-requests/($number)/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Complete a revert
@@ -2863,13 +2965,14 @@ export def "organizations-databases-deploy-requests-revert revert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, into_branch_keyspace_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/deploy-requests/($number)/revert")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List deploy request reviews
@@ -2887,6 +2990,7 @@ export def "organizations-databases-deploy-requests-reviews reviews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, body: string, html_body: string, state: string, created_at: string, updated_at: string, actor: record>> {
@@ -2896,7 +3000,7 @@ export def "organizations-databases-deploy-requests-reviews reviews" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/deploy-requests/($number)/reviews" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Review a deploy request
@@ -2914,6 +3018,7 @@ export def "organizations-databases-deploy-requests-reviews request" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string@state-completer-2 # Whether the review is a comment or approval. Service tokens must have corresponding access (either `approve_deploy_request` or `review_deploy_request`)
   --body-body: string # Deploy request review comments
 ]: any -> record<id: string, body: string, html_body: string, state: string, created_at: string, updated_at: string, actor: record<id: string, display_name: string, avatar_url: string>> {
@@ -2925,7 +3030,7 @@ export def "organizations-databases-deploy-requests-reviews request" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Skip revert period
@@ -2943,13 +3048,14 @@ export def "organizations-databases-deploy-requests-skip-revert period" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, into_branch_keyspace_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/deploy-requests/($number)/skip-revert")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check deploy request storage
@@ -2967,13 +3073,14 @@ export def "organizations-databases-deploy-requests-storage-check storage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<enough_storage: bool, upgradeable: bool, storage_bytes_needed: int, storage_report: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/deploy-requests/($number)/storage-check")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get deploy request throttler configurations
@@ -2991,13 +3098,14 @@ export def "organizations-databases-deploy-requests-throttler throttler-by-organ
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<keyspaces: list<string>, configurable: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, configurations: table<keyspace_name: string, ratio: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/deploy-requests/($number)/throttler")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update deploy request throttler configurations
@@ -3015,6 +3123,7 @@ export def "organizations-databases-deploy-requests-throttler throttler-by-organ
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ratio: int # A throttler ratio between 0 and 95 that will apply to all keyspaces affected by the deploy request. 0 effectively disables throttler, while 95 drastically slows down migrations in the deploy request
   --configurations: list # If specifying throttler ratios per keyspace, an array of { "keyspace_name": "mykeyspace", "ratio": 10 }, one for each eligible keyspace
 ]: any -> record<keyspaces: list<string>, configurable: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, configurations: table<keyspace_name: string, ratio: float>> {
@@ -3026,7 +3135,7 @@ export def "organizations-databases-deploy-requests-throttler throttler-by-organ
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List maintenance schedules
@@ -3043,6 +3152,7 @@ export def "organizations-databases-maintenance-schedules schedules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, name: string, created_at: string, updated_at: string, last_window_datetime: string, next_window_datetime: string, duration: int, day: int, hour: int, week: int, frequency_value: int, frequency_unit: string, enabled: bool, expires_at: string, deadline_at: string, required: bool, pending_vitess_version_update: bool, pending_vitess_version: string, pending_mysql_version_update: bool, pending_mysql_version: string>> {
@@ -3052,7 +3162,7 @@ export def "organizations-databases-maintenance-schedules schedules" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/maintenance-schedules" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a maintenance schedule
@@ -3070,13 +3180,14 @@ export def "organizations-databases-maintenance-schedules schedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, created_at: string, updated_at: string, last_window_datetime: string, next_window_datetime: string, duration: int, day: int, hour: int, week: int, frequency_value: int, frequency_unit: string, enabled: bool, expires_at: string, deadline_at: string, required: bool, pending_vitess_version_update: bool, pending_vitess_version: string, pending_mysql_version_update: bool, pending_mysql_version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/maintenance-schedules/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List maintenance windows
@@ -3094,6 +3205,7 @@ export def "organizations-databases-maintenance-schedules-windows windows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, created_at: string, updated_at: string, started_at: string, finished_at: string>> {
@@ -3103,7 +3215,7 @@ export def "organizations-databases-maintenance-schedules-windows windows" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/maintenance-schedules/($id)/windows" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List read-only regions
@@ -3120,6 +3232,7 @@ export def "organizations-databases-read-only-regions regions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, display_name: string, created_at: string, updated_at: string, ready_at: string, ready: bool, actor: record, region: record>> {
@@ -3129,7 +3242,7 @@ export def "organizations-databases-read-only-regions regions" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/read-only-regions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List database regions
@@ -3146,6 +3259,7 @@ export def "organizations-databases-regions regions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, provider: string, enabled: bool, public_ip_addresses: list, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>> {
@@ -3155,7 +3269,7 @@ export def "organizations-databases-regions regions" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/regions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List schema recommendations
@@ -3172,6 +3286,7 @@ export def "organizations-databases-schema-recommendations recommendations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string@state-completer-3 # Filter by recommendation state
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
@@ -3182,7 +3297,7 @@ export def "organizations-databases-schema-recommendations recommendations" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/schema-recommendations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a schema recommendation
@@ -3200,13 +3315,14 @@ export def "organizations-databases-schema-recommendations recommendation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, html_url: string, title: string, table_name: string, keyspace: string, ddl_statement: string, number: int, state: string, recommendation_type: string, created_at: string, updated_at: string, applied_at: string, dismissed_at: string, closed_by_deploy_request: record<id: string, branch_id: string, number: int>, dismissed_by: record<id: string, display_name: string, avatar_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/schema-recommendations/($number)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Dismiss a schema recommendation
@@ -3224,6 +3340,7 @@ export def "organizations-databases-schema-recommendations-dismiss recommendatio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reason: string # The reason for dismissing the recommendation (max 500 characters)
 ]: any -> record<id: string, html_url: string, title: string, table_name: string, keyspace: string, ddl_statement: string, number: int, state: string, recommendation_type: string, created_at: string, updated_at: string, applied_at: string, dismissed_at: string, closed_by_deploy_request: record<id: string, branch_id: string, number: int>, dismissed_by: record<id: string, display_name: string, avatar_url: string>> {
   let input = $in
@@ -3234,7 +3351,7 @@ export def "organizations-databases-schema-recommendations-dismiss recommendatio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get database throttler configurations
@@ -3251,13 +3368,14 @@ export def "organizations-databases-throttler throttler-by-organization-database
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<keyspaces: list<string>, configurable: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, configurations: table<keyspace_name: string, ratio: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/throttler")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update database throttler configurations
@@ -3274,6 +3392,7 @@ export def "organizations-databases-throttler throttler-by-organization-database
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ratio: int # A throttler ratio between 0 and 95 that will apply to all keyspaces in the database. 0 effectively disables throttler, while 95 drastically slows down deploy request migrations
   --configurations: list # If specifying throttler ratios per keyspace, an array of { "keyspace_name": "mykeyspace", "ratio": 10 }, one for each eligible keyspace
 ]: any -> record<keyspaces: list<string>, configurable: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, configurations: table<keyspace_name: string, ratio: float>> {
@@ -3285,7 +3404,7 @@ export def "organizations-databases-throttler throttler-by-organization-database
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List webhooks
@@ -3302,6 +3421,7 @@ export def "organizations-databases-webhooks webhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, url: string, secret: string, enabled: bool, last_sent_result: string, last_sent_success: bool, last_sent_at: string, created_at: string, updated_at: string, events: list>> {
@@ -3311,7 +3431,7 @@ export def "organizations-databases-webhooks webhooks" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/webhooks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a webhook
@@ -3328,6 +3448,7 @@ export def "organizations-databases-webhooks webhook-by-organization-database" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-url: string # The URL the webhook will send events to
   --enabled: oneof<nothing, bool> # Whether the webhook should be enabled
   --events: list # The events this webhook should subscribe to
@@ -3340,7 +3461,7 @@ export def "organizations-databases-webhooks webhook-by-organization-database" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a webhook
@@ -3358,13 +3479,14 @@ export def "organizations-databases-webhooks webhook-by-organization-database-id
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, url: string, secret: string, enabled: bool, last_sent_result: string, last_sent_success: bool, last_sent_at: string, created_at: string, updated_at: string, events: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/webhooks/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a webhook
@@ -3382,6 +3504,7 @@ export def "organizations-databases-webhooks webhook-by-organization-database-id
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-url: string # The URL the webhook will send events to
   --enabled: oneof<nothing, bool> # Whether the webhook should be enabled
   --events: list # The events this webhook should subscribe to
@@ -3394,7 +3517,7 @@ export def "organizations-databases-webhooks webhook-by-organization-database-id
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a webhook
@@ -3412,13 +3535,14 @@ export def "organizations-databases-webhooks webhook-by-organization-database-id
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/webhooks/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Test a webhook
@@ -3436,13 +3560,14 @@ export def "organizations-databases-webhooks-test webhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/webhooks/($id)/test")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List workflows
@@ -3459,6 +3584,7 @@ export def "organizations-databases-workflows workflows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --between: string # Filter workflows to those active during a time range (e.g. 2025-01-01T00:00:00Z..2025-01-01T23:59:59)
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
@@ -3469,7 +3595,7 @@ export def "organizations-databases-workflows workflows" [
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/workflows" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a workflow
@@ -3486,6 +3612,7 @@ export def "organizations-databases-workflows workflow-by-organization-database"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Name the workflow
   source_keyspace: string # Name of the source keyspace
   target_keyspace: string # Name of the target keyspace
@@ -3502,7 +3629,7 @@ export def "organizations-databases-workflows workflow-by-organization-database"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a workflow
@@ -3520,13 +3647,14 @@ export def "organizations-databases-workflows workflow-by-organization-database-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, number: int, state: string, created_at: string, updated_at: string, started_at: string, completed_at: string, cancelled_at: string, reversed_at: string, retried_at: string, data_copy_completed_at: string, cutover_at: string, replicas_switched: bool, primaries_switched: bool, switch_replicas_at: string, switch_primaries_at: string, verify_data_at: string, workflow_type: string, workflow_subtype: string, defer_secondary_keys: bool, on_ddl: string, workflow_errors: string, may_retry: bool, may_restart: bool, verified_data_stale: bool, sequence_tables_applied: bool, actor: record<id: string, display_name: string, avatar_url: string>, verify_data_by: record<id: string, display_name: string, avatar_url: string>, reversed_by: record<id: string, display_name: string, avatar_url: string>, switch_replicas_by: record<id: string, display_name: string, avatar_url: string>, switch_primaries_by: record<id: string, display_name: string, avatar_url: string>, cancelled_by: record<id: string, display_name: string, avatar_url: string>, completed_by: record<id: string, display_name: string, avatar_url: string>, retried_by: record<id: string, display_name: string, avatar_url: string>, cutover_by: record<id: string, display_name: string, avatar_url: string>, reversed_cutover_by: record<id: string, display_name: string, avatar_url: string>, branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, source_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, target_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, global_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/workflows/($number)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel a workflow
@@ -3544,13 +3672,14 @@ export def "organizations-databases-workflows cancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, number: int, state: string, created_at: string, updated_at: string, started_at: string, completed_at: string, cancelled_at: string, reversed_at: string, retried_at: string, data_copy_completed_at: string, cutover_at: string, replicas_switched: bool, primaries_switched: bool, switch_replicas_at: string, switch_primaries_at: string, verify_data_at: string, workflow_type: string, workflow_subtype: string, defer_secondary_keys: bool, on_ddl: string, workflow_errors: string, may_retry: bool, may_restart: bool, verified_data_stale: bool, sequence_tables_applied: bool, actor: record<id: string, display_name: string, avatar_url: string>, verify_data_by: record<id: string, display_name: string, avatar_url: string>, reversed_by: record<id: string, display_name: string, avatar_url: string>, switch_replicas_by: record<id: string, display_name: string, avatar_url: string>, switch_primaries_by: record<id: string, display_name: string, avatar_url: string>, cancelled_by: record<id: string, display_name: string, avatar_url: string>, completed_by: record<id: string, display_name: string, avatar_url: string>, retried_by: record<id: string, display_name: string, avatar_url: string>, cutover_by: record<id: string, display_name: string, avatar_url: string>, reversed_cutover_by: record<id: string, display_name: string, avatar_url: string>, branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, source_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, target_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, global_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/workflows/($number)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Complete a workflow
@@ -3568,13 +3697,14 @@ export def "organizations-databases-workflows-complete complete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, number: int, state: string, created_at: string, updated_at: string, started_at: string, completed_at: string, cancelled_at: string, reversed_at: string, retried_at: string, data_copy_completed_at: string, cutover_at: string, replicas_switched: bool, primaries_switched: bool, switch_replicas_at: string, switch_primaries_at: string, verify_data_at: string, workflow_type: string, workflow_subtype: string, defer_secondary_keys: bool, on_ddl: string, workflow_errors: string, may_retry: bool, may_restart: bool, verified_data_stale: bool, sequence_tables_applied: bool, actor: record<id: string, display_name: string, avatar_url: string>, verify_data_by: record<id: string, display_name: string, avatar_url: string>, reversed_by: record<id: string, display_name: string, avatar_url: string>, switch_replicas_by: record<id: string, display_name: string, avatar_url: string>, switch_primaries_by: record<id: string, display_name: string, avatar_url: string>, cancelled_by: record<id: string, display_name: string, avatar_url: string>, completed_by: record<id: string, display_name: string, avatar_url: string>, retried_by: record<id: string, display_name: string, avatar_url: string>, cutover_by: record<id: string, display_name: string, avatar_url: string>, reversed_cutover_by: record<id: string, display_name: string, avatar_url: string>, branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, source_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, target_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, global_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/workflows/($number)/complete")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cutover traffic
@@ -3592,13 +3722,14 @@ export def "organizations-databases-workflows-cutover cutover" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, number: int, state: string, created_at: string, updated_at: string, started_at: string, completed_at: string, cancelled_at: string, reversed_at: string, retried_at: string, data_copy_completed_at: string, cutover_at: string, replicas_switched: bool, primaries_switched: bool, switch_replicas_at: string, switch_primaries_at: string, verify_data_at: string, workflow_type: string, workflow_subtype: string, defer_secondary_keys: bool, on_ddl: string, workflow_errors: string, may_retry: bool, may_restart: bool, verified_data_stale: bool, sequence_tables_applied: bool, actor: record<id: string, display_name: string, avatar_url: string>, verify_data_by: record<id: string, display_name: string, avatar_url: string>, reversed_by: record<id: string, display_name: string, avatar_url: string>, switch_replicas_by: record<id: string, display_name: string, avatar_url: string>, switch_primaries_by: record<id: string, display_name: string, avatar_url: string>, cancelled_by: record<id: string, display_name: string, avatar_url: string>, completed_by: record<id: string, display_name: string, avatar_url: string>, retried_by: record<id: string, display_name: string, avatar_url: string>, cutover_by: record<id: string, display_name: string, avatar_url: string>, reversed_cutover_by: record<id: string, display_name: string, avatar_url: string>, branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, source_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, target_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, global_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/workflows/($number)/cutover")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retry a failed workflow
@@ -3616,13 +3747,14 @@ export def "organizations-databases-workflows-retry retry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, number: int, state: string, created_at: string, updated_at: string, started_at: string, completed_at: string, cancelled_at: string, reversed_at: string, retried_at: string, data_copy_completed_at: string, cutover_at: string, replicas_switched: bool, primaries_switched: bool, switch_replicas_at: string, switch_primaries_at: string, verify_data_at: string, workflow_type: string, workflow_subtype: string, defer_secondary_keys: bool, on_ddl: string, workflow_errors: string, may_retry: bool, may_restart: bool, verified_data_stale: bool, sequence_tables_applied: bool, actor: record<id: string, display_name: string, avatar_url: string>, verify_data_by: record<id: string, display_name: string, avatar_url: string>, reversed_by: record<id: string, display_name: string, avatar_url: string>, switch_replicas_by: record<id: string, display_name: string, avatar_url: string>, switch_primaries_by: record<id: string, display_name: string, avatar_url: string>, cancelled_by: record<id: string, display_name: string, avatar_url: string>, completed_by: record<id: string, display_name: string, avatar_url: string>, retried_by: record<id: string, display_name: string, avatar_url: string>, cutover_by: record<id: string, display_name: string, avatar_url: string>, reversed_cutover_by: record<id: string, display_name: string, avatar_url: string>, branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, source_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, target_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, global_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/workflows/($number)/retry")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reverse traffic cutover
@@ -3640,13 +3772,14 @@ export def "organizations-databases-workflows-reverse-cutover cutover" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, number: int, state: string, created_at: string, updated_at: string, started_at: string, completed_at: string, cancelled_at: string, reversed_at: string, retried_at: string, data_copy_completed_at: string, cutover_at: string, replicas_switched: bool, primaries_switched: bool, switch_replicas_at: string, switch_primaries_at: string, verify_data_at: string, workflow_type: string, workflow_subtype: string, defer_secondary_keys: bool, on_ddl: string, workflow_errors: string, may_retry: bool, may_restart: bool, verified_data_stale: bool, sequence_tables_applied: bool, actor: record<id: string, display_name: string, avatar_url: string>, verify_data_by: record<id: string, display_name: string, avatar_url: string>, reversed_by: record<id: string, display_name: string, avatar_url: string>, switch_replicas_by: record<id: string, display_name: string, avatar_url: string>, switch_primaries_by: record<id: string, display_name: string, avatar_url: string>, cancelled_by: record<id: string, display_name: string, avatar_url: string>, completed_by: record<id: string, display_name: string, avatar_url: string>, retried_by: record<id: string, display_name: string, avatar_url: string>, cutover_by: record<id: string, display_name: string, avatar_url: string>, reversed_cutover_by: record<id: string, display_name: string, avatar_url: string>, branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, source_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, target_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, global_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/workflows/($number)/reverse-cutover")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reverse traffic
@@ -3664,13 +3797,14 @@ export def "organizations-databases-workflows-reverse-traffic traffic" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, number: int, state: string, created_at: string, updated_at: string, started_at: string, completed_at: string, cancelled_at: string, reversed_at: string, retried_at: string, data_copy_completed_at: string, cutover_at: string, replicas_switched: bool, primaries_switched: bool, switch_replicas_at: string, switch_primaries_at: string, verify_data_at: string, workflow_type: string, workflow_subtype: string, defer_secondary_keys: bool, on_ddl: string, workflow_errors: string, may_retry: bool, may_restart: bool, verified_data_stale: bool, sequence_tables_applied: bool, actor: record<id: string, display_name: string, avatar_url: string>, verify_data_by: record<id: string, display_name: string, avatar_url: string>, reversed_by: record<id: string, display_name: string, avatar_url: string>, switch_replicas_by: record<id: string, display_name: string, avatar_url: string>, switch_primaries_by: record<id: string, display_name: string, avatar_url: string>, cancelled_by: record<id: string, display_name: string, avatar_url: string>, completed_by: record<id: string, display_name: string, avatar_url: string>, retried_by: record<id: string, display_name: string, avatar_url: string>, cutover_by: record<id: string, display_name: string, avatar_url: string>, reversed_cutover_by: record<id: string, display_name: string, avatar_url: string>, branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, source_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, target_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, global_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/workflows/($number)/reverse-traffic")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Switch primary traffic
@@ -3688,13 +3822,14 @@ export def "organizations-databases-workflows-switch-primaries primaries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, number: int, state: string, created_at: string, updated_at: string, started_at: string, completed_at: string, cancelled_at: string, reversed_at: string, retried_at: string, data_copy_completed_at: string, cutover_at: string, replicas_switched: bool, primaries_switched: bool, switch_replicas_at: string, switch_primaries_at: string, verify_data_at: string, workflow_type: string, workflow_subtype: string, defer_secondary_keys: bool, on_ddl: string, workflow_errors: string, may_retry: bool, may_restart: bool, verified_data_stale: bool, sequence_tables_applied: bool, actor: record<id: string, display_name: string, avatar_url: string>, verify_data_by: record<id: string, display_name: string, avatar_url: string>, reversed_by: record<id: string, display_name: string, avatar_url: string>, switch_replicas_by: record<id: string, display_name: string, avatar_url: string>, switch_primaries_by: record<id: string, display_name: string, avatar_url: string>, cancelled_by: record<id: string, display_name: string, avatar_url: string>, completed_by: record<id: string, display_name: string, avatar_url: string>, retried_by: record<id: string, display_name: string, avatar_url: string>, cutover_by: record<id: string, display_name: string, avatar_url: string>, reversed_cutover_by: record<id: string, display_name: string, avatar_url: string>, branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, source_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, target_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, global_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/workflows/($number)/switch-primaries")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Switch replica traffic
@@ -3712,13 +3847,14 @@ export def "organizations-databases-workflows-switch-replicas replicas" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, number: int, state: string, created_at: string, updated_at: string, started_at: string, completed_at: string, cancelled_at: string, reversed_at: string, retried_at: string, data_copy_completed_at: string, cutover_at: string, replicas_switched: bool, primaries_switched: bool, switch_replicas_at: string, switch_primaries_at: string, verify_data_at: string, workflow_type: string, workflow_subtype: string, defer_secondary_keys: bool, on_ddl: string, workflow_errors: string, may_retry: bool, may_restart: bool, verified_data_stale: bool, sequence_tables_applied: bool, actor: record<id: string, display_name: string, avatar_url: string>, verify_data_by: record<id: string, display_name: string, avatar_url: string>, reversed_by: record<id: string, display_name: string, avatar_url: string>, switch_replicas_by: record<id: string, display_name: string, avatar_url: string>, switch_primaries_by: record<id: string, display_name: string, avatar_url: string>, cancelled_by: record<id: string, display_name: string, avatar_url: string>, completed_by: record<id: string, display_name: string, avatar_url: string>, retried_by: record<id: string, display_name: string, avatar_url: string>, cutover_by: record<id: string, display_name: string, avatar_url: string>, reversed_cutover_by: record<id: string, display_name: string, avatar_url: string>, branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, source_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, target_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, global_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/workflows/($number)/switch-replicas")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Verify workflow data
@@ -3736,13 +3872,14 @@ export def "organizations-databases-workflows-verify-data workflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, number: int, state: string, created_at: string, updated_at: string, started_at: string, completed_at: string, cancelled_at: string, reversed_at: string, retried_at: string, data_copy_completed_at: string, cutover_at: string, replicas_switched: bool, primaries_switched: bool, switch_replicas_at: string, switch_primaries_at: string, verify_data_at: string, workflow_type: string, workflow_subtype: string, defer_secondary_keys: bool, on_ddl: string, workflow_errors: string, may_retry: bool, may_restart: bool, verified_data_stale: bool, sequence_tables_applied: bool, actor: record<id: string, display_name: string, avatar_url: string>, verify_data_by: record<id: string, display_name: string, avatar_url: string>, reversed_by: record<id: string, display_name: string, avatar_url: string>, switch_replicas_by: record<id: string, display_name: string, avatar_url: string>, switch_primaries_by: record<id: string, display_name: string, avatar_url: string>, cancelled_by: record<id: string, display_name: string, avatar_url: string>, completed_by: record<id: string, display_name: string, avatar_url: string>, retried_by: record<id: string, display_name: string, avatar_url: string>, cutover_by: record<id: string, display_name: string, avatar_url: string>, reversed_cutover_by: record<id: string, display_name: string, avatar_url: string>, branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, source_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, target_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, global_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/databases/($database)/workflows/($number)/verify-data")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get invoices
@@ -3758,6 +3895,7 @@ export def "organizations-invoices invoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, total: string, billing_period_start: string, billing_period_end: string, paid: bool, overdue: bool>> {
@@ -3767,7 +3905,7 @@ export def "organizations-invoices invoices" [
   let full_url = (build-url $base $"/organizations/($organization)/invoices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an invoice
@@ -3784,13 +3922,14 @@ export def "organizations-invoices invoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, total: string, billing_period_start: string, billing_period_end: string, paid: bool, overdue: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/invoices/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get invoice line items
@@ -3807,16 +3946,17 @@ export def "organizations-invoices-line-items items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
-]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, subtotal: float, description: string, metric_name: string, database_id: string, database_name: string, resource: record>> {
+]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, subtotal: float, description: string, metric_name: string, cloudflare_billed: bool, database_id: string, database_name: string, resource: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/organizations/($organization)/invoices/($id)/line-items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List organization members
@@ -3832,6 +3972,7 @@ export def "organizations-members members" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Search term to filter members by name or email
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
@@ -3842,7 +3983,7 @@ export def "organizations-members members" [
   let full_url = (build-url $base $"/organizations/($organization)/members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an organization member
@@ -3859,13 +4000,14 @@ export def "organizations-members membership-by-organization-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, user: record<id: string, display_name: string, name: string, email: string, avatar_url: string, created_at: string, updated_at: string, two_factor_auth_configured: bool, default_organization: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, sso: bool, managed: bool, directory_managed: bool, email_verified: bool>, role: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/members/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update organization member role
@@ -3882,6 +4024,7 @@ export def "organizations-members membership-by-organization-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   role: string # The role to assign to the member (e.g., 'admin', 'member'). Note: Cannot update your own role. Roles managed by IdP cannot be updated via API.
 ]: any -> record<id: string, user: record<id: string, display_name: string, name: string, email: string, avatar_url: string, created_at: string, updated_at: string, two_factor_auth_configured: bool, default_organization: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, sso: bool, managed: bool, directory_managed: bool, email_verified: bool>, role: string, created_at: string, updated_at: string> {
   let input = $in
@@ -3892,7 +4035,7 @@ export def "organizations-members membership-by-organization-id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a member from an organization
@@ -3909,6 +4052,7 @@ export def "organizations-members member" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --delete-passwords: oneof<nothing, bool> # Whether to delete all passwords associated with the member. Only available when removing other members (not yourself).
   --delete-service-tokens: oneof<nothing, bool> # Whether to delete all service tokens associated with the member. Only available when removing other members (not yourself).
 ]: nothing -> any {
@@ -3918,7 +4062,7 @@ export def "organizations-members member" [
   let full_url = (build-url $base $"/organizations/($organization)/members/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List OAuth applications
@@ -3934,6 +4078,7 @@ export def "organizations-oauth-applications applications" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, name: string, redirect_uri: string, domain: string, created_at: string, updated_at: string, scopes: string, avatar: string, client_id: string, tokens: int, dcr: bool, single_org_authorization: bool, scopes_by_resource: record, all_scopes_by_resource: record>> {
@@ -3943,7 +4088,7 @@ export def "organizations-oauth-applications applications" [
   let full_url = (build-url $base $"/organizations/($organization)/oauth-applications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an OAuth application
@@ -3960,13 +4105,14 @@ export def "organizations-oauth-applications application" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, redirect_uri: string, domain: string, created_at: string, updated_at: string, scopes: string, avatar: string, client_id: string, tokens: int, dcr: bool, single_org_authorization: bool, scopes_by_resource: record, all_scopes_by_resource: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/oauth-applications/($application_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List OAuth tokens
@@ -3983,6 +4129,7 @@ export def "organizations-oauth-applications-tokens tokens" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, name: string, display_name: string, token: string, plain_text_refresh_token: string, avatar_url: string, created_at: string, updated_at: string, expires_at: string, last_used_at: string, actor_id: string, actor_display_name: string, actor_type: string, service_token_accesses: list, oauth_accesses_by_resource: record>> {
@@ -3992,7 +4139,7 @@ export def "organizations-oauth-applications-tokens tokens" [
   let full_url = (build-url $base $"/organizations/($organization)/oauth-applications/($application_id)/tokens" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an OAuth token
@@ -4010,13 +4157,14 @@ export def "organizations-oauth-applications-tokens token-by-organization-applic
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, display_name: string, token: string, plain_text_refresh_token: string, avatar_url: string, created_at: string, updated_at: string, expires_at: string, last_used_at: string, actor_id: string, actor_display_name: string, actor_type: string, service_token_accesses: table<id: string, access: string, description: string, resource_name: string, resource_id: string, resource_type: string, resource: record>, oauth_accesses_by_resource: record<database: record<databases: list, accesses: list>, organization: record<organizations: list, accesses: list>, branch: record<branches: list, accesses: list>, user: record<users: list, accesses: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/oauth-applications/($application_id)/tokens/($token_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an OAuth token
@@ -4034,13 +4182,14 @@ export def "organizations-oauth-applications-tokens token-by-organization-applic
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/oauth-applications/($application_id)/tokens/($token_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or renew an OAuth token
@@ -4057,6 +4206,7 @@ export def "organizations-oauth-applications-token token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   client_id: string # The OAuth application's client ID
   client_secret: string # The OAuth application's client secret
   grant_type: string@grant-type-completer # Whether an OAuth grant code or a refresh token is being exchanged for an OAuth token
@@ -4072,7 +4222,7 @@ export def "organizations-oauth-applications-token token" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List regions for an organization
@@ -4088,6 +4238,7 @@ export def "organizations-regions organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, provider: string, enabled: bool, public_ip_addresses: list, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>> {
@@ -4097,7 +4248,7 @@ export def "organizations-regions organization" [
   let full_url = (build-url $base $"/organizations/($organization)/regions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List service tokens
@@ -4113,6 +4264,7 @@ export def "organizations-service-tokens tokens" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, name: string, display_name: string, token: string, plain_text_refresh_token: string, avatar_url: string, created_at: string, updated_at: string, expires_at: string, last_used_at: string, actor_id: string, actor_display_name: string, actor_type: string, service_token_accesses: list, oauth_accesses_by_resource: record>> {
@@ -4122,7 +4274,7 @@ export def "organizations-service-tokens tokens" [
   let full_url = (build-url $base $"/organizations/($organization)/service-tokens" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a service token
@@ -4138,6 +4290,7 @@ export def "organizations-service-tokens token-by-organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the service token
   --ttl: int # Time to live (in seconds) for the service token. The token will be invalid when TTL has passed
 ]: any -> record<id: string, name: string, display_name: string, token: string, plain_text_refresh_token: string, avatar_url: string, created_at: string, updated_at: string, expires_at: string, last_used_at: string, actor_id: string, actor_display_name: string, actor_type: string, service_token_accesses: table<id: string, access: string, description: string, resource_name: string, resource_id: string, resource_type: string, resource: record>, oauth_accesses_by_resource: record<database: record<databases: list, accesses: list>, organization: record<organizations: list, accesses: list>, branch: record<branches: list, accesses: list>, user: record<users: list, accesses: list>>> {
@@ -4149,7 +4302,7 @@ export def "organizations-service-tokens token-by-organization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a service token
@@ -4166,13 +4319,14 @@ export def "organizations-service-tokens token-by-organization-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, display_name: string, token: string, plain_text_refresh_token: string, avatar_url: string, created_at: string, updated_at: string, expires_at: string, last_used_at: string, actor_id: string, actor_display_name: string, actor_type: string, service_token_accesses: table<id: string, access: string, description: string, resource_name: string, resource_id: string, resource_type: string, resource: record>, oauth_accesses_by_resource: record<database: record<databases: list, accesses: list>, organization: record<organizations: list, accesses: list>, branch: record<branches: list, accesses: list>, user: record<users: list, accesses: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/service-tokens/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a service token
@@ -4189,13 +4343,14 @@ export def "organizations-service-tokens token-by-organization-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/service-tokens/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List teams in an organization
@@ -4211,6 +4366,7 @@ export def "organizations-teams teams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Search term to filter teams by name
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
@@ -4221,7 +4377,7 @@ export def "organizations-teams teams" [
   let full_url = (build-url $base $"/organizations/($organization)/teams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an organization team
@@ -4237,6 +4393,7 @@ export def "organizations-teams team-by-organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the team
   --description: string # A description of the team's purpose
 ]: any -> record<id: string, display_name: string, creator: record<id: string, display_name: string, avatar_url: string>, members: table<id: string, display_name: string, name: string, email: string, avatar_url: string, created_at: string, updated_at: string, two_factor_auth_configured: bool, default_organization: record, sso: bool, managed: bool, directory_managed: bool, email_verified: bool>, databases: table<id: string, name: string, url: string, branches_url: string>, analyst_databases: table<id: string, name: string, url: string, branches_url: string>, name: string, slug: string, created_at: string, updated_at: string, description: string, managed: bool> {
@@ -4248,7 +4405,7 @@ export def "organizations-teams team-by-organization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an organization team
@@ -4265,13 +4422,14 @@ export def "organizations-teams team-by-organization-team" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, display_name: string, creator: record<id: string, display_name: string, avatar_url: string>, members: table<id: string, display_name: string, name: string, email: string, avatar_url: string, created_at: string, updated_at: string, two_factor_auth_configured: bool, default_organization: record, sso: bool, managed: bool, directory_managed: bool, email_verified: bool>, databases: table<id: string, name: string, url: string, branches_url: string>, analyst_databases: table<id: string, name: string, url: string, branches_url: string>, name: string, slug: string, created_at: string, updated_at: string, description: string, managed: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/teams/($team)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an organization team
@@ -4288,6 +4446,7 @@ export def "organizations-teams team-by-organization-team-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The new name for the team
   --description: string # The new description for the team
 ]: any -> record<id: string, display_name: string, creator: record<id: string, display_name: string, avatar_url: string>, members: table<id: string, display_name: string, name: string, email: string, avatar_url: string, created_at: string, updated_at: string, two_factor_auth_configured: bool, default_organization: record, sso: bool, managed: bool, directory_managed: bool, email_verified: bool>, databases: table<id: string, name: string, url: string, branches_url: string>, analyst_databases: table<id: string, name: string, url: string, branches_url: string>, name: string, slug: string, created_at: string, updated_at: string, description: string, managed: bool> {
@@ -4299,7 +4458,7 @@ export def "organizations-teams team-by-organization-team-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an organization team
@@ -4316,13 +4475,14 @@ export def "organizations-teams team-by-organization-team-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/teams/($team)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List team members
@@ -4339,6 +4499,7 @@ export def "organizations-teams-members members" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, user: record, actor: record, created_at: string, updated_at: string, passwords: list>> {
@@ -4348,7 +4509,7 @@ export def "organizations-teams-members members" [
   let full_url = (build-url $base $"/organizations/($organization)/teams/($team)/members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a member to a team
@@ -4365,6 +4526,7 @@ export def "organizations-teams-members member-by-organization-team" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   user_id: string # The ID of the organization member to add to the team
 ]: any -> record<id: string, user: record<id: string, display_name: string, name: string, email: string, avatar_url: string, created_at: string, updated_at: string, two_factor_auth_configured: bool, default_organization: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, sso: bool, managed: bool, directory_managed: bool, email_verified: bool>, actor: record<id: string, display_name: string, avatar_url: string>, created_at: string, updated_at: string, passwords: table<id: string, name: string, role: string, cidrs: list, created_at: string, deleted_at: string, expires_at: string, last_used_at: string, expired: bool, direct_vtgate: bool, direct_vtgate_addresses: list, ttl_seconds: int, access_host_url: string, access_host_regional_url: string, access_host_regional_urls: list, actor: record, region: record, username: string, plain_text: string, replica: bool, renewable: bool, database_branch: record>> {
   let input = $in
@@ -4375,7 +4537,7 @@ export def "organizations-teams-members member-by-organization-team" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a team member
@@ -4393,13 +4555,14 @@ export def "organizations-teams-members member-by-organization-team-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, user: record<id: string, display_name: string, name: string, email: string, avatar_url: string, created_at: string, updated_at: string, two_factor_auth_configured: bool, default_organization: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, sso: bool, managed: bool, directory_managed: bool, email_verified: bool>, actor: record<id: string, display_name: string, avatar_url: string>, created_at: string, updated_at: string, passwords: table<id: string, name: string, role: string, cidrs: list, created_at: string, deleted_at: string, expires_at: string, last_used_at: string, expired: bool, direct_vtgate: bool, direct_vtgate_addresses: list, ttl_seconds: int, access_host_url: string, access_host_regional_url: string, access_host_regional_urls: list, actor: record, region: record, username: string, plain_text: string, replica: bool, renewable: bool, database_branch: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization)/teams/($team)/members/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove a member from a team
@@ -4417,6 +4580,7 @@ export def "organizations-teams-members member-by-organization-team-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --delete-passwords: oneof<nothing, bool> # Whether to delete the member's passwords created through this team
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4425,7 +4589,7 @@ export def "organizations-teams-members member-by-organization-team-id-1" [
   let full_url = (build-url $base $"/organizations/($organization)/teams/($team)/members/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List public regions
@@ -4440,6 +4604,7 @@ export def "regions regions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, provider: string, enabled: bool, public_ip_addresses: list, display_name: string, location: string, slug: string>> {
@@ -4449,7 +4614,7 @@ export def "regions regions" [
   let full_url = (build-url $base "/regions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get current user
@@ -4464,11 +4629,12 @@ export def "user user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, display_name: string, name: string, email: string, avatar_url: string, created_at: string, updated_at: string, two_factor_auth_configured: bool, default_organization: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, sso: bool, managed: bool, directory_managed: bool, email_verified: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

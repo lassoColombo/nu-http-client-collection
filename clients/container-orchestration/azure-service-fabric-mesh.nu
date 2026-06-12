@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -69,7 +70,7 @@ def api-version-completer [] { ["2018-09-01-preview"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-service-fabric-mesh-operations List" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -102,6 +103,7 @@ export def "providers-microsoft-service-fabric-mesh-operations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<nextLink: string, value: table<display: record, name: string, nextLink: string, origin: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -110,7 +112,7 @@ export def "providers-microsoft-service-fabric-mesh-operations List" [
   let full_url = (build-url $base "/providers/Microsoft.ServiceFabricMesh/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all the application resources in a given subscription.
@@ -126,6 +128,7 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-applications L
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -134,7 +137,7 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-applications L
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ServiceFabricMesh/applications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all the gateway resources in a given subscription.
@@ -150,6 +153,7 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-gateways ListB
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -158,7 +162,7 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-gateways ListB
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ServiceFabricMesh/gateways" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all the network resources in a given subscription.
@@ -174,6 +178,7 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-networks ListB
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -182,7 +187,7 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-networks ListB
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ServiceFabricMesh/networks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all the secret resources in a given subscription.
@@ -198,6 +203,7 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-secrets ListBy
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -206,7 +212,7 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-secrets ListBy
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ServiceFabricMesh/secrets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all the volume resources in a given subscription.
@@ -222,6 +228,7 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-volumes ListBy
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -230,7 +237,7 @@ export def "subscriptions-providers-microsoft-service-fabric-mesh-volumes ListBy
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ServiceFabricMesh/volumes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all the application resources in a given resource group.
@@ -247,6 +254,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -255,7 +263,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/applications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the application resource.
@@ -273,6 +281,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<error: record<code: string, details: list<record>, innerError: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -281,7 +290,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/applications/($applicationResourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the application resource with the given name.
@@ -299,6 +308,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<properties: record<provisioningState: string, debugParams: string, description: string, diagnostics: record<defaultSinkRefs: list, enabled: bool, sinks: list>, healthState: string, serviceNames: list<string>, services: list<record>, status: string, statusDetails: string, unhealthyEvaluation: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -307,7 +317,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/applications/($applicationResourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates an application resource.
@@ -325,6 +335,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<properties: record<provisioningState: string, debugParams: string, description: string, diagnostics: record<defaultSinkRefs: list, enabled: bool, sinks: list>, healthState: string, serviceNames: list<string>, services: list<record>, status: string, statusDetails: string, unhealthyEvaluation: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -333,7 +344,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/applications/($applicationResourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all the service resources.
@@ -351,6 +362,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -359,7 +371,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/applications/($applicationResourceName)/services" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the service resource with the given name.
@@ -378,6 +390,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<properties: record<provisioningState: string, codePackages: list<record>, diagnostics: record<enabled: bool, sinkRefs: list>, networkRefs: list<record>, osType: string, autoScalingPolicies: list<record>, description: string, healthState: string, replicaCount: int, status: string, statusDetails: string, unhealthyEvaluation: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -386,7 +399,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/applications/($applicationResourceName)/services/($serviceResourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets replicas of a given service.
@@ -405,6 +418,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<nextLink: string, value: table<replicaName: string, codePackages: list, diagnostics: record, networkRefs: list, osType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -413,7 +427,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/applications/($applicationResourceName)/services/($serviceResourceName)/replicas" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the given replica of the service of an application.
@@ -433,6 +447,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<replicaName: string, codePackages: table<commands: list, diagnostics: record, endpoints: list, entrypoint: string, environmentVariables: list, image: string, imageRegistryCredential: record, instanceView: record, labels: list, name: string, reliableCollectionsRefs: list, resources: record, settings: list, volumeRefs: list, volumes: list>, diagnostics: record<enabled: bool, sinkRefs: list<string>>, networkRefs: table<endpointRefs: list, name: string>, osType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -441,7 +456,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/applications/($applicationResourceName)/services/($serviceResourceName)/replicas/($replicaName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the logs from the container.
@@ -462,6 +477,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
   --tail: int # Number of lines to show from the end of the logs. Default is 100.
 ]: nothing -> record<content: string> {
@@ -471,7 +487,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/applications/($applicationResourceName)/services/($serviceResourceName)/replicas/($replicaName)/codePackages/($codePackageName)/logs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all the gateway resources in a given resource group.
@@ -488,6 +504,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -496,7 +513,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/gateways" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the gateway resource.
@@ -514,6 +531,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<error: record<code: string, details: list<record>, innerError: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -522,7 +540,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/gateways/($gatewayResourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the gateway resource with the given name.
@@ -540,6 +558,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<properties: record<provisioningState: string, description: string, destinationNetwork: record<endpointRefs: list, name: string>, http: list<record>, ipAddress: string, sourceNetwork: record<endpointRefs: list, name: string>, status: string, statusDetails: string, tcp: list<record>>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -548,7 +567,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/gateways/($gatewayResourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates a gateway resource.
@@ -566,6 +585,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<properties: record<provisioningState: string, description: string, destinationNetwork: record<endpointRefs: list, name: string>, http: list<record>, ipAddress: string, sourceNetwork: record<endpointRefs: list, name: string>, status: string, statusDetails: string, tcp: list<record>>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -574,7 +594,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/gateways/($gatewayResourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all the network resources in a given resource group.
@@ -591,6 +611,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -599,7 +620,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/networks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the network resource.
@@ -617,6 +638,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<error: record<code: string, details: list<record>, innerError: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -625,7 +647,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/networks/($networkResourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the network resource with the given name.
@@ -643,6 +665,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<properties: record<description: string, status: string, statusDetails: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -651,7 +674,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/networks/($networkResourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates a network resource.
@@ -669,6 +692,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<properties: record<description: string, status: string, statusDetails: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -677,7 +701,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/networks/($networkResourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all the secret resources in a given resource group.
@@ -694,6 +718,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -702,7 +727,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/secrets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the secret resource.
@@ -720,6 +745,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<error: record<code: string, details: list<record>, innerError: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -728,7 +754,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/secrets/($secretResourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the secret resource with the given name.
@@ -746,6 +772,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<properties: record<contentType: string, description: string, status: string, statusDetails: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -754,7 +781,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/secrets/($secretResourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates a secret resource.
@@ -772,6 +799,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<properties: record<contentType: string, description: string, status: string, statusDetails: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -780,7 +808,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/secrets/($secretResourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List names of all values of the specified secret resource.
@@ -798,6 +826,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -806,7 +835,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/secrets/($secretResourceName)/values" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the specified  value of the named secret resource.
@@ -825,6 +854,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<error: record<code: string, details: list<record>, innerError: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -833,7 +863,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/secrets/($secretResourceName)/values/($secretValueResourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the specified secret value resource.
@@ -852,6 +882,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<properties: record<provisioningState: string, value: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -860,7 +891,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/secrets/($secretResourceName)/values/($secretValueResourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds the specified value as a new version of the specified secret resource.
@@ -879,6 +910,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<properties: record<provisioningState: string, value: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -887,7 +919,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/secrets/($secretResourceName)/values/($secretValueResourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists the specified value of the secret resource.
@@ -906,6 +938,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -914,7 +947,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/secrets/($secretResourceName)/values/($secretValueResourceName)/list_value" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all the volume resources in a given resource group.
@@ -931,6 +964,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -939,7 +973,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/volumes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the volume resource.
@@ -957,6 +991,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<error: record<code: string, details: list<record>, innerError: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -965,7 +1000,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/volumes/($volumeResourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the volume resource with the given name.
@@ -983,6 +1018,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<properties: record<provisioningState: string, azureFileParameters: record<accountKey: string, accountName: string, shareName: string>, description: string, provider: string, status: string, statusDetails: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -991,7 +1027,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/volumes/($volumeResourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates a volume resource.
@@ -1009,6 +1045,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # The version of the API. This parameter is required and its value must be `2018-09-01-preview`. (default: 2018-09-01-preview)
 ]: nothing -> record<properties: record<provisioningState: string, azureFileParameters: record<accountKey: string, accountName: string, shareName: string>, description: string, provider: string, status: string, statusDetails: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1017,5 +1054,5 @@ export def "subscriptions-resource-groups-providers-microsoft-service-fabric-mes
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceFabricMesh/volumes/($volumeResourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

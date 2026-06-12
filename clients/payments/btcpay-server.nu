@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -80,7 +81,7 @@ def onPayBehavior-completer [] { ["HardMigration" "SoftMigration"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "api-keys DeleteApiKey" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -114,13 +115,14 @@ export def "api-keys DeleteApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/api-keys/($apikey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke an API Key of target user
@@ -137,13 +139,14 @@ export def "users-api-keys DeleteUserApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/users/($idOrEmail)/api-keys/($apikey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the current API Key information
@@ -158,13 +161,14 @@ export def "api-keys-current GetCurrentApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<apiKey: string, label: string, permissions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/api-keys/current")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke the current API Key
@@ -179,13 +183,14 @@ export def "api-keys-current DeleteCurrentApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<apiKey: string, label: string, permissions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/api-keys/current")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new API Key
@@ -200,6 +205,7 @@ export def "api-keys CreateApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # The label of the new API Key (nullable)
   --permissions: list # The permissions granted to this API Key (See API Key Authentication) (nullable)
 ]: any -> record<apiKey: string, label: string, permissions: list<string>> {
@@ -211,7 +217,7 @@ export def "api-keys CreateApiKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new API Key for a user
@@ -227,6 +233,7 @@ export def "users-api-keys CreateUserApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # The label of the new API Key (nullable)
   --permissions: list # The permissions granted to this API Key (See API Key Authentication) (nullable)
 ]: any -> record<apiKey: string, label: string, permissions: list<string>> {
@@ -238,7 +245,7 @@ export def "users-api-keys CreateUserApiKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new Point of Sale app
@@ -254,6 +261,7 @@ export def "stores-apps-pos CreatePointOfSaleApp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --template: string # JSON of item available in the app
 ]: any -> record<items: table<id: string, title: string, description: string, image: string, price: string, priceType: string, buyButtonText: string, inventory: int, disabled: bool>> {
   let input = $in
@@ -264,7 +272,7 @@ export def "stores-apps-pos CreatePointOfSaleApp" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a Point of Sale app
@@ -280,6 +288,7 @@ export def "apps-pos PutPointOfSaleApp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --template: string # JSON of item available in the app
 ]: any -> record<items: table<id: string, title: string, description: string, image: string, price: string, priceType: string, buyButtonText: string, inventory: int, disabled: bool>> {
   let input = $in
@@ -290,7 +299,7 @@ export def "apps-pos PutPointOfSaleApp" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Point of Sale app data
@@ -306,13 +315,14 @@ export def "apps-pos GetPointOfSaleApp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<items: table<id: string, title: string, description: string, image: string, price: string, priceType: string, buyButtonText: string, inventory: int, disabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/apps/pos/($appId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Crowdfund app
@@ -328,6 +338,7 @@ export def "apps-crowdfund PutCrowdfundApp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --perksTemplate: string # JSON of perks available in the app
 ]: any -> record<perks: record> {
   let input = $in
@@ -338,7 +349,7 @@ export def "apps-crowdfund PutCrowdfundApp" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get crowdfund app data
@@ -354,13 +365,14 @@ export def "apps-crowdfund GetCrowdfundApp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<perks: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/apps/crowdfund/($appId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new Crowdfund app
@@ -376,6 +388,7 @@ export def "stores-apps-crowdfund CreateCrowdfundApp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --perksTemplate: string # JSON of perks available in the app
 ]: any -> record<perks: record> {
   let input = $in
@@ -386,7 +399,7 @@ export def "stores-apps-crowdfund CreateCrowdfundApp" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get basic app data
@@ -402,13 +415,14 @@ export def "apps GetApp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, appName: string, storeId: record, created: int, appType: string, archived: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/apps/($appId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete app
@@ -424,13 +438,14 @@ export def "apps DeleteApp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/apps/($appId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Uploads an image for an app item
@@ -446,6 +461,7 @@ export def "apps-image UploadAppItemImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # The image (format: binary)
 ]: any -> record<id: string, userId: string, uri: string, url: string, originalName: string, storageName: string, created: float> {
   let input = $in
@@ -456,7 +472,7 @@ export def "apps-image UploadAppItemImage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Deletes the app item image
@@ -473,13 +489,14 @@ export def "apps-image DeleteAppItemImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/apps/($appId)/image/($fileId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get app sales statistics
@@ -495,6 +512,7 @@ export def "apps-sales GetAppSales" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --numberOfDays: float # How many of the last days (nullable, default: 7)
 ]: nothing -> record<salesCount: int, series: table<date: int, label: string, salesCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -503,7 +521,7 @@ export def "apps-sales GetAppSales" [
   let full_url = (build-url $base $"/api/v1/apps/($appId)/sales" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get app top items statistics
@@ -519,6 +537,7 @@ export def "apps-top-items GetAppTopItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --count: float # How many of the items (nullable, default: 5)
   --offset: float # Offset for paging (nullable, default: 0)
 ]: nothing -> table<itemCode: string, title: string, salesCount: int, total: string, totalFormatted: string> {
@@ -528,7 +547,7 @@ export def "apps-top-items GetAppTopItems" [
   let full_url = (build-url $base $"/api/v1/apps/($appId)/top-items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get basic app data for all apps for a store
@@ -544,13 +563,14 @@ export def "stores-apps GetAllAppsForStore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, appName: string, storeId: record, created: int, appType: string, archived: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/apps")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get basic app data for all apps for all stores for a user
@@ -565,13 +585,14 @@ export def "apps GetAllApps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, appName: string, storeId: record, created: int, appType: string, archived: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/apps")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Authorize User
@@ -586,6 +607,7 @@ export def "api-keys-authorize Authorize" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --permissions: list # The permissions to request. (See API Key authentication) (nullable)
   --strict: oneof<nothing, bool> # If permissions are specified, and strict is set to false, it will allow the user to reject some of permissions the application is requesting. (nullable, default: true)
   --applicationIdentifier: string # If specified, BTCPay Server will check if there is an existing API key associated with the user that also has this application identifier, redirect host AND the permissions required match(takes selectiveStores and strict into account). `applicationIdentifier` is ignored if redirect is not specified. (nullable)
@@ -599,7 +621,7 @@ export def "api-keys-authorize Authorize" [
   let full_url = (build-url $base "/api-keys/authorize" $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all files
@@ -614,13 +636,14 @@ export def "files GetFiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, userId: string, uri: string, url: string, originalName: string, storageName: string, created: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/files")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Uploads a file
@@ -635,6 +658,7 @@ export def "files UploadFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # The profile picture (format: binary)
 ]: any -> record<id: string, userId: string, uri: string, url: string, originalName: string, storageName: string, created: float> {
   let input = $in
@@ -645,7 +669,7 @@ export def "files UploadFile" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get file
@@ -661,13 +685,14 @@ export def "files GetFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, userId: string, uri: string, url: string, originalName: string, storageName: string, created: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/files/($fileId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete file
@@ -683,13 +708,14 @@ export def "files DeleteFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/files/($fileId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get health status
@@ -704,13 +730,14 @@ export def "health GetHealth" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<synchronized: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/health")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get invoices
@@ -726,6 +753,7 @@ export def "stores-invoices GetInvoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orderId: list # Array of OrderIds to fetch the invoices for (e.g. 1000&orderId=1001&orderId=1002)
   --textSearch: string # A term that can help locating specific invoices.
   --status: string@status-completer # Array of statuses of invoices to be fetched
@@ -741,7 +769,7 @@ export def "stores-invoices GetInvoices" [
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/invoices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new invoice
@@ -760,6 +788,7 @@ export def "stores-invoices CreateInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --metadata: record # Additional information around the invoice that can be supplied. The mentioned properties are all optional and you can introduce any json format you wish. See [our documentation](https://docs.btcpayserver.org/Development/InvoiceMetadata/) for more information. (e.g. {orderId: pos-app_346KRC5BjXXXo8cRFKwTBmdR6ZJ4, orderUrl: https://localhost:14142/apps/346KRC5BjXXXo8cRFKwTBmdR6ZJ4/pos, itemDesc: Tea shop, posData: {tip: 0.48, cart: [{id: pu erh, count: 1, image: ~/img/pos-sample/pu-erh.jpg, price: {type: 2, value: 2, formatted: $2.00}, title: Pu Erh, inventory: }, {id: rooibos, count: 1, image: ~/img/pos-sample/rooibos.jpg, price: {type: 2, value: 1.2, formatted: $1.20}, title: Rooibos, inventory: }], total: 3.68, subTotal: 3.2, customAmount: 0, discountAmount: 0, discountPercentage: 0}, receiptData: {Tip: $0.48, Cart: {Pu Erh: $2.00 x 1 = $2.00, Rooibos: $1.20 x 1 = $1.20}}}) — shape: {buyerName?: string, buyerEmail?: string, buyerCountry?: string, buyerZip?: string, buyerState?: string, buyerCity?: string, buyerAddress1?: string, buyerAddress2?: string, buyerPhone?: string, itemDesc?: string, itemCode?: string, orderId?: string, orderUrl?: string, taxIncluded?: float, physical?: string, paymentRequestId?: string, posData?: record, receiptData?: record}
   --checkout: record # Additional settings to customize the checkout flow (nullable) — shape: {speedPolicy?: string, paymentMethods?: list, defaultPaymentMethod?: string, lazyPaymentMethods?: bool, expirationMinutes?: float, monitoringMinutes?: float, paymentTolerance?: float, redirectURL?: string, redirectAutomatically?: bool, defaultLanguage?: string}
   --receipt: record # Additional settings to customize the public receipt (nullable) — shape: {enabled?: bool, showQR?: bool, showPayments?: bool}
@@ -775,7 +804,7 @@ export def "stores-invoices CreateInvoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get invoice
@@ -792,13 +821,14 @@ export def "stores-invoices GetInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<metadata: record, checkout: record, receipt: record, id: string, storeId: record, amount: string, paidAmount: string, currency: string, type: string, checkoutLink: string, createdTime: record, expirationTime: record, monitoringExpiration: record, status: string, additionalStatus: string, availableStatusesForManualMarking: list<string>, archived: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/invoices/($invoiceId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Archive invoice
@@ -815,13 +845,14 @@ export def "stores-invoices ArchiveInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/invoices/($invoiceId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update invoice
@@ -839,6 +870,7 @@ export def "stores-invoices UpdateInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --metadata: record # Additional information around the invoice that can be supplied. The mentioned properties are all optional and you can introduce any json format you wish. See [our documentation](https://docs.btcpayserver.org/Development/InvoiceMetadata/) for more information. (e.g. {orderId: pos-app_346KRC5BjXXXo8cRFKwTBmdR6ZJ4, orderUrl: https://localhost:14142/apps/346KRC5BjXXXo8cRFKwTBmdR6ZJ4/pos, itemDesc: Tea shop, posData: {tip: 0.48, cart: [{id: pu erh, count: 1, image: ~/img/pos-sample/pu-erh.jpg, price: {type: 2, value: 2, formatted: $2.00}, title: Pu Erh, inventory: }, {id: rooibos, count: 1, image: ~/img/pos-sample/rooibos.jpg, price: {type: 2, value: 1.2, formatted: $1.20}, title: Rooibos, inventory: }], total: 3.68, subTotal: 3.2, customAmount: 0, discountAmount: 0, discountPercentage: 0}, receiptData: {Tip: $0.48, Cart: {Pu Erh: $2.00 x 1 = $2.00, Rooibos: $1.20 x 1 = $1.20}}}) — shape: {buyerName?: string, buyerEmail?: string, buyerCountry?: string, buyerZip?: string, buyerState?: string, buyerCity?: string, buyerAddress1?: string, buyerAddress2?: string, buyerPhone?: string, itemDesc?: string, itemCode?: string, orderId?: string, orderUrl?: string, taxIncluded?: float, physical?: string, paymentRequestId?: string, posData?: record, receiptData?: record}
 ]: any -> record<metadata: record, checkout: record, receipt: record, id: string, storeId: record, amount: string, paidAmount: string, currency: string, type: string, checkoutLink: string, createdTime: record, expirationTime: record, monitoringExpiration: record, status: string, additionalStatus: string, availableStatusesForManualMarking: list<string>, archived: bool> {
   let input = $in
@@ -849,7 +881,7 @@ export def "stores-invoices UpdateInvoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get invoice payment methods
@@ -866,6 +898,7 @@ export def "stores-invoices-payment-methods GetInvoicePaymentMethods" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeSensitive: oneof<nothing, bool> # If `true`, `additionalData` might include sensitive data (such as xpub). Requires the permission `btcpay.store.canmodifystoresettings`. (default: false)
   --onlyAccountedPayments: oneof<nothing, bool> # If default or true, only returns payments which are accounted (in Bitcoin, this mean not returning RBF'd or double spent payments) (default: true)
 ]: nothing -> table<paymentMethodId: string, currency: string, destination: string, paymentLink: string, rate: string, paymentMethodPaid: string, totalPaid: string, due: string, amount: string, paymentMethodFee: string, payments: list<record>, activated: bool, additionalData: any> {
@@ -875,7 +908,7 @@ export def "stores-invoices-payment-methods GetInvoicePaymentMethods" [
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/invoices/($invoiceId)/payment-methods" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get invoice refund trigger data
@@ -893,13 +926,14 @@ export def "stores-invoices-refund GetInvoiceRefundTriggerData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<paymentAmountThen: string, paymentAmountNow: string, invoiceAmount: string, paymentCurrency: string, paymentCurrencyDivisibility: float, invoiceCurrencyDivisibility: float, invoiceCurrency: string, overpaidPaymentAmount: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/invoices/($invoiceId)/refund/($paymentMethodId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Mark invoice status
@@ -916,6 +950,7 @@ export def "stores-invoices-status MarkInvoiceStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # Mark an invoice as completed or invalid.
 ]: any -> record<metadata: record, checkout: record, receipt: record, id: string, storeId: record, amount: string, paidAmount: string, currency: string, type: string, checkoutLink: string, createdTime: record, expirationTime: record, monitoringExpiration: record, status: string, additionalStatus: string, availableStatusesForManualMarking: list<string>, archived: bool> {
   let input = $in
@@ -926,7 +961,7 @@ export def "stores-invoices-status MarkInvoiceStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unarchive invoice
@@ -943,13 +978,14 @@ export def "stores-invoices-unarchive UnarchiveInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<metadata: record, checkout: record, receipt: record, id: string, storeId: record, amount: string, paidAmount: string, currency: string, type: string, checkoutLink: string, createdTime: record, expirationTime: record, monitoringExpiration: record, status: string, additionalStatus: string, availableStatusesForManualMarking: list<string>, archived: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/invoices/($invoiceId)/unarchive")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Activate Payment Method
@@ -967,13 +1003,14 @@ export def "stores-invoices-payment-methods-activate ActivatePaymentMethod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/invoices/($invoiceId)/payment-methods/($paymentMethodId)/activate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Refund invoice
@@ -990,6 +1027,7 @@ export def "stores-invoices-refund Refund" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the pull payment (Default: 'Refund' followed by the invoice id) (nullable)
   --description: string # Description of the pull payment
   --payoutMethodId: string # Payout method IDs. Available payment method IDs for Bitcoin are:   - `"BTC-CHAIN"`: Onchain    -`"BTC-LN"`: Lightning (e.g. BTC-LN)
@@ -1006,7 +1044,7 @@ export def "stores-invoices-refund Refund" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get node information
@@ -1022,13 +1060,14 @@ export def "server-lightning-info GetInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<nodeURIs: list<string>, blockHeight: int, alias: string, color: string, version: string, peersCount: int, activeChannelsCount: int, inactiveChannelsCount: int, pendingChannelsCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/server/lightning/($cryptoCode)/info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get node balance
@@ -1044,13 +1083,14 @@ export def "server-lightning-balance GetBalance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<onchain: record, offchain: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/server/lightning/($cryptoCode)/balance")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get node balance histogram
@@ -1066,13 +1106,14 @@ export def "server-lightning-histogram GetHistogram" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, balance: string, series: list<string>, labels: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/server/lightning/($cryptoCode)/histogram")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Connect to lightning node
@@ -1088,6 +1129,7 @@ export def "server-lightning-connect ConnectToNode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --nodeURI: string # Node URI in the form `pubkey@endpoint[:port]` (nullable)
 ]: any -> any {
   let input = $in
@@ -1098,7 +1140,7 @@ export def "server-lightning-connect ConnectToNode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get channels
@@ -1114,13 +1156,14 @@ export def "server-lightning-channels GetChannels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<remoteNode: string, isPublic: bool, isActive: bool, capacity: string, localBalance: string, channelPoint: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/server/lightning/($cryptoCode)/channels")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Open channel
@@ -1136,6 +1179,7 @@ export def "server-lightning-channels OpenChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --nodeURI: string # Node URI in the form `pubkey@endpoint[:port]`
   --channelAmount: string # The amount to fund (in satoshi)
   --feeRate: float # The amount to fund (in satoshi per byte)
@@ -1148,7 +1192,7 @@ export def "server-lightning-channels OpenChannel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get deposit address
@@ -1164,13 +1208,14 @@ export def "server-lightning-address GetDepositAddress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/server/lightning/($cryptoCode)/address")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get payment
@@ -1187,13 +1232,14 @@ export def "server-lightning-payments GetPayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, status: string, BOLT11: string, paymentHash: string, preimage: string, createdAt: float, totalAmount: string, feeAmount: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/server/lightning/($cryptoCode)/payments/($paymentHash)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get invoice
@@ -1210,13 +1256,14 @@ export def "server-lightning-invoices GetInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, status: string, BOLT11: string, paidAt: float, expiresAt: record, amount: string, amountReceived: string, paymentHash: string, preimage: string, customRecords: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/server/lightning/($cryptoCode)/invoices/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pay Lightning Invoice
@@ -1232,6 +1279,7 @@ export def "server-lightning-invoices-pay PayInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --BOLT11: string # The BOLT11 of the invoice to pay
   --amount: string # Optional explicit payment amount in millisatoshi (if specified, it overrides the BOLT11 amount) (nullable)
   --maxFeePercent: string # The fee limit expressed as a percentage of the payment amount (nullable, format: float, e.g. 6.15)
@@ -1246,7 +1294,7 @@ export def "server-lightning-invoices-pay PayInvoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get invoices
@@ -1262,6 +1310,7 @@ export def "server-lightning-invoices GetInvoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pendingOnly: oneof<nothing, bool> # Limit to pending invoices only (nullable, default: false)
   --offsetIndex: float # The index of an invoice that will be used as the start of the list (nullable, default: 0)
 ]: nothing -> table<id: string, status: string, BOLT11: string, paidAt: float, expiresAt: record, amount: string, amountReceived: string, paymentHash: string, preimage: string, customRecords: record> {
@@ -1271,7 +1320,7 @@ export def "server-lightning-invoices GetInvoices" [
   let full_url = (build-url $base $"/api/v1/server/lightning/($cryptoCode)/invoices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create lightning invoice
@@ -1287,6 +1336,7 @@ export def "server-lightning-invoices CreateInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: string # Amount wrapped in a string, represented in a millisatoshi string. (1000 millisatoshi = 1 satoshi)
   --description: string # Description of the invoice in the BOLT11 (nullable)
   --descriptionHashOnly: oneof<nothing, bool> # If `descriptionHashOnly` is `true` (default is `false`), then the BOLT11 returned contains a hash of the `description`, rather than the `description`, itself. This allows for much longer descriptions, but they must be communicated via some other mechanism. (nullable, default: false)
@@ -1301,7 +1351,7 @@ export def "server-lightning-invoices CreateInvoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get payments
@@ -1317,6 +1367,7 @@ export def "server-lightning-payments GetPayments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includePending: oneof<nothing, bool> # Also include pending payments (nullable, default: false)
   --offsetIndex: float # The index of a payment that will be used as the start of the list (nullable, default: 0)
 ]: nothing -> table<id: string, status: string, BOLT11: string, paymentHash: string, preimage: string, createdAt: float, totalAmount: string, feeAmount: string> {
@@ -1326,7 +1377,7 @@ export def "server-lightning-payments GetPayments" [
   let full_url = (build-url $base $"/api/v1/server/lightning/($cryptoCode)/payments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get node information
@@ -1343,13 +1394,14 @@ export def "stores-lightning-info GetInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<nodeURIs: list<string>, blockHeight: int, alias: string, color: string, version: string, peersCount: int, activeChannelsCount: int, inactiveChannelsCount: int, pendingChannelsCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/lightning/($cryptoCode)/info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get node balance
@@ -1366,13 +1418,14 @@ export def "stores-lightning-balance GetBalance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<onchain: record, offchain: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/lightning/($cryptoCode)/balance")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get node balance histogram
@@ -1389,13 +1442,14 @@ export def "stores-lightning-histogram GetHistogram" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, balance: string, series: list<string>, labels: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/lightning/($cryptoCode)/histogram")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Connect to lightning node
@@ -1412,6 +1466,7 @@ export def "stores-lightning-connect ConnectToNode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --nodeURI: string # Node URI in the form `pubkey@endpoint[:port]` (nullable)
 ]: any -> any {
   let input = $in
@@ -1422,7 +1477,7 @@ export def "stores-lightning-connect ConnectToNode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get channels
@@ -1439,13 +1494,14 @@ export def "stores-lightning-channels GetChannels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<remoteNode: string, isPublic: bool, isActive: bool, capacity: string, localBalance: string, channelPoint: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/lightning/($cryptoCode)/channels")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Open channel
@@ -1462,6 +1518,7 @@ export def "stores-lightning-channels OpenChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --nodeURI: string # Node URI in the form `pubkey@endpoint[:port]`
   --channelAmount: string # The amount to fund (in satoshi)
   --feeRate: float # The amount to fund (in satoshi per byte)
@@ -1474,7 +1531,7 @@ export def "stores-lightning-channels OpenChannel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get deposit address
@@ -1491,13 +1548,14 @@ export def "stores-lightning-address GetDepositAddress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/lightning/($cryptoCode)/address")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get payment
@@ -1515,13 +1573,14 @@ export def "stores-lightning-payments GetPayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, status: string, BOLT11: string, paymentHash: string, preimage: string, createdAt: float, totalAmount: string, feeAmount: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/lightning/($cryptoCode)/payments/($paymentHash)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get invoice
@@ -1539,13 +1598,14 @@ export def "stores-lightning-invoices GetInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, status: string, BOLT11: string, paidAt: float, expiresAt: record, amount: string, amountReceived: string, paymentHash: string, preimage: string, customRecords: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/lightning/($cryptoCode)/invoices/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pay Lightning Invoice
@@ -1562,6 +1622,7 @@ export def "stores-lightning-invoices-pay PayInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --BOLT11: string # The BOLT11 of the invoice to pay
   --amount: string # Optional explicit payment amount in millisatoshi (if specified, it overrides the BOLT11 amount) (nullable)
   --maxFeePercent: string # The fee limit expressed as a percentage of the payment amount (nullable, format: float, e.g. 6.15)
@@ -1576,7 +1637,7 @@ export def "stores-lightning-invoices-pay PayInvoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get invoices
@@ -1593,6 +1654,7 @@ export def "stores-lightning-invoices GetInvoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pendingOnly: oneof<nothing, bool> # Limit to pending invoices only (nullable, default: false)
   --offsetIndex: float # The index of an invoice that will be used as the start of the list (nullable, default: 0)
 ]: nothing -> table<id: string, status: string, BOLT11: string, paidAt: float, expiresAt: record, amount: string, amountReceived: string, paymentHash: string, preimage: string, customRecords: record> {
@@ -1602,7 +1664,7 @@ export def "stores-lightning-invoices GetInvoices" [
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/lightning/($cryptoCode)/invoices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create lightning invoice
@@ -1619,6 +1681,7 @@ export def "stores-lightning-invoices CreateInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: string # Amount wrapped in a string, represented in a millisatoshi string. (1000 millisatoshi = 1 satoshi)
   --description: string # Description of the invoice in the BOLT11 (nullable)
   --descriptionHashOnly: oneof<nothing, bool> # If `descriptionHashOnly` is `true` (default is `false`), then the BOLT11 returned contains a hash of the `description`, rather than the `description`, itself. This allows for much longer descriptions, but they must be communicated via some other mechanism. (nullable, default: false)
@@ -1633,7 +1696,7 @@ export def "stores-lightning-invoices CreateInvoice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get payments
@@ -1650,6 +1713,7 @@ export def "stores-lightning-payments GetPayments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includePending: oneof<nothing, bool> # Also include pending payments (nullable, default: false)
   --offsetIndex: float # The index of an invoice that will be used as the start of the list (nullable, default: 0)
 ]: nothing -> table<id: string, status: string, BOLT11: string, paymentHash: string, preimage: string, createdAt: float, totalAmount: string, feeAmount: string> {
@@ -1659,7 +1723,7 @@ export def "stores-lightning-payments GetPayments" [
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/lightning/($cryptoCode)/payments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get available rate sources
@@ -1674,13 +1738,14 @@ export def "misc-rate-sources GetRateSources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/misc/rate-sources")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Permissions metadata
@@ -1695,13 +1760,14 @@ export def "misc-permissions permissionsMetadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<name: string, included: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/misc/permissions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Language codes
@@ -1716,13 +1782,14 @@ export def "misc-lang langCodes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<code: string, currentLanguage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/misc/lang")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invoice checkout
@@ -1738,6 +1805,7 @@ export def "i Checkout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # The preferred language of the checkout page. You can use "auto" to use the language of the customer's browser or see the list of language codes with [this operation](#operation/langCodes).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1746,7 +1814,7 @@ export def "i Checkout" [
   let full_url = (build-url $base $"/i/($invoiceId)" $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get notifications
@@ -1761,6 +1829,7 @@ export def "users-me-notifications GetNotifications" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --storeId: list # Array of store ids to fetch the notifications for (e.g. &storeId=ABCDE&storeId=FGHIJ)
   --take: float # Number of records returned in response (nullable)
   --skip: float # Number of records to skip (nullable)
@@ -1772,7 +1841,7 @@ export def "users-me-notifications GetNotifications" [
   let full_url = (build-url $base "/api/v1/users/me/notifications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get notification
@@ -1788,13 +1857,14 @@ export def "users-me-notifications GetNotification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, identifier: string, type: string, body: string, storeId: string, link: string, createdTime: record, seen: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/users/me/notifications/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update notification
@@ -1810,6 +1880,7 @@ export def "users-me-notifications UpdateNotification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --seen: oneof<nothing, bool> # Sets the notification as seen/unseen. If left null, sets it to the opposite value (nullable)
 ]: any -> record<id: string, identifier: string, type: string, body: string, storeId: string, link: string, createdTime: record, seen: bool> {
   let input = $in
@@ -1820,7 +1891,7 @@ export def "users-me-notifications UpdateNotification" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove Notification
@@ -1836,13 +1907,14 @@ export def "users-me-notifications DeleteNotification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/users/me/notifications/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get notification settings
@@ -1857,13 +1929,14 @@ export def "users-me-notification-settings GetNotificationSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<notifications: table<identifier: string, name: string, enabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me/notification-settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update notification settings
@@ -1878,6 +1951,7 @@ export def "users-me-notification-settings UpdateNotificationSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --disabled: list # List of the notification type identifiers, which should be disabled. Can also be a single item 'all'. (e.g. [newversion, pluginupdate])
 ]: any -> record<notifications: table<identifier: string, name: string, enabled: bool>> {
   let input = $in
@@ -1888,7 +1962,7 @@ export def "users-me-notification-settings UpdateNotificationSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get payment requests
@@ -1904,13 +1978,14 @@ export def "stores-payment-requests GetPaymentRequests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<amount: string, title: string, currency: string, email: string, description: string, expiryDate: float, referenceId: string, allowCustomPaymentAmounts: bool, formId: string, formResponse: record, id: string, storeId: string, status: string, createdTime: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payment-requests")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new payment request
@@ -1926,6 +2001,7 @@ export def "stores-payment-requests CreatePaymentRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: string # The amount of the payment request (format: decimal)
   --title: string # The title of the payment request
   --currency: string # The currency of the payment request. If empty, the store's default currency code will be used. (nullable, format: ISO 4217 Currency code(BTC, EUR, USD, etc))
@@ -1945,7 +2021,7 @@ export def "stores-payment-requests CreatePaymentRequest" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get payment request
@@ -1962,13 +2038,14 @@ export def "stores-payment-requests GetPaymentRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<amount: string, title: string, currency: string, email: string, description: string, expiryDate: float, referenceId: string, allowCustomPaymentAmounts: bool, formId: string, formResponse: record, id: string, storeId: string, status: string, createdTime: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payment-requests/($paymentRequestId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Archive payment request
@@ -1985,13 +2062,14 @@ export def "stores-payment-requests ArchivePaymentRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payment-requests/($paymentRequestId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update payment request
@@ -2008,6 +2086,7 @@ export def "stores-payment-requests UpdatePaymentRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: string # The amount of the payment request (format: decimal)
   --title: string # The title of the payment request
   --currency: string # The currency of the payment request. If empty, the store's default currency code will be used. (nullable, format: ISO 4217 Currency code(BTC, EUR, USD, etc))
@@ -2027,7 +2106,7 @@ export def "stores-payment-requests UpdatePaymentRequest" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new invoice for the payment request
@@ -2044,6 +2123,7 @@ export def "stores-payment-requests-pay Pay" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --amount: string # The amount of the invoice. If `null` or `unspecified`, it will be set to the payment request's due amount. Note that the payment's request `allowCustomPaymentAmounts` must be `true`, or a 422 error will be sent back.' (nullable, format: decimal, e.g. 0.1)
   --allowPendingInvoiceReuse: oneof<nothing, bool> # If `true`, this endpoint will not necessarily create a new invoice, and instead attempt to give back a pending one for this payment request. (nullable, default: false)
 ]: any -> record<metadata: record, checkout: record, receipt: record, id: string, storeId: record, amount: string, paidAmount: string, currency: string, type: string, checkoutLink: string, createdTime: record, expirationTime: record, monitoringExpiration: record, status: string, additionalStatus: string, availableStatusesForManualMarking: list<string>, archived: bool> {
@@ -2055,7 +2135,7 @@ export def "stores-payment-requests-pay Pay" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get store configured payout processors
@@ -2071,13 +2151,14 @@ export def "stores-payout-processors GetStorePayoutProcessors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<name: string, friendlyName: string, payoutMethods: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payout-processors")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove store configured payout processor
@@ -2095,13 +2176,14 @@ export def "stores-payout-processors RemoveStorePayoutProcessor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payout-processors/($processor)/($paymentMethodId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get payout processors
@@ -2116,13 +2198,14 @@ export def "payout-processors GetPayoutProcessors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<name: string, friendlyName: string, payoutMethods: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/payout-processors")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get configured store onchain automated payout processors
@@ -2139,13 +2222,14 @@ export def "stores-payout-processors-on-chain-automated-payout-sender-factory Ge
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<payoutMethodId: string, feeTargetBlock: float, intervalSeconds: record, threshold: string, processNewPayoutsInstantly: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payout-processors/OnChainAutomatedPayoutSenderFactory/($paymentMethodId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update configured store onchain automated payout processors
@@ -2162,6 +2246,7 @@ export def "stores-payout-processors-on-chain-automated-payout-sender-factory Up
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --feeTargetBlock: float # How many blocks should the fee rate calculation target to confirm in. Set to 1 if not provided (nullable)
   --intervalSeconds: any # How often should the processor run
   --threshold: string # Only process payouts when this payout sum is reached. (format: decimal, e.g. 0.1)
@@ -2175,7 +2260,7 @@ export def "stores-payout-processors-on-chain-automated-payout-sender-factory Up
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get configured store Lightning automated payout processors
@@ -2192,13 +2277,14 @@ export def "stores-payout-processors-lightning-automated-payout-sender-factory G
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<payoutMethodId: string, intervalSeconds: record, cancelPayoutAfterFailures: float, processNewPayoutsInstantly: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payout-processors/LightningAutomatedPayoutSenderFactory/($payoutMethodId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update configured store Lightning automated payout processors
@@ -2215,6 +2301,7 @@ export def "stores-payout-processors-lightning-automated-payout-sender-factory U
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --intervalSeconds: any # How often should the processor run
   --cancelPayoutAfterFailures: float # How many failures should the processor tolerate before cancelling the payout (nullable)
   --processNewPayoutsInstantly: oneof<nothing, bool> # Skip the interval when ane eligible payout has been approved (or created with pre-approval) (default: false)
@@ -2227,7 +2314,7 @@ export def "stores-payout-processors-lightning-automated-payout-sender-factory U
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get configured store onchain automated payout processors
@@ -2243,13 +2330,14 @@ export def "stores-payout-processors-on-chain-automated-transfer-sender-factory 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<payoutMethodId: string, feeTargetBlock: float, intervalSeconds: record, threshold: string, processNewPayoutsInstantly: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payout-processors/OnChainAutomatedTransferSenderFactory")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update configured store onchain automated payout processors
@@ -2265,6 +2353,7 @@ export def "stores-payout-processors-on-chain-automated-transfer-sender-factory 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --feeTargetBlock: float # How many blocks should the fee rate calculation target to confirm in. Set to 1 if not provided (nullable)
   --intervalSeconds: any # How often should the processor run
   --threshold: string # Only process payouts when this payout sum is reached. (format: decimal, e.g. 0.1)
@@ -2278,7 +2367,7 @@ export def "stores-payout-processors-on-chain-automated-transfer-sender-factory 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get configured store Lightning automated payout processors
@@ -2294,13 +2383,14 @@ export def "stores-payout-processors-lightning-automated-payout-sender-factory G
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<payoutMethodId: string, intervalSeconds: record, cancelPayoutAfterFailures: float, processNewPayoutsInstantly: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payout-processors/LightningAutomatedPayoutSenderFactory")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Link a boltcard to a pull payment
@@ -2316,6 +2406,7 @@ export def "pull-payments-boltcards LinkBoltcard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   UID: string # The `UID` of the NTag424 (e.g. 46ab87ff36a3b7)
   --onExisting: string@onExisting-completer # What to do if the boltcard is already linked.  * `KeepVersion` will return the keys (K0-K4) that are already registered.  * `UpdateVersion` will increment the version of the key, and thus return different keys (K0-K4). (See [Deterministic Boltcard Key Generation](https://github.com/boltcard/boltcard/blob/main/docs/DETERMINISTIC.md)) (default: UpdateVersion)
 ]: any -> record<LNURLW: string, version: float, K0: string, K1: string, K2: string, K3: string, K4: string> {
@@ -2327,7 +2418,7 @@ export def "pull-payments-boltcards LinkBoltcard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get store's pull payments
@@ -2343,6 +2434,7 @@ export def "stores-pull-payments GetPullPayments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeArchived: oneof<nothing, bool> # Whether this should list archived pull payments (default: false)
 ]: nothing -> table<id: string, name: string, description: string, currency: string, amount: string, BOLT11Expiration: string, autoApproveClaims: bool, archived: bool, viewLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2351,7 +2443,7 @@ export def "stores-pull-payments GetPullPayments" [
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/pull-payments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new pull payment
@@ -2367,6 +2459,7 @@ export def "stores-pull-payments CreatePullPayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the pull payment (nullable)
   --description: string # The description of the pull payment (nullable)
   --amount: string # The amount in `currency` of this pull payment as a decimal string (format: decimal, e.g. 0.1)
@@ -2385,7 +2478,7 @@ export def "stores-pull-payments CreatePullPayment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Pull Payment
@@ -2401,13 +2494,14 @@ export def "pull-payments GetPullPayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, description: string, currency: string, amount: string, BOLT11Expiration: string, autoApproveClaims: bool, archived: bool, viewLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/pull-payments/($pullPaymentId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Archive a pull payment
@@ -2424,13 +2518,14 @@ export def "stores-pull-payments ArchivePullPayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/pull-payments/($pullPaymentId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Payouts
@@ -2446,6 +2541,7 @@ export def "pull-payments-payouts GetPayouts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeCancelled: oneof<nothing, bool> # Whether this should list cancelled payouts (default: false)
 ]: nothing -> table<id: string, revision: int, pullPaymentId: string, date: string, destination: string, originalCurrency: string, originalAmount: string, payoutCurrency: string, payoutAmount: string, payoutMethodId: string, state: string, paymentProof: record<proofType: string>, metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2454,7 +2550,7 @@ export def "pull-payments-payouts GetPayouts" [
   let full_url = (build-url $base $"/api/v1/pull-payments/($pullPaymentId)/payouts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Payout
@@ -2470,6 +2566,7 @@ export def "pull-payments-payouts CreatePayout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --destination: string # The destination of the payout (can be an address or a BIP21 url) (e.g. 1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2)
   --amount: string # The amount of the payout in the currency of the pull payment (eg. USD). (format: decimal, e.g. 10399.18)
   --payoutMethodId: string # Payout method IDs. Available payment method IDs for Bitcoin are:   - `"BTC-CHAIN"`: Onchain    -`"BTC-LN"`: Lightning (e.g. BTC-LN)
@@ -2482,7 +2579,7 @@ export def "pull-payments-payouts CreatePayout" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Payout
@@ -2499,13 +2596,14 @@ export def "pull-payments-payouts GetPayout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, revision: int, pullPaymentId: string, date: string, destination: string, originalCurrency: string, originalAmount: string, payoutCurrency: string, payoutAmount: string, payoutMethodId: string, state: string, paymentProof: record<proofType: string>, metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/pull-payments/($pullPaymentId)/payouts/($payoutId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Pull Payment LNURL details
@@ -2521,13 +2619,14 @@ export def "pull-payments-lnurl GetPullPaymentLNURL" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<lnurlBech32: string, lnurlUri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/pull-payments/($pullPaymentId)/lnurl")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Payout
@@ -2543,6 +2642,7 @@ export def "stores-payouts CreatePayoutThroughStore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --destination: string # The destination of the payout (can be an address or a BIP21 url) (e.g. 1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2)
   --amount: string # The amount of the payout in the currency of the pull payment (eg. USD). (format: decimal, e.g. 10399.18)
   --payoutMethodId: string # Payout method IDs. Available payment method IDs for Bitcoin are:   - `"BTC-CHAIN"`: Onchain    -`"BTC-LN"`: Lightning (e.g. BTC-LN)
@@ -2558,7 +2658,7 @@ export def "stores-payouts CreatePayoutThroughStore" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Store Payouts
@@ -2574,6 +2674,7 @@ export def "stores-payouts GetStorePayouts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeCancelled: oneof<nothing, bool> # Whether this should list cancelled payouts (default: false)
 ]: nothing -> table<id: string, revision: int, pullPaymentId: string, date: string, destination: string, originalCurrency: string, originalAmount: string, payoutCurrency: string, payoutAmount: string, payoutMethodId: string, state: string, paymentProof: record<proofType: string>, metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2582,7 +2683,7 @@ export def "stores-payouts GetStorePayouts" [
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payouts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Payout
@@ -2599,13 +2700,14 @@ export def "stores-payouts GetStorePayout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, revision: int, pullPaymentId: string, date: string, destination: string, originalCurrency: string, originalAmount: string, payoutCurrency: string, payoutAmount: string, payoutMethodId: string, state: string, paymentProof: record<proofType: string>, metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payouts/($payoutId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Approve Payout
@@ -2622,6 +2724,7 @@ export def "stores-payouts ApprovePayout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revision: int # The revision number of the payout being modified
   --rateRule: string # The rate rule to calculate the rate of the payout. This can also be a fixed decimal. (if null or unspecified, will use the same rate setting as the store's settings) (nullable, e.g. kraken(BTC_USD))
 ]: any -> record<id: string, revision: int, pullPaymentId: string, date: string, destination: string, originalCurrency: string, originalAmount: string, payoutCurrency: string, payoutAmount: string, payoutMethodId: string, state: string, paymentProof: record<proofType: string>, metadata: record> {
@@ -2633,7 +2736,7 @@ export def "stores-payouts ApprovePayout" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel Payout
@@ -2650,13 +2753,14 @@ export def "stores-payouts CancelPayout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payouts/($payoutId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Mark Payout as Paid
@@ -2673,13 +2777,14 @@ export def "stores-payouts-mark-paid MarkPayoutPaid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payouts/($payoutId)/mark-paid")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Mark Payout
@@ -2697,6 +2802,7 @@ export def "stores-payouts-mark MarkPayout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string@state-completer # The state of the payout (`AwaitingApproval`, `AwaitingPayment`, `InProgress`, `Completed`, `Cancelled`) (e.g. AwaitingPayment)
   --paymentProof: record # Additional information around how the payout is being or has been paid out. The mentioned properties are all optional (except `proofType`) and you can introduce any json format you wish. — shape: {proofType?: string, id?: string, link?: string}
 ]: any -> any {
@@ -2708,7 +2814,7 @@ export def "stores-payouts-mark MarkPayout" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get server email settings
@@ -2723,13 +2829,14 @@ export def "server-email GetSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<enableStoresToUseServerEmailSettings: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/server/email")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update server email settings
@@ -2744,6 +2851,7 @@ export def "server-email UpdateSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enableStoresToUseServerEmailSettings: oneof<nothing, bool> # Indicates if stores can use server email settings
 ]: any -> record<enableStoresToUseServerEmailSettings: bool> {
   let input = $in
@@ -2754,7 +2862,7 @@ export def "server-email UpdateSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get server info
@@ -2769,13 +2877,14 @@ export def "server-info GetServerInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<version: string, onion: string, supportedPaymentMethods: list<string>, fullySynched: bool, syncStatus: table<paymentMethodId: string, nodeInformation: record, chainHeight: int, syncHeight: float, available: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/server/info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get store's roles
@@ -2790,13 +2899,14 @@ export def "server-roles GetStoreRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, role: string, permissions: list<string>, isServerRole: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/server/roles")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get store email settings
@@ -2812,13 +2922,14 @@ export def "stores-email GetStoreEmailSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<from: string, server: string, port: int, login: string, disableCertificateCheck: bool, passwordSet: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/email")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update store email settings
@@ -2834,6 +2945,7 @@ export def "stores-email UpdateStoreEmailSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-from: string # The sender email address (e.g. sender@gmail.com)
   --server: string # SMTP server host (e.g. smtp.gmail.com)
   --port: int # SMTP server port (e.g. 587)
@@ -2849,7 +2961,7 @@ export def "stores-email UpdateStoreEmailSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send an email for a store
@@ -2865,6 +2977,7 @@ export def "stores-email-send SendStoreEmail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Email of the recipient
   --subject: string # Subject of the email
   --body-body: string # Body of the email to send as plain text.
@@ -2877,7 +2990,7 @@ export def "stores-email-send SendStoreEmail" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get store configured lightning addresses
@@ -2893,13 +3006,14 @@ export def "stores-lightning-addresses GetStoreLightningAddresses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<username: string, currencyCode: string, min: string, max: string, invoiceMetadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/lightning-addresses")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get store configured lightning address
@@ -2916,13 +3030,14 @@ export def "stores-lightning-addresses GetStoreLightningAddress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<username: string, currencyCode: string, min: string, max: string, invoiceMetadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/lightning-addresses/($username)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add or update store configured lightning address
@@ -2939,6 +3054,7 @@ export def "stores-lightning-addresses AddOrUpdateStoreLightningAddress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-username: string # The username of the lightning address
   --currencyCode: string # The currency to generate the invoices for this lightning address in. Leave null lto use the store default. (nullable)
   --min: string # The minimum amount in sats this ln address allows (nullable)
@@ -2953,7 +3069,7 @@ export def "stores-lightning-addresses AddOrUpdateStoreLightningAddress" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove configured lightning address
@@ -2970,13 +3086,14 @@ export def "stores-lightning-addresses RemoveStoreLightningAddress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/lightning-addresses/($username)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get store payment methods
@@ -2992,6 +3109,7 @@ export def "stores-payment-methods GetStorePaymentMethods" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --onlyEnabled: oneof<nothing, bool> # Fetch payment methods that are enabled/disabled only
   --includeConfig: oneof<nothing, bool> # Fetch the config of the payment methods, if `true`, the permission `btcpay.store.canmodifystoresettings` is required.
 ]: nothing -> table<enabled: bool, paymentMethodId: string, config: record> {
@@ -3001,7 +3119,7 @@ export def "stores-payment-methods GetStorePaymentMethods" [
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payment-methods" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get store payment method
@@ -3018,6 +3136,7 @@ export def "stores-payment-methods GetStorePaymentMethod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeConfig: oneof<nothing, bool> # Fetch the config of the payment methods, if `true`, the permission `btcpay.store.canmodifystoresettings` is required.
 ]: nothing -> record<enabled: bool, paymentMethodId: string, config: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3026,7 +3145,7 @@ export def "stores-payment-methods GetStorePaymentMethod" [
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payment-methods/($paymentMethodId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update store's payment method
@@ -3044,6 +3163,7 @@ export def "stores-payment-methods UpdateStorePaymentMethod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Whether the payment method is enabled, leave null or unspecified to not change current setting (nullable, e.g. true)
   --config: record # The new payment method config, leave null or unspecified to not change current setting (nullable) — shape: {useBech32Scheme?: bool, lud12Enabled?: bool, lud21Enabled?: bool, connectionString?: string, derivationScheme?: string, label?: string, accountKeyPath?: string}
 ]: any -> record<enabled: bool, paymentMethodId: string, config: record> {
@@ -3055,7 +3175,7 @@ export def "stores-payment-methods UpdateStorePaymentMethod" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete store's payment method
@@ -3072,13 +3192,14 @@ export def "stores-payment-methods DeleteStorePaymentMethod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payment-methods/($paymentMethodId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get rates
@@ -3094,6 +3215,7 @@ export def "stores-rates GetStoreRates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --currencyPair: list # The currency pairs to fetch rates for (nullable, e.g. [BTC_USD, BTC_EUR])
 ]: nothing -> table<currencyPair: string, errors: list<string>, rate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3102,7 +3224,7 @@ export def "stores-rates GetStoreRates" [
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/rates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get store rate settings for the specified rate source
@@ -3119,13 +3241,14 @@ export def "stores-rates-configuration GetStoreRateConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<spread: string, preferredSource: string, isCustomScript: bool, effectiveScript: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/rates/configuration/($rateSource)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get store rate settings for the specified rate source
@@ -3142,6 +3265,7 @@ export def "stores-rates-configuration UpdateStoreRateConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --spread: string # A spread applies to the rate fetched in `%`. Must be `>= 0` or `<= 100`
   --preferredSource: string # When `isCustomScript` is `false`, uses this source in the default `effectiveScript`. When `isCustomScript` is `true`, this field is ignored (set to `null`). See `/misc/rate-sources` for available sources.
   --isCustomScript: oneof<nothing, bool> # Whether to use `preferredSource` with default script or a custom `effectiveScript`.
@@ -3155,7 +3279,7 @@ export def "stores-rates-configuration UpdateStoreRateConfiguration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Preview rate configuration results
@@ -3171,6 +3295,7 @@ export def "stores-rates-configuration-preview PreviewStoreRateConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --currencyPair: list # The currency pairs to preview (nullable)
   --spread: string # A spread applies to the rate fetched in `%`. Must be `>= 0` or `<= 100`
   --preferredSource: string # When `isCustomScript` is `false`, uses this source in the default `effectiveScript`. When `isCustomScript` is `true`, this field is ignored (set to `null`). See `/misc/rate-sources` for available sources.
@@ -3186,7 +3311,7 @@ export def "stores-rates-configuration-preview PreviewStoreRateConfiguration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get store users
@@ -3202,13 +3327,14 @@ export def "stores-users GetStoreUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, email: string, name: string, imageUrl: string, invitationUrl: string, emailConfirmed: bool, requiresEmailConfirmation: bool, approved: bool, requiresApproval: bool, created: float, disabled: bool, roles: list<string>, userId: string, role: string, storeRole: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/users")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a store user
@@ -3226,6 +3352,7 @@ export def "stores-users AddStoreUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id of the user
   --email: string # The email of the user
   --name: string # The name of the user (nullable)
@@ -3250,7 +3377,7 @@ export def "stores-users AddStoreUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates a store user
@@ -3269,6 +3396,7 @@ export def "stores-users UpdateStoreUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id of the user
   --email: string # The email of the user
   --name: string # The name of the user (nullable)
@@ -3293,7 +3421,7 @@ export def "stores-users UpdateStoreUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove Store User
@@ -3310,13 +3438,14 @@ export def "stores-users RemoveStoreUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/users/($idOrEmail)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get store on-chain wallet overview
@@ -3333,13 +3462,14 @@ export def "stores-payment-methods-wallet ShowOnChainWalletOverview" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<balance: string, unconfirmedBalance: string, confirmedBalance: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payment-methods/($paymentMethodId)/wallet")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get store on-chain wallet balance histogram
@@ -3356,13 +3486,14 @@ export def "stores-payment-methods-wallet-histogram ShowOnChainWalletHistogram" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<type: string, balance: string, series: list<string>, labels: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payment-methods/($paymentMethodId)/wallet/histogram")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get store on-chain wallet fee rate
@@ -3379,6 +3510,7 @@ export def "stores-payment-methods-wallet-feerate GetOnChainFeeRate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --blockTarget: float # The number of blocks away you are willing to target for confirmation. Defaults to the wallet's configured `RecommendedFeeBlockTarget`
 ]: nothing -> record<feeRate: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3387,7 +3519,7 @@ export def "stores-payment-methods-wallet-feerate GetOnChainFeeRate" [
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payment-methods/($paymentMethodId)/wallet/feerate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get store on-chain wallet address
@@ -3404,6 +3536,7 @@ export def "stores-payment-methods-wallet-address GetOnChainWalletReceiveAddress
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --forceGenerate: oneof<nothing, bool> # Whether to generate a new address for this request even if the previous one was not used (default: false)
 ]: nothing -> record<address: string, keyPath: string, paymentLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3412,7 +3545,7 @@ export def "stores-payment-methods-wallet-address GetOnChainWalletReceiveAddress
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payment-methods/($paymentMethodId)/wallet/address" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # UnReserve last store on-chain wallet address
@@ -3429,13 +3562,14 @@ export def "stores-payment-methods-wallet-address UnReserveOnChainWalletReceiveA
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payment-methods/($paymentMethodId)/wallet/address")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get store on-chain wallet transactions
@@ -3452,6 +3586,7 @@ export def "stores-payment-methods-wallet-transactions ShowOnChainWalletTransact
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --labelFilter: string # Transaction label to filter by (e.g. invoice)
   --limit: int # Maximum number of transactions to return
   --skip: int # Number of transactions to skip from the start
@@ -3463,7 +3598,7 @@ export def "stores-payment-methods-wallet-transactions ShowOnChainWalletTransact
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payment-methods/($paymentMethodId)/wallet/transactions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create store on-chain wallet transaction
@@ -3481,6 +3616,7 @@ export def "stores-payment-methods-wallet-transactions CreateOnChainTransaction"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --destinations: list # What and where to send money — item shape: {destination?: string, amount?: string, subtractFromAmount?: bool}
   --feerate: float # Transaction fee. (format: decimal or long (sats/byte))
   --proceedWithPayjoin: oneof<nothing, bool> # Whether to attempt to do a BIP78 payjoin if one of the destinations is a BIP21 with payjoin enabled (nullable, default: true)
@@ -3499,7 +3635,7 @@ export def "stores-payment-methods-wallet-transactions CreateOnChainTransaction"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Broadcast an on-chain transaction or finalized PSBT
@@ -3516,6 +3652,7 @@ export def "stores-payment-methods-wallet-transactions-broadcast BroadcastOnChai
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   transaction: string # A finalized PSBT (base64) or raw transaction hex string
 ]: any -> record<transactionHash: string, comment: string, amount: string, blockHash: string, blockHeight: string, confirmations: string, timestamp: record, status: record, labels: table<type: string, text: string>> {
   let input = $in
@@ -3526,7 +3663,7 @@ export def "stores-payment-methods-wallet-transactions-broadcast BroadcastOnChai
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get store on-chain wallet transaction
@@ -3544,13 +3681,14 @@ export def "stores-payment-methods-wallet-transactions GetOnChainWalletTransacti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<transactionHash: string, comment: string, amount: string, blockHash: string, blockHeight: string, confirmations: string, timestamp: record, status: record, labels: table<type: string, text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payment-methods/($paymentMethodId)/wallet/transactions/($transactionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Patch store on-chain wallet transaction info
@@ -3569,6 +3707,7 @@ export def "stores-payment-methods-wallet-transactions PatchOnChainWalletTransac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --force: string # Whether to update the label/comments even if the transaction does not yet exist
   --comment: string # Transaction comment (nullable)
   --labels: list # Transaction labels (DEPRECATED, nullable)
@@ -3582,7 +3721,7 @@ export def "stores-payment-methods-wallet-transactions PatchOnChainWalletTransac
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get store on-chain wallet UTXOS
@@ -3599,13 +3738,14 @@ export def "stores-payment-methods-wallet-utxos GetOnChainWalletUTXOs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<comment: string, amount: string, link: string, outpoint: string, timestamp: record, keyPath: string, address: string, confirmations: float, labels: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payment-methods/($paymentMethodId)/wallet/utxos")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate store on-chain wallet
@@ -3622,6 +3762,7 @@ export def "stores-payment-methods-wallet-generate GenerateOnChainWallet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # A label that will be shown in the UI
   --existingMnemonic: string # A BIP39 mnemonic (e.g. quality warfare scatter zone report forest potato local swing solve upon candy garment boost lab)
   --passphrase: string # A passphrase for the BIP39 mnemonic seed
@@ -3639,7 +3780,7 @@ export def "stores-payment-methods-wallet-generate GenerateOnChainWallet" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Preview store on-chain payment method addresses
@@ -3656,6 +3797,7 @@ export def "stores-payment-methods-wallet-preview GetOnChainPaymentMethodPreview
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: float # From which index to fetch the addresses
   --count: float # Number of addresses to preview
 ]: nothing -> record<addresses: table<keyPath: string, address: string>> {
@@ -3665,7 +3807,7 @@ export def "stores-payment-methods-wallet-preview GetOnChainPaymentMethodPreview
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payment-methods/($paymentMethodId)/wallet/preview" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Preview proposed store on-chain payment method addresses
@@ -3682,6 +3824,7 @@ export def "stores-payment-methods-wallet-preview POSTOnChainPaymentMethodPrevie
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: float # From which index to fetch the addresses
   --count: float # Number of addresses to preview
   --derivationScheme: string # The derivation scheme (e.g. xpub...)
@@ -3695,7 +3838,7 @@ export def "stores-payment-methods-wallet-preview POSTOnChainPaymentMethodPrevie
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get store on-chain wallet objects
@@ -3712,6 +3855,7 @@ export def "stores-payment-methods-wallet-objects GetOnChainWalletObjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # The ids of objects to fetch, if used, type should be specified (e.g. 03abcde...)
   --type: string # The type of object to fetch (e.g. tx)
   --includeNeighbourData: oneof<nothing, bool> # Whether or not you should include neighbour's node data in the result (ie, `links.objectData`) (default: true)
@@ -3722,7 +3866,7 @@ export def "stores-payment-methods-wallet-objects GetOnChainWalletObjects" [
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payment-methods/($paymentMethodId)/wallet/objects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add/Update store on-chain wallet objects
@@ -3740,6 +3884,7 @@ export def "stores-payment-methods-wallet-objects AddOrUpdateOnChainWalletObject
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record
   --links: list # Links of this object (nullable) — item shape: {type?: string, id?: string, linkData?: record, objectData?: record}
   --type: string # The type of wallet object
@@ -3753,7 +3898,7 @@ export def "stores-payment-methods-wallet-objects AddOrUpdateOnChainWalletObject
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get store on-chain wallet object
@@ -3772,6 +3917,7 @@ export def "stores-payment-methods-wallet-objects GetOnChainWalletObject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeNeighbourData: oneof<nothing, bool> # Whether or not you should include neighbour's node data in the result (ie, `links.objectData`) (default: true)
 ]: nothing -> record<data: record, links: table<type: string, id: string, linkData: record, objectData: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3780,7 +3926,7 @@ export def "stores-payment-methods-wallet-objects GetOnChainWalletObject" [
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payment-methods/($paymentMethodId)/wallet/objects/($objectType)/($objectId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove store on-chain wallet objects
@@ -3799,13 +3945,14 @@ export def "stores-payment-methods-wallet-objects RemoveOnChainWalletObject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payment-methods/($paymentMethodId)/wallet/objects/($objectType)/($objectId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add/Update store on-chain wallet object link
@@ -3824,6 +3971,7 @@ export def "stores-payment-methods-wallet-objects-links AddOrUpdateOnChainWallet
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --data: record # The data of the link
   --type: string # The type of wallet object
   --id: string # The identifier of the wallet object (unique per type, per wallet)
@@ -3836,7 +3984,7 @@ export def "stores-payment-methods-wallet-objects-links AddOrUpdateOnChainWallet
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove store on-chain wallet object links
@@ -3857,13 +4005,14 @@ export def "stores-payment-methods-wallet-objects-links RemoveOnChainWalletLink"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/payment-methods/($paymentMethodId)/wallet/objects/($objectType)/($objectId)/links/($linkType)/($linkId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get stores
@@ -3878,13 +4027,14 @@ export def "stores GetStores" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<name: string, website: string, supportUrl: string, logoUrl: string, cssUrl: string, paymentSoundUrl: string, brandColor: string, applyBrandColorToBackend: bool, defaultCurrency: string, additionalTrackedRates: list<string>, invoiceExpiration: record, refundBOLT11Expiration: record, displayExpirationTimer: record, monitoringExpiration: record, speedPolicy: string, lightningDescriptionTemplate: string, paymentTolerance: float, archived: bool, anyoneCanCreateInvoice: bool, receipt: record, lightningAmountInSatoshi: bool, lightningPrivateRouteHints: bool, onChainWithLnInvoiceFallback: bool, redirectAutomatically: bool, showRecommendedFee: bool, recommendedFeeBlockTarget: int, defaultLang: string, htmlTitle: string, networkFeeMode: string, payJoinEnabled: bool, autoDetectLanguage: bool, showPayInWalletButton: bool, showStoreHeader: bool, celebratePayment: bool, playSoundOnPayment: bool, lazyPaymentMethods: bool, defaultPaymentMethod: string, paymentMethodCriteria: record, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/stores")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new store
@@ -3900,6 +4050,7 @@ export def "stores CreateStore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the store
   --website: string # The absolute url of the store (nullable, format: url)
   --supportUrl: string # The support URI of the store, can contain the placeholders `{OrderId}` and `{InvoiceId}`. Can be any valid URI, such as a website, email, and nostr. (nullable, format: uri)
@@ -3947,7 +4098,7 @@ export def "stores CreateStore" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get store
@@ -3963,13 +4114,14 @@ export def "stores GetStore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, website: string, supportUrl: string, logoUrl: string, cssUrl: string, paymentSoundUrl: string, brandColor: string, applyBrandColorToBackend: bool, defaultCurrency: string, additionalTrackedRates: list<string>, invoiceExpiration: record, refundBOLT11Expiration: record, displayExpirationTimer: record, monitoringExpiration: record, speedPolicy: string, lightningDescriptionTemplate: string, paymentTolerance: float, archived: bool, anyoneCanCreateInvoice: bool, receipt: record, lightningAmountInSatoshi: bool, lightningPrivateRouteHints: bool, onChainWithLnInvoiceFallback: bool, redirectAutomatically: bool, showRecommendedFee: bool, recommendedFeeBlockTarget: int, defaultLang: string, htmlTitle: string, networkFeeMode: string, payJoinEnabled: bool, autoDetectLanguage: bool, showPayInWalletButton: bool, showStoreHeader: bool, celebratePayment: bool, playSoundOnPayment: bool, lazyPaymentMethods: bool, defaultPaymentMethod: string, paymentMethodCriteria: record, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update store
@@ -3986,6 +4138,7 @@ export def "stores UpdateStore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the store
   --website: string # The absolute url of the store (nullable, format: url)
   --supportUrl: string # The support URI of the store, can contain the placeholders `{OrderId}` and `{InvoiceId}`. Can be any valid URI, such as a website, email, and nostr. (nullable, format: uri)
@@ -4034,7 +4187,7 @@ export def "stores UpdateStore" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove Store
@@ -4050,13 +4203,14 @@ export def "stores DeleteStore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Uploads a logo for the store
@@ -4072,6 +4226,7 @@ export def "stores-logo UploadStoreLogo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # The logo (format: binary)
 ]: any -> record<id: string, email: string, name: string, imageUrl: string, invitationUrl: string, emailConfirmed: bool, requiresEmailConfirmation: bool, approved: bool, requiresApproval: bool, created: float, disabled: bool, roles: list<string>> {
   let input = $in
@@ -4082,7 +4237,7 @@ export def "stores-logo UploadStoreLogo" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Deletes the store logo
@@ -4098,13 +4253,14 @@ export def "stores-logo DeleteStoreLogo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/logo")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get store's roles
@@ -4120,13 +4276,14 @@ export def "stores-roles GetStoreRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, role: string, permissions: list<string>, isServerRole: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/roles")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an offering
@@ -4143,13 +4300,14 @@ export def "stores-offerings GetOffering" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<appName: string, successRedirectUrl: string, metadata: record, features: table<id: string, description: string>, id: string, storeId: string, appId: string, plans: table<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list, renewable: bool, metadata: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/offerings/($offeringId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an offering
@@ -4167,6 +4325,7 @@ export def "stores-offerings UpdateOffering" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --appName: string # Display name of the related [application](#tag/Apps). (nullable, e.g. Example App)
   --successRedirectUrl: string # The default URL to redirect to after a plan checkout is successful. (nullable, e.g. https://example.com/success)
   --metadata: record # Custom metadata for the offering. (e.g. {category: saas, region: us})
@@ -4180,7 +4339,7 @@ export def "stores-offerings UpdateOffering" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List offerings for a store
@@ -4196,13 +4355,14 @@ export def "stores-offerings GetOfferings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<appName: string, successRedirectUrl: string, metadata: record, features: list<record>, id: string, storeId: string, appId: string, plans: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/offerings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an offering
@@ -4219,6 +4379,7 @@ export def "stores-offerings CreateOffering" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --appName: string # Display name of the related [application](#tag/Apps). (nullable, e.g. Example App)
   --successRedirectUrl: string # The default URL to redirect to after a plan checkout is successful. (nullable, e.g. https://example.com/success)
   --metadata: record # Custom metadata for the offering. (e.g. {category: saas, region: us})
@@ -4232,7 +4393,7 @@ export def "stores-offerings CreateOffering" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an offering plan
@@ -4249,6 +4410,7 @@ export def "stores-offerings-plans CreateOfferingPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Display name of the plan. (e.g. Monthly Plan)
   --description: string # Short description of the plan. (e.g. Standard monthly subscription.)
   --currency: string # Currency code for the plan price. (e.g. USD)
@@ -4269,7 +4431,7 @@ export def "stores-offerings-plans CreateOfferingPlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an offering plan
@@ -4287,13 +4449,14 @@ export def "stores-offerings-plans GetOfferingPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list<string>, renewable: bool, metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/offerings/($offeringId)/plans/($planId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an offering plan
@@ -4311,6 +4474,7 @@ export def "stores-offerings-plans UpdateOfferingPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Display name of the plan. (e.g. Monthly Plan)
   --description: string # Short description of the plan. (e.g. Standard monthly subscription.)
   --currency: string # Currency code for the plan price. (e.g. USD)
@@ -4331,7 +4495,7 @@ export def "stores-offerings-plans UpdateOfferingPlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a subscriber
@@ -4349,13 +4513,14 @@ export def "stores-offerings-subscribers GetSubscriber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created: int, customer: record<storeId: string, id: string, externalId: string, identities: record, metadata: record>, offering: record<appName: string, successRedirectUrl: string, metadata: record, features: list<record>, id: string, storeId: string, appId: string, plans: list<record>>, plan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list<string>, renewable: bool, metadata: record>, periodEnd: int, trialEnd: int, gracePeriodEnd: int, isActive: bool, isSuspended: bool, suspensionReason: string, autoRenew: bool, metadata: record, processingInvoiceId: string, nextPlan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list<string>, renewable: bool, metadata: record>, scheduledPlan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list<string>, renewable: bool, metadata: record>, scheduledPlanActivatesAt: int, phase: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/offerings/($offeringId)/subscribers/($customerSelector)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a subscriber
@@ -4373,13 +4538,14 @@ export def "stores-offerings-subscribers DeleteSubscriber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/offerings/($offeringId)/subscribers/($customerSelector)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get subscriber credit balance
@@ -4398,13 +4564,14 @@ export def "stores-offerings-subscribers-credits GetCredit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<currency: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/offerings/($offeringId)/subscribers/($customerSelector)/credits/($currency)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update subscriber credit balance
@@ -4423,6 +4590,7 @@ export def "stores-offerings-subscribers-credits UpdateCredit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --credit: string # Amount of credit to add as a numeric string. (e.g. 25.00)
   --charge: string # Amount to deduct as a numeric string. (e.g. 10.00)
   --description: string # Short description explaining the credit change. (e.g. Monthly reward bonus)
@@ -4436,7 +4604,7 @@ export def "stores-offerings-subscribers-credits UpdateCredit" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Suspend a subscriber
@@ -4454,6 +4622,7 @@ export def "stores-offerings-subscribers-suspend SuspendSubscriber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reason: string # Reason for the suspension. (e.g. Suspicious behavior detected)
 ]: any -> record<created: int, customer: record<storeId: string, id: string, externalId: string, identities: record, metadata: record>, offering: record<appName: string, successRedirectUrl: string, metadata: record, features: list<record>, id: string, storeId: string, appId: string, plans: list<record>>, plan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list<string>, renewable: bool, metadata: record>, periodEnd: int, trialEnd: int, gracePeriodEnd: int, isActive: bool, isSuspended: bool, suspensionReason: string, autoRenew: bool, metadata: record, processingInvoiceId: string, nextPlan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list<string>, renewable: bool, metadata: record>, scheduledPlan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list<string>, renewable: bool, metadata: record>, scheduledPlanActivatesAt: int, phase: string> {
   let input = $in
@@ -4464,7 +4633,7 @@ export def "stores-offerings-subscribers-suspend SuspendSubscriber" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unsuspend a subscriber
@@ -4482,13 +4651,14 @@ export def "stores-offerings-subscribers-unsuspend UnsuspendSubscriber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created: int, customer: record<storeId: string, id: string, externalId: string, identities: record, metadata: record>, offering: record<appName: string, successRedirectUrl: string, metadata: record, features: list<record>, id: string, storeId: string, appId: string, plans: list<record>>, plan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list<string>, renewable: bool, metadata: record>, periodEnd: int, trialEnd: int, gracePeriodEnd: int, isActive: bool, isSuspended: bool, suspensionReason: string, autoRenew: bool, metadata: record, processingInvoiceId: string, nextPlan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list<string>, renewable: bool, metadata: record>, scheduledPlan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list<string>, renewable: bool, metadata: record>, scheduledPlanActivatesAt: int, phase: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/offerings/($offeringId)/subscribers/($customerSelector)/unsuspend")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update subscriber dates
@@ -4506,6 +4676,7 @@ export def "stores-offerings-subscribers-dates UpdateSubscriberDates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDate: int # New subscription start date as a Unix timestamp. Omit to leave the current start date unchanged. (nullable, format: unix-time, e.g. 1710000000)
   --expirationDate: int # New expiration date as a Unix timestamp. Updates `trialEnd` if the subscriber is in a trial, otherwise updates `periodEnd`. Grace period end and reminder date are recalculated automatically. Omit to leave the current expiration date unchanged. (nullable, format: unix-time, e.g. 1712678400)
 ]: any -> record<created: int, customer: record<storeId: string, id: string, externalId: string, identities: record, metadata: record>, offering: record<appName: string, successRedirectUrl: string, metadata: record, features: list<record>, id: string, storeId: string, appId: string, plans: list<record>>, plan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list<string>, renewable: bool, metadata: record>, periodEnd: int, trialEnd: int, gracePeriodEnd: int, isActive: bool, isSuspended: bool, suspensionReason: string, autoRenew: bool, metadata: record, processingInvoiceId: string, nextPlan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list<string>, renewable: bool, metadata: record>, scheduledPlan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list<string>, renewable: bool, metadata: record>, scheduledPlanActivatesAt: int, phase: string> {
@@ -4517,7 +4688,7 @@ export def "stores-offerings-subscribers-dates UpdateSubscriberDates" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a plan checkout
@@ -4533,13 +4704,14 @@ export def "plan-checkout GetPlanCheckout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<subscriber: record<created: int, customer: record<storeId: string, id: string, externalId: string, identities: record, metadata: record>, offering: record<appName: string, successRedirectUrl: string, metadata: record, features: list, id: string, storeId: string, appId: string, plans: list>, plan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list, renewable: bool, metadata: record>, periodEnd: int, trialEnd: int, gracePeriodEnd: int, isActive: bool, isSuspended: bool, suspensionReason: string, autoRenew: bool, metadata: record, processingInvoiceId: string, nextPlan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list, renewable: bool, metadata: record>, scheduledPlan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list, renewable: bool, metadata: record>, scheduledPlanActivatesAt: int, phase: string>, plan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list<string>, renewable: bool, metadata: record>, baseUrl: string, id: string, invoiceId: string, successRedirectUrl: string, expiration: int, redirectUrl: string, invoiceMetadata: record, metadata: record, newSubscriber: bool, isTrial: bool, created: int, planStarted: bool, newSubscriberMetadata: record, refundAmount: string, creditedByInvoice: string, onPayBehavior: string, isExpired: bool, url: string, creditPurchase: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/plan-checkout/($checkoutId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Proceed with a plan checkout
@@ -4555,6 +4727,7 @@ export def "plan-checkout ProceedPlanCheckout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Optional customer email used when proceeding with the checkout. (e.g. user@example.com)
 ]: nothing -> record<subscriber: record<created: int, customer: record<storeId: string, id: string, externalId: string, identities: record, metadata: record>, offering: record<appName: string, successRedirectUrl: string, metadata: record, features: list, id: string, storeId: string, appId: string, plans: list>, plan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list, renewable: bool, metadata: record>, periodEnd: int, trialEnd: int, gracePeriodEnd: int, isActive: bool, isSuspended: bool, suspensionReason: string, autoRenew: bool, metadata: record, processingInvoiceId: string, nextPlan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list, renewable: bool, metadata: record>, scheduledPlan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list, renewable: bool, metadata: record>, scheduledPlanActivatesAt: int, phase: string>, plan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list<string>, renewable: bool, metadata: record>, baseUrl: string, id: string, invoiceId: string, successRedirectUrl: string, expiration: int, redirectUrl: string, invoiceMetadata: record, metadata: record, newSubscriber: bool, isTrial: bool, created: int, planStarted: bool, newSubscriberMetadata: record, refundAmount: string, creditedByInvoice: string, onPayBehavior: string, isExpired: bool, url: string, creditPurchase: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4563,7 +4736,7 @@ export def "plan-checkout ProceedPlanCheckout" [
   let full_url = (build-url $base $"/api/v1/plan-checkout/($checkoutId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a plan checkout session
@@ -4578,6 +4751,7 @@ export def "plan-checkout CreatePlanCheckout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --storeId: string # Store ID of the item (e.g. 9CiNzKoANXxmk5ayZngSXrHTiVvvgCrwrpFQd4m2K776)
   --offeringId: string # Offering's ID (e.g. offering_DKWhZGB6PZsgTcPwpf)
   --planId: string # Plan's ID (e.g. plan_KZMVyuQp3v2vFWnEUM)
@@ -4600,7 +4774,7 @@ export def "plan-checkout CreatePlanCheckout" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a subscriber portal session
@@ -4615,6 +4789,7 @@ export def "subscriber-portal CreatePortalSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --storeId: string # Store ID of the item (e.g. 9CiNzKoANXxmk5ayZngSXrHTiVvvgCrwrpFQd4m2K776)
   --offeringId: string # Offering's ID (e.g. offering_DKWhZGB6PZsgTcPwpf)
   --customerSelector: string # Flexible identifier for selecting a customer. Supports: customer ID (e.g., `cust_abc123`), an email (e.g., `user@example.com`), or a key/value identity (e.g., `Email:user@example.com`). (e.g. cust_GUGnpx3311fkaqGk7f)
@@ -4628,7 +4803,7 @@ export def "subscriber-portal CreatePortalSession" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a subscriber portal session
@@ -4644,13 +4819,14 @@ export def "subscriber-portal GetPortalSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<baseUrl: string, id: string, subscriber: record<created: int, customer: record<storeId: string, id: string, externalId: string, identities: record, metadata: record>, offering: record<appName: string, successRedirectUrl: string, metadata: record, features: list, id: string, storeId: string, appId: string, plans: list>, plan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list, renewable: bool, metadata: record>, periodEnd: int, trialEnd: int, gracePeriodEnd: int, isActive: bool, isSuspended: bool, suspensionReason: string, autoRenew: bool, metadata: record, processingInvoiceId: string, nextPlan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list, renewable: bool, metadata: record>, scheduledPlan: record<id: string, name: string, status: string, price: string, currency: string, recurringType: string, gracePeriodDays: int, trialDays: int, description: string, memberCount: int, optimisticActivation: bool, features: list, renewable: bool, metadata: record>, scheduledPlanActivatesAt: int, phase: string>, expiration: int, isExpired: bool, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/subscriber-portal/($portalSessionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get current user information
@@ -4665,13 +4841,14 @@ export def "users-me GetCurrentUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, email: string, name: string, imageUrl: string, invitationUrl: string, emailConfirmed: bool, requiresEmailConfirmation: bool, approved: bool, requiresApproval: bool, created: float, disabled: bool, roles: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update current user information
@@ -4686,6 +4863,7 @@ export def "users-me UpdateCurrentUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # The email of the user (nullable)
   --name: string # The name of the user (nullable)
   --imageUrl: string # The profile picture URL of the user (nullable)
@@ -4700,7 +4878,7 @@ export def "users-me UpdateCurrentUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes user profile
@@ -4715,13 +4893,14 @@ export def "users-me DeleteCurrentUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Uploads a profile picture for the current user
@@ -4736,6 +4915,7 @@ export def "users-me-picture UploadCurrentUserProfilePicture" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # The profile picture (format: binary)
 ]: any -> record<id: string, email: string, name: string, imageUrl: string, invitationUrl: string, emailConfirmed: bool, requiresEmailConfirmation: bool, approved: bool, requiresApproval: bool, created: float, disabled: bool, roles: list<string>> {
   let input = $in
@@ -4746,7 +4926,7 @@ export def "users-me-picture UploadCurrentUserProfilePicture" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Deletes user profile picture
@@ -4761,13 +4941,14 @@ export def "users-me-picture DeleteCurrentUserProfilePicture" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me/picture")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all users
@@ -4782,13 +4963,14 @@ export def "users GetUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create user
@@ -4803,6 +4985,7 @@ export def "users CreateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # The email of the new user
   --name: string # The name of the new user (nullable)
   --imageUrl: string # The profile picture URL of the new user (nullable)
@@ -4818,7 +5001,7 @@ export def "users CreateUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get user by ID or Email
@@ -4834,13 +5017,14 @@ export def "users GetUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, email: string, name: string, imageUrl: string, invitationUrl: string, emailConfirmed: bool, requiresEmailConfirmation: bool, approved: bool, requiresApproval: bool, created: float, disabled: bool, roles: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/users/($idOrEmail)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete user
@@ -4856,13 +5040,14 @@ export def "users DeleteUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/users/($idOrEmail)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Toggle user lock out
@@ -4878,6 +5063,7 @@ export def "users-lock ToggleUserLock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locked: oneof<nothing, bool> # Whether to lock or unlock the user
 ]: any -> any {
   let input = $in
@@ -4888,7 +5074,7 @@ export def "users-lock ToggleUserLock" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Toggle user approval
@@ -4904,6 +5090,7 @@ export def "users-approve ToggleUserApproval" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --approved: oneof<nothing, bool> # Whether to approve or unapprove the user
 ]: any -> any {
   let input = $in
@@ -4914,7 +5101,7 @@ export def "users-approve ToggleUserApproval" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get webhooks of a store
@@ -4930,13 +5117,14 @@ export def "stores-webhooks GetWebhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<enabled: bool, automaticRedelivery: bool, url: string, authorizedEvents: record<everything: bool, specificEvents: list>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/webhooks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new webhook
@@ -4953,6 +5141,7 @@ export def "stores-webhooks CreateWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Whether this webhook is enabled or not (default: true)
   --automaticRedelivery: oneof<nothing, bool> # If true, BTCPay Server will retry to redeliver any failed delivery after 10 seconds, 1 minutes and up to 6 times after 10 minutes. (default: true)
   --body-url: string # The endpoint where BTCPay Server will make the POST request with the webhook body
@@ -4967,7 +5156,7 @@ export def "stores-webhooks CreateWebhook" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a webhook of a store
@@ -4984,13 +5173,14 @@ export def "stores-webhooks GetWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<enabled: bool, automaticRedelivery: bool, url: string, authorizedEvents: record<everything: bool, specificEvents: list<string>>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/webhooks/($webhookId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a webhook
@@ -5008,6 +5198,7 @@ export def "stores-webhooks UpdateWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Whether this webhook is enabled or not (default: true)
   --automaticRedelivery: oneof<nothing, bool> # If true, BTCPay Server will retry to redeliver any failed delivery after 10 seconds, 1 minutes and up to 6 times after 10 minutes. (default: true)
   --body-url: string # The endpoint where BTCPay Server will make the POST request with the webhook body
@@ -5022,7 +5213,7 @@ export def "stores-webhooks UpdateWebhook" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a webhook
@@ -5039,13 +5230,14 @@ export def "stores-webhooks DeleteWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/webhooks/($webhookId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get latest deliveries
@@ -5062,6 +5254,7 @@ export def "stores-webhooks-deliveries GetWebhookDeliveries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --count: string # The number of latest deliveries to fetch
 ]: nothing -> table<id: string, timestamp: float, deliveryTime: float, httpCode: float, errorMessage: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5070,7 +5263,7 @@ export def "stores-webhooks-deliveries GetWebhookDeliveries" [
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/webhooks/($webhookId)/deliveries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a webhook delivery
@@ -5088,13 +5281,14 @@ export def "stores-webhooks-deliveries GetWebhookDelivery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, timestamp: float, deliveryTime: float, httpCode: float, errorMessage: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/webhooks/($webhookId)/deliveries/($deliveryId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the delivery's request
@@ -5112,13 +5306,14 @@ export def "stores-webhooks-deliveries-request GetWebhookDeliveryRequests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/webhooks/($webhookId)/deliveries/($deliveryId)/request")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Redeliver the delivery
@@ -5136,11 +5331,12 @@ export def "stores-webhooks-deliveries-redeliver RedeliverWebhookDelivery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/stores/($storeId)/webhooks/($webhookId)/deliveries/($deliveryId)/redeliver")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

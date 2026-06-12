@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -81,7 +82,7 @@ def action-completer [] { ["addObject" "clear" "delete" "deleteObject" "partialU
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "search customGet" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -115,6 +116,7 @@ export def "search customGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --parameters: record # Query parameters to apply to the current query.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
@@ -123,7 +125,7 @@ export def "search customGet" [
   let full_url = (build-url $base $"/($path)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send requests to the Algolia REST API
@@ -139,6 +141,7 @@ export def "search customPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --parameters: record # Query parameters to apply to the current query.
   --body: record
 ]: any -> record {
@@ -150,7 +153,7 @@ export def "search customPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send requests to the Algolia REST API
@@ -166,6 +169,7 @@ export def "search customPut" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --parameters: record # Query parameters to apply to the current query.
   --body: record
 ]: any -> record {
@@ -177,7 +181,7 @@ export def "search customPut" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send requests to the Algolia REST API
@@ -193,6 +197,7 @@ export def "search customDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --parameters: record # Query parameters to apply to the current query.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
@@ -201,7 +206,7 @@ export def "search customDelete" [
   let full_url = (build-url $base $"/($path)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search an index
@@ -217,6 +222,7 @@ export def "1-indexes-query searchSingleIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --params: string # Search parameters as a URL-encoded query string. (default: , e.g. hitsPerPage=2&getRankingInfo=1)
 ]: any -> record<abTestID: int, abTestVariantID: int, aroundLatLng: string, automaticRadius: string, exhaustive: record<facetsCount: bool, facetValues: bool, nbHits: bool, rulesMatch: bool, typo: bool>, appliedRules: list<record>, exhaustiveFacetsCount: bool, exhaustiveNbHits: bool, exhaustiveTypo: bool, facets: record, facets_stats: record, index: string, indexUsed: string, message: string, nbSortedHits: int, parsedQuery: string, processingTimeMS: int, processingTimingsMS: record, queryAfterRemoval: string, redirect: record<index: list<record>>, renderingContent: record<facetOrdering: record<facets: record, values: record>, redirect: record<url: string>, widgets: record<banners: list>>, serverTimeMS: int, serverUsed: string, userData: any, queryID: string, _automaticInsights: bool, page: int, nbHits: int, nbPages: int, hitsPerPage: int, hits: table<objectID: string, _highlightResult: record, _snippetResult: record, _rankingInfo: record, _distinctSeqID: int>, query: string, params: string, extensions: record<queryCategorization: record<normalizedQuery: string, count: int, type: string, categories: list, autofiltering: record>>> {
   let input = $in
@@ -227,7 +233,7 @@ export def "1-indexes-query searchSingleIndex" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search multiple queries
@@ -242,6 +248,7 @@ export def "1-indexes-queries search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   requests: list
   --strategy: string@strategy-completer # Strategy for multiple search queries:  - `none`. Run all queries. - `stopIfEnoughMatches`. Run the queries one by one, stopping as soon as a query matches at least the `hitsPerPage` number of results.
 ]: any -> record<results: list<any>> {
@@ -253,7 +260,7 @@ export def "1-indexes-queries search" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search for facet values
@@ -270,6 +277,7 @@ export def "1-indexes-facets-query searchForFacetValues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --params: string # Search parameters as a URL-encoded query string. (default: , e.g. hitsPerPage=2&getRankingInfo=1)
   --facetQuery: string # Text to search inside the facet's values. (default: , e.g. george)
   --maxFacetHits: int # Maximum number of facet values to return when [searching for facet values](https://www.algolia.com/doc/guides/managing-results/refine-results/faceting/#search-for-facet-values). (default: 10)
@@ -282,7 +290,7 @@ export def "1-indexes-facets-query searchForFacetValues" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Browse for records
@@ -298,6 +306,7 @@ export def "1-indexes-browse browse" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --params: string # Search parameters as a URL-encoded query string. (default: , e.g. hitsPerPage=2&getRankingInfo=1)
 ]: any -> record<abTestID: int, abTestVariantID: int, aroundLatLng: string, automaticRadius: string, exhaustive: record<facetsCount: bool, facetValues: bool, nbHits: bool, rulesMatch: bool, typo: bool>, appliedRules: list<record>, exhaustiveFacetsCount: bool, exhaustiveNbHits: bool, exhaustiveTypo: bool, facets: record, facets_stats: record, index: string, indexUsed: string, message: string, nbSortedHits: int, parsedQuery: string, processingTimeMS: int, processingTimingsMS: record, queryAfterRemoval: string, redirect: record<index: list<record>>, renderingContent: record<facetOrdering: record<facets: record, values: record>, redirect: record<url: string>, widgets: record<banners: list>>, serverTimeMS: int, serverUsed: string, userData: any, queryID: string, _automaticInsights: bool, page: int, nbHits: int, nbPages: int, hitsPerPage: int, hits: table<objectID: string, _highlightResult: record, _snippetResult: record, _rankingInfo: record, _distinctSeqID: int>, query: string, params: string, extensions: record<queryCategorization: record<normalizedQuery: string, count: int, type: string, categories: list, autofiltering: record>>, cursor: string> {
   let input = $in
@@ -308,7 +317,7 @@ export def "1-indexes-browse browse" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a new record (with auto-generated object ID)
@@ -324,6 +333,7 @@ export def "1-indexes saveObject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<createdAt: string, taskID: int, objectID: string> {
   let input = $in
@@ -333,7 +343,7 @@ export def "1-indexes saveObject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an index
@@ -350,13 +360,14 @@ export def "1-indexes delete-by-indexName" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/1/indexes/($indexName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a record
@@ -373,6 +384,7 @@ export def "1-indexes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --attributesToRetrieve: list # Attributes to include with the records in the response. This is useful to reduce the size of the API response. By default, all retrievable attributes are returned.  `objectID` is always retrieved.  Attributes included in `unretrievableAttributes` won't be retrieved unless the request is authenticated with the admin API key.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
@@ -381,7 +393,7 @@ export def "1-indexes get" [
   let full_url = (build-url $base $"/1/indexes/($indexName)/($objectID)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add or replace a record
@@ -398,6 +410,7 @@ export def "1-indexes addOrUpdateObject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -407,7 +420,7 @@ export def "1-indexes addOrUpdateObject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a record
@@ -424,13 +437,14 @@ export def "1-indexes delete-by-indexName-objectID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/1/indexes/($indexName)/($objectID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete records matching a filter
@@ -447,6 +461,7 @@ export def "1-indexes-delete-by-query post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --facetFilters: any # Filter the search by facet values, so that only records with the same facet values are retrieved.  **Prefer using the `filters` parameter, which supports all filter types and combinations with boolean operators.**  - `[filter1, filter2]` is interpreted as `filter1 AND filter2`. - `[[filter1, filter2], filter3]` is interpreted as `filter1 OR filter2 AND filter3`. - `facet:-value` is interpreted as `NOT facet:value`.  While it's best to avoid attributes that start with a `-`, you can still filter them by escaping with a backslash: `facet:\-value`.  (e.g. [[category:Book, category:-Movie], author:John Doe])
   --filters: string # Filter expression to only include items that match the filter criteria in the response.  You can use these filter expressions:  - **Numeric filters.** `<facet> <op> <number>`, where `<op>` is one of `<`, `<=`, `=`, `!=`, `>`, `>=`. - **Ranges.** `<facet>:<lower> TO <upper>`, where `<lower>` and `<upper>` are the lower and upper limits of the range (inclusive). - **Facet filters.** `<facet>:<value>`, where `<facet>` is a facet attribute (case-sensitive) and `<value>` a facet value. - **Tag filters.** `_tags:<value>` or just `<value>` (case-sensitive). - **Boolean filters.** `<facet>: true | false`.  You can combine filters with `AND`, `OR`, and `NOT` operators with the following restrictions:  - You can only combine filters of the same type with `OR`.   **Not supported:** `facet:value OR num > 3`. - You can't use `NOT` with combinations of filters.   **Not supported:** `NOT(facet:value OR facet:value)` - You can't combine conjunctions (`AND`) with `OR`.   **Not supported:** `facet:value OR (facet:value AND facet:value)`  Use quotes if the facet attribute name or facet value contains spaces, keywords (`OR`, `AND`, `NOT`), or quotes. If a facet attribute is an array, the filter matches if it matches at least one element of the array.  For more information, see [Filters](https://www.algolia.com/doc/guides/managing-results/refine-results/filtering).  (e.g. (category:Book OR category:Ebook) AND _tags:published)
   --numericFilters: any # Filter by numeric facets.  **Prefer using the `filters` parameter, which supports all filter types and combinations with boolean operators.**  You can use numeric comparison operators: `<`, `<=`, `=`, `!=`, `>`, `>=`. Comparisons are precise up to 3 decimals. You can also provide ranges: `facet:<lower> TO <upper>`. The range includes the lower and upper boundaries. The same combination rules apply as for `facetFilters`.  (e.g. [[inStock = 1, deliveryDate < 1441755506], price < 1000])
@@ -464,7 +479,7 @@ export def "1-indexes-delete-by-query post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete all records from an index
@@ -480,13 +495,14 @@ export def "1-indexes-clear clearObjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/1/indexes/($indexName)/clear")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add or update attributes
@@ -503,6 +519,7 @@ export def "1-indexes-partial partialUpdateObject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createIfNotExists: oneof<nothing, bool> # Whether to create a new record if it doesn't exist. (default: true)
   --body: record
 ]: any -> any {
@@ -514,7 +531,7 @@ export def "1-indexes-partial partialUpdateObject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Batch indexing operations on one index
@@ -531,6 +548,7 @@ export def "1-indexes-batch batch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   requests: list # item shape: {action: "addObject"|"updateObject"|"partialUpdateObject"|"partialUpdateObjectNoCreate"|"deleteObject"|"delete"|"clear", body: record}
 ]: any -> record<taskID: int, objectIDs: list<string>> {
   let input = $in
@@ -541,7 +559,7 @@ export def "1-indexes-batch batch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Batch indexing operations on multiple indices
@@ -557,6 +575,7 @@ export def "1-indexes-batch multipleBatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   requests: list # item shape: {action: "addObject"|"updateObject"|"partialUpdateObject"|"partialUpdateObjectNoCreate"|"deleteObject"|"delete"|"clear", body?: record, indexName: string}
 ]: any -> record<taskID: record, objectIDs: list<string>> {
   let input = $in
@@ -567,7 +586,7 @@ export def "1-indexes-batch multipleBatch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve records
@@ -583,6 +602,7 @@ export def "1-indexes-objects post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   requests: list # item shape: {attributesToRetrieve?: list, objectID: string, indexName: string}
 ]: any -> record<message: string, results: list<record>> {
   let input = $in
@@ -593,7 +613,7 @@ export def "1-indexes-objects post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve index settings
@@ -609,6 +629,7 @@ export def "1-indexes-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --getVersion: int # When set to 2, the endpoint will not include `synonyms` in the response. This parameter is here for backward compatibility. (default: 1)
 ]: nothing -> record<primary: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
@@ -617,7 +638,7 @@ export def "1-indexes-settings get" [
   let full_url = (build-url $base $"/1/indexes/($indexName)/settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update index settings
@@ -635,6 +656,7 @@ export def "1-indexes-settings setSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --forwardToReplicas: oneof<nothing, bool> # Whether changes are applied to replica indices.
   --attributesForFaceting: list # Attributes used for [faceting](https://www.algolia.com/doc/guides/managing-results/refine-results/faceting).  Facets are attributes that let you categorize search results. They can be used for filtering search results. By default, no attribute is used for faceting. Attribute names are case-sensitive.  **Modifiers**  - `filterOnly("ATTRIBUTE")`.   Allows the attribute to be used as a filter but doesn't evaluate the facet values.  - `searchable("ATTRIBUTE")`.   Allows searching for facet values.  - `afterDistinct("ATTRIBUTE")`.   Evaluates the facet count _after_ deduplication with `distinct`.   This ensures accurate facet counts.   You can apply this modifier to searchable facets: `afterDistinct(searchable(ATTRIBUTE))`.  (default: [], e.g. [author, filterOnly(isbn), searchable(edition), afterDistinct(category), afterDistinct(searchable(publisher))])
   --replicas: list # Creates [replica indices](https://www.algolia.com/doc/guides/managing-results/refine-results/sorting/in-depth/replicas).  Replicas are copies of a primary index with the same records but different settings, synonyms, or rules. If you want to offer a different ranking or sorting of your search results, you'll use replica indices. All index operations on a primary index are automatically forwarded to its replicas. To add a replica index, you must provide the complete set of replicas to this parameter. If you omit a replica from this list, the replica turns into a regular, standalone index that will no longer be synced with the primary index.  **Modifier**  - `virtual("REPLICA")`.   Create a virtual replica,   Virtual replicas don't increase the number of records and are optimized for [Relevant sorting](https://www.algolia.com/doc/guides/managing-results/refine-results/sorting/in-depth/relevant-sort).  (default: [], e.g. [virtual(prod_products_price_asc), dev_products_replica])
@@ -707,7 +729,7 @@ export def "1-indexes-settings setSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a synonym
@@ -724,13 +746,14 @@ export def "1-indexes-synonyms get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<objectID: string, type: string, synonyms: list<string>, input: string, word: string, corrections: list<string>, placeholder: string, replacements: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/1/indexes/($indexName)/synonyms/($objectID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or replace a synonym
@@ -747,6 +770,7 @@ export def "1-indexes-synonyms saveSynonym" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --forwardToReplicas: oneof<nothing, bool> # Whether changes are applied to replica indices.
   --body-objectID: string # Unique identifier of a synonym object. (e.g. synonymID)
   type: string@type-completer # Synonym type. (e.g. onewaysynonym)
@@ -766,7 +790,7 @@ export def "1-indexes-synonyms saveSynonym" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a synonym
@@ -783,6 +807,7 @@ export def "1-indexes-synonyms delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --forwardToReplicas: oneof<nothing, bool> # Whether changes are applied to replica indices.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
@@ -791,7 +816,7 @@ export def "1-indexes-synonyms delete" [
   let full_url = (build-url $base $"/1/indexes/($indexName)/synonyms/($objectID)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or replace synonyms
@@ -807,6 +832,7 @@ export def "1-indexes-synonyms-batch saveSynonyms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --forwardToReplicas: oneof<nothing, bool> # Whether changes are applied to replica indices.
   --replaceExistingSynonyms: oneof<nothing, bool> # Whether to replace all synonyms in the index with the ones sent with this request.
   --body: record
@@ -819,7 +845,7 @@ export def "1-indexes-synonyms-batch saveSynonyms" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete all synonyms
@@ -835,6 +861,7 @@ export def "1-indexes-synonyms-clear clearSynonyms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --forwardToReplicas: oneof<nothing, bool> # Whether changes are applied to replica indices.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
@@ -843,7 +870,7 @@ export def "1-indexes-synonyms-clear clearSynonyms" [
   let full_url = (build-url $base $"/1/indexes/($indexName)/synonyms/clear" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for synonyms
@@ -859,6 +886,7 @@ export def "1-indexes-synonyms-search searchSynonyms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: string # Search query. (default: )
   --type: string@type-completer # Synonym type. (e.g. onewaysynonym)
   --page: int # Page of search results to retrieve. (default: 0)
@@ -872,7 +900,7 @@ export def "1-indexes-synonyms-search searchSynonyms" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List API keys
@@ -887,13 +915,14 @@ export def "1-keys listApiKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<keys: table<value: string, createdAt: int, acl: list, description: string, indexes: list, maxHitsPerQuery: int, maxQueriesPerIPPerHour: int, queryParameters: string, referers: list, validity: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1/keys")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an API key
@@ -908,6 +937,7 @@ export def "1-keys addApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   acl: list # Permissions that determine the type of API requests this key can make. The required ACL is listed in each endpoint's reference. For more information, see [access control list](https://www.algolia.com/doc/guides/security/api-keys/#access-control-list-acl).  (default: [], e.g. [search, addObject])
   --description: string # Description of an API key to help you identify this API key. (default: , e.g. Used for indexing by the CLI)
   --indexes: list # Index names or patterns that this API key can access. By default, an API key can access all indices in the same application.  You can use leading and trailing wildcard characters (`*`):  - `dev_*` matches all indices starting with "dev_" - `*_dev` matches all indices ending with "_dev" - `*_products_*` matches all indices containing "_products_".  (default: [], e.g. [dev_*, prod_en_products])
@@ -925,7 +955,7 @@ export def "1-keys addApiKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve API key permissions
@@ -941,13 +971,14 @@ export def "1-keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<value: string, createdAt: int, acl: list<string>, description: string, indexes: list<string>, maxHitsPerQuery: int, maxQueriesPerIPPerHour: int, queryParameters: string, referers: list<string>, validity: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/1/keys/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an API key
@@ -963,6 +994,7 @@ export def "1-keys updateApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   acl: list # Permissions that determine the type of API requests this key can make. The required ACL is listed in each endpoint's reference. For more information, see [access control list](https://www.algolia.com/doc/guides/security/api-keys/#access-control-list-acl).  (default: [], e.g. [search, addObject])
   --description: string # Description of an API key to help you identify this API key. (default: , e.g. Used for indexing by the CLI)
   --indexes: list # Index names or patterns that this API key can access. By default, an API key can access all indices in the same application.  You can use leading and trailing wildcard characters (`*`):  - `dev_*` matches all indices starting with "dev_" - `*_dev` matches all indices ending with "_dev" - `*_products_*` matches all indices containing "_products_".  (default: [], e.g. [dev_*, prod_en_products])
@@ -980,7 +1012,7 @@ export def "1-keys updateApiKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an API key
@@ -996,13 +1028,14 @@ export def "1-keys delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<deletedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/1/keys/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Restore an API key
@@ -1018,13 +1051,14 @@ export def "1-keys-restore restoreApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, createdAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/1/keys/($key)/restore")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a rule
@@ -1041,13 +1075,14 @@ export def "1-indexes-rules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<objectID: string, conditions: table<pattern: string, anchoring: string, alternatives: bool, context: string, filters: string>, consequence: record<params: record<similarQuery: string, filters: string, facetFilters: any, optionalFilters: any, numericFilters: any, tagFilters: any, sumOrFiltersScores: bool, restrictSearchableAttributes: list, facets: list, facetingAfterDistinct: bool, page: int, offset: int, length: int, aroundLatLng: string, aroundLatLngViaIP: bool, aroundRadius: any, aroundPrecision: any, minimumAroundRadius: int, insideBoundingBox: any, insidePolygon: list, naturalLanguages: list, ruleContexts: list, personalizationImpact: int, userToken: string, getRankingInfo: bool, synonyms: bool, clickAnalytics: bool, analytics: bool, analyticsTags: list, percentileComputation: bool, enableABTest: bool, attributesToRetrieve: list, ranking: list, relevancyStrictness: int, attributesToHighlight: list, attributesToSnippet: list, highlightPreTag: string, highlightPostTag: string, snippetEllipsisText: string, restrictHighlightAndSnippetArrays: bool, hitsPerPage: int, minWordSizefor1Typo: int, minWordSizefor2Typos: int, typoTolerance: any, allowTyposOnNumericTokens: bool, disableTypoToleranceOnAttributes: list, ignorePlurals: any, removeStopWords: any, queryLanguages: list, decompoundQuery: bool, enableRules: bool, enablePersonalization: bool, queryType: string, removeWordsIfNoResults: string, mode: string, semanticSearch: record, advancedSyntax: bool, optionalWords: any, disableExactOnAttributes: list, exactOnSingleWordQuery: string, alternativesAsExact: list, advancedSyntaxFeatures: list, distinct: any, replaceSynonymsInHighlight: bool, minProximity: int, responseFields: list, maxValuesPerFacet: int, sortFacetValuesBy: string, attributeCriteriaComputedByMinProximity: bool, renderingContent: record, enableReRanking: bool, reRankingApplyFilter: any, query: any, automaticFacetFilters: any, automaticOptionalFacetFilters: any>, promote: list<any>, filterPromotes: bool, hide: list<record>, redirect: record<indexName: string>, userData: record>, description: string, enabled: bool, validity: table<from: int, until: int>, tags: list<string>, scope: string, condition: record<pattern: string, anchoring: string, alternatives: bool, context: string, filters: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/1/indexes/($indexName)/rules/($objectID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or replace a rule
@@ -1068,6 +1103,7 @@ export def "1-indexes-rules saveRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --forwardToReplicas: oneof<nothing, bool> # Whether changes are applied to replica indices.
   --body-objectID: string # Unique identifier of a rule object.
   --conditions: list # Conditions that trigger a rule.  Some consequences require specific conditions or don't require any condition. For more information, see [Conditions](https://www.algolia.com/doc/guides/managing-results/rules/rules-overview/#conditions). — item shape: {pattern?: string, anchoring?: "is"|"startsWith"|"endsWith"|"contains", alternatives?: bool, context?: string, filters?: string}
@@ -1088,7 +1124,7 @@ export def "1-indexes-rules saveRule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a rule
@@ -1105,6 +1141,7 @@ export def "1-indexes-rules delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --forwardToReplicas: oneof<nothing, bool> # Whether changes are applied to replica indices.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
@@ -1113,7 +1150,7 @@ export def "1-indexes-rules delete" [
   let full_url = (build-url $base $"/1/indexes/($indexName)/rules/($objectID)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update rules
@@ -1129,6 +1166,7 @@ export def "1-indexes-rules-batch saveRules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --forwardToReplicas: oneof<nothing, bool> # Whether changes are applied to replica indices.
   --clearExistingRules: oneof<nothing, bool> # Whether existing rules should be deleted before adding this batch.
   --body: record
@@ -1141,7 +1179,7 @@ export def "1-indexes-rules-batch saveRules" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete all rules
@@ -1157,6 +1195,7 @@ export def "1-indexes-rules-clear clearRules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --forwardToReplicas: oneof<nothing, bool> # Whether changes are applied to replica indices.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
@@ -1165,7 +1204,7 @@ export def "1-indexes-rules-clear clearRules" [
   let full_url = (build-url $base $"/1/indexes/($indexName)/rules/clear" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for rules
@@ -1181,6 +1220,7 @@ export def "1-indexes-rules-search searchRules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: string # Search query for rules. (default: )
   --anchoring: string@anchoring-completer # Which part of the search query the pattern should match:  - `startsWith`. The pattern must match the beginning of the query. - `endsWith`. The pattern must match the end of the query. - `is`. The pattern must match the query exactly. - `contains`. The pattern must match anywhere in the query.  Empty queries are only allowed as patterns with `anchoring: is`.
   --context: string # Only return rules that match the context (exact match). (e.g. mobile)
@@ -1196,7 +1236,7 @@ export def "1-indexes-rules-search searchRules" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add or delete dictionary entries
@@ -1213,6 +1253,7 @@ export def "1-dictionaries-batch batchDictionaryEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clearExistingDictionaryEntries: oneof<nothing, bool> # Whether to replace all custom entries in the dictionary with the ones sent with this request. (default: false)
   requests: list # List of additions and deletions to your dictionaries. — item shape: {action: "addEntry"|"deleteEntry", body: record}
 ]: any -> any {
@@ -1224,7 +1265,7 @@ export def "1-dictionaries-batch batchDictionaryEntries" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search dictionary entries
@@ -1240,6 +1281,7 @@ export def "1-dictionaries-search searchDictionaryEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: string # Search query. (default: )
   --page: int # Page of search results to retrieve. (default: 0)
   --hitsPerPage: int # Number of hits per page. (default: 20)
@@ -1253,7 +1295,7 @@ export def "1-dictionaries-search searchDictionaryEntries" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve dictionary settings
@@ -1268,13 +1310,14 @@ export def "1-dictionaries-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<disableStandardEntries: record<plurals: any, stopwords: any, compounds: any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1/dictionaries/*/settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update dictionary settings
@@ -1290,6 +1333,7 @@ export def "1-dictionaries-settings setDictionarySettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   disableStandardEntries: record # Key-value pairs of [supported language ISO codes](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/handling-natural-languages-nlp/in-depth/supported-languages) and boolean values. — shape: {plurals?: any, stopwords?: any, compounds?: any}
 ]: any -> any {
   let input = $in
@@ -1300,7 +1344,7 @@ export def "1-dictionaries-settings setDictionarySettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List available languages
@@ -1316,13 +1360,14 @@ export def "1-dictionaries-languages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1/dictionaries/*/languages")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign or move a user ID
@@ -1339,6 +1384,7 @@ export def "1-clusters-mapping assignUserId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Algolia-User-ID: string # Unique identifier of the user who makes the search request. (e.g. user1)
   cluster: string # Cluster name. (e.g. c11-test)
 ]: any -> any {
@@ -1352,7 +1398,7 @@ export def "1-clusters-mapping assignUserId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List user IDs
@@ -1369,6 +1415,7 @@ export def "1-clusters-mapping listUserIds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Requested page of the API response. If `null`, the API response is not paginated.
   --hitsPerPage: int # Number of hits per page. (default: 100)
 ]: nothing -> record<userIDs: table<userID: string, clusterName: string, nbRecords: int, dataSize: int>> {
@@ -1378,7 +1425,7 @@ export def "1-clusters-mapping listUserIds" [
   let full_url = (build-url $base "/1/clusters/mapping" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign multiple userIDs
@@ -1395,6 +1442,7 @@ export def "1-clusters-mapping-batch batchAssignUserIds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Algolia-User-ID: string # Unique identifier of the user who makes the search request. (e.g. user1)
   cluster: string # Cluster name. (e.g. c11-test)
   users: list # User IDs to assign. (e.g. [einstein, bohr, feynman])
@@ -1409,7 +1457,7 @@ export def "1-clusters-mapping-batch batchAssignUserIds" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get top user IDs
@@ -1426,13 +1474,14 @@ export def "1-clusters-mapping-top get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<topUsers: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1/clusters/mapping/top")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve user ID
@@ -1450,13 +1499,14 @@ export def "1-clusters-mapping get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<userID: string, clusterName: string, nbRecords: int, dataSize: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/1/clusters/mapping/($userID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete user ID
@@ -1474,13 +1524,14 @@ export def "1-clusters-mapping removeUserId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<deletedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/1/clusters/mapping/($userID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List clusters
@@ -1497,13 +1548,14 @@ export def "1-clusters listClusters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<topUsers: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1/clusters")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for user IDs
@@ -1520,6 +1572,7 @@ export def "1-clusters-mapping-search searchUserIds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-query: string
   --clusterName: string # Cluster name. (e.g. c11-test)
   --page: int # Page of search results to retrieve. (default: 0)
@@ -1533,7 +1586,7 @@ export def "1-clusters-mapping-search searchUserIds" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get migration and user mapping status
@@ -1550,6 +1603,7 @@ export def "1-clusters-mapping-pending hasPendingMappings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --getClusters: oneof<nothing, bool> # Whether to include the cluster's pending mapping state in the response.
 ]: nothing -> record<pending: bool, clusters: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
@@ -1558,7 +1612,7 @@ export def "1-clusters-mapping-pending hasPendingMappings" [
   let full_url = (build-url $base "/1/clusters/mapping/pending" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List allowed sources
@@ -1573,13 +1627,14 @@ export def "1-security-sources get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<source: string, description: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1/security/sources")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace allowed sources
@@ -1594,6 +1649,7 @@ export def "1-security-sources replaceSources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<updatedAt: string> {
   let input = $in
@@ -1603,7 +1659,7 @@ export def "1-security-sources replaceSources" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a source
@@ -1618,6 +1674,7 @@ export def "1-security-sources-append appendSource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-source: string # IP address range of the source. (e.g. 10.0.0.1/32)
   --description: string # Source description. (e.g. Server subnet)
 ]: any -> any {
@@ -1629,7 +1686,7 @@ export def "1-security-sources-append appendSource" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a source
@@ -1645,13 +1702,14 @@ export def "1-security-sources delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<deletedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/1/security/sources/($source)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve log entries
@@ -1666,6 +1724,7 @@ export def "1-logs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # First log entry to retrieve. The most recent entries are listed first. (default: 0)
   --length: int # Maximum number of entries to retrieve. (default: 10)
   --indexName: string # Index for which to retrieve log entries. By default, log entries are retrieved for all indices.  (e.g. products)
@@ -1677,7 +1736,7 @@ export def "1-logs get" [
   let full_url = (build-url $base "/1/logs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check application task status
@@ -1693,13 +1752,14 @@ export def "1-task get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/1/task/($taskID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check task status
@@ -1716,13 +1776,14 @@ export def "1-indexes-task get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/1/indexes/($indexName)/task/($taskID)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Copy or move an index
@@ -1738,6 +1799,7 @@ export def "1-indexes-operation operationIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   operation: string@operation-completer # Operation to perform on the index. (e.g. copy)
   destination: string # Index name (case-sensitive). (e.g. products)
   --scope: list # **Only for copying.**  If you specify a scope, only the selected scopes are copied. Records and the other scopes are left unchanged. If you omit the `scope` parameter, everything is copied: records, settings, synonyms, and rules.
@@ -1750,7 +1812,7 @@ export def "1-indexes-operation operationIndex" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List indices
@@ -1765,6 +1827,7 @@ export def "1-indexes listIndices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Requested page of the API response. If `null`, the API response is not paginated.
   --hitsPerPage: int # Number of hits per page. (default: 100)
 ]: nothing -> record<items: table<name: string, createdAt: string, updatedAt: string, entries: int, dataSize: int, fileSize: int, lastBuildTimeS: int, numberOfPendingTasks: int, pendingTask: bool, primary: string, replicas: list, virtual: bool, abTest: record, sourceABTest: string>, nbPages: int> {
@@ -1774,7 +1837,7 @@ export def "1-indexes listIndices" [
   let full_url = (build-url $base "/1/indexes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Wait for an API key operation
@@ -1789,6 +1852,7 @@ export def "wait-for-api-key waitForApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # API key to wait for.
   --operation: string@operation-completer-1 # Whether the API key was created, updated, or deleted.
   --apiKey: record # Used to compare fields of the `getApiKey` response on an `update` operation, to check if the `key` has been updated.
@@ -1799,7 +1863,7 @@ export def "wait-for-api-key waitForApiKey" [
   let full_url = (build-url $base "/waitForApiKey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Wait for operation to complete
@@ -1814,6 +1878,7 @@ export def "wait-for-task waitForTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --indexName: string # The name of the index on which the operation was performed.
   --taskID: int # The taskID returned by the operation. (format: int64)
 ]: nothing -> record<status: string> {
@@ -1823,7 +1888,7 @@ export def "wait-for-task waitForTask" [
   let full_url = (build-url $base "/waitForTask" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Wait for application-level operation to complete
@@ -1838,6 +1903,7 @@ export def "wait-for-app-task waitForAppTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --taskID: int # The taskID returned by the operation. (format: int64)
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
@@ -1846,7 +1912,7 @@ export def "wait-for-app-task waitForAppTask" [
   let full_url = (build-url $base "/waitForAppTask" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all records from an index
@@ -1861,6 +1927,7 @@ export def "browse-objects browseObjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --indexName: string # The name of the index on which the operation was performed.
   --browseParams: string # Browse parameters.
 ]: nothing -> any {
@@ -1870,7 +1937,7 @@ export def "browse-objects browseObjects" [
   let full_url = (build-url $base "/browseObjects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create secured API keys
@@ -1885,6 +1952,7 @@ export def "generate-secured-api-key generateSecuredApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --parentApiKey: string # API key from which the secured API key will inherit its restrictions.
   --restrictions: record # Restrictions to add to the API key.
 ]: nothing -> string {
@@ -1894,7 +1962,7 @@ export def "generate-secured-api-key generateSecuredApiKey" [
   let full_url = (build-url $base "/generateSecuredApiKey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Copies the given `sourceIndexName` records, rules and synonyms to an other Algolia application for the given `destinationIndexName`
@@ -1909,6 +1977,7 @@ export def "account-copy-index accountCopyIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sourceIndexName: string # The name of the index to copy.
   --destinationAppID: string # The application ID to write the index to.
   --destinationApiKey: string # The API Key of the `destinationAppID` to write the index to, must have write ACLs.
@@ -1921,7 +1990,7 @@ export def "account-copy-index accountCopyIndex" [
   let full_url = (build-url $base "/accountCopyIndex" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace all records in an index
@@ -1936,6 +2005,7 @@ export def "replace-all-objects replaceAllObjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --indexName: string # The `indexName` to replace `objects` in.
   --objects: list # List of objects to replace the current objects with.
   --batchSize: int # The size of the chunk of `objects`. The number of `batch` calls will be equal to `length(objects) / batchSize`. Defaults to 1,000. (default: 1000)
@@ -1947,7 +2017,7 @@ export def "replace-all-objects replaceAllObjects" [
   let full_url = (build-url $base "/replaceAllObjects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace all records in an index
@@ -1962,6 +2032,7 @@ export def "replace-all-objects-with-transformation replaceAllObjectsWithTransfo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --indexName: string # The `indexName` to replace `objects` in.
   --objects: list # List of objects to replace the current objects with.
   --batchSize: int # The size of the chunk of `objects`. The number of `batch` calls will be equal to `length(objects) / batchSize`. Defaults to 1,000. (default: 1000)
@@ -1973,7 +2044,7 @@ export def "replace-all-objects-with-transformation replaceAllObjectsWithTransfo
   let full_url = (build-url $base "/replaceAllObjectsWithTransformation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace all records in an index
@@ -1988,6 +2059,7 @@ export def "chunked-batch chunkedBatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --indexName: string # The `indexName` to replace `objects` in.
   --objects: list # List of objects to replace the current objects with.
   --action: string@action-completer # The `batch` `action` to perform on the given array of `objects`, defaults to `addObject`.
@@ -2000,7 +2072,7 @@ export def "chunked-batch chunkedBatch" [
   let full_url = (build-url $base "/chunkedBatch" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Saves the given array of objects in the given index
@@ -2015,6 +2087,7 @@ export def "save-objects saveObjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --indexName: string # The `indexName` to save `objects` into.
   --objects: list # The objects to save in the index.
   --waitForTasks: oneof<nothing, bool> # Whether to wait until every `batch` task has been processed. This may take longer but is more reliable. (default: false)
@@ -2027,7 +2100,7 @@ export def "save-objects saveObjects" [
   let full_url = (build-url $base "/saveObjects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Save objects to an Algolia index by leveraging the Transformation pipeline setup using the Push connector (https://www.algolia.com/doc/guides/sending-and-managing-data/send-and-update-your-data/connectors/push)
@@ -2042,6 +2115,7 @@ export def "save-objects-with-transformation saveObjectsWithTransformation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --indexName: string # The `indexName` to save `objects` into.
   --objects: list # The objects to save in the index.
   --waitForTasks: oneof<nothing, bool> # Whether to wait until every `batch` task has been processed. This may take longer but is more reliable. (default: false)
@@ -2054,7 +2128,7 @@ export def "save-objects-with-transformation saveObjectsWithTransformation" [
   let full_url = (build-url $base "/saveObjectsWithTransformation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes every records for the given objectIDs
@@ -2069,6 +2143,7 @@ export def "delete-objects post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --indexName: string # The `indexName` to delete `objectIDs` from.
   --objectIDs: list # The objectIDs to delete.
   --waitForTasks: oneof<nothing, bool> # Whether to wait until every `batch` task has been processed. This may take longer but is more reliable.
@@ -2081,7 +2156,7 @@ export def "delete-objects post" [
   let full_url = (build-url $base "/deleteObjects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replaces object content of all the given objects according to their respective `objectID` field
@@ -2096,6 +2171,7 @@ export def "partial-update-objects partialUpdateObjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --indexName: string # The `indexName` where to update `objects`.
   --objects: list # The objects to update.
   --createIfNotExists: oneof<nothing, bool> # To be provided if non-existing objects are passed, otherwise, the call will fail. (default: false)
@@ -2109,7 +2185,7 @@ export def "partial-update-objects partialUpdateObjects" [
   let full_url = (build-url $base "/partialUpdateObjects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Save objects to an Algolia index by leveraging the Transformation pipeline setup using the Push connector (https://www.algolia.com/doc/guides/sending-and-managing-data/send-and-update-your-data/connectors/push)
@@ -2124,6 +2200,7 @@ export def "partial-update-objects-with-transformation partialUpdateObjectsWithT
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --indexName: string # The `indexName` where to update `objects`.
   --objects: list # The objects to update.
   --createIfNotExists: oneof<nothing, bool> # To be provided if non-existing objects are passed, otherwise, the call will fail. (default: false)
@@ -2137,7 +2214,7 @@ export def "partial-update-objects-with-transformation partialUpdateObjectsWithT
   let full_url = (build-url $base "/partialUpdateObjectsWithTransformation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check if an index exists or not
@@ -2152,6 +2229,7 @@ export def "index-exists indexExists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --indexName: string # The name of the index to check.
 ]: nothing -> bool {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
@@ -2160,7 +2238,7 @@ export def "index-exists indexExists" [
   let full_url = (build-url $base "/indexExists" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Switch the API key used to authenticate requests
@@ -2175,6 +2253,7 @@ export def "set-client-api-key setClientApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --apiKey: string # API key to use for subsequent requests.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
@@ -2183,5 +2262,5 @@ export def "set-client-api-key setClientApiKey" [
   let full_url = (build-url $base "/setClientApiKey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

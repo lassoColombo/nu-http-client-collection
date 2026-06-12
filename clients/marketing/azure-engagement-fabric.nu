@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -69,7 +70,7 @@ def rank-completer [] { ["PrimaryKey" "SecondaryKey"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-engagement-fabric-operations List" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -102,6 +103,7 @@ export def "providers-microsoft-engagement-fabric-operations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version
 ]: nothing -> record<value: table<display: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -110,7 +112,7 @@ export def "providers-microsoft-engagement-fabric-operations List" [
   let full_url = (build-url $base "/providers/Microsoft.EngagementFabric/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List the EngagementFabric accounts in given subscription
@@ -126,6 +128,7 @@ export def "subscriptions-providers-microsoft-engagement-fabric-accounts List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version
 ]: nothing -> record<value: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -134,7 +137,7 @@ export def "subscriptions-providers-microsoft-engagement-fabric-accounts List" [
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.EngagementFabric/Accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List available SKUs of EngagementFabric resource
@@ -150,6 +153,7 @@ export def "subscriptions-providers-microsoft-engagement-fabric-skus List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version
 ]: nothing -> record<value: table<locationInfo: list, locations: list, name: string, resourceType: string, restrictions: list, tier: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -158,7 +162,7 @@ export def "subscriptions-providers-microsoft-engagement-fabric-skus List" [
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.EngagementFabric/skus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List EngagementFabric accounts in given resource group
@@ -175,6 +179,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version
 ]: nothing -> record<value: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -183,7 +188,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EngagementFabric/Accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the EngagementFabric account
@@ -201,6 +206,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -209,7 +215,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EngagementFabric/Accounts/($accountName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the EngagementFabric account
@@ -227,6 +233,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -235,7 +242,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EngagementFabric/Accounts/($accountName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update EngagementFabric account
@@ -253,6 +260,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version
   --tags: record # The tags of the resource
 ]: any -> record {
@@ -265,7 +273,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create or Update the EngagementFabric account
@@ -284,6 +292,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version
   location: string # The location of the resource
   sku: record # The EngagementFabric SKU — shape: {name: string, tier?: string}
@@ -298,7 +307,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List the EngagementFabric channels
@@ -316,6 +325,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version
 ]: nothing -> record<value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -324,7 +334,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EngagementFabric/Accounts/($accountName)/Channels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the EngagementFabric channel
@@ -343,6 +353,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -351,7 +362,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EngagementFabric/Accounts/($accountName)/Channels/($channelName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the EngagementFabric channel
@@ -370,6 +381,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version
 ]: nothing -> record<properties: record<channelFunctions: list<string>, channelType: string, credentials: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -378,7 +390,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EngagementFabric/Accounts/($accountName)/Channels/($channelName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or Update the EngagementFabric channel
@@ -398,6 +410,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version
   --properties: record # The EngagementFabric channel properties — shape: {channelFunctions?: list, channelType: string, credentials?: record}
 ]: any -> record<properties: record<channelFunctions: list<string>, channelType: string, credentials: record>> {
@@ -410,7 +423,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List available EngagementFabric channel types and functions
@@ -428,6 +441,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version
 ]: nothing -> record<value: table<channelDescription: string, channelFunctions: list, channelType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -436,7 +450,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EngagementFabric/Accounts/($accountName)/listChannelTypes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List keys of the EngagementFabric account
@@ -454,6 +468,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version
 ]: nothing -> record<value: table<name: string, rank: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -462,7 +477,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EngagementFabric/Accounts/($accountName)/listKeys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Regenerate key of the EngagementFabric account
@@ -480,6 +495,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version
   name: string # The name of key to be regenerated
   rank: string@rank-completer # The rank of the EngagementFabric account key
@@ -493,7 +509,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check availability of EngagementFabric resource
@@ -510,6 +526,7 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API version
   name: string # The name to be checked
   type: string # The fully qualified resource type for the name to be checked
@@ -523,5 +540,5 @@ export def "subscriptions-resource-groups-providers-microsoft-engagement-fabric-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

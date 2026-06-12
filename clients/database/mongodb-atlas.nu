@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -92,7 +93,7 @@ def orderBy-completer [] { ["asc" "desc"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "atlas get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -125,6 +126,7 @@ export def "atlas get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -134,7 +136,7 @@ export def "atlas get" [
   let full_url = (build-url $base "/api/atlas/v2" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Alert Configuration Matchers Field Names
@@ -149,6 +151,7 @@ export def "atlas-alert-configs-matchers-field-names listAlertConfigMatcherField
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -158,7 +161,7 @@ export def "atlas-alert-configs-matchers-field-names listAlertConfigMatcherField
   let full_url = (build-url $base "/api/atlas/v2/alertConfigs/matchers/fieldNames" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Authorized Clusters in All Projects
@@ -173,6 +176,7 @@ export def "atlas-clusters listClusterDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -185,7 +189,7 @@ export def "atlas-clusters listClusterDetails" [
   let full_url = (build-url $base "/api/atlas/v2/clusters" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Descriptions of User-Configurable Project Limits
@@ -200,6 +204,7 @@ export def "atlas-default-group-limits listDefaultGroupLimits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
@@ -211,7 +216,7 @@ export def "atlas-default-group-limits listDefaultGroupLimits" [
   let full_url = (build-url $base "/api/atlas/v2/defaultGroupLimits" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One User-Configurable Project Limit and Description
@@ -227,6 +232,7 @@ export def "atlas-default-group-limits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -236,7 +242,7 @@ export def "atlas-default-group-limits get" [
   let full_url = (build-url $base $"/api/atlas/v2/defaultGroupLimits/($limitName)" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Event Types
@@ -251,6 +257,7 @@ export def "atlas-event-types listEventTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -263,7 +270,7 @@ export def "atlas-event-types listEventTypes" [
   let full_url = (build-url $base "/api/atlas/v2/eventTypes" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete One Federation Settings Instance
@@ -279,13 +286,14 @@ export def "atlas-federation-settings delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/atlas/v2/federationSettings/($federationSettingsId)")
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Organization Configurations from One Federation
@@ -301,6 +309,7 @@ export def "atlas-federation-settings-connected-org-configs listFederationSettin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
@@ -311,7 +320,7 @@ export def "atlas-federation-settings-connected-org-configs listFederationSettin
   let full_url = (build-url $base $"/api/atlas/v2/federationSettings/($federationSettingsId)/connectedOrgConfigs" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove One Organization Configuration from One Federation
@@ -328,6 +337,7 @@ export def "atlas-federation-settings-connected-org-configs removeFederationSett
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -336,7 +346,7 @@ export def "atlas-federation-settings-connected-org-configs removeFederationSett
   let full_url = (build-url $base $"/api/atlas/v2/federationSettings/($federationSettingsId)/connectedOrgConfigs/($orgId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Organization Configuration from One Federation
@@ -353,6 +363,7 @@ export def "atlas-federation-settings-connected-org-configs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -361,7 +372,7 @@ export def "atlas-federation-settings-connected-org-configs get" [
   let full_url = (build-url $base $"/api/atlas/v2/federationSettings/($federationSettingsId)/connectedOrgConfigs/($orgId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Organization Configuration in One Federation
@@ -378,6 +389,7 @@ export def "atlas-federation-settings-connected-org-configs updateFederationSett
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
@@ -389,7 +401,7 @@ export def "atlas-federation-settings-connected-org-configs updateFederationSett
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Role Mappings from One Organization
@@ -406,6 +418,7 @@ export def "atlas-federation-settings-connected-org-configs-role-mappings listFe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -414,7 +427,7 @@ export def "atlas-federation-settings-connected-org-configs-role-mappings listFe
   let full_url = (build-url $base $"/api/atlas/v2/federationSettings/($federationSettingsId)/connectedOrgConfigs/($orgId)/roleMappings" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Role Mapping in One Organization Configuration
@@ -431,6 +444,7 @@ export def "atlas-federation-settings-connected-org-configs-role-mappings create
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
@@ -442,7 +456,7 @@ export def "atlas-federation-settings-connected-org-configs-role-mappings create
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Remove One Role Mapping from One Organization
@@ -460,6 +474,7 @@ export def "atlas-federation-settings-connected-org-configs-role-mappings delete
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -468,7 +483,7 @@ export def "atlas-federation-settings-connected-org-configs-role-mappings delete
   let full_url = (build-url $base $"/api/atlas/v2/federationSettings/($federationSettingsId)/connectedOrgConfigs/($orgId)/roleMappings/($id)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Role Mapping from One Organization
@@ -486,6 +501,7 @@ export def "atlas-federation-settings-connected-org-configs-role-mappings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -494,7 +510,7 @@ export def "atlas-federation-settings-connected-org-configs-role-mappings get" [
   let full_url = (build-url $base $"/api/atlas/v2/federationSettings/($federationSettingsId)/connectedOrgConfigs/($orgId)/roleMappings/($id)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Role Mapping in One Organization
@@ -512,6 +528,7 @@ export def "atlas-federation-settings-connected-org-configs-role-mappings update
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
@@ -523,7 +540,7 @@ export def "atlas-federation-settings-connected-org-configs-role-mappings update
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Identity Providers in One Federation
@@ -539,6 +556,7 @@ export def "atlas-federation-settings-identity-providers listFederationSettingId
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
@@ -551,7 +569,7 @@ export def "atlas-federation-settings-identity-providers listFederationSettingId
   let full_url = (build-url $base $"/api/atlas/v2/federationSettings/($federationSettingsId)/identityProviders" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Identity Provider
@@ -567,6 +585,7 @@ export def "atlas-federation-settings-identity-providers createFederationSetting
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
@@ -578,7 +597,7 @@ export def "atlas-federation-settings-identity-providers createFederationSetting
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-11-15+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-11-15+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-11-15+json" $body
 }
 
 # Delete One Identity Provider
@@ -596,6 +615,7 @@ export def "atlas-federation-settings-identity-providers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -604,7 +624,7 @@ export def "atlas-federation-settings-identity-providers delete" [
   let full_url = (build-url $base $"/api/atlas/v2/federationSettings/($federationSettingsId)/identityProviders/($identityProviderId)" $qp)
   let accept_val = "application/vnd.atlas.2023-11-15+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Identity Provider by ID
@@ -621,6 +641,7 @@ export def "atlas-federation-settings-identity-providers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
@@ -630,7 +651,7 @@ export def "atlas-federation-settings-identity-providers get" [
   let full_url = (build-url $base $"/api/atlas/v2/federationSettings/($federationSettingsId)/identityProviders/($identityProviderId)" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Identity Provider
@@ -647,6 +668,7 @@ export def "atlas-federation-settings-identity-providers updateFederationSetting
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
@@ -659,7 +681,7 @@ export def "atlas-federation-settings-identity-providers updateFederationSetting
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Revoke JWKS from One OIDC Identity Provider
@@ -677,6 +699,7 @@ export def "atlas-federation-settings-identity-providers-jwks revokeFederationSe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -685,7 +708,7 @@ export def "atlas-federation-settings-identity-providers-jwks revokeFederationSe
   let full_url = (build-url $base $"/api/atlas/v2/federationSettings/($federationSettingsId)/identityProviders/($identityProviderId)/jwks" $qp)
   let accept_val = "application/vnd.atlas.2023-11-15+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Metadata of One Identity Provider
@@ -702,13 +725,14 @@ export def "atlas-federation-settings-identity-providers-metadataxml get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/atlas/v2/federationSettings/($federationSettingsId)/identityProviders/($identityProviderId)/metadata.xml")
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Projects
@@ -723,6 +747,7 @@ export def "atlas-groups listGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -735,7 +760,7 @@ export def "atlas-groups listGroups" [
   let full_url = (build-url $base "/api/atlas/v2/groups" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Project
@@ -750,6 +775,7 @@ export def "atlas-groups createGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --projectOwnerId: string # Unique 24-hexadecimal digit string that identifies the MongoDB Cloud user to whom to grant the Project Owner role on the specified project. If you set this parameter, it overrides the default value of the oldest Organization Owner.
@@ -763,7 +789,7 @@ export def "atlas-groups createGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return One Project by Name
@@ -779,6 +805,7 @@ export def "atlas-groups-by-name get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -788,7 +815,7 @@ export def "atlas-groups-by-name get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/byName/($groupName)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove One Project
@@ -804,6 +831,7 @@ export def "atlas-groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -813,7 +841,7 @@ export def "atlas-groups delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Project
@@ -829,6 +857,7 @@ export def "atlas-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -838,7 +867,7 @@ export def "atlas-groups get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Project
@@ -854,6 +883,7 @@ export def "atlas-groups updateGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -866,7 +896,7 @@ export def "atlas-groups updateGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Add One MongoDB Cloud User to One Project
@@ -884,6 +914,7 @@ export def "atlas-groups-access addGroupAccessUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
@@ -896,7 +927,7 @@ export def "atlas-groups-access addGroupAccessUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-02-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-02-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-02-01+json" $body
 }
 
 # Return All Project IP Access List Entries
@@ -913,6 +944,7 @@ export def "atlas-groups-access-list listGroupAccessListEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -925,7 +957,7 @@ export def "atlas-groups-access-list listGroupAccessListEntries" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/accessList" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Entries to Project IP Access List
@@ -942,6 +974,7 @@ export def "atlas-groups-access-list createGroupAccessListEntry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -957,7 +990,7 @@ export def "atlas-groups-access-list createGroupAccessListEntry" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Remove One Entry from One Project IP Access List
@@ -975,6 +1008,7 @@ export def "atlas-groups-access-list delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -984,7 +1018,7 @@ export def "atlas-groups-access-list delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/accessList/($entryValue)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Project IP Access List Entry
@@ -1002,6 +1036,7 @@ export def "atlas-groups-access-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -1011,7 +1046,7 @@ export def "atlas-groups-access-list get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/accessList/($entryValue)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Status of One Project IP Access List Entry
@@ -1028,6 +1063,7 @@ export def "atlas-groups-access-list-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -1037,7 +1073,7 @@ export def "atlas-groups-access-list-status get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/accessList/($entryValue)/status" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Pre-Filtered Activity Feed Link for One Project
@@ -1053,6 +1089,7 @@ export def "atlas-groups-activity-feed get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --eventType: list # Category of incident recorded at this moment in time.  **IMPORTANT**: The complete list of event type values changes frequently.
   --maxDate: string # End date and time for events to include in the activity feed link. ISO 8601 timestamp format in UTC. (format: date-time)
@@ -1065,7 +1102,7 @@ export def "atlas-groups-activity-feed get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/activityFeed" $qp)
   let accept_val = "application/vnd.atlas.2025-03-12+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return AI Model API Keys for One Group
@@ -1081,6 +1118,7 @@ export def "atlas-groups-ai-model-api-keys listGroupAiModelApiKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
@@ -1092,7 +1130,7 @@ export def "atlas-groups-ai-model-api-keys listGroupAiModelApiKeys" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/aiModelApiKeys" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create New AI Model API Key
@@ -1108,6 +1146,7 @@ export def "atlas-groups-ai-model-api-keys createGroupAiModelApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -1120,7 +1159,7 @@ export def "atlas-groups-ai-model-api-keys createGroupAiModelApiKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.preview+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.preview+json" $body
 }
 
 # Delete Existing AI Model API Key
@@ -1137,6 +1176,7 @@ export def "atlas-groups-ai-model-api-keys delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -1146,7 +1186,7 @@ export def "atlas-groups-ai-model-api-keys delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/aiModelApiKeys/($apiKeyId)" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Single AI Model API Key for One Group
@@ -1163,6 +1203,7 @@ export def "atlas-groups-ai-model-api-keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -1172,7 +1213,7 @@ export def "atlas-groups-ai-model-api-keys get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/aiModelApiKeys/($apiKeyId)" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Existing AI Model API Key
@@ -1189,6 +1230,7 @@ export def "atlas-groups-ai-model-api-keys updateGroupAiModelApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -1201,7 +1243,7 @@ export def "atlas-groups-ai-model-api-keys updateGroupAiModelApiKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.preview+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.preview+json" $body
 }
 
 # Return AI Model Rate Limits for One Group
@@ -1217,6 +1259,7 @@ export def "atlas-groups-ai-model-rate-limits listGroupAiModelRateLimits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
@@ -1228,7 +1271,7 @@ export def "atlas-groups-ai-model-rate-limits listGroupAiModelRateLimits" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/aiModelRateLimits" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Single AI Model Rate Limit for One Group
@@ -1245,6 +1288,7 @@ export def "atlas-groups-ai-model-rate-limits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -1254,7 +1298,7 @@ export def "atlas-groups-ai-model-rate-limits get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/aiModelRateLimits/($modelGroupName)" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update AI Model Rate Limit
@@ -1271,6 +1315,7 @@ export def "atlas-groups-ai-model-rate-limits updateGroupAiModelRateLimit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -1283,7 +1328,7 @@ export def "atlas-groups-ai-model-rate-limits updateGroupAiModelRateLimit" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.preview+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.preview+json" $body
 }
 
 # Reset AI Model Rate Limit for One Model Group
@@ -1300,6 +1345,7 @@ export def "atlas-groups-ai-model-rate-limits resetGroupAiModelRateLimit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -1309,7 +1355,7 @@ export def "atlas-groups-ai-model-rate-limits resetGroupAiModelRateLimit" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/aiModelRateLimits/($modelGroupName):reset" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reset AI Model Rate Limits for Group
@@ -1325,6 +1371,7 @@ export def "atlas-groups-ai-model-rate-limits-reset resetGroupAiModelRateLimits"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -1334,7 +1381,7 @@ export def "atlas-groups-ai-model-rate-limits-reset resetGroupAiModelRateLimits"
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/aiModelRateLimits:reset" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Alert Configurations in One Project
@@ -1350,6 +1397,7 @@ export def "atlas-groups-alert-configs listGroupAlertConfigs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -1362,7 +1410,7 @@ export def "atlas-groups-alert-configs listGroupAlertConfigs" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/alertConfigs" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Alert Configuration in One Project
@@ -1378,6 +1426,7 @@ export def "atlas-groups-alert-configs createGroupAlertConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -1390,7 +1439,7 @@ export def "atlas-groups-alert-configs createGroupAlertConfig" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Remove One Alert Configuration from One Project
@@ -1408,6 +1457,7 @@ export def "atlas-groups-alert-configs delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -1417,7 +1467,7 @@ export def "atlas-groups-alert-configs delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/alertConfigs/($alertConfigId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Alert Configuration from One Project
@@ -1435,6 +1485,7 @@ export def "atlas-groups-alert-configs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -1444,7 +1495,7 @@ export def "atlas-groups-alert-configs get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/alertConfigs/($alertConfigId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Toggle State of One Alert Configuration in One Project
@@ -1462,6 +1513,7 @@ export def "atlas-groups-alert-configs toggleGroupAlertConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -1474,7 +1526,7 @@ export def "atlas-groups-alert-configs toggleGroupAlertConfig" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Update One Alert Configuration in One Project
@@ -1492,6 +1544,7 @@ export def "atlas-groups-alert-configs updateGroupAlertConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -1504,7 +1557,7 @@ export def "atlas-groups-alert-configs updateGroupAlertConfig" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Open Alerts for One Alert Configuration
@@ -1522,6 +1575,7 @@ export def "atlas-groups-alert-configs-alerts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -1534,7 +1588,7 @@ export def "atlas-groups-alert-configs-alerts get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/alertConfigs/($alertConfigId)/alerts" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Alerts from One Project
@@ -1550,6 +1604,7 @@ export def "atlas-groups-alerts listGroupAlerts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -1563,7 +1618,7 @@ export def "atlas-groups-alerts listGroupAlerts" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/alerts" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Alert from One Project
@@ -1581,6 +1636,7 @@ export def "atlas-groups-alerts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -1590,7 +1646,7 @@ export def "atlas-groups-alerts get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/alerts/($alertId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Acknowledge One Alert from One Project
@@ -1608,6 +1664,7 @@ export def "atlas-groups-alerts acknowledgeGroupAlert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -1621,7 +1678,7 @@ export def "atlas-groups-alerts acknowledgeGroupAlert" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Alert Configurations Set for One Alert
@@ -1639,6 +1696,7 @@ export def "atlas-groups-alerts-alert-configs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
@@ -1651,7 +1709,7 @@ export def "atlas-groups-alerts-alert-configs get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/alerts/($alertId)/alertConfigs" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Organization API Keys Assigned to One Project
@@ -1668,6 +1726,7 @@ export def "atlas-groups-api-keys listGroupApiKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -1680,7 +1739,7 @@ export def "atlas-groups-api-keys listGroupApiKeys" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/apiKeys" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create and Assign One Organization API Key to One Project
@@ -1696,6 +1755,7 @@ export def "atlas-groups-api-keys createGroupApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -1708,7 +1768,7 @@ export def "atlas-groups-api-keys createGroupApiKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Unassign One Organization API Key from One Project
@@ -1726,6 +1786,7 @@ export def "atlas-groups-api-keys removeGroupApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -1735,7 +1796,7 @@ export def "atlas-groups-api-keys removeGroupApiKey" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/apiKeys/($apiUserId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Organization API Key Roles for One Project
@@ -1752,6 +1813,7 @@ export def "atlas-groups-api-keys updateGroupApiKeyRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
@@ -1767,7 +1829,7 @@ export def "atlas-groups-api-keys updateGroupApiKeyRoles" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Assign One Organization API Key to One Project
@@ -1784,6 +1846,7 @@ export def "atlas-groups-api-keys addGroupApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -1796,7 +1859,7 @@ export def "atlas-groups-api-keys addGroupApiKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return Auditing Configuration for One Project
@@ -1812,6 +1875,7 @@ export def "atlas-groups-audit-log get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -1821,7 +1885,7 @@ export def "atlas-groups-audit-log get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/auditLog" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Auditing Configuration for One Project
@@ -1837,6 +1901,7 @@ export def "atlas-groups-audit-log updateGroupAuditLog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -1849,7 +1914,7 @@ export def "atlas-groups-audit-log updateGroupAuditLog" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return One Custom DNS Configuration for Atlas Clusters on AWS
@@ -1865,6 +1930,7 @@ export def "atlas-groups-aws-custom-dns get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -1874,7 +1940,7 @@ export def "atlas-groups-aws-custom-dns get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/awsCustomDNS" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update State of One Custom DNS Configuration for Atlas Clusters on AWS
@@ -1890,6 +1956,7 @@ export def "atlas-groups-aws-custom-dns toggleGroupAwsCustomDns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -1902,7 +1969,7 @@ export def "atlas-groups-aws-custom-dns toggleGroupAwsCustomDns" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Snapshot Export Buckets
@@ -1918,6 +1985,7 @@ export def "atlas-groups-backup-export-buckets listGroupBackupExportBuckets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
@@ -1931,7 +1999,7 @@ export def "atlas-groups-backup-export-buckets listGroupBackupExportBuckets" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/backup/exportBuckets" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Snapshot Export Bucket
@@ -1947,6 +2015,7 @@ export def "atlas-groups-backup-export-buckets createGroupBackupExportBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -1960,7 +2029,7 @@ export def "atlas-groups-backup-export-buckets createGroupBackupExportBucket" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Delete One Snapshot Export Bucket
@@ -1977,6 +2046,7 @@ export def "atlas-groups-backup-export-buckets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1985,7 +2055,7 @@ export def "atlas-groups-backup-export-buckets delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/backup/exportBuckets/($exportBucketId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Snapshot Export Bucket
@@ -2002,6 +2072,7 @@ export def "atlas-groups-backup-export-buckets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
@@ -2011,7 +2082,7 @@ export def "atlas-groups-backup-export-buckets get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/backup/exportBuckets/($exportBucketId)" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Export Bucket Private Networking Settings
@@ -2028,6 +2099,7 @@ export def "atlas-groups-backup-export-buckets updateGroupBackupExportBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -2040,7 +2112,7 @@ export def "atlas-groups-backup-export-buckets updateGroupBackupExportBucket" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-05-30+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-05-30+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-05-30+json" $body
 }
 
 # Return Object Storage Private Endpoints for Cloud Backups for One Cloud Provider in One Project
@@ -2057,6 +2129,7 @@ export def "atlas-groups-backup-private-endpoints listGroupBackupPrivateEndpoint
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
@@ -2069,7 +2142,7 @@ export def "atlas-groups-backup-private-endpoints listGroupBackupPrivateEndpoint
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/backup/($cloudProvider)/privateEndpoints" $qp)
   let accept_val = "application/vnd.atlas.2024-11-13+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Object Storage Private Endpoint for Cloud Backups for One Cloud Provider in One Project
@@ -2086,6 +2159,7 @@ export def "atlas-groups-backup-private-endpoints createGroupBackupPrivateEndpoi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
@@ -2098,7 +2172,7 @@ export def "atlas-groups-backup-private-endpoints createGroupBackupPrivateEndpoi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-11-13+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-11-13+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-11-13+json" $body
 }
 
 # Delete One Object Storage Private Endpoint for Cloud Backups for One Cloud Provider from One Project
@@ -2116,6 +2190,7 @@ export def "atlas-groups-backup-private-endpoints delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
@@ -2125,7 +2200,7 @@ export def "atlas-groups-backup-private-endpoints delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/backup/($cloudProvider)/privateEndpoints/($endpointId)" $qp)
   let accept_val = "application/vnd.atlas.2024-11-13+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Object Storage Private Endpoint for Cloud Backups for One Cloud Provider in One Project
@@ -2143,6 +2218,7 @@ export def "atlas-groups-backup-private-endpoints get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
@@ -2152,7 +2228,7 @@ export def "atlas-groups-backup-private-endpoints get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/backup/($cloudProvider)/privateEndpoints/($endpointId)" $qp)
   let accept_val = "application/vnd.atlas.2024-11-13+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disable Backup Compliance Policy Settings
@@ -2168,6 +2244,7 @@ export def "atlas-groups-backup-compliance-policy disableGroupBackupCompliancePo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -2177,7 +2254,7 @@ export def "atlas-groups-backup-compliance-policy disableGroupBackupCompliancePo
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/backupCompliancePolicy" $qp)
   let accept_val = "application/vnd.atlas.2024-11-13+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Backup Compliance Policy Settings
@@ -2193,6 +2270,7 @@ export def "atlas-groups-backup-compliance-policy get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -2203,7 +2281,7 @@ export def "atlas-groups-backup-compliance-policy get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/backupCompliancePolicy" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Backup Compliance Policy Settings
@@ -2219,6 +2297,7 @@ export def "atlas-groups-backup-compliance-policy updateGroupBackupCompliancePol
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --overwriteBackupPolicies: oneof<nothing, bool> # Flag that indicates whether to overwrite non complying backup policies with the new data protection settings or not. (default: true)
@@ -2233,7 +2312,7 @@ export def "atlas-groups-backup-compliance-policy updateGroupBackupCompliancePol
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Cloud Provider Access Roles
@@ -2249,6 +2328,7 @@ export def "atlas-groups-cloud-provider-access listGroupCloudProviderAccess" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -2258,7 +2338,7 @@ export def "atlas-groups-cloud-provider-access listGroupCloudProviderAccess" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/cloudProviderAccess" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Cloud Provider Access Role
@@ -2275,6 +2355,7 @@ export def "atlas-groups-cloud-provider-access createGroupCloudProviderAccess" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -2287,7 +2368,7 @@ export def "atlas-groups-cloud-provider-access createGroupCloudProviderAccess" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Deauthorize One Cloud Provider Access Role
@@ -2305,6 +2386,7 @@ export def "atlas-groups-cloud-provider-access deauthorizeGroupCloudProviderAcce
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -2314,7 +2396,7 @@ export def "atlas-groups-cloud-provider-access deauthorizeGroupCloudProviderAcce
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/cloudProviderAccess/($cloudProvider)/($roleId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Cloud Provider Access Role
@@ -2331,6 +2413,7 @@ export def "atlas-groups-cloud-provider-access get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -2340,7 +2423,7 @@ export def "atlas-groups-cloud-provider-access get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/cloudProviderAccess/($roleId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Authorize One Cloud Provider Access Role
@@ -2358,6 +2441,7 @@ export def "atlas-groups-cloud-provider-access authorizeGroupCloudProviderAccess
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -2370,7 +2454,7 @@ export def "atlas-groups-cloud-provider-access authorizeGroupCloudProviderAccess
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Validate One Cluster Configuration
@@ -2386,6 +2470,7 @@ export def "atlas-groups-cluster-configurations-validate validateGroupClusterCon
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -2398,7 +2483,7 @@ export def "atlas-groups-cluster-configurations-validate validateGroupClusterCon
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2025-03-12+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2025-03-12+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2025-03-12+json" $body
 }
 
 # Return All Clusters in One Project
@@ -2415,6 +2500,7 @@ export def "atlas-groups-clusters listGroupClusters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-3 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
@@ -2432,7 +2518,7 @@ export def "atlas-groups-clusters listGroupClusters" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Cluster in One Project
@@ -2449,6 +2535,7 @@ export def "atlas-groups-clusters createGroupCluster" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-4 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -2466,7 +2553,7 @@ export def "atlas-groups-clusters createGroupCluster" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Cloud Provider Regions
@@ -2482,6 +2569,7 @@ export def "atlas-groups-clusters-provider-regions listGroupClusterProviderRegio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -2496,7 +2584,7 @@ export def "atlas-groups-clusters-provider-regions listGroupClusterProviderRegio
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/provider/regions" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upgrade One Shared-Tier Cluster
@@ -2513,6 +2601,7 @@ export def "atlas-groups-clusters-tenant-upgrade upgradeGroupClusterTenantUpgrad
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -2525,7 +2614,7 @@ export def "atlas-groups-clusters-tenant-upgrade upgradeGroupClusterTenantUpgrad
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Upgrade One Shared-Tier Cluster to One Serverless Instance
@@ -2544,6 +2633,7 @@ export def "atlas-groups-clusters-tenant-upgrade-to-serverless upgradeGroupClust
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -2556,7 +2646,7 @@ export def "atlas-groups-clusters-tenant-upgrade-to-serverless upgradeGroupClust
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Remove One Cluster from One Project
@@ -2574,6 +2664,7 @@ export def "atlas-groups-clusters delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-5 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -2585,7 +2676,7 @@ export def "atlas-groups-clusters delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Cluster from One Project
@@ -2603,6 +2694,7 @@ export def "atlas-groups-clusters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-3 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -2617,7 +2709,7 @@ export def "atlas-groups-clusters get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Cluster in One Project
@@ -2634,6 +2726,7 @@ export def "atlas-groups-clusters updateGroupCluster" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-4 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -2651,7 +2744,7 @@ export def "atlas-groups-clusters updateGroupCluster" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return Auto Scaling Configuration for One Sharded Cluster
@@ -2670,6 +2763,7 @@ export def "atlas-groups-clusters-auto-scaling-configuration autoGroupClusterSca
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -2679,7 +2773,7 @@ export def "atlas-groups-clusters-auto-scaling-configuration autoGroupClusterSca
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/autoScalingConfiguration" $qp)
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Snapshot Export Jobs
@@ -2696,6 +2790,7 @@ export def "atlas-groups-clusters-backup-exports listGroupClusterBackupExports" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
@@ -2708,7 +2803,7 @@ export def "atlas-groups-clusters-backup-exports listGroupClusterBackupExports" 
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/backup/exports" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Snapshot Export Job
@@ -2725,6 +2820,7 @@ export def "atlas-groups-clusters-backup-exports createGroupClusterBackupExport"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
@@ -2736,7 +2832,7 @@ export def "atlas-groups-clusters-backup-exports createGroupClusterBackupExport"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return One Snapshot Export Job
@@ -2754,6 +2850,7 @@ export def "atlas-groups-clusters-backup-exports get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2762,7 +2859,7 @@ export def "atlas-groups-clusters-backup-exports get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/backup/exports/($exportId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Restore Jobs for One Cluster
@@ -2779,6 +2876,7 @@ export def "atlas-groups-clusters-backup-restore-jobs listGroupClusterBackupRest
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -2791,7 +2889,7 @@ export def "atlas-groups-clusters-backup-restore-jobs listGroupClusterBackupRest
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/backup/restoreJobs" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Restore Job of One Cluster
@@ -2808,6 +2906,7 @@ export def "atlas-groups-clusters-backup-restore-jobs createGroupClusterBackupRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -2820,7 +2919,7 @@ export def "atlas-groups-clusters-backup-restore-jobs createGroupClusterBackupRe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Cancel One Restore Job for One Cluster
@@ -2838,6 +2937,7 @@ export def "atlas-groups-clusters-backup-restore-jobs cancelGroupClusterBackupRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -2847,7 +2947,7 @@ export def "atlas-groups-clusters-backup-restore-jobs cancelGroupClusterBackupRe
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/backup/restoreJobs/($restoreJobId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Restore Job for One Cluster
@@ -2865,6 +2965,7 @@ export def "atlas-groups-clusters-backup-restore-jobs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -2874,7 +2975,7 @@ export def "atlas-groups-clusters-backup-restore-jobs get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/backup/restoreJobs/($restoreJobId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove All Cloud Backup Schedules
@@ -2891,6 +2992,7 @@ export def "atlas-groups-clusters-backup-schedule delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-6 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
@@ -2900,7 +3002,7 @@ export def "atlas-groups-clusters-backup-schedule delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/backup/schedule" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Cloud Backup Schedule
@@ -2917,6 +3019,7 @@ export def "atlas-groups-clusters-backup-schedule get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-6 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -2927,7 +3030,7 @@ export def "atlas-groups-clusters-backup-schedule get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/backup/schedule" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Cloud Backup Schedule for One Cluster
@@ -2944,6 +3047,7 @@ export def "atlas-groups-clusters-backup-schedule updateGroupClusterBackupSchedu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-6 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -2957,7 +3061,7 @@ export def "atlas-groups-clusters-backup-schedule updateGroupClusterBackupSchedu
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Replica Set Cloud Backups
@@ -2974,6 +3078,7 @@ export def "atlas-groups-clusters-backup-snapshots listGroupClusterBackupSnapsho
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -2989,7 +3094,7 @@ export def "atlas-groups-clusters-backup-snapshots listGroupClusterBackupSnapsho
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/backup/snapshots" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Take One On-Demand Snapshot
@@ -3006,6 +3111,7 @@ export def "atlas-groups-clusters-backup-snapshots takeGroupClusterBackupSnapsho
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -3018,7 +3124,7 @@ export def "atlas-groups-clusters-backup-snapshots takeGroupClusterBackupSnapsho
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Remove One Sharded Cluster Cloud Backup
@@ -3036,6 +3142,7 @@ export def "atlas-groups-clusters-backup-snapshots-sharded-cluster delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -3045,7 +3152,7 @@ export def "atlas-groups-clusters-backup-snapshots-sharded-cluster delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/backup/snapshots/shardedCluster/($snapshotId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Sharded Cluster Cloud Backup
@@ -3063,6 +3170,7 @@ export def "atlas-groups-clusters-backup-snapshots-sharded-cluster get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -3072,7 +3180,7 @@ export def "atlas-groups-clusters-backup-snapshots-sharded-cluster get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/backup/snapshots/shardedCluster/($snapshotId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Sharded Cluster Cloud Backups
@@ -3089,6 +3197,7 @@ export def "atlas-groups-clusters-backup-snapshots-sharded-clusters listGroupClu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -3098,7 +3207,7 @@ export def "atlas-groups-clusters-backup-snapshots-sharded-clusters listGroupClu
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/backup/snapshots/shardedClusters" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove One Replica Set Cloud Backup
@@ -3116,6 +3225,7 @@ export def "atlas-groups-clusters-backup-snapshots delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -3125,7 +3235,7 @@ export def "atlas-groups-clusters-backup-snapshots delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/backup/snapshots/($snapshotId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Replica Set Cloud Backup
@@ -3143,6 +3253,7 @@ export def "atlas-groups-clusters-backup-snapshots get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -3152,7 +3263,7 @@ export def "atlas-groups-clusters-backup-snapshots get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/backup/snapshots/($snapshotId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Expiration Date for One Cloud Backup
@@ -3170,6 +3281,7 @@ export def "atlas-groups-clusters-backup-snapshots updateGroupClusterBackupSnaps
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -3182,7 +3294,7 @@ export def "atlas-groups-clusters-backup-snapshots updateGroupClusterBackupSnaps
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return Databases in One Snapshot
@@ -3200,6 +3312,7 @@ export def "atlas-groups-clusters-backup-snapshots-databases listGroupClusterBac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -3212,7 +3325,7 @@ export def "atlas-groups-clusters-backup-snapshots-databases listGroupClusterBac
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/backup/snapshots/($snapshotId)/databases" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Database in One Snapshot
@@ -3231,6 +3344,7 @@ export def "atlas-groups-clusters-backup-snapshots-databases get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -3240,7 +3354,7 @@ export def "atlas-groups-clusters-backup-snapshots-databases get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/backup/snapshots/($snapshotId)/databases/($databaseName)" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Collections in One Database in One Snapshot
@@ -3259,6 +3373,7 @@ export def "atlas-groups-clusters-backup-snapshots-databases-collections listGro
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -3271,7 +3386,7 @@ export def "atlas-groups-clusters-backup-snapshots-databases-collections listGro
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/backup/snapshots/($snapshotId)/databases/($databaseName)/collections" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Collection in One Database in One Snapshot
@@ -3291,6 +3406,7 @@ export def "atlas-groups-clusters-backup-snapshots-databases-collections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -3300,7 +3416,7 @@ export def "atlas-groups-clusters-backup-snapshots-databases-collections get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/backup/snapshots/($snapshotId)/databases/($databaseName)/collections/($collectionName)" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Legacy Backup Checkpoints
@@ -3319,6 +3435,7 @@ export def "atlas-groups-clusters-backup-checkpoints listGroupClusterBackupCheck
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -3331,7 +3448,7 @@ export def "atlas-groups-clusters-backup-checkpoints listGroupClusterBackupCheck
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/backupCheckpoints" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Legacy Backup Checkpoint
@@ -3351,6 +3468,7 @@ export def "atlas-groups-clusters-backup-checkpoints get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -3360,7 +3478,7 @@ export def "atlas-groups-clusters-backup-checkpoints get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/backupCheckpoints/($checkpointId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Pinned Namespaces
@@ -3377,6 +3495,7 @@ export def "atlas-groups-clusters-coll-stats-pinned listGroupClusterCollStatPinn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3385,7 +3504,7 @@ export def "atlas-groups-clusters-coll-stats-pinned listGroupClusterCollStatPinn
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/collStats/pinned" $qp)
   let accept_val = "application/vnd.atlas.2023-11-15+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Pinned Namespaces
@@ -3402,6 +3521,7 @@ export def "atlas-groups-clusters-coll-stats-pinned updateGroupClusterCollStatPi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
@@ -3413,7 +3533,7 @@ export def "atlas-groups-clusters-coll-stats-pinned updateGroupClusterCollStatPi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-11-15+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-11-15+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-11-15+json" $body
 }
 
 # Pin Namespaces
@@ -3430,6 +3550,7 @@ export def "atlas-groups-clusters-coll-stats-pinned pinGroupClusterCollStatPinne
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
@@ -3441,7 +3562,7 @@ export def "atlas-groups-clusters-coll-stats-pinned pinGroupClusterCollStatPinne
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-11-15+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-11-15+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-11-15+json" $body
 }
 
 # Unpin Namespaces
@@ -3458,6 +3579,7 @@ export def "atlas-groups-clusters-coll-stats-unpin unpinGroupClusterCollStatUnpi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
@@ -3469,7 +3591,7 @@ export def "atlas-groups-clusters-coll-stats-unpin unpinGroupClusterCollStatUnpi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-11-15+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-11-15+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-11-15+json" $body
 }
 
 # Return All Collection Restore Jobs for One Cluster
@@ -3486,6 +3608,7 @@ export def "atlas-groups-clusters-collection-restore-jobs listGroupClusterCollec
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
@@ -3497,7 +3620,7 @@ export def "atlas-groups-clusters-collection-restore-jobs listGroupClusterCollec
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/collectionRestoreJobs" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Collection Restore Job
@@ -3514,6 +3637,7 @@ export def "atlas-groups-clusters-collection-restore-jobs createGroupClusterColl
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -3526,7 +3650,7 @@ export def "atlas-groups-clusters-collection-restore-jobs createGroupClusterColl
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.preview+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.preview+json" $body
 }
 
 # Return One Collection Restore Job for One Cluster
@@ -3544,6 +3668,7 @@ export def "atlas-groups-clusters-collection-restore-jobs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -3553,7 +3678,7 @@ export def "atlas-groups-clusters-collection-restore-jobs get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/collectionRestoreJobs/($jobId)" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Collection States for One Collection Restore Job
@@ -3571,6 +3696,7 @@ export def "atlas-groups-clusters-collection-restore-jobs-collections listGroupC
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
@@ -3585,7 +3711,7 @@ export def "atlas-groups-clusters-collection-restore-jobs-collections listGroupC
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/collectionRestoreJobs/($jobId)/collections" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Collection State for One Collection Restore Job
@@ -3604,6 +3730,7 @@ export def "atlas-groups-clusters-collection-restore-jobs-collections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -3613,7 +3740,7 @@ export def "atlas-groups-clusters-collection-restore-jobs-collections get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/collectionRestoreJobs/($jobId)/collections/($sourceNamespace)" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Atlas Search Index
@@ -3633,6 +3760,7 @@ export def "atlas-groups-clusters-fts-indexes createGroupClusterFtsIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -3645,7 +3773,7 @@ export def "atlas-groups-clusters-fts-indexes createGroupClusterFtsIndex" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Atlas Search Indexes for One Collection
@@ -3667,6 +3795,7 @@ export def "atlas-groups-clusters-fts-indexes listGroupClusterFtsIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -3676,7 +3805,7 @@ export def "atlas-groups-clusters-fts-indexes listGroupClusterFtsIndex" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/fts/indexes/($databaseName)/($collectionName)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove One Atlas Search Index
@@ -3697,6 +3826,7 @@ export def "atlas-groups-clusters-fts-indexes delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -3706,7 +3836,7 @@ export def "atlas-groups-clusters-fts-indexes delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/fts/indexes/($indexId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Atlas Search Index
@@ -3727,6 +3857,7 @@ export def "atlas-groups-clusters-fts-indexes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -3736,7 +3867,7 @@ export def "atlas-groups-clusters-fts-indexes get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/fts/indexes/($indexId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Atlas Search Index
@@ -3757,6 +3888,7 @@ export def "atlas-groups-clusters-fts-indexes updateGroupClusterFtsIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -3769,7 +3901,7 @@ export def "atlas-groups-clusters-fts-indexes updateGroupClusterFtsIndex" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return One Managed Namespace in One Global Cluster
@@ -3787,6 +3919,7 @@ export def "atlas-groups-clusters-global-writes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-3 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -3797,7 +3930,7 @@ export def "atlas-groups-clusters-global-writes get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/globalWrites" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove All Custom Zone Mappings from One Global Cluster
@@ -3815,6 +3948,7 @@ export def "atlas-groups-clusters-global-writes-custom-zone-mapping delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-3 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -3825,7 +3959,7 @@ export def "atlas-groups-clusters-global-writes-custom-zone-mapping delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/globalWrites/customZoneMapping" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add One Custom Zone Mapping to One Global Cluster
@@ -3843,6 +3977,7 @@ export def "atlas-groups-clusters-global-writes-custom-zone-mapping createGroupC
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-3 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -3856,7 +3991,7 @@ export def "atlas-groups-clusters-global-writes-custom-zone-mapping createGroupC
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Remove One Managed Namespace from One Global Cluster
@@ -3874,6 +4009,7 @@ export def "atlas-groups-clusters-global-writes-managed-namespaces delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-3 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -3886,7 +4022,7 @@ export def "atlas-groups-clusters-global-writes-managed-namespaces delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/globalWrites/managedNamespaces" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Managed Namespace in One Global Cluster
@@ -3904,6 +4040,7 @@ export def "atlas-groups-clusters-global-writes-managed-namespaces createGroupCl
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-3 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -3917,7 +4054,7 @@ export def "atlas-groups-clusters-global-writes-managed-namespaces createGroupCl
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Create One Rolling Index
@@ -3935,6 +4072,7 @@ export def "atlas-groups-clusters-index createGroupClusterIndexRollingIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -3947,7 +4085,7 @@ export def "atlas-groups-clusters-index createGroupClusterIndexRollingIndex" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Online Archives for One Cluster
@@ -3965,6 +4103,7 @@ export def "atlas-groups-clusters-online-archives listGroupClusterOnlineArchives
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -3977,7 +4116,7 @@ export def "atlas-groups-clusters-online-archives listGroupClusterOnlineArchives
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/onlineArchives" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Online Archive
@@ -3995,6 +4134,7 @@ export def "atlas-groups-clusters-online-archives createGroupClusterOnlineArchiv
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -4007,7 +4147,7 @@ export def "atlas-groups-clusters-online-archives createGroupClusterOnlineArchiv
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Download Online Archive Query Logs
@@ -4025,6 +4165,7 @@ export def "atlas-groups-clusters-online-archives-query-logsgz downloadGroupClus
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --startDate: int # Date and time that specifies the starting point for the range of log messages to return. This resource expresses this value in the number of seconds that have elapsed since the [UNIX epoch](https://en.wikipedia.org/wiki/Unix_time). (format: int64, e.g. 1636481348)
   --endDate: int # Date and time that specifies the end point for the range of log messages to return. This resource expresses this value in the number of seconds that have elapsed since the [UNIX epoch](https://en.wikipedia.org/wiki/Unix_time). (format: int64, e.g. 1636481348)
@@ -4036,7 +4177,7 @@ export def "atlas-groups-clusters-online-archives-query-logsgz downloadGroupClus
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/onlineArchives/queryLogs.gz" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+gzip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove One Online Archive
@@ -4055,6 +4196,7 @@ export def "atlas-groups-clusters-online-archives delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -4064,7 +4206,7 @@ export def "atlas-groups-clusters-online-archives delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/onlineArchives/($archiveId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Online Archive
@@ -4083,6 +4225,7 @@ export def "atlas-groups-clusters-online-archives get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -4092,7 +4235,7 @@ export def "atlas-groups-clusters-online-archives get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/onlineArchives/($archiveId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Online Archive
@@ -4111,6 +4254,7 @@ export def "atlas-groups-clusters-online-archives updateGroupClusterOnlineArchiv
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -4123,7 +4267,7 @@ export def "atlas-groups-clusters-online-archives updateGroupClusterOnlineArchiv
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # End One Outage Simulation
@@ -4141,6 +4285,7 @@ export def "atlas-groups-clusters-outage-simulation endGroupClusterOutageSimulat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -4150,7 +4295,7 @@ export def "atlas-groups-clusters-outage-simulation endGroupClusterOutageSimulat
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/outageSimulation" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Outage Simulation
@@ -4168,6 +4313,7 @@ export def "atlas-groups-clusters-outage-simulation get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -4177,7 +4323,7 @@ export def "atlas-groups-clusters-outage-simulation get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/outageSimulation" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start One Outage Simulation
@@ -4195,6 +4341,7 @@ export def "atlas-groups-clusters-outage-simulation startGroupClusterOutageSimul
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -4207,7 +4354,7 @@ export def "atlas-groups-clusters-outage-simulation startGroupClusterOutageSimul
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Suggested Indexes to Drop
@@ -4224,13 +4371,14 @@ export def "atlas-groups-clusters-performance-advisor-drop-index-suggestions lis
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/performanceAdvisor/dropIndexSuggestions")
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Schema Advice
@@ -4247,13 +4395,14 @@ export def "atlas-groups-clusters-performance-advisor-schema-advice listGroupClu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/performanceAdvisor/schemaAdvice")
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Suggested Indexes
@@ -4270,6 +4419,7 @@ export def "atlas-groups-clusters-performance-advisor-suggested-indexes listGrou
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --processIds: list # Process IDs from which to retrieve suggested indexes. A `processId` is a combination of host and port that serves the MongoDB process. The host must be the hostname, FQDN, IPv4 address, or IPv6 address of the host that runs the MongoDB process (`mongod` or `mongos`). The port must be the IANA port on which the MongoDB process listens for requests. To include multiple `processIds`, pass the parameter multiple times delimited with an ampersand (`&`) between each `processId`.
   --namespaces: list # Namespaces from which to retrieve suggested indexes. A namespace consists of one database and one collection resource written as `.`: `<database>.<collection>`. To include multiple namespaces, pass the parameter multiple times delimited with an ampersand (`&`) between each namespace. Omit this parameter to return results for all namespaces.
   --since: int # Date and time from which the query retrieves the suggested indexes. This parameter expresses its value in the number of milliseconds that have elapsed since the [UNIX epoch](https://en.wikipedia.org/wiki/Unix_time).  - If you don't specify the **until** parameter, the endpoint returns data covering from the **since** value and the current time. - If you specify neither the **since** nor the **until** parameters, the endpoint returns data from the previous 24 hours. (format: int64)
@@ -4281,7 +4431,7 @@ export def "atlas-groups-clusters-performance-advisor-suggested-indexes listGrou
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/performanceAdvisor/suggestedIndexes" $qp)
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Advanced Configuration Options for One Cluster
@@ -4299,6 +4449,7 @@ export def "atlas-groups-clusters-process-args get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-6 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -4309,7 +4460,7 @@ export def "atlas-groups-clusters-process-args get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/processArgs" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Advanced Configuration Options for One Cluster
@@ -4327,6 +4478,7 @@ export def "atlas-groups-clusters-process-args updateGroupClusterProcessArgs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-6 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -4340,7 +4492,7 @@ export def "atlas-groups-clusters-process-args updateGroupClusterProcessArgs" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return Query Statistic Summaries
@@ -4357,6 +4509,7 @@ export def "atlas-groups-clusters-query-shape-insights-summaries listGroupCluste
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since: int # Date and time from which to retrieve query shape statistics. This parameter expresses its value in the number of milliseconds that have elapsed since the [UNIX epoch](https://en.wikipedia.org/wiki/Unix_time).  - If you don't specify the **until** parameter, the endpoint returns data covering from the **since** value and the current time. - If you specify neither the **since** nor the **until** parameters, the endpoint returns data from the previous 24 hours. (format: int64)
   --until: int # Date and time up until which to retrieve query shape statistics. This parameter expresses its value in the number of milliseconds that have elapsed since the [UNIX epoch](https://en.wikipedia.org/wiki/Unix_time).  - If you specify the **until** parameter, you must specify the **since** parameter. - If you specify neither the **since** nor the **until** parameters, the endpoint returns data from the previous 24 hours. (format: int64)
   --processIds: list # Process IDs from which to retrieve query shape statistics. A `processId` is a combination of host and port that serves the MongoDB process. The host must be the hostname, FQDN, IPv4 address, or IPv6 address of the host that runs the MongoDB process (`mongod` or `mongos`). The port must be the IANA port on which the MongoDB process listens for requests. To include multiple `processId`, pass the parameter multiple times delimited with an ampersand (`&`) between each `processId`.
@@ -4374,7 +4527,7 @@ export def "atlas-groups-clusters-query-shape-insights-summaries listGroupCluste
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/queryShapeInsights/summaries" $qp)
   let accept_val = "application/vnd.atlas.2025-03-12+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Query Shape Details
@@ -4392,6 +4545,7 @@ export def "atlas-groups-clusters-query-shape-insights-details get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --since: int # Date and time from which to retrieve query shape statistics. This parameter expresses its value in the number of milliseconds that have elapsed since the [UNIX epoch](https://en.wikipedia.org/wiki/Unix_time).  - If you don't specify the **until** parameter, the endpoint returns data covering from the **since** value and the current time. - If you specify neither the **since** nor the **until** parameters, the endpoint returns data from the previous 24 hours. (format: int64)
@@ -4404,7 +4558,7 @@ export def "atlas-groups-clusters-query-shape-insights-details get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/queryShapeInsights/($queryShapeHash)/details" $qp)
   let accept_val = "application/vnd.atlas.2025-03-12+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Query Shapes
@@ -4421,6 +4575,7 @@ export def "atlas-groups-clusters-query-shapes listGroupClusterQueryShapes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-1 # The status of query shapes to retrieve. Only REJECTED status is supported. If omitted, defaults to REJECTED. (default: REJECTED)
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
@@ -4434,7 +4589,7 @@ export def "atlas-groups-clusters-query-shapes listGroupClusterQueryShapes" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/queryShapes" $qp)
   let accept_val = "application/vnd.atlas.2025-03-12+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Query Shape
@@ -4452,6 +4607,7 @@ export def "atlas-groups-clusters-query-shapes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -4461,7 +4617,7 @@ export def "atlas-groups-clusters-query-shapes get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/queryShapes/($queryShapeHash)" $qp)
   let accept_val = "application/vnd.atlas.2025-03-12+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Query Shape Rejection Status
@@ -4479,6 +4635,7 @@ export def "atlas-groups-clusters-query-shapes updateGroupClusterQueryShape" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -4491,7 +4648,7 @@ export def "atlas-groups-clusters-query-shapes updateGroupClusterQueryShape" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2025-03-12+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2025-03-12+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2025-03-12+json" $body
 }
 
 # Test Failover for One Cluster
@@ -4508,6 +4665,7 @@ export def "atlas-groups-clusters-restart-primaries restartGroupClusterPrimaries
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-5 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -4518,7 +4676,7 @@ export def "atlas-groups-clusters-restart-primaries restartGroupClusterPrimaries
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/restartPrimaries" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Legacy Backup Restore Jobs
@@ -4538,6 +4696,7 @@ export def "atlas-groups-clusters-restore-jobs listGroupClusterRestoreJobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -4551,7 +4710,7 @@ export def "atlas-groups-clusters-restore-jobs listGroupClusterRestoreJobs" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/restoreJobs" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Legacy Backup Restore Job
@@ -4571,6 +4730,7 @@ export def "atlas-groups-clusters-restore-jobs createGroupClusterRestoreJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -4583,7 +4743,7 @@ export def "atlas-groups-clusters-restore-jobs createGroupClusterRestoreJob" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return One Legacy Backup Restore Job
@@ -4604,6 +4764,7 @@ export def "atlas-groups-clusters-restore-jobs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -4613,7 +4774,7 @@ export def "atlas-groups-clusters-restore-jobs get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/restoreJobs/($jobId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Search Nodes
@@ -4630,6 +4791,7 @@ export def "atlas-groups-clusters-search-deployment delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -4640,7 +4802,7 @@ export def "atlas-groups-clusters-search-deployment delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/search/deployment" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Search Nodes
@@ -4657,6 +4819,7 @@ export def "atlas-groups-clusters-search-deployment get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-7 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -4667,7 +4830,7 @@ export def "atlas-groups-clusters-search-deployment get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/search/deployment" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Search Nodes
@@ -4684,6 +4847,7 @@ export def "atlas-groups-clusters-search-deployment updateGroupClusterSearchDepl
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -4697,7 +4861,7 @@ export def "atlas-groups-clusters-search-deployment updateGroupClusterSearchDepl
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Create Search Nodes
@@ -4714,6 +4878,7 @@ export def "atlas-groups-clusters-search-deployment createGroupClusterSearchDepl
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -4727,7 +4892,7 @@ export def "atlas-groups-clusters-search-deployment createGroupClusterSearchDepl
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Atlas Search Indexes for One Cluster
@@ -4745,6 +4910,7 @@ export def "atlas-groups-clusters-search-indexes listGroupClusterSearchIndexes" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -4754,7 +4920,7 @@ export def "atlas-groups-clusters-search-indexes listGroupClusterSearchIndexes" 
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/search/indexes" $qp)
   let accept_val = "application/vnd.atlas.2024-05-30+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Atlas Search Index
@@ -4772,6 +4938,7 @@ export def "atlas-groups-clusters-search-indexes createGroupClusterSearchIndex" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -4784,7 +4951,7 @@ export def "atlas-groups-clusters-search-indexes createGroupClusterSearchIndex" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-05-30+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-05-30+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-05-30+json" $body
 }
 
 # Return All Atlas Search Indexes for One Collection
@@ -4804,6 +4971,7 @@ export def "atlas-groups-clusters-search-indexes listGroupClusterSearchIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -4813,7 +4981,7 @@ export def "atlas-groups-clusters-search-indexes listGroupClusterSearchIndex" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/search/indexes/($databaseName)/($collectionName)" $qp)
   let accept_val = "application/vnd.atlas.2024-05-30+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove One Atlas Search Index by Name
@@ -4834,6 +5002,7 @@ export def "atlas-groups-clusters-search-indexes delete-by-groupId-clusterName-c
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -4843,7 +5012,7 @@ export def "atlas-groups-clusters-search-indexes delete-by-groupId-clusterName-c
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/search/indexes/($databaseName)/($collectionName)/($indexName)" $qp)
   let accept_val = "application/vnd.atlas.2024-05-30+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Atlas Search Index by Name
@@ -4864,6 +5033,7 @@ export def "atlas-groups-clusters-search-indexes get-by-groupId-clusterName-coll
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -4873,7 +5043,7 @@ export def "atlas-groups-clusters-search-indexes get-by-groupId-clusterName-coll
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/search/indexes/($databaseName)/($collectionName)/($indexName)" $qp)
   let accept_val = "application/vnd.atlas.2024-05-30+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Atlas Search Index by Name
@@ -4894,6 +5064,7 @@ export def "atlas-groups-clusters-search-indexes updateGroupClusterSearchIndexBy
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -4906,7 +5077,7 @@ export def "atlas-groups-clusters-search-indexes updateGroupClusterSearchIndexBy
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-05-30+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-05-30+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-05-30+json" $body
 }
 
 # Remove One Atlas Search Index by ID
@@ -4925,6 +5096,7 @@ export def "atlas-groups-clusters-search-indexes delete-by-groupId-clusterName-i
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -4934,7 +5106,7 @@ export def "atlas-groups-clusters-search-indexes delete-by-groupId-clusterName-i
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/search/indexes/($indexId)" $qp)
   let accept_val = "application/vnd.atlas.2024-05-30+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Atlas Search Index by ID
@@ -4953,6 +5125,7 @@ export def "atlas-groups-clusters-search-indexes get-by-groupId-clusterName-inde
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -4962,7 +5135,7 @@ export def "atlas-groups-clusters-search-indexes get-by-groupId-clusterName-inde
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/search/indexes/($indexId)" $qp)
   let accept_val = "application/vnd.atlas.2024-05-30+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Atlas Search Index by ID
@@ -4981,6 +5154,7 @@ export def "atlas-groups-clusters-search-indexes updateGroupClusterSearchIndex" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -4993,7 +5167,7 @@ export def "atlas-groups-clusters-search-indexes updateGroupClusterSearchIndex" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-05-30+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-05-30+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-05-30+json" $body
 }
 
 # Return One Snapshot Schedule
@@ -5013,6 +5187,7 @@ export def "atlas-groups-clusters-snapshot-schedule get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -5022,7 +5197,7 @@ export def "atlas-groups-clusters-snapshot-schedule get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/snapshotSchedule" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Snapshot Schedule for One Cluster
@@ -5042,6 +5217,7 @@ export def "atlas-groups-clusters-snapshot-schedule updateGroupClusterSnapshotSc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -5054,7 +5230,7 @@ export def "atlas-groups-clusters-snapshot-schedule updateGroupClusterSnapshotSc
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Legacy Backup Snapshots
@@ -5074,6 +5250,7 @@ export def "atlas-groups-clusters-snapshots listGroupClusterSnapshots" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -5087,7 +5264,7 @@ export def "atlas-groups-clusters-snapshots listGroupClusterSnapshots" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/snapshots" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove One Legacy Backup Snapshot
@@ -5108,6 +5285,7 @@ export def "atlas-groups-clusters-snapshots delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -5117,7 +5295,7 @@ export def "atlas-groups-clusters-snapshots delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/snapshots/($snapshotId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Legacy Backup Snapshot
@@ -5138,6 +5316,7 @@ export def "atlas-groups-clusters-snapshots get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -5147,7 +5326,7 @@ export def "atlas-groups-clusters-snapshots get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/snapshots/($snapshotId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Expiration Date for One Legacy Backup Snapshot
@@ -5168,6 +5347,7 @@ export def "atlas-groups-clusters-snapshots updateGroupClusterSnapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -5180,7 +5360,7 @@ export def "atlas-groups-clusters-snapshots updateGroupClusterSnapshot" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return Status of All Cluster Operations
@@ -5197,6 +5377,7 @@ export def "atlas-groups-clusters-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -5206,7 +5387,7 @@ export def "atlas-groups-clusters-status get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/status" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Ranked Namespaces from One Cluster
@@ -5224,6 +5405,7 @@ export def "atlas-groups-clusters-coll-stats-namespaces get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --start: string # Date and time when MongoDB Cloud begins reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
   --end: string # Date and time when MongoDB Cloud stops reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
@@ -5235,7 +5417,7 @@ export def "atlas-groups-clusters-coll-stats-namespaces get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/($clusterView)/collStats/namespaces" $qp)
   let accept_val = "application/vnd.atlas.2023-11-15+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Cluster-Level Query Latency
@@ -5255,6 +5437,7 @@ export def "atlas-groups-clusters-coll-stats-measurements listGroupClusterCollSt
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --metrics: list # List that contains the metrics that you want to retrieve for the associated data series. If you don't set this parameter, this resource returns data series for all Coll Stats Latency metrics.
   --start: string # Date and time when MongoDB Cloud begins reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
@@ -5267,7 +5450,7 @@ export def "atlas-groups-clusters-coll-stats-measurements listGroupClusterCollSt
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName)/($clusterView)/($databaseName)/($collectionName)/collStats/measurements" $qp)
   let accept_val = "application/vnd.atlas.2023-11-15+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Grant MongoDB Employee Cluster Access for One Cluster
@@ -5284,6 +5467,7 @@ export def "atlas-groups-clusters grantGroupClusterMongoDbEmployeeAccess" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -5296,7 +5480,7 @@ export def "atlas-groups-clusters grantGroupClusterMongoDbEmployeeAccess" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
 }
 
 # Pin Feature Compatibility Version for One Cluster in One Project
@@ -5313,6 +5497,7 @@ export def "atlas-groups-clusters pinGroupClusterFeatureCompatibilityVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -5325,7 +5510,7 @@ export def "atlas-groups-clusters pinGroupClusterFeatureCompatibilityVersion" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-05-30+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-05-30+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-05-30+json" $body
 }
 
 # Revoke MongoDB Employee Cluster Access for One Cluster
@@ -5342,6 +5527,7 @@ export def "atlas-groups-clusters revokeGroupClusterMongoDbEmployeeAccess" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -5351,7 +5537,7 @@ export def "atlas-groups-clusters revokeGroupClusterMongoDbEmployeeAccess" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName):revokeMongoDBEmployeeAccess" $qp)
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unpin Feature Compatibility Version for One Cluster in One Project
@@ -5368,6 +5554,7 @@ export def "atlas-groups-clusters unpinGroupClusterFeatureCompatibilityVersion" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -5377,7 +5564,7 @@ export def "atlas-groups-clusters unpinGroupClusterFeatureCompatibilityVersion" 
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($clusterName):unpinFeatureCompatibilityVersion" $qp)
   let accept_val = "application/vnd.atlas.2024-05-30+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download Logs for One Cluster Host in One Project
@@ -5395,6 +5582,7 @@ export def "atlas-groups-clusters-logs downloadGroupClusterLog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-8 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --endDate: int # Specifies the date and time for the ending point of the range of log messages to retrieve, in the number of seconds that have elapsed since the UNIX epoch. This value will default to 24 hours after the start date. If the start date is also unspecified, the value will default to the time of the request. (format: int64)
@@ -5406,7 +5594,7 @@ export def "atlas-groups-clusters-logs downloadGroupClusterLog" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/clusters/($hostName)/logs/($logName).gz" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+gzip")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Metric Names
@@ -5422,6 +5610,7 @@ export def "atlas-groups-coll-stats-metrics listGroupCollStatMetrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5430,7 +5619,7 @@ export def "atlas-groups-coll-stats-metrics listGroupCollStatMetrics" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/collStats/metrics" $qp)
   let accept_val = "application/vnd.atlas.2023-11-15+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Network Peering Containers in One Project for One Cloud Provider
@@ -5446,6 +5635,7 @@ export def "atlas-groups-containers listGroupContainers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -5459,7 +5649,7 @@ export def "atlas-groups-containers listGroupContainers" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/containers" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Network Peering Container
@@ -5475,6 +5665,7 @@ export def "atlas-groups-containers createGroupContainer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -5487,7 +5678,7 @@ export def "atlas-groups-containers createGroupContainer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Network Peering Containers in One Project
@@ -5503,6 +5694,7 @@ export def "atlas-groups-containers-all listGroupContainerAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -5515,7 +5707,7 @@ export def "atlas-groups-containers-all listGroupContainerAll" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/containers/all" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove One Network Peering Container
@@ -5532,6 +5724,7 @@ export def "atlas-groups-containers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -5541,7 +5734,7 @@ export def "atlas-groups-containers delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/containers/($containerId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Network Peering Container
@@ -5558,6 +5751,7 @@ export def "atlas-groups-containers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -5567,7 +5761,7 @@ export def "atlas-groups-containers get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/containers/($containerId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Network Peering Container
@@ -5584,6 +5778,7 @@ export def "atlas-groups-containers updateGroupContainer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -5596,7 +5791,7 @@ export def "atlas-groups-containers updateGroupContainer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Custom Roles in One Project
@@ -5612,6 +5807,7 @@ export def "atlas-groups-custom-db-roles-roles listGroupCustomDbRoleRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -5621,7 +5817,7 @@ export def "atlas-groups-custom-db-roles-roles listGroupCustomDbRoleRoles" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/customDBRoles/roles" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Custom Role
@@ -5637,6 +5833,7 @@ export def "atlas-groups-custom-db-roles-roles createGroupCustomDbRoleRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -5649,7 +5846,7 @@ export def "atlas-groups-custom-db-roles-roles createGroupCustomDbRoleRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Remove One Custom Role from One Project
@@ -5666,6 +5863,7 @@ export def "atlas-groups-custom-db-roles-roles delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -5675,7 +5873,7 @@ export def "atlas-groups-custom-db-roles-roles delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/customDBRoles/roles/($roleName)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Custom Role in One Project
@@ -5692,6 +5890,7 @@ export def "atlas-groups-custom-db-roles-roles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -5701,7 +5900,7 @@ export def "atlas-groups-custom-db-roles-roles get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/customDBRoles/roles/($roleName)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Custom Role in One Project
@@ -5718,6 +5917,7 @@ export def "atlas-groups-custom-db-roles-roles updateGroupCustomDbRoleRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -5730,7 +5930,7 @@ export def "atlas-groups-custom-db-roles-roles updateGroupCustomDbRoleRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Federated Database Instances in One Project
@@ -5746,6 +5946,7 @@ export def "atlas-groups-data-federation listGroupDataFederation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --type: string@type-completer # Type of Federated Database Instances to return. (default: USER)
@@ -5756,7 +5957,7 @@ export def "atlas-groups-data-federation listGroupDataFederation" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/dataFederation" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Federated Database Instance in One Project
@@ -5772,6 +5973,7 @@ export def "atlas-groups-data-federation createGroupDataFederation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --skipRoleValidation: oneof<nothing, bool> # Flag that indicates whether this request should check if the requesting IAM role can read from the S3 bucket. AWS checks if the role can list the objects in the bucket before writing to it. Some IAM roles only need write permissions. This flag allows you to skip that check. (default: false)
@@ -5785,7 +5987,7 @@ export def "atlas-groups-data-federation createGroupDataFederation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Remove One Federated Database Instance from One Project
@@ -5802,6 +6004,7 @@ export def "atlas-groups-data-federation delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -5811,7 +6014,7 @@ export def "atlas-groups-data-federation delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/dataFederation/($tenantName)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Federated Database Instance in One Project
@@ -5828,6 +6031,7 @@ export def "atlas-groups-data-federation get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5836,7 +6040,7 @@ export def "atlas-groups-data-federation get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/dataFederation/($tenantName)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Federated Database Instance in One Project
@@ -5853,6 +6057,7 @@ export def "atlas-groups-data-federation updateGroupDataFederation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --skipRoleValidation: oneof<nothing, bool> # Flag that indicates whether this request should check if the requesting IAM role can read from the S3 bucket. AWS checks if the role can list the objects in the bucket before writing to it. Some IAM roles only need write permissions. This flag allows you to skip that check.
@@ -5866,7 +6071,7 @@ export def "atlas-groups-data-federation updateGroupDataFederation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Query Limits for One Federated Database Instance
@@ -5883,6 +6088,7 @@ export def "atlas-groups-data-federation-limits listGroupDataFederationLimits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -5892,7 +6098,7 @@ export def "atlas-groups-data-federation-limits listGroupDataFederationLimits" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/dataFederation/($tenantName)/limits" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete One Query Limit for One Federated Database Instance
@@ -5910,6 +6116,7 @@ export def "atlas-groups-data-federation-limits delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5918,7 +6125,7 @@ export def "atlas-groups-data-federation-limits delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/dataFederation/($tenantName)/limits/($limitName)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Federated Database Instance Query Limit for One Project
@@ -5936,6 +6143,7 @@ export def "atlas-groups-data-federation-limits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -5945,7 +6153,7 @@ export def "atlas-groups-data-federation-limits get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/dataFederation/($tenantName)/limits/($limitName)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Configure One Query Limit for One Federated Database Instance
@@ -5963,6 +6171,7 @@ export def "atlas-groups-data-federation-limits setGroupDataFederationLimit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
@@ -5974,7 +6183,7 @@ export def "atlas-groups-data-federation-limits setGroupDataFederationLimit" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Download Query Logs for One Federated Database Instance
@@ -5991,6 +6200,7 @@ export def "atlas-groups-data-federation-query-logsgz downloadGroupDataFederatio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --endDate: int # Timestamp that specifies the end point for the range of log messages to download.  MongoDB Cloud expresses this timestamp in the number of seconds that have elapsed since the UNIX epoch. (format: int64, e.g. 1636481348)
   --startDate: int # Timestamp that specifies the starting point for the range of log messages to download. MongoDB Cloud expresses this timestamp in the number of seconds that have elapsed since the UNIX epoch. (format: int64, e.g. 1636466948)
 ]: nothing -> any {
@@ -6000,7 +6210,7 @@ export def "atlas-groups-data-federation-query-logsgz downloadGroupDataFederatio
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/dataFederation/($tenantName)/queryLogs.gz" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+gzip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Database Users in One Project
@@ -6016,6 +6226,7 @@ export def "atlas-groups-database-users listGroupDatabaseUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -6028,7 +6239,7 @@ export def "atlas-groups-database-users listGroupDatabaseUsers" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/databaseUsers" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Database User in One Project
@@ -6045,6 +6256,7 @@ export def "atlas-groups-database-users createGroupDatabaseUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -6057,7 +6269,7 @@ export def "atlas-groups-database-users createGroupDatabaseUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Remove One Database User from One Project
@@ -6075,6 +6287,7 @@ export def "atlas-groups-database-users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -6084,7 +6297,7 @@ export def "atlas-groups-database-users delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/databaseUsers/($databaseName)/($username)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Database User from One Project
@@ -6102,6 +6315,7 @@ export def "atlas-groups-database-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -6111,7 +6325,7 @@ export def "atlas-groups-database-users get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/databaseUsers/($databaseName)/($username)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Database User in One Project
@@ -6129,6 +6343,7 @@ export def "atlas-groups-database-users updateGroupDatabaseUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -6141,7 +6356,7 @@ export def "atlas-groups-database-users updateGroupDatabaseUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All X.509 Certificates Assigned to One Database User
@@ -6158,6 +6373,7 @@ export def "atlas-groups-database-users-certs listGroupDatabaseUserCerts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -6170,7 +6386,7 @@ export def "atlas-groups-database-users-certs listGroupDatabaseUserCerts" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/databaseUsers/($username)/certs" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One X.509 Certificate for One Database User
@@ -6188,6 +6404,7 @@ export def "atlas-groups-database-users-certs createGroupDatabaseUserCert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -6200,7 +6417,7 @@ export def "atlas-groups-database-users-certs createGroupDatabaseUserCert" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return Database Access History for One Cluster by Cluster Name
@@ -6218,6 +6435,7 @@ export def "atlas-groups-db-access-history-clusters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --authResult: oneof<nothing, bool> # Flag that indicates whether the response returns the successful authentication attempts only.
@@ -6232,7 +6450,7 @@ export def "atlas-groups-db-access-history-clusters get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/dbAccessHistory/clusters/($clusterName)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Database Access History for One Cluster by Hostname
@@ -6250,6 +6468,7 @@ export def "atlas-groups-db-access-history-processes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --authResult: oneof<nothing, bool> # Flag that indicates whether the response returns the successful authentication attempts only.
@@ -6264,7 +6483,7 @@ export def "atlas-groups-db-access-history-processes get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/dbAccessHistory/processes/($hostname)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Configuration for Encryption at Rest Using Customer-Managed Keys for One Project
@@ -6280,6 +6499,7 @@ export def "atlas-groups-encryption-at-rest get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -6289,7 +6509,7 @@ export def "atlas-groups-encryption-at-rest get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/encryptionAtRest" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Encryption at Rest Configuration in One Project
@@ -6305,6 +6525,7 @@ export def "atlas-groups-encryption-at-rest updateGroupEncryptionAtRest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -6317,7 +6538,7 @@ export def "atlas-groups-encryption-at-rest updateGroupEncryptionAtRest" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return Private Endpoints for Encryption at Rest Using Customer Key Management for One Cloud Provider in One Project
@@ -6334,6 +6555,7 @@ export def "atlas-groups-encryption-at-rest-private-endpoints listGroupEncryptio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
@@ -6346,7 +6568,7 @@ export def "atlas-groups-encryption-at-rest-private-endpoints listGroupEncryptio
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/encryptionAtRest/($cloudProvider)/privateEndpoints" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Private Endpoint for Encryption at Rest Using Customer Key Management for One Cloud Provider in One Project
@@ -6363,6 +6585,7 @@ export def "atlas-groups-encryption-at-rest-private-endpoints createGroupEncrypt
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -6375,7 +6598,7 @@ export def "atlas-groups-encryption-at-rest-private-endpoints createGroupEncrypt
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Delete One Private Endpoint for Encryption at Rest Using Customer Key Management for One Cloud Provider from One Project
@@ -6393,6 +6616,7 @@ export def "atlas-groups-encryption-at-rest-private-endpoints requestGroupEncryp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -6402,7 +6626,7 @@ export def "atlas-groups-encryption-at-rest-private-endpoints requestGroupEncryp
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/encryptionAtRest/($cloudProvider)/privateEndpoints/($endpointId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Private Endpoint for Encryption at Rest Using Customer Key Management for One Cloud Provider in One Project
@@ -6420,6 +6644,7 @@ export def "atlas-groups-encryption-at-rest-private-endpoints get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -6429,7 +6654,7 @@ export def "atlas-groups-encryption-at-rest-private-endpoints get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/encryptionAtRest/($cloudProvider)/privateEndpoints/($endpointId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Events from One Project
@@ -6445,6 +6670,7 @@ export def "atlas-groups-events listGroupEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -6463,7 +6689,7 @@ export def "atlas-groups-events listGroupEvents" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/events" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Event from One Project
@@ -6481,6 +6707,7 @@ export def "atlas-groups-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --includeRaw: oneof<nothing, bool> # Flag that indicates whether to include the raw document in the output. The raw document contains additional meta information about the event. (default: false)
@@ -6491,7 +6718,7 @@ export def "atlas-groups-events get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/events/($eventId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Flex Clusters from One Project
@@ -6507,6 +6734,7 @@ export def "atlas-groups-flex-clusters listGroupFlexClusters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -6519,7 +6747,7 @@ export def "atlas-groups-flex-clusters listGroupFlexClusters" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/flexClusters" $qp)
   let accept_val = "application/vnd.atlas.2024-11-13+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Flex Cluster in One Project
@@ -6535,6 +6763,7 @@ export def "atlas-groups-flex-clusters createGroupFlexCluster" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -6547,7 +6776,7 @@ export def "atlas-groups-flex-clusters createGroupFlexCluster" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-11-13+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-11-13+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-11-13+json" $body
 }
 
 # Remove One Flex Cluster from One Project
@@ -6564,6 +6793,7 @@ export def "atlas-groups-flex-clusters delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -6573,7 +6803,7 @@ export def "atlas-groups-flex-clusters delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/flexClusters/($name)" $qp)
   let accept_val = "application/vnd.atlas.2024-11-13+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Flex Cluster from One Project
@@ -6590,6 +6820,7 @@ export def "atlas-groups-flex-clusters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -6599,7 +6830,7 @@ export def "atlas-groups-flex-clusters get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/flexClusters/($name)" $qp)
   let accept_val = "application/vnd.atlas.2024-11-13+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Flex Cluster in One Project
@@ -6616,6 +6847,7 @@ export def "atlas-groups-flex-clusters updateGroupFlexCluster" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -6628,7 +6860,7 @@ export def "atlas-groups-flex-clusters updateGroupFlexCluster" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-11-13+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-11-13+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-11-13+json" $body
 }
 
 # Download One Flex Cluster Snapshot
@@ -6645,6 +6877,7 @@ export def "atlas-groups-flex-clusters-backup-download downloadGroupFlexClusterB
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -6657,7 +6890,7 @@ export def "atlas-groups-flex-clusters-backup-download downloadGroupFlexClusterB
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-11-13+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-11-13+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-11-13+json" $body
 }
 
 # Return All Restore Jobs for One Flex Cluster
@@ -6674,6 +6907,7 @@ export def "atlas-groups-flex-clusters-backup-restore-jobs listGroupFlexClusterB
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -6686,7 +6920,7 @@ export def "atlas-groups-flex-clusters-backup-restore-jobs listGroupFlexClusterB
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/flexClusters/($name)/backup/restoreJobs" $qp)
   let accept_val = "application/vnd.atlas.2024-11-13+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Restore Job for One Flex Cluster
@@ -6703,6 +6937,7 @@ export def "atlas-groups-flex-clusters-backup-restore-jobs createGroupFlexCluste
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -6715,7 +6950,7 @@ export def "atlas-groups-flex-clusters-backup-restore-jobs createGroupFlexCluste
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-11-13+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-11-13+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-11-13+json" $body
 }
 
 # Return One Restore Job for One Flex Cluster
@@ -6733,6 +6968,7 @@ export def "atlas-groups-flex-clusters-backup-restore-jobs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -6742,7 +6978,7 @@ export def "atlas-groups-flex-clusters-backup-restore-jobs get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/flexClusters/($name)/backup/restoreJobs/($restoreJobId)" $qp)
   let accept_val = "application/vnd.atlas.2024-11-13+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Snapshots for One Flex Cluster
@@ -6759,6 +6995,7 @@ export def "atlas-groups-flex-clusters-backup-snapshots listGroupFlexClusterBack
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
@@ -6771,7 +7008,7 @@ export def "atlas-groups-flex-clusters-backup-snapshots listGroupFlexClusterBack
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/flexClusters/($name)/backup/snapshots" $qp)
   let accept_val = "application/vnd.atlas.2024-11-13+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Snapshot for One Flex Cluster
@@ -6789,6 +7026,7 @@ export def "atlas-groups-flex-clusters-backup-snapshots get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6797,7 +7035,7 @@ export def "atlas-groups-flex-clusters-backup-snapshots get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/flexClusters/($name)/backup/snapshots/($snapshotId)" $qp)
   let accept_val = "application/vnd.atlas.2024-11-13+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upgrade One Flex Cluster
@@ -6813,6 +7051,7 @@ export def "atlas-groups-flex-clusters-tenant-upgrade tenantGroupFlexClusterUpgr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -6825,7 +7064,7 @@ export def "atlas-groups-flex-clusters-tenant-upgrade tenantGroupFlexClusterUpgr
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-11-13+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-11-13+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-11-13+json" $body
 }
 
 # Return All Atlas Search Metric Types for One Process
@@ -6842,6 +7081,7 @@ export def "atlas-groups-hosts-fts-metrics listGroupHostFtsMetrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6850,7 +7090,7 @@ export def "atlas-groups-hosts-fts-metrics listGroupHostFtsMetrics" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/hosts/($processId)/fts/metrics" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Atlas Search Index Metrics for One Namespace
@@ -6869,6 +7109,7 @@ export def "atlas-groups-hosts-fts-metrics-indexes-measurements listGroupHostFts
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --granularity: string # Duration that specifies the interval at which Atlas reports the metrics. This parameter expresses its value in the ISO 8601 duration format in UTC. (e.g. PT1M)
   --period: string # Duration over which Atlas reports the metrics. This parameter expresses its value in the ISO 8601 duration format in UTC. Include this parameter when you do not set **start** and **end**. (e.g. PT10H)
   --start: string # Date and time when MongoDB Cloud begins reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
@@ -6882,7 +7123,7 @@ export def "atlas-groups-hosts-fts-metrics-indexes-measurements listGroupHostFts
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/hosts/($processId)/fts/metrics/indexes/($databaseName)/($collectionName)/measurements" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Atlas Search Metrics for One Index in One Namespace
@@ -6902,6 +7143,7 @@ export def "atlas-groups-hosts-fts-metrics-indexes-measurements get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --granularity: string # Duration that specifies the interval at which Atlas reports the metrics. This parameter expresses its value in the ISO 8601 duration format in UTC. (e.g. PT1M)
   --period: string # Duration over which Atlas reports the metrics. This parameter expresses its value in the ISO 8601 duration format in UTC. Include this parameter when you do not set **start** and **end**. (e.g. PT10H)
   --start: string # Date and time when MongoDB Cloud begins reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
@@ -6915,7 +7157,7 @@ export def "atlas-groups-hosts-fts-metrics-indexes-measurements get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/hosts/($processId)/fts/metrics/indexes/($databaseName)/($collectionName)/($indexName)/measurements" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Atlas Search Hardware and Status Metrics
@@ -6932,6 +7174,7 @@ export def "atlas-groups-hosts-fts-metrics-measurements listGroupHostFtsMetricMe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --granularity: string # Duration that specifies the interval at which Atlas reports the metrics. This parameter expresses its value in the ISO 8601 duration format in UTC. (e.g. PT1M)
   --period: string # Duration over which Atlas reports the metrics. This parameter expresses its value in the ISO 8601 duration format in UTC. Include this parameter when you do not set **start** and **end**. (e.g. PT10H)
   --start: string # Date and time when MongoDB Cloud begins reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
@@ -6945,7 +7188,7 @@ export def "atlas-groups-hosts-fts-metrics-measurements listGroupHostFtsMetricMe
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/hosts/($processId)/fts/metrics/measurements" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Active Third-Party Service Integrations
@@ -6961,6 +7204,7 @@ export def "atlas-groups-integrations listGroupIntegrations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -6973,7 +7217,7 @@ export def "atlas-groups-integrations listGroupIntegrations" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/integrations" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove One Third-Party Service Integration
@@ -6990,6 +7234,7 @@ export def "atlas-groups-integrations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -6999,7 +7244,7 @@ export def "atlas-groups-integrations delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/integrations/($integrationType)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Third-Party Service Integration
@@ -7016,6 +7261,7 @@ export def "atlas-groups-integrations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -7025,7 +7271,7 @@ export def "atlas-groups-integrations get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/integrations/($integrationType)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Third-Party Service Integration
@@ -7042,6 +7288,7 @@ export def "atlas-groups-integrations createGroupIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -7057,7 +7304,7 @@ export def "atlas-groups-integrations createGroupIntegration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Update One Third-Party Service Integration
@@ -7074,6 +7321,7 @@ export def "atlas-groups-integrations updateGroupIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -7089,7 +7337,7 @@ export def "atlas-groups-integrations updateGroupIntegration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Invitations in One Project
@@ -7107,6 +7355,7 @@ export def "atlas-groups-invites listGroupInvites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --username: string # Email address of the user account invited to this project. (format: email)
@@ -7117,7 +7366,7 @@ export def "atlas-groups-invites listGroupInvites" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/invites" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Invitation in One Project
@@ -7135,6 +7384,7 @@ export def "atlas-groups-invites updateGroupInvites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -7147,7 +7397,7 @@ export def "atlas-groups-invites updateGroupInvites" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Create Invitation for One MongoDB Cloud User in One Project
@@ -7165,6 +7415,7 @@ export def "atlas-groups-invites createGroupInvite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
@@ -7177,7 +7428,7 @@ export def "atlas-groups-invites createGroupInvite" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Remove One Invitation from One Project
@@ -7196,6 +7447,7 @@ export def "atlas-groups-invites delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7204,7 +7456,7 @@ export def "atlas-groups-invites delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/invites/($invitationId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Invitation in One Project by Invitation ID
@@ -7223,6 +7475,7 @@ export def "atlas-groups-invites get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -7232,7 +7485,7 @@ export def "atlas-groups-invites get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/invites/($invitationId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Invitation in One Project by Invitation ID
@@ -7251,6 +7504,7 @@ export def "atlas-groups-invites updateGroupInviteById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
@@ -7262,7 +7516,7 @@ export def "atlas-groups-invites updateGroupInviteById" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All IP Addresses for One Project
@@ -7278,6 +7532,7 @@ export def "atlas-groups-ip-addresses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -7287,7 +7542,7 @@ export def "atlas-groups-ip-addresses get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/ipAddresses" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Limits for One Project
@@ -7303,6 +7558,7 @@ export def "atlas-groups-limits listGroupLimits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -7312,7 +7568,7 @@ export def "atlas-groups-limits listGroupLimits" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/limits" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove One Project Limit
@@ -7329,6 +7585,7 @@ export def "atlas-groups-limits delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -7338,7 +7595,7 @@ export def "atlas-groups-limits delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/limits/($limitName)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Limit for One Project
@@ -7355,6 +7612,7 @@ export def "atlas-groups-limits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -7364,7 +7622,7 @@ export def "atlas-groups-limits get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/limits/($limitName)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set One Project Limit
@@ -7381,6 +7639,7 @@ export def "atlas-groups-limits setGroupLimit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -7393,7 +7652,7 @@ export def "atlas-groups-limits setGroupLimit" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Create One Migration for One Local Managed Cluster to MongoDB Atlas
@@ -7410,6 +7669,7 @@ export def "atlas-groups-live-migrations createGroupLiveMigration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -7423,7 +7683,7 @@ export def "atlas-groups-live-migrations createGroupLiveMigration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Validate One Migration Request
@@ -7439,6 +7699,7 @@ export def "atlas-groups-live-migrations-validate validateGroupLiveMigrations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -7452,7 +7713,7 @@ export def "atlas-groups-live-migrations-validate validateGroupLiveMigrations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return One Migration Validation Job
@@ -7469,6 +7730,7 @@ export def "atlas-groups-live-migrations-validate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7477,7 +7739,7 @@ export def "atlas-groups-live-migrations-validate get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/liveMigrations/validate/($validationId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Migration Job
@@ -7494,6 +7756,7 @@ export def "atlas-groups-live-migrations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -7503,7 +7766,7 @@ export def "atlas-groups-live-migrations get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/liveMigrations/($liveMigrationId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cut Over One Migrated Cluster
@@ -7520,6 +7783,7 @@ export def "atlas-groups-live-migrations-cutover cutoverGroupLiveMigration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -7529,7 +7793,7 @@ export def "atlas-groups-live-migrations-cutover cutoverGroupLiveMigration" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/liveMigrations/($liveMigrationId)/cutover" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Active Log Integrations
@@ -7545,6 +7809,7 @@ export def "atlas-groups-log-integrations listGroupLogIntegrations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -7558,7 +7823,7 @@ export def "atlas-groups-log-integrations listGroupLogIntegrations" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/logIntegrations" $qp)
   let accept_val = "application/vnd.atlas.2025-03-12+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Log Integration
@@ -7574,6 +7839,7 @@ export def "atlas-groups-log-integrations createGroupLogIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -7586,7 +7852,7 @@ export def "atlas-groups-log-integrations createGroupLogIntegration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2025-03-12+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2025-03-12+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2025-03-12+json" $body
 }
 
 # Remove One Log Integration
@@ -7603,6 +7869,7 @@ export def "atlas-groups-log-integrations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -7612,7 +7879,7 @@ export def "atlas-groups-log-integrations delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/logIntegrations/($id)" $qp)
   let accept_val = "application/vnd.atlas.2025-03-12+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Log Integration
@@ -7629,6 +7896,7 @@ export def "atlas-groups-log-integrations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -7638,7 +7906,7 @@ export def "atlas-groups-log-integrations get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/logIntegrations/($id)" $qp)
   let accept_val = "application/vnd.atlas.2025-03-12+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Log Integration
@@ -7655,6 +7923,7 @@ export def "atlas-groups-log-integrations updateGroupLogIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -7667,7 +7936,7 @@ export def "atlas-groups-log-integrations updateGroupLogIntegration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2025-03-12+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2025-03-12+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2025-03-12+json" $body
 }
 
 # Reset One Maintenance Window for One Project
@@ -7683,6 +7952,7 @@ export def "atlas-groups-maintenance-window resetGroupMaintenanceWindow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7691,7 +7961,7 @@ export def "atlas-groups-maintenance-window resetGroupMaintenanceWindow" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/maintenanceWindow" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Maintenance Window for One Project
@@ -7707,6 +7977,7 @@ export def "atlas-groups-maintenance-window get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -7716,7 +7987,7 @@ export def "atlas-groups-maintenance-window get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/maintenanceWindow" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Maintenance Window for One Project
@@ -7732,6 +8003,7 @@ export def "atlas-groups-maintenance-window updateGroupMaintenanceWindow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
@@ -7743,7 +8015,7 @@ export def "atlas-groups-maintenance-window updateGroupMaintenanceWindow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Toggle Automatic Deferral of Maintenance for One Project
@@ -7759,6 +8031,7 @@ export def "atlas-groups-maintenance-window-auto-defer toggleGroupMaintenanceWin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7767,7 +8040,7 @@ export def "atlas-groups-maintenance-window-auto-defer toggleGroupMaintenanceWin
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/maintenanceWindow/autoDefer" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Defer One Maintenance Window for One Project
@@ -7783,6 +8056,7 @@ export def "atlas-groups-maintenance-window-defer deferGroupMaintenanceWindow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7791,7 +8065,7 @@ export def "atlas-groups-maintenance-window-defer deferGroupMaintenanceWindow" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/maintenanceWindow/defer" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Managed Slow Operation Threshold Status
@@ -7807,6 +8081,7 @@ export def "atlas-groups-managed-slow-ms get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -7816,7 +8091,7 @@ export def "atlas-groups-managed-slow-ms get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/managedSlowMs" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disable Managed Slow Operation Threshold
@@ -7832,6 +8107,7 @@ export def "atlas-groups-managed-slow-ms-disable disableGroupManagedSlowMs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -7841,7 +8117,7 @@ export def "atlas-groups-managed-slow-ms-disable disableGroupManagedSlowMs" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/managedSlowMs/disable" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable Managed Slow Operation Threshold
@@ -7857,6 +8133,7 @@ export def "atlas-groups-managed-slow-ms-enable enableGroupManagedSlowMs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -7866,7 +8143,7 @@ export def "atlas-groups-managed-slow-ms-enable enableGroupManagedSlowMs" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/managedSlowMs/enable" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Active Metric Integrations
@@ -7882,6 +8159,7 @@ export def "atlas-groups-metric-integrations listGroupMetricIntegrations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -7896,7 +8174,7 @@ export def "atlas-groups-metric-integrations listGroupMetricIntegrations" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/metricIntegrations" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Metric Integration
@@ -7912,6 +8190,7 @@ export def "atlas-groups-metric-integrations createGroupMetricIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -7924,7 +8203,7 @@ export def "atlas-groups-metric-integrations createGroupMetricIntegration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.preview+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.preview+json" $body
 }
 
 # Remove One Metric Integration
@@ -7941,6 +8220,7 @@ export def "atlas-groups-metric-integrations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -7950,7 +8230,7 @@ export def "atlas-groups-metric-integrations delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/metricIntegrations/($metricIntegrationId)" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Metric Integration
@@ -7967,6 +8247,7 @@ export def "atlas-groups-metric-integrations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -7976,7 +8257,7 @@ export def "atlas-groups-metric-integrations get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/metricIntegrations/($metricIntegrationId)" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Metric Integration
@@ -7993,6 +8274,7 @@ export def "atlas-groups-metric-integrations updateGroupMetricIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -8005,7 +8287,7 @@ export def "atlas-groups-metric-integrations updateGroupMetricIntegration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.preview+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.preview+json" $body
 }
 
 # Return All Available MongoDB LTS Versions for Clusters in One Project
@@ -8021,6 +8303,7 @@ export def "atlas-groups-mongo-db-versions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --cloudProvider: string@cloudProvider-completer # Filter results to only one cloud provider.
@@ -8035,7 +8318,7 @@ export def "atlas-groups-mongo-db-versions get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/mongoDBVersions" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Network Peering Connections in One Project
@@ -8051,6 +8334,7 @@ export def "atlas-groups-peers listGroupPeers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -8064,7 +8348,7 @@ export def "atlas-groups-peers listGroupPeers" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/peers" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Network Peering Connection
@@ -8081,6 +8365,7 @@ export def "atlas-groups-peers createGroupPeer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -8093,7 +8378,7 @@ export def "atlas-groups-peers createGroupPeer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Remove One Network Peering Connection
@@ -8110,6 +8395,7 @@ export def "atlas-groups-peers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -8119,7 +8405,7 @@ export def "atlas-groups-peers delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/peers/($peerId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Network Peering Connection in One Project
@@ -8136,6 +8422,7 @@ export def "atlas-groups-peers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -8145,7 +8432,7 @@ export def "atlas-groups-peers get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/peers/($peerId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Network Peering Connection
@@ -8162,6 +8449,7 @@ export def "atlas-groups-peers updateGroupPeer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -8174,7 +8462,7 @@ export def "atlas-groups-peers updateGroupPeer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Data Lake Pipelines in One Project
@@ -8192,6 +8480,7 @@ export def "atlas-groups-pipelines listGroupPipelines" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8200,7 +8489,7 @@ export def "atlas-groups-pipelines listGroupPipelines" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/pipelines" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Data Lake Pipeline
@@ -8219,6 +8508,7 @@ export def "atlas-groups-pipelines createGroupPipeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
@@ -8230,7 +8520,7 @@ export def "atlas-groups-pipelines createGroupPipeline" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Remove One Data Lake Pipeline
@@ -8249,6 +8539,7 @@ export def "atlas-groups-pipelines delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8257,7 +8548,7 @@ export def "atlas-groups-pipelines delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/pipelines/($pipelineName)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Data Lake Pipeline
@@ -8276,6 +8567,7 @@ export def "atlas-groups-pipelines get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -8285,7 +8577,7 @@ export def "atlas-groups-pipelines get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/pipelines/($pipelineName)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Data Lake Pipeline
@@ -8304,6 +8596,7 @@ export def "atlas-groups-pipelines updateGroupPipeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
@@ -8315,7 +8608,7 @@ export def "atlas-groups-pipelines updateGroupPipeline" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Ingestion Schedules for One Data Lake Pipeline
@@ -8334,6 +8627,7 @@ export def "atlas-groups-pipelines-available-schedules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -8343,7 +8637,7 @@ export def "atlas-groups-pipelines-available-schedules get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/pipelines/($pipelineName)/availableSchedules" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Backup Snapshots for One Data Lake Pipeline
@@ -8362,6 +8656,7 @@ export def "atlas-groups-pipelines-available-snapshots get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -8375,7 +8670,7 @@ export def "atlas-groups-pipelines-available-snapshots get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/pipelines/($pipelineName)/availableSnapshots" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pause One Data Lake Pipeline
@@ -8394,6 +8689,7 @@ export def "atlas-groups-pipelines-pause pauseGroupPipeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -8403,7 +8699,7 @@ export def "atlas-groups-pipelines-pause pauseGroupPipeline" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/pipelines/($pipelineName)/pause" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resume One Data Lake Pipeline
@@ -8422,6 +8718,7 @@ export def "atlas-groups-pipelines-resume resumeGroupPipeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -8431,7 +8728,7 @@ export def "atlas-groups-pipelines-resume resumeGroupPipeline" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/pipelines/($pipelineName)/resume" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Data Lake Pipeline Runs in One Project
@@ -8450,6 +8747,7 @@ export def "atlas-groups-pipelines-runs listGroupPipelineRuns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -8463,7 +8761,7 @@ export def "atlas-groups-pipelines-runs listGroupPipelineRuns" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/pipelines/($pipelineName)/runs" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete One Pipeline Run Dataset
@@ -8483,6 +8781,7 @@ export def "atlas-groups-pipelines-runs delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -8492,7 +8791,7 @@ export def "atlas-groups-pipelines-runs delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/pipelines/($pipelineName)/runs/($pipelineRunId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Data Lake Pipeline Run
@@ -8512,6 +8811,7 @@ export def "atlas-groups-pipelines-runs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -8521,7 +8821,7 @@ export def "atlas-groups-pipelines-runs get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/pipelines/($pipelineName)/runs/($pipelineRunId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Trigger On-Demand Snapshot Ingestion
@@ -8540,6 +8840,7 @@ export def "atlas-groups-pipelines-trigger triggerGroupPipeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -8552,7 +8853,7 @@ export def "atlas-groups-pipelines-trigger triggerGroupPipeline" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Create One Private Endpoint Service for One Provider
@@ -8569,6 +8870,7 @@ export def "atlas-groups-private-endpoint-endpoint-service createGroupPrivateEnd
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -8581,7 +8883,7 @@ export def "atlas-groups-private-endpoint-endpoint-service createGroupPrivateEnd
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Update One Private Endpoint Service for One Provider
@@ -8598,6 +8900,7 @@ export def "atlas-groups-private-endpoint-endpoint-service updateGroupPrivateEnd
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -8610,7 +8913,7 @@ export def "atlas-groups-private-endpoint-endpoint-service updateGroupPrivateEnd
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return Regionalized Private Endpoint Status
@@ -8626,6 +8929,7 @@ export def "atlas-groups-private-endpoint-regional-mode get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -8635,7 +8939,7 @@ export def "atlas-groups-private-endpoint-regional-mode get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/privateEndpoint/regionalMode" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Toggle Regionalized Private Endpoint Status
@@ -8651,6 +8955,7 @@ export def "atlas-groups-private-endpoint-regional-mode toggleGroupPrivateEndpoi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -8663,7 +8968,7 @@ export def "atlas-groups-private-endpoint-regional-mode toggleGroupPrivateEndpoi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Private Endpoints for One Serverless Instance
@@ -8682,6 +8987,7 @@ export def "atlas-groups-private-endpoint-serverless-instance-endpoint listGroup
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8690,7 +8996,7 @@ export def "atlas-groups-private-endpoint-serverless-instance-endpoint listGroup
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/privateEndpoint/serverless/instance/($instanceName)/endpoint" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Private Endpoint for One Serverless Instance
@@ -8710,6 +9016,7 @@ export def "atlas-groups-private-endpoint-serverless-instance-endpoint createGro
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
@@ -8721,7 +9028,7 @@ export def "atlas-groups-private-endpoint-serverless-instance-endpoint createGro
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Remove One Private Endpoint for One Serverless Instance
@@ -8741,6 +9048,7 @@ export def "atlas-groups-private-endpoint-serverless-instance-endpoint delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8749,7 +9057,7 @@ export def "atlas-groups-private-endpoint-serverless-instance-endpoint delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/privateEndpoint/serverless/instance/($instanceName)/endpoint/($endpointId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Private Endpoint for One Serverless Instance
@@ -8769,6 +9077,7 @@ export def "atlas-groups-private-endpoint-serverless-instance-endpoint get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8777,7 +9086,7 @@ export def "atlas-groups-private-endpoint-serverless-instance-endpoint get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/privateEndpoint/serverless/instance/($instanceName)/endpoint/($endpointId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Private Endpoint for One Serverless Instance
@@ -8797,6 +9106,7 @@ export def "atlas-groups-private-endpoint-serverless-instance-endpoint updateGro
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
@@ -8808,7 +9118,7 @@ export def "atlas-groups-private-endpoint-serverless-instance-endpoint updateGro
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Private Endpoint Services for One Provider
@@ -8825,6 +9135,7 @@ export def "atlas-groups-private-endpoint-endpoint-service listGroupPrivateEndpo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -8834,7 +9145,7 @@ export def "atlas-groups-private-endpoint-endpoint-service listGroupPrivateEndpo
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/privateEndpoint/($cloudProvider)/endpointService" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove One Private Endpoint Service for One Provider
@@ -8852,6 +9163,7 @@ export def "atlas-groups-private-endpoint-endpoint-service delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -8861,7 +9173,7 @@ export def "atlas-groups-private-endpoint-endpoint-service delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/privateEndpoint/($cloudProvider)/endpointService/($endpointServiceId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Private Endpoint Service for One Provider
@@ -8879,6 +9191,7 @@ export def "atlas-groups-private-endpoint-endpoint-service get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -8888,7 +9201,7 @@ export def "atlas-groups-private-endpoint-endpoint-service get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/privateEndpoint/($cloudProvider)/endpointService/($endpointServiceId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Private Endpoint for One Provider
@@ -8906,6 +9219,7 @@ export def "atlas-groups-private-endpoint-endpoint-service-endpoint createGroupP
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -8918,7 +9232,7 @@ export def "atlas-groups-private-endpoint-endpoint-service-endpoint createGroupP
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Remove One Private Endpoint for One Provider
@@ -8937,6 +9251,7 @@ export def "atlas-groups-private-endpoint-endpoint-service-endpoint delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -8946,7 +9261,7 @@ export def "atlas-groups-private-endpoint-endpoint-service-endpoint delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/privateEndpoint/($cloudProvider)/endpointService/($endpointServiceId)/endpoint/($endpointId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Private Endpoint for One Provider
@@ -8965,6 +9280,7 @@ export def "atlas-groups-private-endpoint-endpoint-service-endpoint get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -8974,7 +9290,7 @@ export def "atlas-groups-private-endpoint-endpoint-service-endpoint get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/privateEndpoint/($cloudProvider)/endpointService/($endpointServiceId)/endpoint/($endpointId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Verify Connect via Peering-Only Mode for One Project
@@ -8993,6 +9309,7 @@ export def "atlas-groups-private-ip-mode verifyGroupPrivateIpMode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -9002,7 +9319,7 @@ export def "atlas-groups-private-ip-mode verifyGroupPrivateIpMode" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/privateIpMode" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disable Connect via Peering-Only Mode for One Project
@@ -9021,6 +9338,7 @@ export def "atlas-groups-private-ip-mode disableGroupPrivateIpModePeering" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -9033,7 +9351,7 @@ export def "atlas-groups-private-ip-mode disableGroupPrivateIpModePeering" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Federated Database Instance and Online Archive Private Endpoints in One Project
@@ -9049,6 +9367,7 @@ export def "atlas-groups-private-network-settings-endpoint-ids listGroupPrivateN
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -9061,7 +9380,7 @@ export def "atlas-groups-private-network-settings-endpoint-ids listGroupPrivateN
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/privateNetworkSettings/endpointIds" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Federated Database Instance and Online Archive Private Endpoint for One Project
@@ -9078,6 +9397,7 @@ export def "atlas-groups-private-network-settings-endpoint-ids createGroupPrivat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -9090,7 +9410,7 @@ export def "atlas-groups-private-network-settings-endpoint-ids createGroupPrivat
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Remove One Federated Database Instance and Online Archive Private Endpoint from One Project
@@ -9107,6 +9427,7 @@ export def "atlas-groups-private-network-settings-endpoint-ids delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -9116,7 +9437,7 @@ export def "atlas-groups-private-network-settings-endpoint-ids delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/privateNetworkSettings/endpointIds/($endpointId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Federated Database Instance and Online Archive Private Endpoint in One Project
@@ -9133,6 +9454,7 @@ export def "atlas-groups-private-network-settings-endpoint-ids get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -9142,7 +9464,7 @@ export def "atlas-groups-private-network-settings-endpoint-ids get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/privateNetworkSettings/endpointIds/($endpointId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All MongoDB Processes in One Project
@@ -9158,6 +9480,7 @@ export def "atlas-groups-processes listGroupProcesses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -9170,7 +9493,7 @@ export def "atlas-groups-processes listGroupProcesses" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/processes" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One MongoDB Process by ID
@@ -9187,6 +9510,7 @@ export def "atlas-groups-processes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -9196,7 +9520,7 @@ export def "atlas-groups-processes get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/processes/($processId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Ranked Namespaces from One Host
@@ -9213,6 +9537,7 @@ export def "atlas-groups-processes-coll-stats-namespaces get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --start: string # Date and time when MongoDB Cloud begins reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
   --end: string # Date and time when MongoDB Cloud stops reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
@@ -9224,7 +9549,7 @@ export def "atlas-groups-processes-coll-stats-namespaces get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/processes/($processId)/collStats/namespaces" $qp)
   let accept_val = "application/vnd.atlas.2023-11-15+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Available Databases for One MongoDB Process
@@ -9242,6 +9567,7 @@ export def "atlas-groups-processes-databases listGroupProcessDatabases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -9254,7 +9580,7 @@ export def "atlas-groups-processes-databases listGroupProcessDatabases" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/processes/($processId)/databases" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Database for One MongoDB Process
@@ -9272,6 +9598,7 @@ export def "atlas-groups-processes-databases get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -9281,7 +9608,7 @@ export def "atlas-groups-processes-databases get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/processes/($processId)/databases/($databaseName)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Measurements for One Database in One MongoDB Process
@@ -9299,6 +9626,7 @@ export def "atlas-groups-processes-databases-measurements get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --m: list # One or more types of measurement to request for this MongoDB process. If omitted, the resource returns all measurements. To specify multiple values for `m`, repeat the `m` parameter for each value. Specify measurements that apply to the specified host. MongoDB Cloud returns an error if you specified any invalid measurements.
@@ -9313,7 +9641,7 @@ export def "atlas-groups-processes-databases-measurements get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/processes/($processId)/databases/($databaseName)/measurements" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Available Disks for One MongoDB Process
@@ -9330,6 +9658,7 @@ export def "atlas-groups-processes-disks listGroupProcessDisks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -9342,7 +9671,7 @@ export def "atlas-groups-processes-disks listGroupProcessDisks" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/processes/($processId)/disks" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Measurements for One Disk
@@ -9360,6 +9689,7 @@ export def "atlas-groups-processes-disks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9368,7 +9698,7 @@ export def "atlas-groups-processes-disks get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/processes/($processId)/disks/($partitionName)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Measurements of One Disk for One MongoDB Process
@@ -9386,6 +9716,7 @@ export def "atlas-groups-processes-disks-measurements get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --m: list # One or more types of measurement to request for this MongoDB process. If omitted, the resource returns all measurements. To specify multiple values for `m`, repeat the `m` parameter for each value. Specify measurements that apply to the specified host. MongoDB Cloud returns an error if you specified any invalid measurements.
@@ -9400,7 +9731,7 @@ export def "atlas-groups-processes-disks-measurements get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/processes/($processId)/disks/($partitionName)/measurements" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Measurements for One MongoDB Process
@@ -9417,6 +9748,7 @@ export def "atlas-groups-processes-measurements get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --m: list # One or more types of measurement to request for this MongoDB process. If omitted, the resource returns all measurements. To specify multiple values for `m`, repeat the `m` parameter for each value. Specify measurements that apply to the specified host. MongoDB Cloud returns an error if you specified any invalid measurements.
@@ -9431,7 +9763,7 @@ export def "atlas-groups-processes-measurements get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/processes/($processId)/measurements" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Namespaces for One Host
@@ -9448,6 +9780,7 @@ export def "atlas-groups-processes-performance-advisor-namespaces listGroupProce
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --duration: int # Length of time expressed during which the query finds suggested indexes among the managed namespaces in the cluster. This parameter expresses its value in milliseconds.  - If you don't specify the **since** parameter, the endpoint returns data covering the duration before the current time. - If you specify neither the **duration** nor **since** parameters, the endpoint returns data from the previous 24 hours. (format: int64)
@@ -9459,7 +9792,7 @@ export def "atlas-groups-processes-performance-advisor-namespaces listGroupProce
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/processes/($processId)/performanceAdvisor/namespaces" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Slow Queries
@@ -9476,6 +9809,7 @@ export def "atlas-groups-processes-performance-advisor-slow-query-logs listGroup
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --duration: int # Length of time expressed during which the query finds slow queries among the managed namespaces in the cluster. This parameter expresses its value in milliseconds.  - If you don't specify the **since** parameter, the endpoint returns data covering the duration before the current time. - If you specify neither the **duration** nor **since** parameters, the endpoint returns data from the previous 24 hours. (format: int64)
@@ -9492,7 +9826,7 @@ export def "atlas-groups-processes-performance-advisor-slow-query-logs listGroup
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/processes/($processId)/performanceAdvisor/slowQueryLogs" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Suggested Indexes
@@ -9509,6 +9843,7 @@ export def "atlas-groups-processes-performance-advisor-suggested-indexes listGro
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -9526,7 +9861,7 @@ export def "atlas-groups-processes-performance-advisor-suggested-indexes listGro
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/processes/($processId)/performanceAdvisor/suggestedIndexes" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Host-Level Query Latency
@@ -9545,6 +9880,7 @@ export def "atlas-groups-processes-coll-stats-measurements listGroupProcessCollS
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --metrics: list # List that contains the metrics that you want to retrieve for the associated data series. If you don't set this parameter, this resource returns data series for all Coll Stats Latency metrics.
   --start: string # Date and time when MongoDB Cloud begins reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
@@ -9557,7 +9893,7 @@ export def "atlas-groups-processes-coll-stats-measurements listGroupProcessCollS
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/processes/($processId)/($databaseName)/($collectionName)/collStats/measurements" $qp)
   let accept_val = "application/vnd.atlas.2023-11-15+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disable Push-Based Log Export for One Project
@@ -9575,6 +9911,7 @@ export def "atlas-groups-push-based-log-export delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -9584,7 +9921,7 @@ export def "atlas-groups-push-based-log-export delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/pushBasedLogExport" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Push-Based Log Export Configuration in One Project
@@ -9602,6 +9939,7 @@ export def "atlas-groups-push-based-log-export get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -9611,7 +9949,7 @@ export def "atlas-groups-push-based-log-export get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/pushBasedLogExport" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Push-Based Log Export Configuration in One Project
@@ -9629,6 +9967,7 @@ export def "atlas-groups-push-based-log-export updateGroupPushBasedLogExport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -9641,7 +9980,7 @@ export def "atlas-groups-push-based-log-export updateGroupPushBasedLogExport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Create One Push-Based Log Export Configuration in One Project
@@ -9659,6 +9998,7 @@ export def "atlas-groups-push-based-log-export createGroupPushBasedLogExport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -9671,7 +10011,7 @@ export def "atlas-groups-push-based-log-export createGroupPushBasedLogExport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Load Sample Dataset into One Cluster
@@ -9688,6 +10028,7 @@ export def "atlas-groups-sample-dataset-load requestGroupSampleDatasetLoad" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9696,7 +10037,7 @@ export def "atlas-groups-sample-dataset-load requestGroupSampleDatasetLoad" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/sampleDatasetLoad/($name)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Status of Sample Dataset Load for One Cluster
@@ -9713,6 +10054,7 @@ export def "atlas-groups-sample-dataset-load get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9721,7 +10063,7 @@ export def "atlas-groups-sample-dataset-load get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/sampleDatasetLoad/($sampleDatasetId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Cluster Description from Sandbox Template Configuration
@@ -9738,6 +10080,7 @@ export def "atlas-groups-sandbox generateGroupSandboxClusterDescription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -9747,7 +10090,7 @@ export def "atlas-groups-sandbox generateGroupSandboxClusterDescription" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/sandbox/($sandboxConfigId):generateClusterDescription" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Serverless Instances in One Project
@@ -9766,6 +10109,7 @@ export def "atlas-groups-serverless listGroupServerlessInstances" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -9778,7 +10122,7 @@ export def "atlas-groups-serverless listGroupServerlessInstances" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/serverless" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Restore Jobs for One Serverless Instance
@@ -9798,6 +10142,7 @@ export def "atlas-groups-serverless-backup-restore-jobs listGroupServerlessBacku
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -9810,7 +10155,7 @@ export def "atlas-groups-serverless-backup-restore-jobs listGroupServerlessBacku
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/serverless/($clusterName)/backup/restoreJobs" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Restore Job for One Serverless Instance
@@ -9830,6 +10175,7 @@ export def "atlas-groups-serverless-backup-restore-jobs createGroupServerlessBac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -9842,7 +10188,7 @@ export def "atlas-groups-serverless-backup-restore-jobs createGroupServerlessBac
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return One Restore Job for One Serverless Instance
@@ -9863,6 +10209,7 @@ export def "atlas-groups-serverless-backup-restore-jobs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -9872,7 +10219,7 @@ export def "atlas-groups-serverless-backup-restore-jobs get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/serverless/($clusterName)/backup/restoreJobs/($restoreJobId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Snapshots of One Serverless Instance
@@ -9892,6 +10239,7 @@ export def "atlas-groups-serverless-backup-snapshots listGroupServerlessBackupSn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
@@ -9904,7 +10252,7 @@ export def "atlas-groups-serverless-backup-snapshots listGroupServerlessBackupSn
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/serverless/($clusterName)/backup/snapshots" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Snapshot of One Serverless Instance
@@ -9925,6 +10273,7 @@ export def "atlas-groups-serverless-backup-snapshots get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9933,7 +10282,7 @@ export def "atlas-groups-serverless-backup-snapshots get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/serverless/($clusterName)/backup/snapshots/($snapshotId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Serverless Auto-Indexing Status
@@ -9953,6 +10302,7 @@ export def "atlas-groups-serverless-performance-advisor-auto-indexing get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -9962,7 +10312,7 @@ export def "atlas-groups-serverless-performance-advisor-auto-indexing get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/serverless/($clusterName)/performanceAdvisor/autoIndexing" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set Serverless Auto-Indexing Status
@@ -9982,6 +10332,7 @@ export def "atlas-groups-serverless-performance-advisor-auto-indexing setGroupSe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enable: oneof<nothing, bool> # Value that we want to set for the Serverless Auto Indexing toggle.
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -9991,7 +10342,7 @@ export def "atlas-groups-serverless-performance-advisor-auto-indexing setGroupSe
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/serverless/($clusterName)/performanceAdvisor/autoIndexing" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Serverless Instance from One Project
@@ -10011,6 +10362,7 @@ export def "atlas-groups-serverless get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -10020,7 +10372,7 @@ export def "atlas-groups-serverless get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/serverless/($name)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Project Service Accounts
@@ -10036,6 +10388,7 @@ export def "atlas-groups-service-accounts listGroupServiceAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -10047,7 +10400,7 @@ export def "atlas-groups-service-accounts listGroupServiceAccounts" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/serviceAccounts" $qp)
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Project Service Account
@@ -10063,6 +10416,7 @@ export def "atlas-groups-service-accounts createGroupServiceAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -10075,7 +10429,7 @@ export def "atlas-groups-service-accounts createGroupServiceAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
 }
 
 # Remove One Project Service Account
@@ -10092,6 +10446,7 @@ export def "atlas-groups-service-accounts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -10101,7 +10456,7 @@ export def "atlas-groups-service-accounts delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/serviceAccounts/($clientId)" $qp)
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Project Service Account
@@ -10118,6 +10473,7 @@ export def "atlas-groups-service-accounts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -10127,7 +10483,7 @@ export def "atlas-groups-service-accounts get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/serviceAccounts/($clientId)" $qp)
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Project Service Account
@@ -10144,6 +10500,7 @@ export def "atlas-groups-service-accounts updateGroupServiceAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -10156,7 +10513,7 @@ export def "atlas-groups-service-accounts updateGroupServiceAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
 }
 
 # Return All Access List Entries for One Project Service Account
@@ -10173,6 +10530,7 @@ export def "atlas-groups-service-accounts-access-list listGroupServiceAccountAcc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -10185,7 +10543,7 @@ export def "atlas-groups-service-accounts-access-list listGroupServiceAccountAcc
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/serviceAccounts/($clientId)/accessList" $qp)
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Access List Entries for One Project Service Account
@@ -10202,6 +10560,7 @@ export def "atlas-groups-service-accounts-access-list createGroupServiceAccountA
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -10217,7 +10576,7 @@ export def "atlas-groups-service-accounts-access-list createGroupServiceAccountA
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
 }
 
 # Remove One Access List Entry from One Project Service Account
@@ -10235,6 +10594,7 @@ export def "atlas-groups-service-accounts-access-list delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -10244,7 +10604,7 @@ export def "atlas-groups-service-accounts-access-list delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/serviceAccounts/($clientId)/accessList/($ipAddress)" $qp)
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Project Service Account Secret
@@ -10261,6 +10621,7 @@ export def "atlas-groups-service-accounts-secrets createGroupServiceAccountSecre
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -10273,7 +10634,7 @@ export def "atlas-groups-service-accounts-secrets createGroupServiceAccountSecre
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
 }
 
 # Delete One Project Service Account Secret
@@ -10291,6 +10652,7 @@ export def "atlas-groups-service-accounts-secrets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -10300,7 +10662,7 @@ export def "atlas-groups-service-accounts-secrets delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/serviceAccounts/($clientId)/secrets/($secretId)" $qp)
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign One Service Account to One Project
@@ -10317,6 +10679,7 @@ export def "atlas-groups-service-accounts inviteGroupServiceAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -10329,7 +10692,7 @@ export def "atlas-groups-service-accounts inviteGroupServiceAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
 }
 
 # Return Project Settings
@@ -10345,6 +10708,7 @@ export def "atlas-groups-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -10354,7 +10718,7 @@ export def "atlas-groups-settings get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/settings" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Project Settings
@@ -10370,6 +10734,7 @@ export def "atlas-groups-settings updateGroupSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -10382,7 +10747,7 @@ export def "atlas-groups-settings updateGroupSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Standby Links for One Project
@@ -10398,6 +10763,7 @@ export def "atlas-groups-standby-links listGroupStandbyLinks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
@@ -10409,7 +10775,7 @@ export def "atlas-groups-standby-links listGroupStandbyLinks" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/standbyLinks" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Standby Link
@@ -10425,6 +10791,7 @@ export def "atlas-groups-standby-links createGroupStandbyLink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether to wrap the response in an envelope.
   --body: record
 ]: any -> any {
@@ -10436,7 +10803,7 @@ export def "atlas-groups-standby-links createGroupStandbyLink" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.preview+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.preview+json" $body
 }
 
 # Delete Standby Link
@@ -10453,6 +10820,7 @@ export def "atlas-groups-standby-links delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether to wrap the response in an envelope.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10461,7 +10829,7 @@ export def "atlas-groups-standby-links delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/standbyLinks/($standbyLinkId)" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Standby Link
@@ -10478,6 +10846,7 @@ export def "atlas-groups-standby-links get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether to wrap the response in an envelope.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10486,7 +10855,7 @@ export def "atlas-groups-standby-links get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/standbyLinks/($standbyLinkId)" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Standby Link Failovers
@@ -10503,6 +10872,7 @@ export def "atlas-groups-standby-links-failovers listGroupStandbyLinkFailovers" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
@@ -10514,7 +10884,7 @@ export def "atlas-groups-standby-links-failovers listGroupStandbyLinkFailovers" 
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/standbyLinks/($standbyLinkId)/failovers" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Standby Link Failover
@@ -10531,6 +10901,7 @@ export def "atlas-groups-standby-links-failovers createGroupStandbyLinkFailover"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether to wrap the response in an envelope.
   --body: record
 ]: any -> any {
@@ -10542,7 +10913,7 @@ export def "atlas-groups-standby-links-failovers createGroupStandbyLinkFailover"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.preview+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.preview+json" $body
 }
 
 # Return One Standby Link Failover
@@ -10560,6 +10931,7 @@ export def "atlas-groups-standby-links-failovers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether to wrap the response in an envelope.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10568,7 +10940,7 @@ export def "atlas-groups-standby-links-failovers get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/standbyLinks/($standbyLinkId)/failovers/($failoverId)" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Inspect Failover Readiness for One Standby Link
@@ -10585,6 +10957,7 @@ export def "atlas-groups-standby-links inspectGroupStandbyLinkFailoverReadiness"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether to wrap the response in an envelope.
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -10594,7 +10967,7 @@ export def "atlas-groups-standby-links inspectGroupStandbyLinkFailoverReadiness"
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/standbyLinks/($standbyLinkId):inspectFailoverReadiness" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Stream Workspaces in One Project
@@ -10610,6 +10983,7 @@ export def "atlas-groups-streams listGroupStreamWorkspaces" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
@@ -10621,7 +10995,7 @@ export def "atlas-groups-streams listGroupStreamWorkspaces" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/streams" $qp)
   let accept_val = "application/vnd.atlas.2023-02-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Stream Workspace
@@ -10637,6 +11011,7 @@ export def "atlas-groups-streams createGroupStreamWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -10649,7 +11024,7 @@ export def "atlas-groups-streams createGroupStreamWorkspace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-02-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-02-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-02-01+json" $body
 }
 
 # Return Account ID and VPC ID for One Project and Region
@@ -10665,6 +11040,7 @@ export def "atlas-groups-streams-account-details get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --cloudProvider: string # One of "aws", "azure" or "gcp".
   --regionName: string # The cloud provider specific region name, i.e. "US_EAST_1" for cloud provider "aws".
@@ -10675,7 +11051,7 @@ export def "atlas-groups-streams-account-details get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/streams/accountDetails" $qp)
   let accept_val = "application/vnd.atlas.2024-11-13+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Active Incoming VPC Peering Connections
@@ -10691,6 +11067,7 @@ export def "atlas-groups-streams-active-vpc-peering-connections listGroupStreamA
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
@@ -10702,7 +11079,7 @@ export def "atlas-groups-streams-active-vpc-peering-connections listGroupStreamA
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/streams/activeVpcPeeringConnections" $qp)
   let accept_val = "application/vnd.atlas.2024-11-13+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Private Link Connections
@@ -10718,6 +11095,7 @@ export def "atlas-groups-streams-private-link-connections listGroupStreamPrivate
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
@@ -10729,7 +11107,7 @@ export def "atlas-groups-streams-private-link-connections listGroupStreamPrivate
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/streams/privateLinkConnections" $qp)
   let accept_val = "application/vnd.atlas.2023-02-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Private Link Connection
@@ -10745,6 +11123,7 @@ export def "atlas-groups-streams-private-link-connections createGroupStreamPriva
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -10757,7 +11136,7 @@ export def "atlas-groups-streams-private-link-connections createGroupStreamPriva
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-02-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-02-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-02-01+json" $body
 }
 
 # Delete One Private Link Connection
@@ -10774,6 +11153,7 @@ export def "atlas-groups-streams-private-link-connections delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -10783,7 +11163,7 @@ export def "atlas-groups-streams-private-link-connections delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/streams/privateLinkConnections/($connectionId)" $qp)
   let accept_val = "application/vnd.atlas.2023-02-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Private Link Connection
@@ -10800,6 +11180,7 @@ export def "atlas-groups-streams-private-link-connections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10808,7 +11189,7 @@ export def "atlas-groups-streams-private-link-connections get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/streams/privateLinkConnections/($connectionId)" $qp)
   let accept_val = "application/vnd.atlas.2023-02-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All VPC Peering Connections
@@ -10824,6 +11205,7 @@ export def "atlas-groups-streams-vpc-peering-connections listGroupStreamVpcPeeri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --requesterAccountId: string # The Account ID of the VPC Peering connection/s.
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -10836,7 +11218,7 @@ export def "atlas-groups-streams-vpc-peering-connections listGroupStreamVpcPeeri
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/streams/vpcPeeringConnections" $qp)
   let accept_val = "application/vnd.atlas.2023-02-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete One VPC Peering Connection
@@ -10853,6 +11235,7 @@ export def "atlas-groups-streams-vpc-peering-connections delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10861,7 +11244,7 @@ export def "atlas-groups-streams-vpc-peering-connections delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/streams/vpcPeeringConnections/($id)" $qp)
   let accept_val = "application/vnd.atlas.2023-02-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Accept One Incoming VPC Peering Connection
@@ -10878,6 +11261,7 @@ export def "atlas-groups-streams-vpc-peering-connections acceptGroupStreamVpcPee
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
@@ -10889,7 +11273,7 @@ export def "atlas-groups-streams-vpc-peering-connections acceptGroupStreamVpcPee
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-02-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-02-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-02-01+json" $body
 }
 
 # Reject One Incoming VPC Peering Connection
@@ -10906,6 +11290,7 @@ export def "atlas-groups-streams-vpc-peering-connections rejectGroupStreamVpcPee
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10914,7 +11299,7 @@ export def "atlas-groups-streams-vpc-peering-connections rejectGroupStreamVpcPee
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/streams/vpcPeeringConnections/($id):reject" $qp)
   let accept_val = "application/vnd.atlas.2023-02-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete One Stream Workspace
@@ -10931,6 +11316,7 @@ export def "atlas-groups-streams delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -10940,7 +11326,7 @@ export def "atlas-groups-streams delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/streams/($tenantName)" $qp)
   let accept_val = "application/vnd.atlas.2023-02-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Stream Workspace
@@ -10957,6 +11343,7 @@ export def "atlas-groups-streams get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeConnections: oneof<nothing, bool> # Flag to indicate whether connections information should be included in the stream workspace.
 ]: nothing -> any {
@@ -10966,7 +11353,7 @@ export def "atlas-groups-streams get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/streams/($tenantName)" $qp)
   let accept_val = "application/vnd.atlas.2023-02-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Stream Workspace
@@ -10983,6 +11370,7 @@ export def "atlas-groups-streams updateGroupStreamWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-9 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -10996,7 +11384,7 @@ export def "atlas-groups-streams updateGroupStreamWorkspace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/vnd.atlas.2023-02-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-02-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-02-01+json" $body
 }
 
 # Download Audit Logs for One Atlas Stream Processing Workspace
@@ -11013,6 +11401,7 @@ export def "atlas-groups-streams-audit-logs downloadGroupStreamAuditLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --endDate: int # Timestamp that specifies the end point for the range of log messages to download.  MongoDB Cloud expresses this timestamp in the number of seconds that have elapsed since the UNIX epoch. (format: int64, e.g. 1636481348)
   --startDate: int # Timestamp that specifies the starting point for the range of log messages to download. MongoDB Cloud expresses this timestamp in the number of seconds that have elapsed since the UNIX epoch. (format: int64, e.g. 1636466948)
@@ -11024,7 +11413,7 @@ export def "atlas-groups-streams-audit-logs downloadGroupStreamAuditLogs" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/streams/($tenantName)/auditLogs" $qp)
   let accept_val = "application/vnd.atlas.2023-02-01+gzip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Connections of the Stream Workspaces
@@ -11041,6 +11430,7 @@ export def "atlas-groups-streams-connections listGroupStreamConnections" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
@@ -11052,7 +11442,7 @@ export def "atlas-groups-streams-connections listGroupStreamConnections" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/streams/($tenantName)/connections" $qp)
   let accept_val = "application/vnd.atlas.2023-02-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Stream Connection
@@ -11069,6 +11459,7 @@ export def "atlas-groups-streams-connections createGroupStreamConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -11081,7 +11472,7 @@ export def "atlas-groups-streams-connections createGroupStreamConnection" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-02-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-02-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-02-01+json" $body
 }
 
 # Delete One Stream Connection
@@ -11099,6 +11490,7 @@ export def "atlas-groups-streams-connections delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -11108,7 +11500,7 @@ export def "atlas-groups-streams-connections delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/streams/($tenantName)/connections/($connectionName)" $qp)
   let accept_val = "application/vnd.atlas.2023-02-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Stream Connection
@@ -11126,6 +11518,7 @@ export def "atlas-groups-streams-connections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11134,7 +11527,7 @@ export def "atlas-groups-streams-connections get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/streams/($tenantName)/connections/($connectionName)" $qp)
   let accept_val = "application/vnd.atlas.2023-02-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Stream Connection
@@ -11152,6 +11545,7 @@ export def "atlas-groups-streams-connections updateGroupStreamConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -11164,7 +11558,7 @@ export def "atlas-groups-streams-connections updateGroupStreamConnection" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-02-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-02-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-02-01+json" $body
 }
 
 # Create One Failover Stream Connection
@@ -11182,6 +11576,7 @@ export def "atlas-groups-streams-connections-failover-connections createGroupStr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -11194,7 +11589,7 @@ export def "atlas-groups-streams-connections-failover-connections createGroupStr
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.preview+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.preview+json" $body
 }
 
 # Create One Stream Processor
@@ -11211,6 +11606,7 @@ export def "atlas-groups-streams-processor createGroupStreamProcessor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -11223,7 +11619,7 @@ export def "atlas-groups-streams-processor createGroupStreamProcessor" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-05-30+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-05-30+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-05-30+json" $body
 }
 
 # Delete One Stream Processor
@@ -11241,6 +11637,7 @@ export def "atlas-groups-streams-processor delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -11250,7 +11647,7 @@ export def "atlas-groups-streams-processor delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/streams/($tenantName)/processor/($processorName)" $qp)
   let accept_val = "application/vnd.atlas.2024-05-30+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Stream Processor
@@ -11268,6 +11665,7 @@ export def "atlas-groups-streams-processor get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -11277,7 +11675,7 @@ export def "atlas-groups-streams-processor get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/streams/($tenantName)/processor/($processorName)" $qp)
   let accept_val = "application/vnd.atlas.2024-05-30+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Stream Processor
@@ -11295,6 +11693,7 @@ export def "atlas-groups-streams-processor updateGroupStreamProcessor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -11307,7 +11706,7 @@ export def "atlas-groups-streams-processor updateGroupStreamProcessor" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-05-30+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-05-30+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-05-30+json" $body
 }
 
 # Start One Stream Processor
@@ -11325,6 +11724,7 @@ export def "atlas-groups-streams-processor startGroupStreamProcessor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -11334,7 +11734,7 @@ export def "atlas-groups-streams-processor startGroupStreamProcessor" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/streams/($tenantName)/processor/($processorName):start" $qp)
   let accept_val = "application/vnd.atlas.2024-05-30+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start One Stream Processor With Options
@@ -11352,6 +11752,7 @@ export def "atlas-groups-streams-processor startGroupStreamProcessorWith" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-10 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -11365,7 +11766,7 @@ export def "atlas-groups-streams-processor startGroupStreamProcessorWith" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/vnd.atlas.2025-03-12+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2025-03-12+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2025-03-12+json" $body
 }
 
 # Stop One Stream Processor
@@ -11383,6 +11784,7 @@ export def "atlas-groups-streams-processor stopGroupStreamProcessor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -11392,7 +11794,7 @@ export def "atlas-groups-streams-processor stopGroupStreamProcessor" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/streams/($tenantName)/processor/($processorName):stop" $qp)
   let accept_val = "application/vnd.atlas.2024-05-30+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Stream Processors in One Stream Workspace
@@ -11409,6 +11811,7 @@ export def "atlas-groups-streams-processors get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -11421,7 +11824,7 @@ export def "atlas-groups-streams-processors get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/streams/($tenantName)/processors" $qp)
   let accept_val = "application/vnd.atlas.2024-05-30+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download Operational Logs for One Atlas Stream Processing Workspace
@@ -11438,6 +11841,7 @@ export def "atlas-groups-streams downloadGroupStreamOperationalLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --endDate: int # Timestamp that specifies the end point for the range of log messages to download.  MongoDB Cloud expresses this timestamp in the number of seconds that have elapsed since the UNIX epoch. (format: int64, e.g. 1636481348)
   --startDate: int # Timestamp that specifies the starting point for the range of log messages to download. MongoDB Cloud expresses this timestamp in the number of seconds that have elapsed since the UNIX epoch. (format: int64, e.g. 1636466948)
@@ -11449,7 +11853,7 @@ export def "atlas-groups-streams downloadGroupStreamOperationalLogs" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/streams/($tenantName):downloadOperationalLogs" $qp)
   let accept_val = "application/vnd.atlas.2025-03-12+gzip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Stream Workspace with Sample Connections
@@ -11465,6 +11869,7 @@ export def "atlas-groups-streams-with-sample-connections withGroupStreamSampleCo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -11477,7 +11882,7 @@ export def "atlas-groups-streams-with-sample-connections withGroupStreamSampleCo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
 }
 
 # Return All Teams in One Project
@@ -11493,6 +11898,7 @@ export def "atlas-groups-teams listGroupTeams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
@@ -11505,7 +11911,7 @@ export def "atlas-groups-teams listGroupTeams" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/teams" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Multiple Teams to One Project
@@ -11522,6 +11928,7 @@ export def "atlas-groups-teams addGroupTeams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -11534,7 +11941,7 @@ export def "atlas-groups-teams addGroupTeams" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Remove One Team from One Project
@@ -11552,6 +11959,7 @@ export def "atlas-groups-teams removeGroupTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11560,7 +11968,7 @@ export def "atlas-groups-teams removeGroupTeam" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/teams/($teamId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Team in One Project
@@ -11577,6 +11985,7 @@ export def "atlas-groups-teams get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -11586,7 +11995,7 @@ export def "atlas-groups-teams get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/teams/($teamId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Team Roles in One Project
@@ -11604,6 +12013,7 @@ export def "atlas-groups-teams updateGroupTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -11616,7 +12026,7 @@ export def "atlas-groups-teams updateGroupTeam" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return LDAP or X.509 Configuration
@@ -11632,6 +12042,7 @@ export def "atlas-groups-user-security get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -11641,7 +12052,7 @@ export def "atlas-groups-user-security get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/userSecurity" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update LDAP or X.509 Configuration
@@ -11657,6 +12068,7 @@ export def "atlas-groups-user-security updateGroupUserSecurity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -11669,7 +12081,7 @@ export def "atlas-groups-user-security updateGroupUserSecurity" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Disable Customer-Managed X.509
@@ -11685,6 +12097,7 @@ export def "atlas-groups-user-security-customer-x509 disableGroupUserSecurityCus
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11693,7 +12106,7 @@ export def "atlas-groups-user-security-customer-x509 disableGroupUserSecurityCus
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/userSecurity/customerX509" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove LDAP User to DN Mapping
@@ -11709,6 +12122,7 @@ export def "atlas-groups-user-security-ldap-user-to-dn-mapping delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -11718,7 +12132,7 @@ export def "atlas-groups-user-security-ldap-user-to-dn-mapping delete" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/userSecurity/ldap/userToDNMapping" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Verify LDAP Configuration in One Project
@@ -11734,6 +12148,7 @@ export def "atlas-groups-user-security-ldap-verify verifyGroupUserSecurityLdap" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -11746,7 +12161,7 @@ export def "atlas-groups-user-security-ldap-verify verifyGroupUserSecurityLdap" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return Status of LDAP Configuration Verification in One Project
@@ -11763,6 +12178,7 @@ export def "atlas-groups-user-security-ldap-verify get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -11772,7 +12188,7 @@ export def "atlas-groups-user-security-ldap-verify get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/userSecurity/ldap/verify/($requestId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All MongoDB Cloud Users in One Project
@@ -11790,6 +12206,7 @@ export def "atlas-groups-users listGroupUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-11 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
@@ -11808,7 +12225,7 @@ export def "atlas-groups-users listGroupUsers" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/users" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add One MongoDB Cloud User to One Project
@@ -11824,6 +12241,7 @@ export def "atlas-groups-users addGroupUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -11836,7 +12254,7 @@ export def "atlas-groups-users addGroupUsers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2025-02-19+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2025-02-19+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2025-02-19+json" $body
 }
 
 # Remove One MongoDB Cloud User from One Project
@@ -11854,6 +12272,7 @@ export def "atlas-groups-users removeGroupUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-11 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -11864,7 +12283,7 @@ export def "atlas-groups-users removeGroupUser" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/users/($userId)" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One MongoDB Cloud User in One Project
@@ -11881,6 +12300,7 @@ export def "atlas-groups-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --orgMembershipStatuses: list # Organization membership status to filter users by. You can supply this parameter multiple times. Allowed values: `ACTIVE`, `PENDING`, `INVITATION_EXPIRED`, `INVITATION_REJECTED`. If you exclude this parameter, this resource returns ACTIVE and PENDING users. Not supported in deprecated versions.
@@ -11891,7 +12311,7 @@ export def "atlas-groups-users get" [
   let full_url = (build-url $base $"/api/atlas/v2/groups/($groupId)/users/($userId)" $qp)
   let accept_val = "application/vnd.atlas.2025-02-19+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Project Roles for One MongoDB Cloud User
@@ -11910,6 +12330,7 @@ export def "atlas-groups-users-roles updateGroupUserRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
@@ -11922,7 +12343,7 @@ export def "atlas-groups-users-roles updateGroupUserRoles" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Add One Project Role to One MongoDB Cloud User
@@ -11940,6 +12361,7 @@ export def "atlas-groups-users addGroupUserRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -11952,7 +12374,7 @@ export def "atlas-groups-users addGroupUserRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2025-02-19+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2025-02-19+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2025-02-19+json" $body
 }
 
 # Remove One Project Role from One MongoDB Cloud User
@@ -11970,6 +12392,7 @@ export def "atlas-groups-users removeGroupUserRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -11982,7 +12405,7 @@ export def "atlas-groups-users removeGroupUserRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2025-02-19+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2025-02-19+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2025-02-19+json" $body
 }
 
 # Migrate One Project to Another Organization
@@ -11998,6 +12421,7 @@ export def "atlas-groups migrateGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
@@ -12009,7 +12433,7 @@ export def "atlas-groups migrateGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-05-30+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-05-30+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-05-30+json" $body
 }
 
 # Return All Organizations
@@ -12024,6 +12448,7 @@ export def "atlas-orgs listOrgs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -12037,7 +12462,7 @@ export def "atlas-orgs listOrgs" [
   let full_url = (build-url $base "/api/atlas/v2/orgs" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Organization
@@ -12053,6 +12478,7 @@ export def "atlas-orgs createOrg" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -12065,7 +12491,7 @@ export def "atlas-orgs createOrg" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Remove One Organization
@@ -12081,6 +12507,7 @@ export def "atlas-orgs delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12089,7 +12516,7 @@ export def "atlas-orgs delete" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Organization
@@ -12105,6 +12532,7 @@ export def "atlas-orgs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -12114,7 +12542,7 @@ export def "atlas-orgs get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Organization
@@ -12130,6 +12558,7 @@ export def "atlas-orgs updateOrg" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -12142,7 +12571,7 @@ export def "atlas-orgs updateOrg" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return Pre-Filtered Activity Feed Link for One Organization
@@ -12158,6 +12587,7 @@ export def "atlas-orgs-activity-feed get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --eventType: list # Category of incident recorded at this moment in time.  **IMPORTANT**: The complete list of event type values changes frequently.
   --maxDate: string # End date and time for events to include in the activity feed link. ISO 8601 timestamp format in UTC. (format: date-time)
@@ -12169,7 +12599,7 @@ export def "atlas-orgs-activity-feed get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/activityFeed" $qp)
   let accept_val = "application/vnd.atlas.2025-03-12+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return AI Model API Keys for One Organization
@@ -12185,6 +12615,7 @@ export def "atlas-orgs-ai-model-api-keys listOrgAiModelApiKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
@@ -12196,7 +12627,7 @@ export def "atlas-orgs-ai-model-api-keys listOrgAiModelApiKeys" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/aiModelApiKeys" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Single AI Model API Key for One Organization
@@ -12213,6 +12644,7 @@ export def "atlas-orgs-ai-model-api-keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -12222,7 +12654,7 @@ export def "atlas-orgs-ai-model-api-keys get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/aiModelApiKeys/($apiKeyId)" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return AI Model Rate Limits for One Organization
@@ -12238,6 +12670,7 @@ export def "atlas-orgs-ai-model-rate-limits listOrgAiModelRateLimits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
@@ -12249,7 +12682,7 @@ export def "atlas-orgs-ai-model-rate-limits listOrgAiModelRateLimits" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/aiModelRateLimits" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Single AI Model Rate Limit for One Organization
@@ -12266,6 +12699,7 @@ export def "atlas-orgs-ai-model-rate-limits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -12275,7 +12709,7 @@ export def "atlas-orgs-ai-model-rate-limits get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/aiModelRateLimits/($modelGroupName)" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Organization API Keys
@@ -12292,6 +12726,7 @@ export def "atlas-orgs-api-keys listOrgApiKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -12304,7 +12739,7 @@ export def "atlas-orgs-api-keys listOrgApiKeys" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/apiKeys" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Organization API Key
@@ -12321,6 +12756,7 @@ export def "atlas-orgs-api-keys createOrgApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -12333,7 +12769,7 @@ export def "atlas-orgs-api-keys createOrgApiKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Remove One Organization API Key
@@ -12351,6 +12787,7 @@ export def "atlas-orgs-api-keys delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -12360,7 +12797,7 @@ export def "atlas-orgs-api-keys delete" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/apiKeys/($apiUserId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Organization API Key
@@ -12378,6 +12815,7 @@ export def "atlas-orgs-api-keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -12387,7 +12825,7 @@ export def "atlas-orgs-api-keys get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/apiKeys/($apiUserId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Organization API Key
@@ -12405,6 +12843,7 @@ export def "atlas-orgs-api-keys updateOrgApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -12417,7 +12856,7 @@ export def "atlas-orgs-api-keys updateOrgApiKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Access List Entries for One Organization API Key
@@ -12435,6 +12874,7 @@ export def "atlas-orgs-api-keys-access-list listOrgApiKeyAccessListEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -12447,7 +12887,7 @@ export def "atlas-orgs-api-keys-access-list listOrgApiKeyAccessListEntries" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/apiKeys/($apiUserId)/accessList" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Access List Entry for One Organization API Key
@@ -12464,6 +12904,7 @@ export def "atlas-orgs-api-keys-access-list createOrgApiKeyAccessListEntry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -12479,7 +12920,7 @@ export def "atlas-orgs-api-keys-access-list createOrgApiKeyAccessListEntry" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Remove One Access List Entry for One Organization API Key
@@ -12498,6 +12939,7 @@ export def "atlas-orgs-api-keys-access-list delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -12507,7 +12949,7 @@ export def "atlas-orgs-api-keys-access-list delete" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/apiKeys/($apiUserId)/accessList/($ipAddress)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Access List Entry for One Organization API Key
@@ -12526,6 +12968,7 @@ export def "atlas-orgs-api-keys-access-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -12535,7 +12978,7 @@ export def "atlas-orgs-api-keys-access-list get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/apiKeys/($apiUserId)/accessList/($ipAddress)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Associated Invoices
@@ -12551,6 +12994,7 @@ export def "atlas-orgs-associated-invoices get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --month: int # The month for which to retrieve invoices (1-12). Defaults to current month. (format: int64)
   --year: int # The year for which to retrieve invoices. Defaults to current year. (format: int64)
   --includeLinkedOrgs: oneof<nothing, bool> # Whether to include invoices from linked organizations. Defaults to false.
@@ -12561,7 +13005,7 @@ export def "atlas-orgs-associated-invoices get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/associatedInvoices" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Cost Explorer Query Process
@@ -12577,6 +13021,7 @@ export def "atlas-orgs-billing-cost-explorer-usage createOrgBillingCostExplorerU
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
@@ -12588,7 +13033,7 @@ export def "atlas-orgs-billing-cost-explorer-usage createOrgBillingCostExplorerU
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return Usage Details for One Cost Explorer Query
@@ -12605,6 +13050,7 @@ export def "atlas-orgs-billing-cost-explorer-usage get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-12 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
@@ -12614,7 +13060,7 @@ export def "atlas-orgs-billing-cost-explorer-usage get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/billing/costExplorer/usage/($token)" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+csv")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Events from One Organization
@@ -12630,6 +13076,7 @@ export def "atlas-orgs-events listOrgEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -12646,7 +13093,7 @@ export def "atlas-orgs-events listOrgEvents" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/events" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Event from One Organization
@@ -12664,6 +13111,7 @@ export def "atlas-orgs-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --includeRaw: oneof<nothing, bool> # Flag that indicates whether to include the raw document in the output. The raw document contains additional meta information about the event. (default: false)
@@ -12674,7 +13122,7 @@ export def "atlas-orgs-events get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/events/($eventId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Federation Settings for One Organization
@@ -12690,6 +13138,7 @@ export def "atlas-orgs-federation-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -12699,7 +13148,7 @@ export def "atlas-orgs-federation-settings get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/federationSettings" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Projects in One Organization
@@ -12715,6 +13164,7 @@ export def "atlas-orgs-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -12728,7 +13178,7 @@ export def "atlas-orgs-groups get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/groups" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Invitations in One Organization
@@ -12747,6 +13197,7 @@ export def "atlas-orgs-invites listOrgInvites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --username: string # Email address of the user account invited to this organization. If you exclude this parameter, this resource returns all pending invitations. (format: email)
@@ -12757,7 +13208,7 @@ export def "atlas-orgs-invites listOrgInvites" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/invites" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Invitation in One Organization
@@ -12776,6 +13227,7 @@ export def "atlas-orgs-invites updateOrgInvites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -12788,7 +13240,7 @@ export def "atlas-orgs-invites updateOrgInvites" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Create Invitation for One MongoDB Cloud User in One Organization
@@ -12807,6 +13259,7 @@ export def "atlas-orgs-invites createOrgInvite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -12819,7 +13272,7 @@ export def "atlas-orgs-invites createOrgInvite" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Remove One Invitation from One Organization
@@ -12839,6 +13292,7 @@ export def "atlas-orgs-invites delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -12848,7 +13302,7 @@ export def "atlas-orgs-invites delete" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/invites/($invitationId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Invitation in One Organization by Invitation ID
@@ -12868,6 +13322,7 @@ export def "atlas-orgs-invites get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12876,7 +13331,7 @@ export def "atlas-orgs-invites get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/invites/($invitationId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Invitation in One Organization by Invitation ID
@@ -12896,6 +13351,7 @@ export def "atlas-orgs-invites updateOrgInviteById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -12908,7 +13364,7 @@ export def "atlas-orgs-invites updateOrgInviteById" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Invoices for One Organization
@@ -12924,6 +13380,7 @@ export def "atlas-orgs-invoices listOrgInvoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -12942,7 +13399,7 @@ export def "atlas-orgs-invoices listOrgInvoices" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/invoices" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Pending Invoices for One Organization
@@ -12958,6 +13415,7 @@ export def "atlas-orgs-invoices-pending listOrgInvoicePending" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -12967,7 +13425,7 @@ export def "atlas-orgs-invoices-pending listOrgInvoicePending" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/invoices/pending" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Invoice for One Organization
@@ -12984,6 +13442,7 @@ export def "atlas-orgs-invoices get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-12 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -12994,7 +13453,7 @@ export def "atlas-orgs-invoices get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/invoices/($invoiceId)" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+csv")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Invoice as CSV for One Organization
@@ -13011,6 +13470,7 @@ export def "atlas-orgs-invoices-csv get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -13020,7 +13480,7 @@ export def "atlas-orgs-invoices-csv get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/invoices/($invoiceId)/csv" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Line Items for One Invoice by Invoice ID
@@ -13037,6 +13497,7 @@ export def "atlas-orgs-invoices-line-items-search searchOrgInvoiceLineItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
@@ -13050,7 +13511,7 @@ export def "atlas-orgs-invoices-line-items-search searchOrgInvoiceLineItems" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
 }
 
 # Generate and Download Invoice Report
@@ -13067,6 +13528,7 @@ export def "atlas-orgs-invoices generateOrgInvoiceAndDownloadReport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -13076,7 +13538,7 @@ export def "atlas-orgs-invoices generateOrgInvoiceAndDownloadReport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.preview+gzip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.preview+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.preview+json" $body
 }
 
 # Return All Projects Available for Migration
@@ -13092,6 +13554,7 @@ export def "atlas-orgs-live-migrations-available-projects listOrgLiveMigrationAv
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -13101,7 +13564,7 @@ export def "atlas-orgs-live-migrations-available-projects listOrgLiveMigrationAv
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/liveMigrations/availableProjects" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove One Link-Token
@@ -13117,6 +13580,7 @@ export def "atlas-orgs-live-migrations-link-tokens delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -13125,7 +13589,7 @@ export def "atlas-orgs-live-migrations-link-tokens delete" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/liveMigrations/linkTokens" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Link-Token
@@ -13141,6 +13605,7 @@ export def "atlas-orgs-live-migrations-link-tokens createOrgLiveMigrationLinkTok
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -13153,7 +13618,7 @@ export def "atlas-orgs-live-migrations-link-tokens createOrgLiveMigrationLinkTok
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Non-Compliant Resources
@@ -13170,6 +13635,7 @@ export def "atlas-orgs-non-compliant-resources get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -13179,7 +13645,7 @@ export def "atlas-orgs-non-compliant-resources get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/nonCompliantResources" $qp)
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Atlas Resource Policies
@@ -13196,6 +13662,7 @@ export def "atlas-orgs-resource-policies listOrgResourcePolicies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -13205,7 +13672,7 @@ export def "atlas-orgs-resource-policies listOrgResourcePolicies" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/resourcePolicies" $qp)
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Atlas Resource Policy
@@ -13222,6 +13689,7 @@ export def "atlas-orgs-resource-policies createOrgResourcePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -13234,7 +13702,7 @@ export def "atlas-orgs-resource-policies createOrgResourcePolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
 }
 
 # Delete One Atlas Resource Policy
@@ -13252,6 +13720,7 @@ export def "atlas-orgs-resource-policies delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -13261,7 +13730,7 @@ export def "atlas-orgs-resource-policies delete" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/resourcePolicies/($resourcePolicyId)" $qp)
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Atlas Resource Policy
@@ -13279,6 +13748,7 @@ export def "atlas-orgs-resource-policies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -13288,7 +13758,7 @@ export def "atlas-orgs-resource-policies get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/resourcePolicies/($resourcePolicyId)" $qp)
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Atlas Resource Policy
@@ -13306,6 +13776,7 @@ export def "atlas-orgs-resource-policies updateOrgResourcePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -13318,7 +13789,7 @@ export def "atlas-orgs-resource-policies updateOrgResourcePolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
 }
 
 # Validate One Atlas Resource Policy
@@ -13335,6 +13806,7 @@ export def "atlas-orgs-resource-policies-validate validateOrgResourcePolicies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -13347,7 +13819,7 @@ export def "atlas-orgs-resource-policies-validate validateOrgResourcePolicies" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
 }
 
 # Return Sandbox Configuration IDs for an Organization
@@ -13363,6 +13835,7 @@ export def "atlas-orgs-sandbox-config listOrgSandboxConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -13374,7 +13847,7 @@ export def "atlas-orgs-sandbox-config listOrgSandboxConfig" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/sandboxConfig" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Sandbox Configuration for an Organization
@@ -13390,6 +13863,7 @@ export def "atlas-orgs-sandbox-config createOrgSandboxConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -13402,7 +13876,7 @@ export def "atlas-orgs-sandbox-config createOrgSandboxConfig" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.preview+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.preview+json" $body
 }
 
 # Delete the Default Sandbox Configuration and Disable Sandbox
@@ -13419,13 +13893,14 @@ export def "atlas-orgs-sandbox-config delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/sandboxConfig/($sandboxConfigId)")
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Default Sandbox Configuration for One Organization
@@ -13442,6 +13917,7 @@ export def "atlas-orgs-sandbox-config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -13451,7 +13927,7 @@ export def "atlas-orgs-sandbox-config get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/sandboxConfig/($sandboxConfigId)" $qp)
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an Existing Sandbox Configuration
@@ -13468,6 +13944,7 @@ export def "atlas-orgs-sandbox-config updateOrgSandboxConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -13480,7 +13957,7 @@ export def "atlas-orgs-sandbox-config updateOrgSandboxConfig" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.preview+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.preview+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.preview+json" $body
 }
 
 # Return All Organization Service Accounts
@@ -13496,6 +13973,7 @@ export def "atlas-orgs-service-accounts listOrgServiceAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -13507,7 +13985,7 @@ export def "atlas-orgs-service-accounts listOrgServiceAccounts" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/serviceAccounts" $qp)
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Organization Service Account
@@ -13523,6 +14001,7 @@ export def "atlas-orgs-service-accounts createOrgServiceAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -13535,7 +14014,7 @@ export def "atlas-orgs-service-accounts createOrgServiceAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
 }
 
 # Delete One Organization Service Account
@@ -13552,6 +14031,7 @@ export def "atlas-orgs-service-accounts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -13561,7 +14041,7 @@ export def "atlas-orgs-service-accounts delete" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/serviceAccounts/($clientId)" $qp)
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Organization Service Account
@@ -13578,6 +14058,7 @@ export def "atlas-orgs-service-accounts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -13587,7 +14068,7 @@ export def "atlas-orgs-service-accounts get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/serviceAccounts/($clientId)" $qp)
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One Organization Service Account
@@ -13604,6 +14085,7 @@ export def "atlas-orgs-service-accounts updateOrgServiceAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -13616,7 +14098,7 @@ export def "atlas-orgs-service-accounts updateOrgServiceAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
 }
 
 # Return All Access List Entries for One Organization Service Account
@@ -13633,6 +14115,7 @@ export def "atlas-orgs-service-accounts-access-list listOrgServiceAccountAccessL
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -13645,7 +14128,7 @@ export def "atlas-orgs-service-accounts-access-list listOrgServiceAccountAccessL
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/serviceAccounts/($clientId)/accessList" $qp)
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Access List Entries for One Organization Service Account
@@ -13662,6 +14145,7 @@ export def "atlas-orgs-service-accounts-access-list createOrgServiceAccountAcces
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -13677,7 +14161,7 @@ export def "atlas-orgs-service-accounts-access-list createOrgServiceAccountAcces
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
 }
 
 # Remove One Access List Entry from One Organization Service Account
@@ -13695,6 +14179,7 @@ export def "atlas-orgs-service-accounts-access-list delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -13704,7 +14189,7 @@ export def "atlas-orgs-service-accounts-access-list delete" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/serviceAccounts/($clientId)/accessList/($ipAddress)" $qp)
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Service Account Project Assignments
@@ -13721,6 +14206,7 @@ export def "atlas-orgs-service-accounts-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -13732,7 +14218,7 @@ export def "atlas-orgs-service-accounts-groups get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/serviceAccounts/($clientId)/groups" $qp)
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Organization Service Account Secret
@@ -13749,6 +14235,7 @@ export def "atlas-orgs-service-accounts-secrets createOrgServiceAccountSecret" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -13761,7 +14248,7 @@ export def "atlas-orgs-service-accounts-secrets createOrgServiceAccountSecret" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2024-08-05+json" $body
 }
 
 # Delete One Organization Service Account Secret
@@ -13779,6 +14266,7 @@ export def "atlas-orgs-service-accounts-secrets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -13788,7 +14276,7 @@ export def "atlas-orgs-service-accounts-secrets delete" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/serviceAccounts/($clientId)/secrets/($secretId)" $qp)
   let accept_val = "application/vnd.atlas.2024-08-05+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Settings for One Organization
@@ -13804,6 +14292,7 @@ export def "atlas-orgs-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -13813,7 +14302,7 @@ export def "atlas-orgs-settings get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/settings" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Settings for One Organization
@@ -13829,6 +14318,7 @@ export def "atlas-orgs-settings updateOrgSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -13841,7 +14331,7 @@ export def "atlas-orgs-settings updateOrgSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All Teams in One Organization
@@ -13858,6 +14348,7 @@ export def "atlas-orgs-teams listOrgTeams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
@@ -13870,7 +14361,7 @@ export def "atlas-orgs-teams listOrgTeams" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/teams" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One Team in One Organization
@@ -13887,6 +14378,7 @@ export def "atlas-orgs-teams createOrgTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -13899,7 +14391,7 @@ export def "atlas-orgs-teams createOrgTeam" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return One Team by Name
@@ -13917,6 +14409,7 @@ export def "atlas-orgs-teams-by-name get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -13926,7 +14419,7 @@ export def "atlas-orgs-teams-by-name get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/teams/byName/($teamName)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove One Team from One Organization
@@ -13944,6 +14437,7 @@ export def "atlas-orgs-teams delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -13953,7 +14447,7 @@ export def "atlas-orgs-teams delete" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/teams/($teamId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Team by ID
@@ -13971,6 +14465,7 @@ export def "atlas-orgs-teams get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -13980,7 +14475,7 @@ export def "atlas-orgs-teams get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/teams/($teamId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Rename One Team
@@ -13998,6 +14493,7 @@ export def "atlas-orgs-teams renameOrgTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -14010,7 +14506,7 @@ export def "atlas-orgs-teams renameOrgTeam" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return All MongoDB Cloud Users Assigned to One Team
@@ -14029,6 +14525,7 @@ export def "atlas-orgs-teams-users listOrgTeamUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-11 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -14045,7 +14542,7 @@ export def "atlas-orgs-teams-users listOrgTeamUsers" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/teams/($teamId)/users" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign MongoDB Cloud Users in One Organization to One Team
@@ -14065,6 +14562,7 @@ export def "atlas-orgs-teams-users addOrgTeamUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -14077,7 +14575,7 @@ export def "atlas-orgs-teams-users addOrgTeamUsers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Remove One MongoDB Cloud User from One Team
@@ -14098,6 +14596,7 @@ export def "atlas-orgs-teams-users removeOrgTeamUserFromTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -14107,7 +14606,7 @@ export def "atlas-orgs-teams-users removeOrgTeamUserFromTeam" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/teams/($teamId)/users/($userId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add One MongoDB Cloud User to One Team
@@ -14125,6 +14624,7 @@ export def "atlas-orgs-teams addOrgTeamUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -14137,7 +14637,7 @@ export def "atlas-orgs-teams addOrgTeamUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2025-02-19+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2025-02-19+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2025-02-19+json" $body
 }
 
 # Remove One MongoDB Cloud User from One Team
@@ -14155,6 +14655,7 @@ export def "atlas-orgs-teams removeOrgTeamUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -14167,7 +14668,7 @@ export def "atlas-orgs-teams removeOrgTeamUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2025-02-19+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2025-02-19+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2025-02-19+json" $body
 }
 
 # Return All MongoDB Cloud Users in One Organization
@@ -14185,6 +14686,7 @@ export def "atlas-orgs-users listOrgUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-11 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -14201,7 +14703,7 @@ export def "atlas-orgs-users listOrgUsers" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/users" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add One MongoDB Cloud User to One Organization
@@ -14217,6 +14719,7 @@ export def "atlas-orgs-users createOrgUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -14229,7 +14732,7 @@ export def "atlas-orgs-users createOrgUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2025-02-19+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2025-02-19+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2025-02-19+json" $body
 }
 
 # Remove One MongoDB Cloud User from One Organization
@@ -14247,6 +14750,7 @@ export def "atlas-orgs-users removeOrgUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-11 # Response content type
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
@@ -14257,7 +14761,7 @@ export def "atlas-orgs-users removeOrgUser" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/users/($userId)" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2023-01-01+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One MongoDB Cloud User in One Organization
@@ -14274,6 +14778,7 @@ export def "atlas-orgs-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --orgMembershipStatuses: list # Organization membership status to filter users by. You can supply this parameter multiple times. Allowed values: `ACTIVE`, `PENDING`, `INVITATION_EXPIRED`, `INVITATION_REJECTED`. If you exclude this parameter, this resource returns ACTIVE and PENDING users. Not supported in deprecated versions.
@@ -14284,7 +14789,7 @@ export def "atlas-orgs-users get" [
   let full_url = (build-url $base $"/api/atlas/v2/orgs/($orgId)/users/($userId)" $qp)
   let accept_val = "application/vnd.atlas.2025-02-19+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update One MongoDB Cloud User in One Organization
@@ -14302,6 +14807,7 @@ export def "atlas-orgs-users updateOrgUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -14314,7 +14820,7 @@ export def "atlas-orgs-users updateOrgUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2025-02-19+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2025-02-19+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2025-02-19+json" $body
 }
 
 # Update Organization Roles for One MongoDB Cloud User
@@ -14333,6 +14839,7 @@ export def "atlas-orgs-users-roles updateOrgUserRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
@@ -14345,7 +14852,7 @@ export def "atlas-orgs-users-roles updateOrgUserRoles" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Add One Organization Role to One MongoDB Cloud User
@@ -14363,6 +14870,7 @@ export def "atlas-orgs-users addOrgUserRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -14375,7 +14883,7 @@ export def "atlas-orgs-users addOrgUserRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2025-02-19+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2025-02-19+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2025-02-19+json" $body
 }
 
 # Remove One Organization Role from One MongoDB Cloud User
@@ -14393,6 +14901,7 @@ export def "atlas-orgs-users removeOrgUserRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -14405,7 +14914,7 @@ export def "atlas-orgs-users removeOrgUserRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2025-02-19+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2025-02-19+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2025-02-19+json" $body
 }
 
 # Return All Rate Limits
@@ -14420,6 +14929,7 @@ export def "atlas-rate-limits listRateLimits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-10 # Response content type
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
@@ -14438,7 +14948,7 @@ export def "atlas-rate-limits listRateLimits" [
   let full_url = (build-url $base "/api/atlas/v2/rateLimits" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2025-03-12+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Rate Limit
@@ -14454,6 +14964,7 @@ export def "atlas-rate-limits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-10 # Response content type
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
@@ -14468,7 +14979,7 @@ export def "atlas-rate-limits get" [
   let full_url = (build-url $base $"/api/atlas/v2/rateLimits/($endpointSetId)" $qp)
   let accept_val = ($accept | default "application/vnd.atlas.2025-03-12+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Stock Keeping Units
@@ -14483,6 +14994,7 @@ export def "atlas-skus listSkus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
@@ -14495,7 +15007,7 @@ export def "atlas-skus listSkus" [
   let full_url = (build-url $base "/api/atlas/v2/skus" $qp)
   let accept_val = "application/vnd.atlas.2025-03-12+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One Stock Keeping Unit
@@ -14511,6 +15023,7 @@ export def "atlas-skus get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -14520,7 +15033,7 @@ export def "atlas-skus get" [
   let full_url = (build-url $base $"/api/atlas/v2/skus/($skuId)" $qp)
   let accept_val = "application/vnd.atlas.2025-03-12+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return All Control Plane IP Addresses
@@ -14535,6 +15048,7 @@ export def "atlas-unauth-control-plane-ip-addresses listControlPlaneIpAddresses"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -14543,7 +15057,7 @@ export def "atlas-unauth-control-plane-ip-addresses listControlPlaneIpAddresses"
   let full_url = (build-url $base "/api/atlas/v2/unauth/controlPlaneIPAddresses" $qp)
   let accept_val = "application/vnd.atlas.2023-11-15+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create One MongoDB Cloud User
@@ -14560,6 +15074,7 @@ export def "atlas-users createUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
@@ -14572,7 +15087,7 @@ export def "atlas-users createUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atlas.2023-01-01+json" $body
 }
 
 # Return One MongoDB Cloud User by Username
@@ -14591,6 +15106,7 @@ export def "atlas-users-by-name get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -14600,7 +15116,7 @@ export def "atlas-users-by-name get" [
   let full_url = (build-url $base $"/api/atlas/v2/users/byName/($userName)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return One MongoDB Cloud User by ID
@@ -14619,6 +15135,7 @@ export def "atlas-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
@@ -14628,5 +15145,5 @@ export def "atlas-users get" [
   let full_url = (build-url $base $"/api/atlas/v2/users/($userId)" $qp)
   let accept_val = "application/vnd.atlas.2023-01-01+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

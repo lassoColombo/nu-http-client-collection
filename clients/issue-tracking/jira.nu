@@ -1,4 +1,4 @@
-# Auto-generated client for The Jira Cloud platform REST API v1001.0.0-SNAPSHOT-fc7a4733e5b961216b9bf0a12338994ae0045171
+# Auto-generated client for The Jira Cloud platform REST API v1001.0.0-SNAPSHOT-bedacd980694b20cc2d075e07957144168b04bde
 # Source: https://developer.atlassian.com/cloud/jira/platform/swagger-v3.v3.json
 # Auth: --token flag or $env.THE_JIRA_CLOUD_PLATFORM_REST_API_TOKEN
 
@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -113,7 +114,7 @@ def workflowMode-completer [] { ["draft" "live"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "rest-3-announcement-banner get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -146,13 +147,14 @@ export def "rest-3-announcement-banner get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<hashId: string, isDismissible: bool, isEnabled: bool, message: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/announcementBanner")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update announcement banner configuration
@@ -167,6 +169,7 @@ export def "rest-3-announcement-banner setBanner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isDismissible: oneof<nothing, bool> # Flag indicating if the announcement banner can be dismissed by the user.
   --isEnabled: oneof<nothing, bool> # Flag indicating if the announcement banner is enabled or not.
   --message: string # The text on the announcement banner.
@@ -180,7 +183,7 @@ export def "rest-3-announcement-banner setBanner" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk get custom field configurations
@@ -195,6 +198,7 @@ export def "rest-3-app-field-context-configuration-list post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # The list of configuration IDs. To include multiple configurations, separate IDs with an ampersand: `id=10000&id=10001`. Can't be provided with `fieldContextId`, `issueId`, `projectKeyOrId`, or `issueTypeId`.
   --fieldContextId: list # The list of field context IDs. To include multiple field contexts, separate IDs with an ampersand: `fieldContextId=10000&fieldContextId=10001`. Can't be provided with `id`, `issueId`, `projectKeyOrId`, or `issueTypeId`.
   --issueId: int # The ID of the issue to filter results by. If the issue doesn't exist, an empty list is returned. Can't be provided with `projectKeyOrId`, or `issueTypeId`. (format: int64)
@@ -213,7 +217,7 @@ export def "rest-3-app-field-context-configuration-list post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update custom fields
@@ -229,6 +233,7 @@ export def "rest-3-app-field-value updateMultipleCustomFieldValues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --generateChangelog: oneof<nothing, bool> # Whether to generate a changelog for this update. (default: true)
   --generateAppEvents: oneof<nothing, bool> # Whether to generate app events for this update. Suppresses Forge, Connect, OAuth 2.0, and admin-configured webhooks (registered via the Jira admin UI). Note: Suppressing events means that "issue updated" events will not be emitted for your app or any other apps installed in Jira. This may cause other apps to retain stale data for the updated field, resulting in potentially confusing behaviour. We do not recommend using this flag in a Marketplace app as it may result in incompatibilities with other apps that depend on up-to-date issue data. (default: true)
   --updates: list # item shape: {customField: string, issueIds: list, value: any}
@@ -242,7 +247,7 @@ export def "rest-3-app-field-value updateMultipleCustomFieldValues" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get custom field configurations
@@ -258,6 +263,7 @@ export def "rest-3-app-field-context-configuration get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # The list of configuration IDs. To include multiple configurations, separate IDs with an ampersand: `id=10000&id=10001`. Can't be provided with `fieldContextId`, `issueId`, `projectKeyOrId`, or `issueTypeId`.
   --fieldContextId: list # The list of field context IDs. To include multiple field contexts, separate IDs with an ampersand: `fieldContextId=10000&fieldContextId=10001`. Can't be provided with `id`, `issueId`, `projectKeyOrId`, or `issueTypeId`.
   --issueId: int # The ID of the issue to filter results by. If the issue doesn't exist, an empty list is returned. Can't be provided with `projectKeyOrId`, or `issueTypeId`. (format: int64)
@@ -272,7 +278,7 @@ export def "rest-3-app-field-context-configuration get" [
   let full_url = (build-url $base $"/rest/api/3/app/field/($fieldIdOrKey)/context/configuration" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update custom field configurations
@@ -289,6 +295,7 @@ export def "rest-3-app-field-context-configuration updateCustomFieldConfiguratio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   configurations: list # The list of custom field configuration details. — item shape: {configuration?: any, id: string, schema?: any}
 ]: any -> any {
   let input = $in
@@ -299,7 +306,7 @@ export def "rest-3-app-field-context-configuration updateCustomFieldConfiguratio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update custom field value
@@ -316,6 +323,7 @@ export def "rest-3-app-field-value updateCustomFieldValue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --generateChangelog: oneof<nothing, bool> # Whether to generate a changelog for this update. (default: true)
   --generateAppEvents: oneof<nothing, bool> # Whether to generate app events for this update. Suppresses Forge, Connect, OAuth 2.0, and admin-configured webhooks (registered via the Jira admin UI). Note: Suppressing events means that "issue updated" events will not be emitted for your app or any other apps installed in Jira. This may cause other apps to retain stale data for the updated field, resulting in potentially confusing behaviour. We do not recommend using this flag in a Marketplace app as it may result in incompatibilities with other apps that depend on up-to-date issue data. (default: true)
   --updates: list # The list of custom field update details. — item shape: {issueIds: list, value: any}
@@ -329,7 +337,7 @@ export def "rest-3-app-field-value updateCustomFieldValue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get application property
@@ -344,6 +352,7 @@ export def "rest-3-application-properties get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # The key of the application property.
   --permissionLevel: string # The permission level of all items being returned in the list.
   --keyFilter: string # When a `key` isn't provided, this filters the list of results by the application property `key` using a regular expression. For example, using `jira.lf.*` will return all application properties with keys that start with *jira.lf.*.
@@ -354,7 +363,7 @@ export def "rest-3-application-properties get" [
   let full_url = (build-url $base "/rest/api/3/application-properties" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get advanced settings
@@ -369,13 +378,14 @@ export def "rest-3-application-properties-advanced-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<allowedValues: list<string>, defaultValue: string, desc: string, example: string, id: string, key: string, name: string, type: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/application-properties/advanced-settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set application property
@@ -391,6 +401,7 @@ export def "rest-3-application-properties setApplicationProperty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-id: string # The ID of the application property.
   --value: string # The new value.
 ]: any -> record<allowedValues: list<string>, defaultValue: string, desc: string, example: string, id: string, key: string, name: string, type: string, value: string> {
@@ -402,7 +413,7 @@ export def "rest-3-application-properties setApplicationProperty" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all application roles
@@ -417,13 +428,14 @@ export def "rest-3-applicationrole list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<defaultGroups: list<string>, defaultGroupsDetails: list<record>, defined: bool, groupDetails: list<record>, groups: list<string>, hasUnlimitedSeats: bool, key: string, name: string, numberOfSeats: int, platform: bool, remainingSeats: int, selectedByDefault: bool, userCount: int, userCountDescription: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/applicationrole")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get application role
@@ -439,13 +451,14 @@ export def "rest-3-applicationrole get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<defaultGroups: list<string>, defaultGroupsDetails: table<groupId: string, name: string, self: string>, defined: bool, groupDetails: table<groupId: string, name: string, self: string>, groups: list<string>, hasUnlimitedSeats: bool, key: string, name: string, numberOfSeats: int, platform: bool, remainingSeats: int, selectedByDefault: bool, userCount: int, userCountDescription: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/applicationrole/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get attachment content
@@ -461,6 +474,7 @@ export def "rest-3-attachment-content get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --redirect: oneof<nothing, bool> # Whether a redirect is provided for the attachment download. Clients that do not automatically follow redirects can set this to `false` to avoid making multiple requests to download the attachment. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -469,7 +483,7 @@ export def "rest-3-attachment-content get" [
   let full_url = (build-url $base $"/rest/api/3/attachment/content/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Jira attachment settings
@@ -484,13 +498,14 @@ export def "rest-3-attachment-meta get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<enabled: bool, uploadLimit: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/attachment/meta")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get attachment thumbnail
@@ -506,6 +521,7 @@ export def "rest-3-attachment-thumbnail get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --redirect: oneof<nothing, bool> # Whether a redirect is provided for the attachment download. Clients that do not automatically follow redirects can set this to `false` to avoid making multiple requests to download the attachment. (default: true)
   --fallbackToDefault: oneof<nothing, bool> # Whether a default thumbnail is returned when the requested thumbnail is not found. (default: true)
   --width: int # The maximum width to scale the thumbnail to. (format: int32)
@@ -517,7 +533,7 @@ export def "rest-3-attachment-thumbnail get" [
   let full_url = (build-url $base $"/rest/api/3/attachment/thumbnail/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete attachment
@@ -533,13 +549,14 @@ export def "rest-3-attachment removeAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/attachment/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get attachment metadata
@@ -555,13 +572,14 @@ export def "rest-3-attachment get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<author: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, content: string, created: string, filename: string, id: int, mimeType: string, properties: record, self: string, size: int, thumbnail: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/attachment/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all metadata for an expanded attachment
@@ -577,13 +595,14 @@ export def "rest-3-attachment-expand-human expandAttachmentForHumans" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<entries: table<index: int, label: string, mediaType: string, path: string, size: string>, id: int, mediaType: string, name: string, totalEntryCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/attachment/($id)/expand/human")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get contents metadata for an expanded attachment
@@ -599,13 +618,14 @@ export def "rest-3-attachment-expand-raw expandAttachmentForMachines" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<entries: table<abbreviatedName: string, entryIndex: int, mediaType: string, name: string, size: int>, totalEntryCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/attachment/($id)/expand/raw")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get audit records
@@ -620,6 +640,7 @@ export def "rest-3-auditing-record get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The number of records to skip before returning the first result. (format: int32, default: 0)
   --limit: int # The maximum number of results to return. (format: int32, default: 1000)
   --filter: string # The strings to match with audit field content, space separated.
@@ -632,7 +653,7 @@ export def "rest-3-auditing-record get" [
   let full_url = (build-url $base "/rest/api/3/auditing/record" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get system avatars by type
@@ -648,13 +669,14 @@ export def "rest-3-avatar-system get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<system: table<fileName: string, id: string, isDeletable: bool, isSelected: bool, isSystemAvatar: bool, owner: string, urls: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/avatar/($type)/system")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk delete issues
@@ -669,6 +691,7 @@ export def "rest-3-bulk-issues-delete submitBulkDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   selectedIssueIdsOrKeys: list # List of issue IDs or keys which are to be bulk deleted. These IDs or keys can be from different projects and issue types.
   --sendBulkNotification: oneof<nothing, bool> # A boolean value that indicates whether to send a bulk change notification when the issues are being deleted.  If `true`, dispatches a bulk notification email to users about the updates. (nullable, default: true)
 ]: any -> record<taskId: string> {
@@ -680,7 +703,7 @@ export def "rest-3-bulk-issues-delete submitBulkDelete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get bulk editable fields
@@ -695,6 +718,7 @@ export def "rest-3-bulk-issues-fields get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --issueIdsOrKeys: string # The IDs or keys of the issues to get editable fields from.
   --searchText: string # (Optional)The text to search for in the editable fields.
   --endingBefore: string # (Optional)The end cursor for use in pagination.
@@ -706,7 +730,7 @@ export def "rest-3-bulk-issues-fields get" [
   let full_url = (build-url $base "/rest/api/3/bulk/issues/fields" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk edit issues
@@ -721,6 +745,7 @@ export def "rest-3-bulk-issues-fields submitBulkEdit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   editedFieldsInput: any # An object that defines the values to be updated in specified fields of an issue. The structure and content of this parameter vary depending on the type of field being edited. Although the order is not significant, ensure that field IDs align with those in selectedActions.
   selectedActions: list # List of all the field IDs that are to be bulk edited. Each field ID in this list corresponds to a specific attribute of an issue that is set to be modified in the bulk edit operation. The relevant field ID can be obtained by calling the Bulk Edit Get Fields REST API (documentation available on this page itself).
   selectedIssueIdsOrKeys: list # List of issue IDs or keys which are to be bulk edited. These IDs or keys can be from different projects and issue types.
@@ -734,7 +759,7 @@ export def "rest-3-bulk-issues-fields submitBulkEdit" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk move issues
@@ -749,6 +774,7 @@ export def "rest-3-bulk-issues-move submitBulkMove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sendBulkNotification: oneof<nothing, bool> # A boolean value that indicates whether to send a bulk change notification when the issues are being moved.  If `true`, dispatches a bulk notification email to users about the updates. (nullable, default: true)
   --targetToSourcesMapping: record # An object representing the mapping of issues and data related to destination entities, like fields and statuses, that are required during a bulk move.  The key is a string that is created by concatenating the following three entities in order, separated by commas. The format is `<project ID or key>,<issueType ID>,<parent ID or key>`. It should be unique across mappings provided in the payload. If you provide multiple mappings for the same key, only one will be processed. However, the operation won't fail, so the error may be hard to track down.   *  ***Destination project*** (Required): ID or key of the project to which the issues are being moved.  *  ***Destination issueType*** (Required): ID of the issueType to which the issues are being moved.  *  ***Destination parent ID or key*** (Optional): ID or key of the issue which will become the parent of the issues being moved. Only required when the destination issueType is a subtask.
 ]: any -> record<taskId: string> {
@@ -760,7 +786,7 @@ export def "rest-3-bulk-issues-move submitBulkMove" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get available transitions
@@ -775,6 +801,7 @@ export def "rest-3-bulk-issues-transition get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --issueIdsOrKeys: string # Comma (,) separated Ids or keys of the issues to get transitions available for them.
   --endingBefore: string # (Optional)The end cursor for use in pagination.
   --startingAfter: string # (Optional)The start cursor for use in pagination.
@@ -785,7 +812,7 @@ export def "rest-3-bulk-issues-transition get" [
   let full_url = (build-url $base "/rest/api/3/bulk/issues/transition" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk transition issue statuses
@@ -801,6 +828,7 @@ export def "rest-3-bulk-issues-transition submitBulkTransition" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   bulkTransitionInputs: list # List of objects and each object has two properties:   *  Issues that will be bulk transitioned.  *  TransitionId that corresponds to a specific transition of issues that share the same workflow. — item shape: {selectedIssueIdsOrKeys: list, transitionId: string}
   --sendBulkNotification: oneof<nothing, bool> # A boolean value that indicates whether to send a bulk change notification when the issues are being transitioned.  If `true`, dispatches a bulk notification email to users about the updates. (nullable, default: true)
 ]: any -> record<taskId: string> {
@@ -812,7 +840,7 @@ export def "rest-3-bulk-issues-transition submitBulkTransition" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk unwatch issues
@@ -827,6 +855,7 @@ export def "rest-3-bulk-issues-unwatch submitBulkUnwatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   selectedIssueIdsOrKeys: list # List of issue IDs or keys which are to be bulk watched or unwatched. These IDs or keys can be from different projects and issue types.
 ]: any -> record<taskId: string> {
   let input = $in
@@ -837,7 +866,7 @@ export def "rest-3-bulk-issues-unwatch submitBulkUnwatch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk watch issues
@@ -852,6 +881,7 @@ export def "rest-3-bulk-issues-watch submitBulkWatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   selectedIssueIdsOrKeys: list # List of issue IDs or keys which are to be bulk watched or unwatched. These IDs or keys can be from different projects and issue types.
 ]: any -> record<taskId: string> {
   let input = $in
@@ -862,7 +892,7 @@ export def "rest-3-bulk-issues-watch submitBulkWatch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get bulk issue operation progress
@@ -878,13 +908,14 @@ export def "rest-3-bulk-queue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created: string, failedAccessibleIssues: record, invalidOrInaccessibleIssueCount: int, processedAccessibleIssues: list<int>, progressPercent: int, started: string, status: string, submittedBy: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, taskId: string, totalIssueCount: int, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/bulk/queue/($taskId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk fetch changelogs
@@ -899,6 +930,7 @@ export def "rest-3-changelog-bulkfetch post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldIds: list # List of field IDs to filter changelogs
   issueIdsOrKeys: list # List of issue IDs/keys to fetch changelogs for
   --maxResults: int # The maximum number of items to return per page (format: int32, default: 1000)
@@ -912,7 +944,7 @@ export def "rest-3-changelog-bulkfetch post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all classification levels
@@ -927,6 +959,7 @@ export def "rest-3-classification-levels get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: list # Optional set of statuses to filter by.
   --orderBy: string@orderBy-completer # Ordering of the results by a given field. If not provided, values will not be sorted.
 ]: nothing -> record<classifications: table<color: string, description: string, guideline: string, guidelineADF: string, id: string, name: string, rank: int, status: string>> {
@@ -936,7 +969,7 @@ export def "rest-3-classification-levels get" [
   let full_url = (build-url $base "/rest/api/3/classification-levels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get comments by IDs
@@ -951,6 +984,7 @@ export def "rest-3-comment-list post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information about comments in the response. This parameter accepts a comma-separated list. Expand options include:   *  `renderedBody` Returns the comment body rendered in HTML.  *  `properties` Returns the comment's properties.
   ids: list # The list of comment IDs. A maximum of 1000 IDs can be specified.
 ]: any -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<author: record, body: any, created: string, id: string, jsdAuthorCanSeeRequest: bool, jsdPublic: bool, properties: list, renderedBody: string, self: string, updateAuthor: record, updated: string, visibility: record>> {
@@ -963,7 +997,7 @@ export def "rest-3-comment-list post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get comment property keys
@@ -979,13 +1013,14 @@ export def "rest-3-comment-properties list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/comment/($commentId)/properties")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete comment property
@@ -1002,13 +1037,14 @@ export def "rest-3-comment-properties delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/comment/($commentId)/properties/($propertyKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get comment property
@@ -1025,13 +1061,14 @@ export def "rest-3-comment-properties get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/comment/($commentId)/properties/($propertyKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set comment property
@@ -1048,6 +1085,7 @@ export def "rest-3-comment-properties setCommentProperty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -1057,7 +1095,7 @@ export def "rest-3-comment-properties setCommentProperty" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Find components for projects
@@ -1072,6 +1110,7 @@ export def "rest-3-component findComponentsForProjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectIdsOrKeys: list # The project IDs and/or project keys (case sensitive).
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
@@ -1084,7 +1123,7 @@ export def "rest-3-component findComponentsForProjects" [
   let full_url = (build-url $base "/rest/api/3/component" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create component
@@ -1099,6 +1138,7 @@ export def "rest-3-component createComponent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --assigneeType: string@assigneeType-completer # The nominal user type used to determine the assignee for issues created with this component. See `realAssigneeType` for details on how the type of the user, and hence the user, assigned to issues is determined. Can take the following values:   *  `PROJECT_LEAD` the assignee to any issues created with this component is nominally the lead for the project the component is in.  *  `COMPONENT_LEAD` the assignee to any issues created with this component is nominally the lead for the component.  *  `UNASSIGNED` an assignee is not set for issues created with this component.  *  `PROJECT_DEFAULT` the assignee to any issues created with this component is nominally the default assignee for the project that the component is in.  Default value: `PROJECT_DEFAULT`.   Optional when creating or updating a component.
   --description: string # The description for the component. Optional when creating or updating a component.
   --leadAccountId: string # The accountId of the component's lead user. The accountId uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*.
@@ -1114,7 +1154,7 @@ export def "rest-3-component createComponent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete component
@@ -1130,6 +1170,7 @@ export def "rest-3-component delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --moveIssuesTo: string # The ID of the component to replace the deleted component. If this value is null no replacement is made.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1138,7 +1179,7 @@ export def "rest-3-component delete" [
   let full_url = (build-url $base $"/rest/api/3/component/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get component
@@ -1154,13 +1195,14 @@ export def "rest-3-component get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ari: string, assignee: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, assigneeType: string, description: string, id: string, isAssigneeTypeValid: bool, lead: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, leadAccountId: string, leadUserName: string, metadata: record, name: string, project: string, projectId: int, realAssignee: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, realAssigneeType: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/component/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update component
@@ -1176,6 +1218,7 @@ export def "rest-3-component updateComponent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --assigneeType: string@assigneeType-completer # The nominal user type used to determine the assignee for issues created with this component. See `realAssigneeType` for details on how the type of the user, and hence the user, assigned to issues is determined. Can take the following values:   *  `PROJECT_LEAD` the assignee to any issues created with this component is nominally the lead for the project the component is in.  *  `COMPONENT_LEAD` the assignee to any issues created with this component is nominally the lead for the component.  *  `UNASSIGNED` an assignee is not set for issues created with this component.  *  `PROJECT_DEFAULT` the assignee to any issues created with this component is nominally the default assignee for the project that the component is in.  Default value: `PROJECT_DEFAULT`.   Optional when creating or updating a component.
   --description: string # The description for the component. Optional when creating or updating a component.
   --leadAccountId: string # The accountId of the component's lead user. The accountId uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*.
@@ -1191,7 +1234,7 @@ export def "rest-3-component updateComponent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get component issues count
@@ -1207,13 +1250,14 @@ export def "rest-3-component-related-issue-counts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<issueCount: int, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/component/($id)/relatedIssueCounts")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get field schemes
@@ -1228,6 +1272,7 @@ export def "rest-3-config-fieldschemes list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: list # (optional) List of project IDs to filter schemes by. If not provided, schemes from all projects are returned.
   --qp-query: string # (optional) Text filter for scheme name or description matching (case-insensitive). If not provided, no text filtering is applied.
   --startAt: int # Zero-based index of the first item to return (default: 0) (format: int64, default: 0)
@@ -1239,7 +1284,7 @@ export def "rest-3-config-fieldschemes list" [
   let full_url = (build-url $base "/rest/api/3/config/fieldschemes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create field scheme
@@ -1254,6 +1299,7 @@ export def "rest-3-config-fieldschemes createFieldAssociationScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # Description of the scheme to be created
   name: string # The name of the scheme to be created
 ]: any -> record<description: string, id: int, links: record<associations: string, projects: string>, name: string> {
@@ -1265,7 +1311,7 @@ export def "rest-3-config-fieldschemes createFieldAssociationScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove fields associated with field schemes
@@ -1280,6 +1326,7 @@ export def "rest-3-config-fieldschemes-fields removeFieldsAssociatedWithSchemes"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<results: table<error: string, fieldId: string, schemeId: int, success: bool>> {
   let input = $in
@@ -1289,7 +1336,7 @@ export def "rest-3-config-fieldschemes-fields removeFieldsAssociatedWithSchemes"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update fields associated with field schemes
@@ -1304,6 +1351,7 @@ export def "rest-3-config-fieldschemes-fields updateFieldsAssociatedWithSchemes"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<results: table<error: string, fieldId: string, schemeId: int, success: bool, workTypeIds: list>> {
   let input = $in
@@ -1313,7 +1361,7 @@ export def "rest-3-config-fieldschemes-fields updateFieldsAssociatedWithSchemes"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove field parameters
@@ -1328,6 +1376,7 @@ export def "rest-3-config-fieldschemes-fields-parameters removeFieldAssociationS
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -1337,7 +1386,7 @@ export def "rest-3-config-fieldschemes-fields-parameters removeFieldAssociationS
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update field parameters
@@ -1352,6 +1401,7 @@ export def "rest-3-config-fieldschemes-fields-parameters updateFieldAssociationS
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<results: table<error: string, fieldId: string, schemeId: int, success: bool, workTypeId: int>> {
   let input = $in
@@ -1361,7 +1411,7 @@ export def "rest-3-config-fieldschemes-fields-parameters updateFieldAssociationS
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get projects with field schemes
@@ -1376,6 +1426,7 @@ export def "rest-3-config-fieldschemes-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The starting index of the returned projects. Base index: 0. (format: int64, default: 0)
   --maxResults: int # The maximum number of projects to return per page, maximum allowed value is 100. (format: int32, default: 50)
   --projectId: list # List of project ids to filter the results by.
@@ -1386,7 +1437,7 @@ export def "rest-3-config-fieldschemes-projects get" [
   let full_url = (build-url $base "/rest/api/3/config/fieldschemes/projects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Associate projects to field schemes
@@ -1401,6 +1452,7 @@ export def "rest-3-config-fieldschemes-projects associateProjectsToFieldAssociat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<results: table<error: string, projectId: int, schemeId: int, success: bool>> {
   let input = $in
@@ -1410,7 +1462,7 @@ export def "rest-3-config-fieldschemes-projects associateProjectsToFieldAssociat
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a field scheme
@@ -1426,13 +1478,14 @@ export def "rest-3-config-fieldschemes delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<deleted: bool, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/config/fieldschemes/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get field scheme
@@ -1448,13 +1501,14 @@ export def "rest-3-config-fieldschemes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, fieldsCount: int, id: string, isDefault: bool, links: record<associations: string, projects: string>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/config/fieldschemes/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update field scheme
@@ -1470,6 +1524,7 @@ export def "rest-3-config-fieldschemes updateFieldAssociationScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description value to update
   --name: string # The name value to update
 ]: any -> record<description: string, id: int, links: record<associations: string, projects: string>, name: string> {
@@ -1481,7 +1536,7 @@ export def "rest-3-config-fieldschemes updateFieldAssociationScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Clone field scheme
@@ -1497,6 +1552,7 @@ export def "rest-3-config-fieldschemes-clone cloneFieldAssociationScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # Description of the scheme to be created
   name: string # The name of the scheme to be created
 ]: any -> record<description: string, id: int, links: record<associations: string, projects: string>, name: string> {
@@ -1508,7 +1564,7 @@ export def "rest-3-config-fieldschemes-clone cloneFieldAssociationScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search field scheme fields
@@ -1524,6 +1580,7 @@ export def "rest-3-config-fieldschemes-fields searchFieldAssociationSchemeFields
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The starting index of the returned fields. Base index: 0. (format: int64, default: 0)
   --maxResults: int # The maximum number of fields to return per page, maximum allowed value is 100. (format: int32, default: 50)
   --fieldId: list # The field IDs to filter by, if empty then all fields belonging to a field association scheme will be returned
@@ -1534,7 +1591,7 @@ export def "rest-3-config-fieldschemes-fields searchFieldAssociationSchemeFields
   let full_url = (build-url $base $"/rest/api/3/config/fieldschemes/($id)/fields" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get field parameters
@@ -1551,13 +1608,14 @@ export def "rest-3-config-fieldschemes-fields-parameters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fieldId: string, parameters: record<description: string, isRequired: bool>, workTypeParameters: table<description: string, isRequired: bool, workTypeId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/config/fieldschemes/($id)/fields/($fieldId)/parameters")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search field scheme projects
@@ -1573,6 +1631,7 @@ export def "rest-3-config-fieldschemes-projects searchFieldAssociationSchemeProj
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The starting index of the returned projects. Base index: 0. (format: int64, default: 0)
   --maxResults: int # The maximum number of projects to return per page, maximum allowed value is 100. (format: int32, default: 50)
   --projectId: list # The project Ids to filter by, if empty then all projects belonging to a field association scheme will be returned
@@ -1583,7 +1642,7 @@ export def "rest-3-config-fieldschemes-projects searchFieldAssociationSchemeProj
   let full_url = (build-url $base $"/rest/api/3/config/fieldschemes/($id)/projects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get global settings
@@ -1598,13 +1657,14 @@ export def "rest-3-configuration get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<attachmentsEnabled: bool, issueLinkingEnabled: bool, subTasksEnabled: bool, timeTrackingConfiguration: record<defaultUnit: string, timeFormat: string, workingDaysPerWeek: float, workingHoursPerDay: float>, timeTrackingEnabled: bool, unassignedIssuesAllowed: bool, votingEnabled: bool, watchingEnabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/configuration")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get selected time tracking provider
@@ -1619,13 +1679,14 @@ export def "rest-3-configuration-timetracking get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/configuration/timetracking")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Select time tracking provider
@@ -1640,6 +1701,7 @@ export def "rest-3-configuration-timetracking selectTimeTrackingImplementation" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   key: string # The key for the time tracking provider. For example, *JIRA*.
   --name: string # The name of the time tracking provider. For example, *JIRA provided time tracking*.
 ]: any -> any {
@@ -1651,7 +1713,7 @@ export def "rest-3-configuration-timetracking selectTimeTrackingImplementation" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all time tracking providers
@@ -1666,13 +1728,14 @@ export def "rest-3-configuration-timetracking-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: string, name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/configuration/timetracking/list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get time tracking settings
@@ -1687,13 +1750,14 @@ export def "rest-3-configuration-timetracking-options get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<defaultUnit: string, timeFormat: string, workingDaysPerWeek: float, workingHoursPerDay: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/configuration/timetracking/options")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set time tracking settings
@@ -1708,6 +1772,7 @@ export def "rest-3-configuration-timetracking-options setSharedTimeTrackingConfi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   defaultUnit: string@defaultUnit-completer # The default unit of time applied to logged time.
   timeFormat: string@timeFormat-completer # The format that will appear on an issue's *Time Spent* field.
   workingDaysPerWeek: float # The number of days in a working week. (format: double)
@@ -1721,7 +1786,7 @@ export def "rest-3-configuration-timetracking-options setSharedTimeTrackingConfi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get custom field option
@@ -1737,13 +1802,14 @@ export def "rest-3-custom-field-option get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<self: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/customFieldOption/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all dashboards
@@ -1758,6 +1824,7 @@ export def "rest-3-dashboard list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string@filter-completer # The filter applied to the list of dashboards. Valid values are:   *  `favourite` Returns dashboards the user has marked as favorite.  *  `my` Returns dashboards owned by the user.
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int32, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 20)
@@ -1768,7 +1835,7 @@ export def "rest-3-dashboard list" [
   let full_url = (build-url $base "/rest/api/3/dashboard" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create dashboard
@@ -1785,6 +1852,7 @@ export def "rest-3-dashboard createDashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extendAdminPermissions: oneof<nothing, bool> # Whether admin level permissions are used. It should only be true if the user has *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) (default: false)
   --description: string # The description of the dashboard.
   editPermissions: list # The edit permissions for the dashboard. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
@@ -1800,7 +1868,7 @@ export def "rest-3-dashboard createDashboard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk edit dashboards
@@ -1815,6 +1883,7 @@ export def "rest-3-dashboard-bulk-edit bulkEditDashboards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   action: string@action-completer # Allowed action for bulk edit shareable entity
   --changeOwnerDetails: any # The details of change owner action.
   entityIds: list # The id list of shareable entities to be changed.
@@ -1829,7 +1898,7 @@ export def "rest-3-dashboard-bulk-edit bulkEditDashboards" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get available gadgets
@@ -1844,13 +1913,14 @@ export def "rest-3-dashboard-gadgets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<gadgets: table<moduleKey: string, title: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/dashboard/gadgets")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for dashboards
@@ -1865,6 +1935,7 @@ export def "rest-3-dashboard-search get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dashboardName: string # String used to perform a case-insensitive partial match with `name`.
   --accountId: string # User account ID used to return dashboards with the matching `owner.accountId`. This parameter cannot be used with the `owner` parameter.
   --owner: string # This parameter is deprecated because of privacy changes. Use `accountId` instead. See the [migration guide](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details. User name used to return dashboards with the matching `owner.name`. This parameter cannot be used with the `accountId` parameter.
@@ -1883,7 +1954,7 @@ export def "rest-3-dashboard-search get" [
   let full_url = (build-url $base "/rest/api/3/dashboard/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get gadgets
@@ -1899,6 +1970,7 @@ export def "rest-3-dashboard-gadget get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --moduleKey: list # The list of gadgets module keys. To include multiple module keys, separate module keys with ampersand: `moduleKey=key:one&moduleKey=key:two`.
   --uri: list # The list of gadgets URIs. To include multiple URIs, separate URIs with ampersand: `uri=/rest/example/uri/1&uri=/rest/example/uri/2`.
   --gadgetId: list # The list of gadgets IDs. To include multiple IDs, separate IDs with ampersand: `gadgetId=10000&gadgetId=10001`.
@@ -1909,7 +1981,7 @@ export def "rest-3-dashboard-gadget get" [
   let full_url = (build-url $base $"/rest/api/3/dashboard/($dashboardId)/gadget" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add gadget to dashboard
@@ -1925,6 +1997,7 @@ export def "rest-3-dashboard-gadget addGadget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --color: string # The color of the gadget. Should be one of `blue`, `red`, `yellow`, `green`, `cyan`, `purple`, `gray`, or `white`.
   --ignoreUriAndModuleKeyValidation: oneof<nothing, bool> # Whether to ignore the validation of module key and URI. For example, when a gadget is created that is a part of an application that isn't installed.
   --moduleKey: string # The module key of the gadget type. Can't be provided with `uri`.
@@ -1940,7 +2013,7 @@ export def "rest-3-dashboard-gadget addGadget" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove gadget from dashboard
@@ -1957,13 +2030,14 @@ export def "rest-3-dashboard-gadget removeGadget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/dashboard/($dashboardId)/gadget/($gadgetId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update gadget on dashboard
@@ -1980,6 +2054,7 @@ export def "rest-3-dashboard-gadget updateGadget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --color: string # The color of the gadget. Should be one of `blue`, `red`, `yellow`, `green`, `cyan`, `purple`, `gray`, or `white`.
   --position: any # The position of the gadget.
   --title: string # The title of the gadget.
@@ -1992,7 +2067,7 @@ export def "rest-3-dashboard-gadget updateGadget" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get dashboard item property keys
@@ -2009,13 +2084,14 @@ export def "rest-3-dashboard-items-properties list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/dashboard/($dashboardId)/items/($itemId)/properties")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete dashboard item property
@@ -2033,13 +2109,14 @@ export def "rest-3-dashboard-items-properties delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/dashboard/($dashboardId)/items/($itemId)/properties/($propertyKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get dashboard item property
@@ -2057,13 +2134,14 @@ export def "rest-3-dashboard-items-properties get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/dashboard/($dashboardId)/items/($itemId)/properties/($propertyKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set dashboard item property
@@ -2081,6 +2159,7 @@ export def "rest-3-dashboard-items-properties setDashboardItemProperty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -2090,7 +2169,7 @@ export def "rest-3-dashboard-items-properties setDashboardItemProperty" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete dashboard
@@ -2106,13 +2185,14 @@ export def "rest-3-dashboard delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/dashboard/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get dashboard
@@ -2128,13 +2208,14 @@ export def "rest-3-dashboard get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<automaticRefreshMs: int, description: string, editPermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, id: string, isFavourite: bool, isWritable: bool, name: string, owner: record<accountId: string, active: bool, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, key: string, name: string, self: string>, popularity: int, rank: int, self: string, sharePermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, systemDashboard: bool, view: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/dashboard/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update dashboard
@@ -2152,6 +2233,7 @@ export def "rest-3-dashboard updateDashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extendAdminPermissions: oneof<nothing, bool> # Whether admin level permissions are used. It should only be true if the user has *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) (default: false)
   --description: string # The description of the dashboard.
   editPermissions: list # The edit permissions for the dashboard. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
@@ -2167,7 +2249,7 @@ export def "rest-3-dashboard updateDashboard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Copy dashboard
@@ -2185,6 +2267,7 @@ export def "rest-3-dashboard-copy copyDashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --extendAdminPermissions: oneof<nothing, bool> # Whether admin level permissions are used. It should only be true if the user has *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) (default: false)
   --description: string # The description of the dashboard.
   editPermissions: list # The edit permissions for the dashboard. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
@@ -2200,7 +2283,7 @@ export def "rest-3-dashboard-copy copyDashboard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get data policy for the workspace
@@ -2215,13 +2298,14 @@ export def "rest-3-data-policy get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<anyContentBlocked: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/data-policy")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get data policy for projects
@@ -2236,6 +2320,7 @@ export def "rest-3-data-policy-project get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: string # A list of project identifiers. This parameter accepts a comma-separated list.
 ]: nothing -> record<projectDataPolicies: table<dataPolicy: record, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2244,7 +2329,7 @@ export def "rest-3-data-policy-project get" [
   let full_url = (build-url $base "/rest/api/3/data-policy/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get events
@@ -2259,13 +2344,14 @@ export def "rest-3-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/events")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Analyse Jira expression
@@ -2280,6 +2366,7 @@ export def "rest-3-expression-analyse analyseExpression" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --check: string@check-completer # The check to perform:   *  `syntax` Each expression's syntax is checked to ensure the expression can be parsed. Also, syntactic limits are validated. For example, the expression's length.  *  `type` EXPERIMENTAL. Each expression is type checked and the final type of the expression inferred. Any type errors that would result in the expression failure at runtime are reported. For example, accessing properties that don't exist or passing the wrong number of arguments to functions. Also performs the syntax check.  *  `complexity` EXPERIMENTAL. Determines the formulae for how many [expensive operations](https://developer.atlassian.com/cloud/jira/platform/jira-expressions/#expensive-operations) each expression may execute. (default: syntax)
   --contextVariables: record # Context variables and their types. The type checker assumes that [common context variables](https://developer.atlassian.com/cloud/jira/platform/jira-expressions/#context-variables), such as `issue` or `project`, are available in context and sets their type. Use this property to override the default types or provide details of new variables.
   expressions: list # The list of Jira expressions to analyse. (e.g. issues.map(issue => issue.properties['property_key']))
@@ -2293,7 +2380,7 @@ export def "rest-3-expression-analyse analyseExpression" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Currently being removed. Evaluate Jira expression
@@ -2310,6 +2397,7 @@ export def "rest-3-expression-eval evaluateJiraExpression" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts `meta.complexity` that returns information about the expression complexity. For example, the number of expensive operations used by the expression and how close the expression is to reaching the [complexity limit](https://developer.atlassian.com/cloud/jira/platform/jira-expressions/#restrictions). Useful when designing and debugging your expressions.
   --context: any # The context in which the Jira expression is evaluated.
   expression: string # The Jira expression to evaluate. (e.g. { key: issue.key, type: issue.issueType.name, links: issue.links.map(link => link.linkedIssue.id) })
@@ -2323,7 +2411,7 @@ export def "rest-3-expression-eval evaluateJiraExpression" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Evaluate Jira expression using enhanced search API
@@ -2338,6 +2426,7 @@ export def "rest-3-expression-evaluate evaluateJSISJiraExpression" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts `meta.complexity` that returns information about the expression complexity. For example, the number of expensive operations used by the expression and how close the expression is to reaching the [complexity limit](https://developer.atlassian.com/cloud/jira/platform/jira-expressions/#restrictions). Useful when designing and debugging your expressions.
   --context: any # The context in which the Jira expression is evaluated.
   expression: string # The Jira expression to evaluate. (e.g. { key: issue.key, type: issue.issueType.name, links: issue.links.map(link => link.linkedIssue.id) })
@@ -2351,7 +2440,7 @@ export def "rest-3-expression-evaluate evaluateJSISJiraExpression" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get fields
@@ -2366,13 +2455,14 @@ export def "rest-3-field get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<clauseNames: list<string>, custom: bool, id: string, key: string, name: string, navigable: bool, orderable: bool, schema: record<configuration: record, custom: string, customId: int, items: string, system: string, type: string>, scope: record<project: record, type: string>, searchable: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/field")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create custom field
@@ -2387,6 +2477,7 @@ export def "rest-3-field createCustomField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the custom field, which is displayed in Jira.
   name: string # The name of the custom field, which is displayed in Jira. This is not the unique identifier.
   --searcherKey: string@searcherKey-completer # The searcher defines the way the field is searched in Jira. For example, *com.atlassian.jira.plugin.system.customfieldtypes:grouppickersearcher*.   The search UI (basic search and JQL search) will display different operations and values for the field, based on the field searcher. You must specify a searcher that is valid for the field type, as listed below (abbreviated values shown):   *  `cascadingselect`: `cascadingselectsearcher`  *  `datepicker`: `daterange`  *  `datetime`: `datetimerange`  *  `float`: `exactnumber` or `numberrange`  *  `grouppicker`: `grouppickersearcher`  *  `importid`: `exactnumber` or `numberrange`  *  `labels`: `labelsearcher`  *  `multicheckboxes`: `multiselectsearcher`  *  `multigrouppicker`: `multiselectsearcher`  *  `multiselect`: `multiselectsearcher`  *  `multiuserpicker`: `userpickergroupsearcher`  *  `multiversion`: `versionsearcher`  *  `project`: `projectsearcher`  *  `radiobuttons`: `multiselectsearcher`  *  `readonlyfield`: `textsearcher`  *  `select`: `multiselectsearcher`  *  `textarea`: `textsearcher`  *  `textfield`: `textsearcher`  *  `url`: `exacttextsearcher`  *  `userpicker`: `userpickergroupsearcher`  *  `version`: `versionsearcher`  If no searcher is provided, the field isn't searchable. However, [Forge custom fields](https://developer.atlassian.com/platform/forge/manifest-reference/modules/#jira-custom-field-type--beta-) have a searcher set automatically, so are always searchable.
@@ -2400,7 +2491,7 @@ export def "rest-3-field createCustomField" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove associations
@@ -2417,6 +2508,7 @@ export def "rest-3-field-association removeAssociations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   associationContexts: list # Contexts to associate/unassociate the fields with. — item shape: {identifier?: record, type: string}
   --body-fields: list # Fields to associate/unassociate with projects. — item shape: {identifier?: record, type: string}
 ]: any -> any {
@@ -2428,7 +2520,7 @@ export def "rest-3-field-association removeAssociations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create associations
@@ -2445,6 +2537,7 @@ export def "rest-3-field-association createAssociations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   associationContexts: list # Contexts to associate/unassociate the fields with. — item shape: {identifier?: record, type: string}
   --body-fields: list # Fields to associate/unassociate with projects. — item shape: {identifier?: record, type: string}
 ]: any -> any {
@@ -2456,7 +2549,7 @@ export def "rest-3-field-association createAssociations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get fields paginated
@@ -2471,6 +2564,7 @@ export def "rest-3-field-search get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --type: list # The type of fields to search.
@@ -2486,7 +2580,7 @@ export def "rest-3-field-search get" [
   let full_url = (build-url $base "/rest/api/3/field/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get fields in trash paginated
@@ -2501,6 +2595,7 @@ export def "rest-3-field-search-trashed get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --id: list
@@ -2514,7 +2609,7 @@ export def "rest-3-field-search-trashed get" [
   let full_url = (build-url $base "/rest/api/3/field/search/trashed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update custom field
@@ -2530,6 +2625,7 @@ export def "rest-3-field updateCustomField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the custom field. The maximum length is 40000 characters.
   --name: string # The name of the custom field. It doesn't have to be unique. The maximum length is 255 characters.
   --searcherKey: string@searcherKey-completer # The searcher that defines the way the field is searched in Jira. It can be set to `null`, otherwise you must specify the valid searcher for the field type, as listed below (abbreviated values shown):   *  `cascadingselect`: `cascadingselectsearcher`  *  `datepicker`: `daterange`  *  `datetime`: `datetimerange`  *  `float`: `exactnumber` or `numberrange`  *  `grouppicker`: `grouppickersearcher`  *  `importid`: `exactnumber` or `numberrange`  *  `labels`: `labelsearcher`  *  `multicheckboxes`: `multiselectsearcher`  *  `multigrouppicker`: `multiselectsearcher`  *  `multiselect`: `multiselectsearcher`  *  `multiuserpicker`: `userpickergroupsearcher`  *  `multiversion`: `versionsearcher`  *  `project`: `projectsearcher`  *  `radiobuttons`: `multiselectsearcher`  *  `readonlyfield`: `textsearcher`  *  `select`: `multiselectsearcher`  *  `textarea`: `textsearcher`  *  `textfield`: `textsearcher`  *  `url`: `exacttextsearcher`  *  `userpicker`: `userpickergroupsearcher`  *  `version`: `versionsearcher`
@@ -2542,7 +2638,7 @@ export def "rest-3-field updateCustomField" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get field project associations
@@ -2558,6 +2654,7 @@ export def "rest-3-field-association-project get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<projectId: string>> {
@@ -2567,7 +2664,7 @@ export def "rest-3-field-association-project get" [
   let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/association/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get custom field contexts
@@ -2583,6 +2680,7 @@ export def "rest-3-field-context get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isAnyIssueType: oneof<nothing, bool> # Whether to return contexts that apply to all issue types.
   --isGlobalContext: oneof<nothing, bool> # Whether to return contexts that apply to all projects.
   --contextId: list # The list of context IDs. To include multiple contexts, separate IDs with ampersand: `contextId=10000&contextId=10001`.
@@ -2595,7 +2693,7 @@ export def "rest-3-field-context get" [
   let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create custom field context
@@ -2611,6 +2709,7 @@ export def "rest-3-field-context createCustomFieldContext" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the context.
   --issueTypeIds: list # The list of issue types IDs for the context. If the list is empty, the context refers to all issue types.
   name: string # The name of the context.
@@ -2624,7 +2723,7 @@ export def "rest-3-field-context createCustomFieldContext" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get custom field contexts default values
@@ -2642,6 +2741,7 @@ export def "rest-3-field-context-default-value get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contextId: list # The IDs of the contexts.
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
@@ -2652,7 +2752,7 @@ export def "rest-3-field-context-default-value get" [
   let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/defaultValue" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set custom field contexts default values
@@ -2670,6 +2770,7 @@ export def "rest-3-field-context-default-value setDefaultValues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --defaultValues: list
 ]: any -> any {
   let input = $in
@@ -2680,7 +2781,7 @@ export def "rest-3-field-context-default-value setDefaultValues" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get issue types for custom field context
@@ -2696,6 +2797,7 @@ export def "rest-3-field-context-issuetypemapping get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contextId: list # The ID of the context. To include multiple contexts, provide an ampersand-separated list. For example, `contextId=10001&contextId=10002`.
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
@@ -2706,7 +2808,7 @@ export def "rest-3-field-context-issuetypemapping get" [
   let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/issuetypemapping" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get custom field contexts for projects and issue types
@@ -2723,6 +2825,7 @@ export def "rest-3-field-context-mapping post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   mappings: list # The project and issue type mappings. — item shape: {issueTypeId: string, projectId: string}
@@ -2736,7 +2839,7 @@ export def "rest-3-field-context-mapping post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get project mappings for custom field context
@@ -2752,6 +2855,7 @@ export def "rest-3-field-context-projectmapping get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contextId: list # The list of context IDs. To include multiple context, separate IDs with ampersand: `contextId=10000&contextId=10001`.
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
@@ -2762,7 +2866,7 @@ export def "rest-3-field-context-projectmapping get" [
   let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/projectmapping" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete custom field context
@@ -2779,13 +2883,14 @@ export def "rest-3-field-context delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/($contextId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update custom field context
@@ -2802,6 +2907,7 @@ export def "rest-3-field-context updateCustomFieldContext" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the custom field context. The maximum length is 255 characters.
   --name: string # The name of the custom field context. The name must be unique. The maximum length is 255 characters.
 ]: any -> any {
@@ -2813,7 +2919,7 @@ export def "rest-3-field-context updateCustomFieldContext" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add issue types to context
@@ -2830,6 +2936,7 @@ export def "rest-3-field-context-issuetype addIssueTypesToContext" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   issueTypeIds: list # The list of issue type IDs.
 ]: any -> any {
   let input = $in
@@ -2840,7 +2947,7 @@ export def "rest-3-field-context-issuetype addIssueTypesToContext" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove issue types from context
@@ -2857,6 +2964,7 @@ export def "rest-3-field-context-issuetype-remove removeIssueTypesFromContext" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   issueTypeIds: list # The list of issue type IDs.
 ]: any -> any {
   let input = $in
@@ -2867,7 +2975,7 @@ export def "rest-3-field-context-issuetype-remove removeIssueTypesFromContext" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get custom field options (context)
@@ -2884,6 +2992,7 @@ export def "rest-3-field-context-option get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --optionId: int # The ID of the option. (format: int64)
   --onlyOptions: oneof<nothing, bool> # Whether only options are returned. (default: false)
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
@@ -2895,7 +3004,7 @@ export def "rest-3-field-context-option get" [
   let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/($contextId)/option" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create custom field options (context)
@@ -2913,6 +3022,7 @@ export def "rest-3-field-context-option createCustomFieldOption" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --options: list # Details of options to create. — item shape: {disabled?: bool, optionId?: string, value: string}
 ]: any -> record<options: table<disabled: bool, id: string, optionId: string, value: string>> {
   let input = $in
@@ -2923,7 +3033,7 @@ export def "rest-3-field-context-option createCustomFieldOption" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update custom field options (context)
@@ -2941,6 +3051,7 @@ export def "rest-3-field-context-option updateCustomFieldOption" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --options: list # Details of the options to update. — item shape: {disabled?: bool, id: string, value?: string}
 ]: any -> record<options: table<disabled: bool, id: string, value: string>> {
   let input = $in
@@ -2951,7 +3062,7 @@ export def "rest-3-field-context-option updateCustomFieldOption" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reorder custom field options (context)
@@ -2968,6 +3079,7 @@ export def "rest-3-field-context-option-move reorderCustomFieldOptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --after: string # The ID of the custom field option or cascading option to place the moved options after. Required if `position` isn't provided.
   customFieldOptionIds: list # A list of IDs of custom field options to move. The order of the custom field option IDs in the list is the order they are given after the move. The list must contain custom field options or cascading options, but not both.
   --position: string@position-completer # The position the custom field options should be moved to. Required if `after` isn't provided.
@@ -2980,7 +3092,7 @@ export def "rest-3-field-context-option-move reorderCustomFieldOptions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete custom field options (context)
@@ -2998,13 +3110,14 @@ export def "rest-3-field-context-option delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/($contextId)/option/($optionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace custom field options
@@ -3022,6 +3135,7 @@ export def "rest-3-field-context-option-issue replaceCustomFieldOption" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --replaceWith: int # The ID of the option that will replace the currently selected option. (format: int64)
   --jql: string # A JQL query that specifies the issues to be updated. For example, *project=10000*.
 ]: nothing -> any {
@@ -3031,7 +3145,7 @@ export def "rest-3-field-context-option-issue replaceCustomFieldOption" [
   let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/($contextId)/option/($optionId)/issue" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign custom field context to projects
@@ -3048,6 +3162,7 @@ export def "rest-3-field-context-project assignProjectsToCustomFieldContext" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   projectIds: list # The IDs of projects.
 ]: any -> any {
   let input = $in
@@ -3058,7 +3173,7 @@ export def "rest-3-field-context-project assignProjectsToCustomFieldContext" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove custom field context from projects
@@ -3075,6 +3190,7 @@ export def "rest-3-field-context-project-remove removeCustomFieldContextFromProj
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   projectIds: list # The IDs of projects.
 ]: any -> any {
   let input = $in
@@ -3085,7 +3201,7 @@ export def "rest-3-field-context-project-remove removeCustomFieldContextFromProj
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get contexts for a field
@@ -3103,6 +3219,7 @@ export def "rest-3-field-contexts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 20)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<id: int, name: string, scope: record>> {
@@ -3112,7 +3229,7 @@ export def "rest-3-field-contexts get" [
   let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/contexts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get screens for a field
@@ -3128,6 +3245,7 @@ export def "rest-3-field-screens get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 100)
   --expand: string # Use [expand](#expansion) to include additional information about screens in the response. This parameter accepts `tab` which returns details about the screen tabs the field is used in.
@@ -3138,7 +3256,7 @@ export def "rest-3-field-screens get" [
   let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/screens" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all issue field options
@@ -3154,6 +3272,7 @@ export def "rest-3-field-option list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<config: record, id: int, properties: record, value: string>> {
@@ -3163,7 +3282,7 @@ export def "rest-3-field-option list" [
   let full_url = (build-url $base $"/rest/api/3/field/($fieldKey)/option" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create issue field option
@@ -3180,6 +3299,7 @@ export def "rest-3-field-option createIssueFieldOption" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --config: record # Details of the projects the option is available in. — shape: {attributes?: list, scope?: any}
   --properties: record # The properties of the option as arbitrary key-value pairs. These properties can be searched using JQL, if the extractions (see https://developer.atlassian.com/cloud/jira/platform/modules/issue-field-option-property-index/) are defined in the descriptor for the issue field module.
   value: string # The option's name, which is displayed in Jira.
@@ -3192,7 +3312,7 @@ export def "rest-3-field-option createIssueFieldOption" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get selectable issue field options
@@ -3208,6 +3328,7 @@ export def "rest-3-field-option-suggestions-edit get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --projectId: int # Filters the results to options that are only available in the specified project. (format: int64)
@@ -3218,7 +3339,7 @@ export def "rest-3-field-option-suggestions-edit get" [
   let full_url = (build-url $base $"/rest/api/3/field/($fieldKey)/option/suggestions/edit" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get visible issue field options
@@ -3234,6 +3355,7 @@ export def "rest-3-field-option-suggestions-search get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --projectId: int # Filters the results to options that are only available in the specified project. (format: int64)
@@ -3244,7 +3366,7 @@ export def "rest-3-field-option-suggestions-search get" [
   let full_url = (build-url $base $"/rest/api/3/field/($fieldKey)/option/suggestions/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete issue field option
@@ -3261,13 +3383,14 @@ export def "rest-3-field-option delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/field/($fieldKey)/option/($optionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issue field option
@@ -3284,13 +3407,14 @@ export def "rest-3-field-option get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<config: record<attributes: list<string>, scope: record<global: record, projects: list, projects2: list>>, id: int, properties: record, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/field/($fieldKey)/option/($optionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update issue field option
@@ -3308,6 +3432,7 @@ export def "rest-3-field-option updateIssueFieldOption" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --config: record # Details of the projects the option is available in. — shape: {attributes?: list, scope?: any}
   id: int # The unique identifier for the option. This is only unique within the select field's set of options. (format: int64)
   --properties: record # The properties of the object, as arbitrary key-value pairs. These properties can be searched using JQL, if the extractions (see [Issue Field Option Property Index](https://developer.atlassian.com/cloud/jira/platform/modules/issue-field-option-property-index/)) are defined in the descriptor for the issue field module.
@@ -3321,7 +3446,7 @@ export def "rest-3-field-option updateIssueFieldOption" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Replace issue field option
@@ -3338,6 +3463,7 @@ export def "rest-3-field-option-issue replaceIssueFieldOption" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --replaceWith: int # The ID of the option that will replace the currently selected option. (format: int64)
   --jql: string # A JQL query that specifies the issues to be updated. For example, *project=10000*.
   --overrideScreenSecurity: oneof<nothing, bool> # Whether screen security is overridden to enable hidden fields to be edited. Available to Connect and Forge app users with admin permission. (default: false)
@@ -3349,7 +3475,7 @@ export def "rest-3-field-option-issue replaceIssueFieldOption" [
   let full_url = (build-url $base $"/rest/api/3/field/($fieldKey)/option/($optionId)/issue" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete custom field
@@ -3365,13 +3491,14 @@ export def "rest-3-field delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/field/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Restore custom field from trash
@@ -3387,13 +3514,14 @@ export def "rest-3-field-restore restoreCustomField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/field/($id)/restore")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Move custom field to trash
@@ -3409,13 +3537,14 @@ export def "rest-3-field-trash trashCustomField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/field/($id)/trash")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all field configurations
@@ -3432,6 +3561,7 @@ export def "rest-3-fieldconfiguration get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --id: list # The list of field configuration IDs. To include multiple IDs, provide an ampersand-separated list. For example, `id=10000&id=10001`.
@@ -3444,7 +3574,7 @@ export def "rest-3-fieldconfiguration get" [
   let full_url = (build-url $base "/rest/api/3/fieldconfiguration" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create field configuration
@@ -3461,6 +3591,7 @@ export def "rest-3-fieldconfiguration createFieldConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the field configuration.
   name: string # The name of the field configuration. Must be unique.
 ]: any -> record<description: string, id: int, isDefault: bool, name: string> {
@@ -3472,7 +3603,7 @@ export def "rest-3-fieldconfiguration createFieldConfiguration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete field configuration
@@ -3490,13 +3621,14 @@ export def "rest-3-fieldconfiguration delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/fieldconfiguration/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update field configuration
@@ -3514,6 +3646,7 @@ export def "rest-3-fieldconfiguration updateFieldConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the field configuration.
   name: string # The name of the field configuration. Must be unique.
 ]: any -> any {
@@ -3525,7 +3658,7 @@ export def "rest-3-fieldconfiguration updateFieldConfiguration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get field configuration items
@@ -3543,6 +3676,7 @@ export def "rest-3-fieldconfiguration-fields get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<description: string, id: string, isHidden: bool, isRequired: bool, renderer: string>> {
@@ -3552,7 +3686,7 @@ export def "rest-3-fieldconfiguration-fields get" [
   let full_url = (build-url $base $"/rest/api/3/fieldconfiguration/($id)/fields" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update field configuration items
@@ -3571,6 +3705,7 @@ export def "rest-3-fieldconfiguration-fields updateFieldConfigurationItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   fieldConfigurationItems: list # Details of fields in a field configuration. — item shape: {description?: string, id: string, isHidden?: bool, isRequired?: bool, renderer?: string}
 ]: any -> any {
   let input = $in
@@ -3581,7 +3716,7 @@ export def "rest-3-fieldconfiguration-fields updateFieldConfigurationItems" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all field configuration schemes
@@ -3598,6 +3733,7 @@ export def "rest-3-fieldconfigurationscheme get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --id: list # The list of field configuration scheme IDs. To include multiple IDs, provide an ampersand-separated list. For example, `id=10000&id=10001`.
@@ -3608,7 +3744,7 @@ export def "rest-3-fieldconfigurationscheme get" [
   let full_url = (build-url $base "/rest/api/3/fieldconfigurationscheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create field configuration scheme
@@ -3625,6 +3761,7 @@ export def "rest-3-fieldconfigurationscheme createFieldConfigurationScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the field configuration scheme.
   name: string # The name of the field configuration scheme. The name must be unique.
 ]: any -> record<description: string, id: string, name: string> {
@@ -3636,7 +3773,7 @@ export def "rest-3-fieldconfigurationscheme createFieldConfigurationScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get field configuration issue type items
@@ -3653,6 +3790,7 @@ export def "rest-3-fieldconfigurationscheme-mapping get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --fieldConfigurationSchemeId: list # The list of field configuration scheme IDs. To include multiple field configuration schemes separate IDs with ampersand: `fieldConfigurationSchemeId=10000&fieldConfigurationSchemeId=10001`.
@@ -3663,7 +3801,7 @@ export def "rest-3-fieldconfigurationscheme-mapping get" [
   let full_url = (build-url $base "/rest/api/3/fieldconfigurationscheme/mapping" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get field configuration schemes for projects
@@ -3680,6 +3818,7 @@ export def "rest-3-fieldconfigurationscheme-project get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --projectId: list # The list of project IDs. To include multiple projects, separate IDs with ampersand: `projectId=10000&projectId=10001`.
@@ -3690,7 +3829,7 @@ export def "rest-3-fieldconfigurationscheme-project get" [
   let full_url = (build-url $base "/rest/api/3/fieldconfigurationscheme/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign field configuration scheme to project
@@ -3707,6 +3846,7 @@ export def "rest-3-fieldconfigurationscheme-project assignFieldConfigurationSche
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldConfigurationSchemeId: string # The ID of the field configuration scheme. If the field configuration scheme ID is `null`, the operation assigns the default field configuration scheme.
   projectId: string # The ID of the project.
 ]: any -> any {
@@ -3718,7 +3858,7 @@ export def "rest-3-fieldconfigurationscheme-project assignFieldConfigurationSche
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete field configuration scheme
@@ -3736,13 +3876,14 @@ export def "rest-3-fieldconfigurationscheme delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/fieldconfigurationscheme/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update field configuration scheme
@@ -3760,6 +3901,7 @@ export def "rest-3-fieldconfigurationscheme updateFieldConfigurationScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the field configuration scheme.
   name: string # The name of the field configuration scheme. The name must be unique.
 ]: any -> any {
@@ -3771,7 +3913,7 @@ export def "rest-3-fieldconfigurationscheme updateFieldConfigurationScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Assign issue types to field configurations
@@ -3790,6 +3932,7 @@ export def "rest-3-fieldconfigurationscheme-mapping setFieldConfigurationSchemeM
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   mappings: list # Field configuration to issue type mappings. — item shape: {fieldConfigurationId: string, issueTypeId: string}
 ]: any -> any {
   let input = $in
@@ -3800,7 +3943,7 @@ export def "rest-3-fieldconfigurationscheme-mapping setFieldConfigurationSchemeM
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove issue types from field configuration scheme
@@ -3818,6 +3961,7 @@ export def "rest-3-fieldconfigurationscheme-mapping-delete removeIssueTypesFromG
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   issueTypeIds: list # The list of issue type IDs. Must contain unique values not longer than 255 characters and not be empty. Maximum of 100 IDs.
 ]: any -> any {
   let input = $in
@@ -3828,7 +3972,7 @@ export def "rest-3-fieldconfigurationscheme-mapping-delete removeIssueTypesFromG
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create filter
@@ -3845,6 +3989,7 @@ export def "rest-3-filter createFilter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information about filter in the response. This parameter accepts a comma-separated list. Expand options include:   *  `sharedUsers` Returns the users that the filter is shared with. This includes users that can browse projects that the filter is shared with. If you don't specify `sharedUsers`, then the `sharedUsers` object is returned but it doesn't list any users. The list of users returned is limited to 1000, to access additional users append `[start-index:end-index]` to the expand request. For example, to access the next 1000 users, use `?expand=sharedUsers[1001:2000]`.  *  `subscriptions` Returns the users that are subscribed to the filter. If you don't specify `subscriptions`, the `subscriptions` object is returned but it doesn't list any subscriptions. The list of subscriptions returned is limited to 1000, to access additional subscriptions append `[start-index:end-index]` to the expand request. For example, to access the next 1000 subscriptions, use `?expand=subscriptions[1001:2000]`.
   --overrideSharePermissions: oneof<nothing, bool> # EXPERIMENTAL: Whether share permissions are overridden to enable filters with any share permissions to be created. Available to users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
   --description: string # A description of the filter.
@@ -3863,7 +4008,7 @@ export def "rest-3-filter createFilter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get default share scope
@@ -3878,13 +4023,14 @@ export def "rest-3-filter-default-share-scope get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<scope: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/filter/defaultShareScope")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set default share scope
@@ -3899,6 +4045,7 @@ export def "rest-3-filter-default-share-scope setDefaultShareScope" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   scope: string@scope-completer # The scope of the default sharing for new filters and dashboards:   *  `AUTHENTICATED` Shared with all logged-in users.  *  `GLOBAL` Shared with all logged-in users. This shows as `AUTHENTICATED` in the response.  *  `PRIVATE` Not shared with any users.
 ]: any -> record<scope: string> {
   let input = $in
@@ -3909,7 +4056,7 @@ export def "rest-3-filter-default-share-scope setDefaultShareScope" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get favorite filters
@@ -3924,6 +4071,7 @@ export def "rest-3-filter-favourite get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information about filter in the response. This parameter accepts a comma-separated list. Expand options include:   *  `sharedUsers` Returns the users that the filter is shared with. This includes users that can browse projects that the filter is shared with. If you don't specify `sharedUsers`, then the `sharedUsers` object is returned but it doesn't list any users. The list of users returned is limited to 1000, to access additional users append `[start-index:end-index]` to the expand request. For example, to access the next 1000 users, use `?expand=sharedUsers[1001:2000]`.  *  `subscriptions` Returns the users that are subscribed to the filter. If you don't specify `subscriptions`, the `subscriptions` object is returned but it doesn't list any subscriptions. The list of subscriptions returned is limited to 1000, to access additional subscriptions append `[start-index:end-index]` to the expand request. For example, to access the next 1000 subscriptions, use `?expand=subscriptions[1001:2000]`.
 ]: nothing -> table<approximateLastUsed: string, description: string, editPermissions: list<record>, favourite: bool, favouritedCount: int, id: string, jql: string, name: string, owner: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, searchUrl: string, self: string, sharePermissions: list<record>, sharedUsers: record<end_index: int, items: list, max_results: int, size: int, start_index: int>, subscriptions: record<end_index: int, items: list, max_results: int, size: int, start_index: int>, viewUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3932,7 +4080,7 @@ export def "rest-3-filter-favourite get" [
   let full_url = (build-url $base "/rest/api/3/filter/favourite" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get my filters
@@ -3947,6 +4095,7 @@ export def "rest-3-filter-my get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information about filter in the response. This parameter accepts a comma-separated list. Expand options include:   *  `sharedUsers` Returns the users that the filter is shared with. This includes users that can browse projects that the filter is shared with. If you don't specify `sharedUsers`, then the `sharedUsers` object is returned but it doesn't list any users. The list of users returned is limited to 1000, to access additional users append `[start-index:end-index]` to the expand request. For example, to access the next 1000 users, use `?expand=sharedUsers[1001:2000]`.  *  `subscriptions` Returns the users that are subscribed to the filter. If you don't specify `subscriptions`, the `subscriptions` object is returned but it doesn't list any subscriptions. The list of subscriptions returned is limited to 1000, to access additional subscriptions append `[start-index:end-index]` to the expand request. For example, to access the next 1000 subscriptions, use `?expand=subscriptions[1001:2000]`.
   --includeFavourites: oneof<nothing, bool> # Include the user's favorite filters in the response. (default: false)
 ]: nothing -> table<approximateLastUsed: string, description: string, editPermissions: list<record>, favourite: bool, favouritedCount: int, id: string, jql: string, name: string, owner: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, searchUrl: string, self: string, sharePermissions: list<record>, sharedUsers: record<end_index: int, items: list, max_results: int, size: int, start_index: int>, subscriptions: record<end_index: int, items: list, max_results: int, size: int, start_index: int>, viewUrl: string> {
@@ -3956,7 +4105,7 @@ export def "rest-3-filter-my get" [
   let full_url = (build-url $base "/rest/api/3/filter/my" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for filters
@@ -3971,6 +4120,7 @@ export def "rest-3-filter-search get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filterName: string # String used to perform a case-insensitive partial match with `name`.
   --accountId: string # User account ID used to return filters with the matching `owner.accountId`. This parameter cannot be used with `owner`.
   --owner: string # This parameter is deprecated because of privacy changes. Use `accountId` instead. See the [migration guide](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details. User name used to return filters with the matching `owner.name`. This parameter cannot be used with `accountId`.
@@ -3991,7 +4141,7 @@ export def "rest-3-filter-search get" [
   let full_url = (build-url $base "/rest/api/3/filter/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete filter
@@ -4007,13 +4157,14 @@ export def "rest-3-filter delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/filter/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get filter
@@ -4029,6 +4180,7 @@ export def "rest-3-filter get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information about filter in the response. This parameter accepts a comma-separated list. Expand options include:   *  `sharedUsers` Returns the users that the filter is shared with. This includes users that can browse projects that the filter is shared with. If you don't specify `sharedUsers`, then the `sharedUsers` object is returned but it doesn't list any users. The list of users returned is limited to 1000, to access additional users append `[start-index:end-index]` to the expand request. For example, to access the next 1000 users, use `?expand=sharedUsers[1001:2000]`.  *  `subscriptions` Returns the users that are subscribed to the filter. If you don't specify `subscriptions`, the `subscriptions` object is returned but it doesn't list any subscriptions. The list of subscriptions returned is limited to 1000, to access additional subscriptions append `[start-index:end-index]` to the expand request. For example, to access the next 1000 subscriptions, use `?expand=subscriptions[1001:2000]`.
   --overrideSharePermissions: oneof<nothing, bool> # EXPERIMENTAL: Whether share permissions are overridden to enable filters with any share permissions to be returned. Available to users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
 ]: nothing -> record<approximateLastUsed: string, description: string, editPermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, favourite: bool, favouritedCount: int, id: string, jql: string, name: string, owner: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, searchUrl: string, self: string, sharePermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, sharedUsers: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>, subscriptions: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>, viewUrl: string> {
@@ -4038,7 +4190,7 @@ export def "rest-3-filter get" [
   let full_url = (build-url $base $"/rest/api/3/filter/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update filter
@@ -4056,6 +4208,7 @@ export def "rest-3-filter updateFilter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information about filter in the response. This parameter accepts a comma-separated list. Expand options include:   *  `sharedUsers` Returns the users that the filter is shared with. This includes users that can browse projects that the filter is shared with. If you don't specify `sharedUsers`, then the `sharedUsers` object is returned but it doesn't list any users. The list of users returned is limited to 1000, to access additional users append `[start-index:end-index]` to the expand request. For example, to access the next 1000 users, use `?expand=sharedUsers[1001:2000]`.  *  `subscriptions` Returns the users that are subscribed to the filter. If you don't specify `subscriptions`, the `subscriptions` object is returned but it doesn't list any subscriptions. The list of subscriptions returned is limited to 1000, to access additional subscriptions append `[start-index:end-index]` to the expand request. For example, to access the next 1000 subscriptions, use `?expand=subscriptions[1001:2000]`.
   --overrideSharePermissions: oneof<nothing, bool> # EXPERIMENTAL: Whether share permissions are overridden to enable the addition of any share permissions to filters. Available to users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
   --description: string # A description of the filter.
@@ -4074,7 +4227,7 @@ export def "rest-3-filter updateFilter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reset columns
@@ -4090,13 +4243,14 @@ export def "rest-3-filter-columns resetColumns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/filter/($id)/columns")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get columns
@@ -4112,13 +4266,14 @@ export def "rest-3-filter-columns get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<label: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/filter/($id)/columns")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set columns
@@ -4134,6 +4289,7 @@ export def "rest-3-filter-columns setColumns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --columns: list
 ]: any -> any {
   let input = $in
@@ -4144,7 +4300,7 @@ export def "rest-3-filter-columns setColumns" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove filter as favorite
@@ -4160,6 +4316,7 @@ export def "rest-3-filter-favourite delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information about filter in the response. This parameter accepts a comma-separated list. Expand options include:   *  `sharedUsers` Returns the users that the filter is shared with. This includes users that can browse projects that the filter is shared with. If you don't specify `sharedUsers`, then the `sharedUsers` object is returned but it doesn't list any users. The list of users returned is limited to 1000, to access additional users append `[start-index:end-index]` to the expand request. For example, to access the next 1000 users, use `?expand=sharedUsers[1001:2000]`.  *  `subscriptions` Returns the users that are subscribed to the filter. If you don't specify `subscriptions`, the `subscriptions` object is returned but it doesn't list any subscriptions. The list of subscriptions returned is limited to 1000, to access additional subscriptions append `[start-index:end-index]` to the expand request. For example, to access the next 1000 subscriptions, use `?expand=subscriptions[1001:2000]`.
 ]: nothing -> record<approximateLastUsed: string, description: string, editPermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, favourite: bool, favouritedCount: int, id: string, jql: string, name: string, owner: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, searchUrl: string, self: string, sharePermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, sharedUsers: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>, subscriptions: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>, viewUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4168,7 +4325,7 @@ export def "rest-3-filter-favourite delete" [
   let full_url = (build-url $base $"/rest/api/3/filter/($id)/favourite" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add filter as favorite
@@ -4184,6 +4341,7 @@ export def "rest-3-filter-favourite setFavouriteForFilter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information about filter in the response. This parameter accepts a comma-separated list. Expand options include:   *  `sharedUsers` Returns the users that the filter is shared with. This includes users that can browse projects that the filter is shared with. If you don't specify `sharedUsers`, then the `sharedUsers` object is returned but it doesn't list any users. The list of users returned is limited to 1000, to access additional users append `[start-index:end-index]` to the expand request. For example, to access the next 1000 users, use `?expand=sharedUsers[1001:2000]`.  *  `subscriptions` Returns the users that are subscribed to the filter. If you don't specify `subscriptions`, the `subscriptions` object is returned but it doesn't list any subscriptions. The list of subscriptions returned is limited to 1000, to access additional subscriptions append `[start-index:end-index]` to the expand request. For example, to access the next 1000 subscriptions, use `?expand=subscriptions[1001:2000]`.
 ]: nothing -> record<approximateLastUsed: string, description: string, editPermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, favourite: bool, favouritedCount: int, id: string, jql: string, name: string, owner: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, searchUrl: string, self: string, sharePermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, sharedUsers: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>, subscriptions: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>, viewUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4192,7 +4350,7 @@ export def "rest-3-filter-favourite setFavouriteForFilter" [
   let full_url = (build-url $base $"/rest/api/3/filter/($id)/favourite" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change filter owner
@@ -4208,6 +4366,7 @@ export def "rest-3-filter-owner changeFilterOwner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   accountId: string # The account ID of the new owner.
 ]: any -> any {
   let input = $in
@@ -4218,7 +4377,7 @@ export def "rest-3-filter-owner changeFilterOwner" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get share permissions
@@ -4234,13 +4393,14 @@ export def "rest-3-filter-permission list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<group: record<groupId: string, name: string, self: string>, id: int, project: record<archived: bool, archivedBy: record, archivedDate: string, assigneeType: string, avatarUrls: record, components: list, deleted: bool, deletedBy: record, deletedDate: string, description: string, email: string, expand: string, favourite: bool, id: string, insight: record, isPrivate: bool, issueTypeHierarchy: record, issueTypes: list, key: string, landingPageInfo: record, lead: record, name: string, permissions: record, projectCategory: record, projectTypeKey: string, properties: record, retentionTillDate: string, roles: record, self: string, simplified: bool, style: string, url: string, uuid: string, versions: list>, role: record<actors: list, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record, self: string, translatedName: string>, type: string, user: record<accountId: string, active: bool, avatarUrls: record, displayName: string, key: string, name: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/filter/($id)/permission")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add share permission
@@ -4256,6 +4416,7 @@ export def "rest-3-filter-permission addSharePermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: string # The user account ID that the filter is shared with. For a request, specify the `accountId` property for the user.
   --groupId: string # The ID of the group, which uniquely identifies the group across all Atlassian products.For example, *952d12c3-5b5b-4d04-bb32-44d383afc4b2*. Cannot be provided with `groupname`.
   --groupname: string # The name of the group to share the filter with. Set `type` to `group`. Please note that the name of a group is mutable, to reliably identify a group use `groupId`.
@@ -4272,7 +4433,7 @@ export def "rest-3-filter-permission addSharePermission" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete share permission
@@ -4289,13 +4450,14 @@ export def "rest-3-filter-permission delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/filter/($id)/permission/($permissionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get share permission
@@ -4312,13 +4474,14 @@ export def "rest-3-filter-permission get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<group: record<groupId: string, name: string, self: string>, id: int, project: record<archived: bool, archivedBy: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, archivedDate: string, assigneeType: string, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, components: list<record>, deleted: bool, deletedBy: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, deletedDate: string, description: string, email: string, expand: string, favourite: bool, id: string, insight: record<lastIssueUpdateTime: string, totalIssueCount: int>, isPrivate: bool, issueTypeHierarchy: record<baseLevelId: int, levels: list>, issueTypes: list<record>, key: string, landingPageInfo: record<attributes: record, boardId: int, boardName: string, projectKey: string, projectType: string, queueCategory: string, queueId: int, queueName: string, simpleBoard: bool, simplified: bool, url: string>, lead: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, permissions: record<canEdit: bool>, projectCategory: record<description: string, id: string, name: string, self: string>, projectTypeKey: string, properties: record, retentionTillDate: string, roles: record, self: string, simplified: bool, style: string, url: string, uuid: string, versions: list<record>>, role: record<actors: list<record>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record, type: string>, self: string, translatedName: string>, type: string, user: record<accountId: string, active: bool, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, key: string, name: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/filter/($id)/permission/($permissionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk pin or unpin issue panel to projects
@@ -4334,6 +4497,7 @@ export def "rest-3-forge-panel-action-bulk-async bulkPinUnpinProjectsAsync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   moduleId: string # The moduleId of the Forge panel in the format `ari:cloud:ecosystem::extension/{app-id}/{environment-id}/static/{module-key}`
   projectList: list # The list of projects to pin or unpin the issue panel to or from. — item shape: {action: "PIN"|"UNPIN", projectIdOrKey: string}
 ]: any -> record<taskId: string> {
@@ -4345,7 +4509,7 @@ export def "rest-3-forge-panel-action-bulk-async bulkPinUnpinProjectsAsync" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove group
@@ -4360,6 +4524,7 @@ export def "rest-3-group removeGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --groupname: string
   --groupId: string # The ID of the group. This parameter cannot be used with the `groupname` parameter.
   --swapGroup: string # As a group's name can change, use of `swapGroupId` is recommended to identify a group.   The group to transfer restrictions to. Only comments and worklogs are transferred. If restrictions are not transferred, comments and worklogs are inaccessible after the deletion. This parameter cannot be used with the `swapGroupId` parameter.
@@ -4371,7 +4536,7 @@ export def "rest-3-group removeGroup" [
   let full_url = (build-url $base "/rest/api/3/group" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get group
@@ -4388,6 +4553,7 @@ export def "rest-3-group get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --groupname: string # As a group's name can change, use of `groupId` is recommended to identify a group.   The name of the group. This parameter cannot be used with the `groupId` parameter.
   --groupId: string # The ID of the group. This parameter cannot be used with the `groupName` parameter.
   --expand: string # List of fields to expand.
@@ -4398,7 +4564,7 @@ export def "rest-3-group get" [
   let full_url = (build-url $base "/rest/api/3/group" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create group
@@ -4413,6 +4579,7 @@ export def "rest-3-group createGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the group.
 ]: any -> record<expand: string, groupId: string, name: string, self: string, users: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>> {
   let input = $in
@@ -4423,7 +4590,7 @@ export def "rest-3-group createGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk get groups
@@ -4438,6 +4605,7 @@ export def "rest-3-group-bulk bulkGetGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --groupId: list # The ID of a group. To specify multiple IDs, pass multiple `groupId` parameters. For example, `groupId=5b10a2844c20165700ede21g&groupId=5b10ac8d82e05b22cc7d4ef5`. (e.g. 3571b9a7-348f-414a-9087-8e1ea03a7df8)
@@ -4451,7 +4619,7 @@ export def "rest-3-group-bulk bulkGetGroups" [
   let full_url = (build-url $base "/rest/api/3/group/bulk" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get users from group
@@ -4466,6 +4634,7 @@ export def "rest-3-group-member get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --groupname: string # As a group's name can change, use of `groupId` is recommended to identify a group.   The name of the group. This parameter cannot be used with the `groupId` parameter.
   --groupId: string # The ID of the group. This parameter cannot be used with the `groupName` parameter.
   --includeInactiveUsers: oneof<nothing, bool> # Include inactive users. (default: false)
@@ -4478,7 +4647,7 @@ export def "rest-3-group-member get" [
   let full_url = (build-url $base "/rest/api/3/group/member" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove user from group
@@ -4493,6 +4662,7 @@ export def "rest-3-group-user removeUserFromGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --groupname: string # As a group's name can change, use of `groupId` is recommended to identify a group.   The name of the group. This parameter cannot be used with the `groupId` parameter.
   --groupId: string # The ID of the group. This parameter cannot be used with the `groupName` parameter.
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
@@ -4504,7 +4674,7 @@ export def "rest-3-group-user removeUserFromGroup" [
   let full_url = (build-url $base "/rest/api/3/group/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add user to group
@@ -4519,6 +4689,7 @@ export def "rest-3-group-user addUserToGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --groupname: string # As a group's name can change, use of `groupId` is recommended to identify a group.   The name of the group. This parameter cannot be used with the `groupId` parameter.
   --groupId: string # The ID of the group. This parameter cannot be used with the `groupName` parameter.
   --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*.
@@ -4533,7 +4704,7 @@ export def "rest-3-group-user addUserToGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Find groups
@@ -4548,6 +4719,7 @@ export def "rest-3-groups-picker findGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: string # This parameter is deprecated, setting it does not affect the results. To find groups containing a particular user, use [Get user groups](#api-rest-api-3-user-groups-get).
   --qp-query: string # The string to find in group names. (e.g. query)
   --exclude: list # As a group's name can change, use of `excludeGroupIds` is recommended to identify a group.   A group to exclude from the result. To exclude multiple groups, provide an ampersand-separated list. For example, `exclude=group1&exclude=group2`. This parameter cannot be used with the `excludeGroupIds` parameter.
@@ -4562,7 +4734,7 @@ export def "rest-3-groups-picker findGroups" [
   let full_url = (build-url $base "/rest/api/3/groups/picker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find users and groups
@@ -4577,6 +4749,7 @@ export def "rest-3-groupuserpicker findUsersAndGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # The search string.
   --maxResults: int # The maximum number of items to return in each list. (format: int32, default: 50)
   --showAvatar: oneof<nothing, bool> # Whether the user avatar should be returned. If an invalid value is provided, the default value is used. (default: false)
@@ -4593,7 +4766,7 @@ export def "rest-3-groupuserpicker findUsersAndGroups" [
   let full_url = (build-url $base "/rest/api/3/groupuserpicker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get license
@@ -4608,13 +4781,14 @@ export def "rest-3-instance-license get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<applications: table<id: string, plan: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/instance/license")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create issue
@@ -4630,6 +4804,7 @@ export def "rest-3-issue createIssue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --updateHistory: oneof<nothing, bool> # Whether the project in which the issue is created is added to the user's **Recently viewed** project list, as shown under **Projects** in Jira. When provided, the issue type and request type are added to the user's history for a project. These values are then used to provide defaults on the issue create screen. (default: false)
   --body-fields: record # List of issue screen fields to update, specifying the sub-field to update and its value for each field. This field provides a straightforward option when setting a sub-field. When multiple sub-fields or other operations are required, use `update`. Fields included in here cannot be included in `update`.
   --historyMetadata: any # Additional issue history details.
@@ -4646,7 +4821,7 @@ export def "rest-3-issue createIssue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Archive issue(s) by JQL
@@ -4661,6 +4836,7 @@ export def "rest-3-issue-archive archiveIssuesAsync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --jql: string
 ]: any -> string {
   let input = $in
@@ -4671,7 +4847,7 @@ export def "rest-3-issue-archive archiveIssuesAsync" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Archive issue(s) by issue ID/key
@@ -4686,6 +4862,7 @@ export def "rest-3-issue-archive archiveIssues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --issueIdsOrKeys: list
 ]: any -> record<errors: record<issueIsSubtask: record<count: int, issueIdsOrKeys: list, message: string>, issuesInArchivedProjects: record<count: int, issueIdsOrKeys: list, message: string>, issuesInUnlicensedProjects: record<count: int, issueIdsOrKeys: list, message: string>, issuesNotFound: record<count: int, issueIdsOrKeys: list, message: string>, userDoesNotHavePermission: record<count: int, issueIdsOrKeys: list, message: string>>, numberOfIssuesUpdated: int> {
   let input = $in
@@ -4696,7 +4873,7 @@ export def "rest-3-issue-archive archiveIssues" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk create issue
@@ -4712,6 +4889,7 @@ export def "rest-3-issue-bulk createIssues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --issueUpdates: list # item shape: {fields?: record, historyMetadata?: any, properties?: list, transition?: any, update?: record}
 ]: any -> record<errors: table<elementErrors: record, failedElementNumber: int, status: int>, issues: table<id: string, key: string, self: string, transition: record, watchers: record>> {
   let input = $in
@@ -4722,7 +4900,7 @@ export def "rest-3-issue-bulk createIssues" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk fetch issues
@@ -4737,6 +4915,7 @@ export def "rest-3-issue-bulkfetch bulkFetchIssues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Use [expand](#expansion) to include additional information about issues in the response. Note that, unlike the majority of instances where `expand` is specified, `expand` is defined as a list of values. The expand options are:   *  `renderedFields` Returns field values rendered in HTML format.  *  `names` Returns the display name of each field.  *  `schema` Returns the schema describing a field type.  *  `transitions` Returns all possible transitions for the issue.  *  `operations` Returns all possible operations for the issue.  *  `editmeta` Returns information about how each field can be edited.  *  `changelog` Returns a list of recent updates to an issue, sorted by date, starting from the most recent. This returns a maximum of 40 changelogs. If you require more, please refer to [Bulk fetch changelogs](#api-rest-api-3-changelog-bulkfetch-post).  *  `versionedRepresentations` Instead of `fields`, returns `versionedRepresentations` a JSON array containing each version of a field's value, with the highest numbered item representing the most recent version.
   --body-fields: list # A list of fields to return for each issue, use it to retrieve a subset of fields. This parameter accepts a comma-separated list. Expand options include:   *  `*all` Returns all fields.  *  `*navigable` Returns navigable fields.  *  Any issue field, prefixed with a minus to exclude.  The default is `*navigable`.  Examples:   *  `summary,comment` Returns the summary and comments fields only.  *  `-description` Returns all navigable (default) fields except description.  *  `*all,-comment` Returns all fields except comments.  Multiple `fields` parameters can be included in a request.  Note: All navigable fields are returned by default. This differs from [GET issue](#api-rest-api-3-issue-issueIdOrKey-get) where the default is all fields.
   --fieldsByKeys: oneof<nothing, bool> # Reference fields by their key (rather than ID). The default is `false`.
@@ -4751,7 +4930,7 @@ export def "rest-3-issue-bulkfetch bulkFetchIssues" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get create issue metadata
@@ -4768,6 +4947,7 @@ export def "rest-3-issue-createmeta get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectIds: list # List of project IDs. This parameter accepts a comma-separated list. Multiple project IDs can also be provided using an ampersand-separated list. For example, `projectIds=10000,10001&projectIds=10020,10021`. This parameter may be provided with `projectKeys`.
   --projectKeys: list # List of project keys. This parameter accepts a comma-separated list. Multiple project keys can also be provided using an ampersand-separated list. For example, `projectKeys=proj1,proj2&projectKeys=proj3`. This parameter may be provided with `projectIds`.
   --issuetypeIds: list # List of issue type IDs. This parameter accepts a comma-separated list. Multiple issue type IDs can also be provided using an ampersand-separated list. For example, `issuetypeIds=10000,10001&issuetypeIds=10020,10021`. This parameter may be provided with `issuetypeNames`.
@@ -4780,7 +4960,7 @@ export def "rest-3-issue-createmeta get" [
   let full_url = (build-url $base "/rest/api/3/issue/createmeta" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get create metadata issue types for a project
@@ -4796,6 +4976,7 @@ export def "rest-3-issue-createmeta-issuetypes list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int32, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
 ]: nothing -> record<createMetaIssueType: table<avatarId: int, description: string, entityId: string, expand: string, fields: record, hierarchyLevel: int, iconUrl: string, id: string, name: string, scope: record, self: string, subtask: bool>, issueTypes: table<avatarId: int, description: string, entityId: string, expand: string, fields: record, hierarchyLevel: int, iconUrl: string, id: string, name: string, scope: record, self: string, subtask: bool>, maxResults: int, startAt: int, total: int> {
@@ -4805,7 +4986,7 @@ export def "rest-3-issue-createmeta-issuetypes list" [
   let full_url = (build-url $base $"/rest/api/3/issue/createmeta/($projectIdOrKey)/issuetypes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get create field metadata for a project and issue type id
@@ -4822,6 +5003,7 @@ export def "rest-3-issue-createmeta-issuetypes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int32, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
 ]: nothing -> record<fields: table<allowedValues: list, autoCompleteUrl: string, configuration: record, defaultValue: any, fieldId: string, hasDefaultValue: bool, key: string, name: string, operations: list, required: bool, schema: record>, maxResults: int, results: table<allowedValues: list, autoCompleteUrl: string, configuration: record, defaultValue: any, fieldId: string, hasDefaultValue: bool, key: string, name: string, operations: list, required: bool, schema: record>, startAt: int, total: int> {
@@ -4831,7 +5013,7 @@ export def "rest-3-issue-createmeta-issuetypes get" [
   let full_url = (build-url $base $"/rest/api/3/issue/createmeta/($projectIdOrKey)/issuetypes/($issueTypeId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issue limit report
@@ -4846,6 +5028,7 @@ export def "rest-3-issue-limit-report get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isReturningKeys: oneof<nothing, bool> # Return issue keys instead of issue ids in the response.  Usage: Add `?isReturningKeys=true` to the end of the path to request issue keys. (default: false)
 ]: nothing -> record<issuesApproachingLimit: record, issuesBreachingLimit: record, limits: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4854,7 +5037,7 @@ export def "rest-3-issue-limit-report get" [
   let full_url = (build-url $base "/rest/api/3/issue/limit/report" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issue picker suggestions
@@ -4869,6 +5052,7 @@ export def "rest-3-issue-picker get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # A string to match against text fields in the issue such as title, description, or comments. (e.g. query)
   --currentJQL: string # A JQL query defining a list of issues to search for the query term. Note that `username` and `userkey` cannot be used as search terms for this parameter, due to privacy reasons. Use `accountId` instead.
   --currentIssueKey: string # The key of an issue to exclude from search results. For example, the issue the user is viewing when they perform this query.
@@ -4882,7 +5066,7 @@ export def "rest-3-issue-picker get" [
   let full_url = (build-url $base "/rest/api/3/issue/picker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk set issues properties by list
@@ -4897,6 +5081,7 @@ export def "rest-3-issue-properties bulkSetIssuesPropertiesList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --entitiesIds: list # A list of entity property IDs.
   --properties: record # A list of entity property keys and values.
 ]: any -> any {
@@ -4908,7 +5093,7 @@ export def "rest-3-issue-properties bulkSetIssuesPropertiesList" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk set issue properties by issue
@@ -4924,6 +5109,7 @@ export def "rest-3-issue-properties-multi bulkSetIssuePropertiesByIssue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --issues: list # A list of issue IDs and their respective properties. — item shape: {issueID?: int, properties?: record}
 ]: any -> any {
   let input = $in
@@ -4934,7 +5120,7 @@ export def "rest-3-issue-properties-multi bulkSetIssuePropertiesByIssue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk delete issue property
@@ -4950,6 +5136,7 @@ export def "rest-3-issue-properties bulkDeleteIssueProperty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --currentValue: any # The value of properties to perform the bulk operation on.
   --entityIds: list # List of issues to perform the bulk delete operation on.
 ]: any -> any {
@@ -4961,7 +5148,7 @@ export def "rest-3-issue-properties bulkDeleteIssueProperty" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk set issue property
@@ -4977,6 +5164,7 @@ export def "rest-3-issue-properties bulkSetIssueProperty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expression: string # EXPERIMENTAL. The Jira expression to calculate the value of the property. The value of the expression must be an object that can be converted to JSON, such as a number, boolean, string, list, or map. The context variables available to the expression are `issue` and `user`. Issues for which the expression returns a value whose JSON representation is longer than 32768 characters are ignored.
   --filter: any # The bulk operation filter.
   --value: any # The value of the property. The value must be a [valid](https://tools.ietf.org/html/rfc4627), non-empty JSON blob. The maximum length is 32768 characters.
@@ -4989,7 +5177,7 @@ export def "rest-3-issue-properties bulkSetIssueProperty" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unarchive issue(s) by issue keys/ID
@@ -5004,6 +5192,7 @@ export def "rest-3-issue-unarchive unarchiveIssues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --issueIdsOrKeys: list
 ]: any -> record<errors: record<issueIsSubtask: record<count: int, issueIdsOrKeys: list, message: string>, issuesInArchivedProjects: record<count: int, issueIdsOrKeys: list, message: string>, issuesInUnlicensedProjects: record<count: int, issueIdsOrKeys: list, message: string>, issuesNotFound: record<count: int, issueIdsOrKeys: list, message: string>, userDoesNotHavePermission: record<count: int, issueIdsOrKeys: list, message: string>>, numberOfIssuesUpdated: int> {
   let input = $in
@@ -5014,7 +5203,7 @@ export def "rest-3-issue-unarchive unarchiveIssues" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get is watching issue bulk
@@ -5029,6 +5218,7 @@ export def "rest-3-issue-watching post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   issueIds: list # The list of issue IDs.
 ]: any -> record<issuesIsWatching: record> {
   let input = $in
@@ -5039,7 +5229,7 @@ export def "rest-3-issue-watching post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete issue
@@ -5055,6 +5245,7 @@ export def "rest-3-issue delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --deleteSubtasks: string@deleteSubtasks-completer # Whether the issue's subtasks are deleted when the issue is deleted. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5063,7 +5254,7 @@ export def "rest-3-issue delete" [
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issue
@@ -5079,6 +5270,7 @@ export def "rest-3-issue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: list # A list of fields to return for the issue. This parameter accepts a comma-separated list. Use it to retrieve a subset of fields. Allowed values:   *  `*all` Returns all fields.  *  `*navigable` Returns navigable fields.  *  Any issue field, prefixed with a minus to exclude.  Examples:   *  `summary,comment` Returns only the summary and comments fields.  *  `-description` Returns all (default) fields except description.  *  `*navigable,-comment` Returns all navigable fields except comment.  This parameter may be specified multiple times. For example, `fields=field1,field2& fields=field3`.  Note: All fields are returned by default. This differs from [Search for issues using JQL (GET)](#api-rest-api-3-search-get) and [Search for issues using JQL (POST)](#api-rest-api-3-search-post) where the default is all navigable fields.
   --fieldsByKeys: oneof<nothing, bool> # Whether fields in `fields` are referenced by keys rather than IDs. This parameter is useful where fields have been added by a connect app and a field's key may differ from its ID. (default: false)
   --expand: string # Use [expand](#expansion) to include additional information about the issues in the response. This parameter accepts a comma-separated list. Expand options include:   *  `renderedFields` Returns field values rendered in HTML format.  *  `names` Returns the display name of each field.  *  `schema` Returns the schema describing a field type.  *  `transitions` Returns all possible transitions for the issue.  *  `editmeta` Returns information about how each field can be edited.  *  `changelog` Returns a list of recent updates to an issue, sorted by date, starting from the most recent.  *  `versionedRepresentations` Returns a JSON array for each version of a field's value, with the highest number representing the most recent version. Note: When included in the request, the `fields` parameter is ignored.
@@ -5092,7 +5284,7 @@ export def "rest-3-issue get" [
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit issue
@@ -5109,6 +5301,7 @@ export def "rest-3-issue editIssue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --notifyUsers: oneof<nothing, bool> # Whether a notification email about the issue update is sent to all watchers. To disable the notification, administer Jira or administer project permissions are required. If the user doesn't have the necessary permission the request is ignored. (default: true)
   --overrideScreenSecurity: oneof<nothing, bool> # Whether screen security is overridden to enable hidden fields to be edited. Available to Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
   --overrideEditableFlag: oneof<nothing, bool> # Whether screen security is overridden to enable uneditable fields to be edited. Available to Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
@@ -5129,7 +5322,7 @@ export def "rest-3-issue editIssue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Assign issue
@@ -5145,6 +5338,7 @@ export def "rest-3-issue-assignee assignIssue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. Required in requests.
   --key: string # This property is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --name: string # This property is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
@@ -5157,7 +5351,7 @@ export def "rest-3-issue-assignee assignIssue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add attachment
@@ -5173,6 +5367,7 @@ export def "rest-3-issue-attachments addAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> table<author: record<accountId: string, accountType: string, active: bool, avatarUrls: record, displayName: string, emailAddress: string, key: string, name: string, self: string, timeZone: string>, content: string, created: string, filename: string, id: string, mimeType: string, self: string, size: int, thumbnail: string> {
   let input = $in
@@ -5182,7 +5377,7 @@ export def "rest-3-issue-attachments addAttachment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get changelogs
@@ -5198,6 +5393,7 @@ export def "rest-3-issue-changelog get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int32, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 100)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<author: record, created: string, historyMetadata: record, id: string, items: list>> {
@@ -5207,7 +5403,7 @@ export def "rest-3-issue-changelog get" [
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/changelog" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get changelogs by IDs
@@ -5223,6 +5419,7 @@ export def "rest-3-issue-changelog-list post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   changelogIds: list # The list of changelog IDs.
 ]: any -> record<histories: table<author: record, created: string, historyMetadata: record, id: string, items: list>, maxResults: int, startAt: int, total: int> {
   let input = $in
@@ -5233,7 +5430,7 @@ export def "rest-3-issue-changelog-list post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get comments
@@ -5249,6 +5446,7 @@ export def "rest-3-issue-comment list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 100)
   --orderBy: string@orderBy-completer-5 # [Order](#ordering) the results by a field. Accepts *created* to sort comments by their created date.
@@ -5260,7 +5458,7 @@ export def "rest-3-issue-comment list" [
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/comment" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add comment
@@ -5277,6 +5475,7 @@ export def "rest-3-issue-comment addComment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information about comments in the response. This parameter accepts `renderedBody`, which returns the comment body rendered in HTML.
   --body-body: any # The comment text in [Atlassian Document Format](https://developer.atlassian.com/cloud/jira/platform/apis/document/structure/).
   --properties: list # A list of comment properties. Optional on create and update. — item shape: {key?: string, value?: any}
@@ -5291,7 +5490,7 @@ export def "rest-3-issue-comment addComment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete comment
@@ -5308,13 +5507,14 @@ export def "rest-3-issue-comment delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/comment/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get comment
@@ -5331,6 +5531,7 @@ export def "rest-3-issue-comment get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information about comments in the response. This parameter accepts `renderedBody`, which returns the comment body rendered in HTML.
 ]: nothing -> record<author: record<accountId: string, accountType: string, active: bool, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, key: string, name: string, self: string, timeZone: string>, body: any, created: string, id: string, jsdAuthorCanSeeRequest: bool, jsdPublic: bool, properties: table<key: string, value: any>, renderedBody: string, self: string, updateAuthor: record<accountId: string, accountType: string, active: bool, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, key: string, name: string, self: string, timeZone: string>, updated: string, visibility: record<identifier: string, type: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5339,7 +5540,7 @@ export def "rest-3-issue-comment get" [
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/comment/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update comment
@@ -5357,6 +5558,7 @@ export def "rest-3-issue-comment updateComment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --notifyUsers: oneof<nothing, bool> # Whether users are notified when a comment is updated. (default: true)
   --overrideEditableFlag: oneof<nothing, bool> # Whether screen security is overridden to enable uneditable fields to be edited. Available to Connect app users with the *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
   --expand: string # Use [expand](#expansion) to include additional information about comments in the response. This parameter accepts `renderedBody`, which returns the comment body rendered in HTML.
@@ -5373,7 +5575,7 @@ export def "rest-3-issue-comment updateComment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get edit issue metadata
@@ -5389,6 +5591,7 @@ export def "rest-3-issue-editmeta get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --overrideScreenSecurity: oneof<nothing, bool> # Whether hidden fields are returned. Available to Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
   --overrideEditableFlag: oneof<nothing, bool> # Whether non-editable fields are returned. Available to Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
 ]: nothing -> record<fields: record> {
@@ -5398,7 +5601,7 @@ export def "rest-3-issue-editmeta get" [
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/editmeta" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send notification for issue
@@ -5414,6 +5617,7 @@ export def "rest-3-issue-notify notify" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --htmlBody: string # The HTML body of the email notification for the issue.
   --restrict: any # Restricts the notifications to users with the specified permissions.
   --subject: string # The subject of the email notification for the issue. If this is not specified, then the subject is set to the issue key and summary.
@@ -5428,7 +5632,7 @@ export def "rest-3-issue-notify notify" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get issue property keys
@@ -5444,13 +5648,14 @@ export def "rest-3-issue-properties list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/properties")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete issue property
@@ -5467,13 +5672,14 @@ export def "rest-3-issue-properties delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/properties/($propertyKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issue property
@@ -5490,13 +5696,14 @@ export def "rest-3-issue-properties get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/properties/($propertyKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set issue property
@@ -5513,6 +5720,7 @@ export def "rest-3-issue-properties setIssueProperty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -5522,7 +5730,7 @@ export def "rest-3-issue-properties setIssueProperty" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete remote issue link by global ID
@@ -5538,6 +5746,7 @@ export def "rest-3-issue-remotelink delete-by-issueIdOrKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --globalId: string # The global ID of a remote issue link. (e.g. system=http://www.mycompany.com/support&id=1)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5546,7 +5755,7 @@ export def "rest-3-issue-remotelink delete-by-issueIdOrKey" [
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/remotelink" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get remote issue links
@@ -5562,6 +5771,7 @@ export def "rest-3-issue-remotelink list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --globalId: string # The global ID of the remote issue link.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5570,7 +5780,7 @@ export def "rest-3-issue-remotelink list" [
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/remotelink" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update remote issue link
@@ -5586,6 +5796,7 @@ export def "rest-3-issue-remotelink createOrUpdateRemoteIssueLink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --application: any # Details of the remote application the linked item is in. For example, trello.
   --globalId: string # An identifier for the remote item in the remote system. For example, the global ID for a remote item in Confluence would consist of the app ID and page ID, like this: `appId=456&pageId=123`.  Setting this field enables the remote issue link details to be updated or deleted using remote system and item details as the record identifier, rather than using the record's Jira ID.  The maximum length is 255 characters.
   object: any # Details of the item linked to.
@@ -5599,7 +5810,7 @@ export def "rest-3-issue-remotelink createOrUpdateRemoteIssueLink" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete remote issue link by ID
@@ -5616,13 +5827,14 @@ export def "rest-3-issue-remotelink delete-by-issueIdOrKey-linkId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/remotelink/($linkId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get remote issue link by ID
@@ -5639,13 +5851,14 @@ export def "rest-3-issue-remotelink get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<application: record<name: string, type: string>, globalId: string, id: int, object: record<icon: record<link: string, title: string, url16x16: string>, status: record<icon: record, resolved: bool>, summary: string, title: string, url: string>, relationship: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/remotelink/($linkId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update remote issue link by ID
@@ -5662,6 +5875,7 @@ export def "rest-3-issue-remotelink updateRemoteIssueLink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --application: any # Details of the remote application the linked item is in. For example, trello.
   --globalId: string # An identifier for the remote item in the remote system. For example, the global ID for a remote item in Confluence would consist of the app ID and page ID, like this: `appId=456&pageId=123`.  Setting this field enables the remote issue link details to be updated or deleted using remote system and item details as the record identifier, rather than using the record's Jira ID.  The maximum length is 255 characters.
   object: any # Details of the item linked to.
@@ -5675,7 +5889,7 @@ export def "rest-3-issue-remotelink updateRemoteIssueLink" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get transitions
@@ -5691,6 +5905,7 @@ export def "rest-3-issue-transitions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information about transitions in the response. This parameter accepts `transitions.fields`, which returns information about the fields in the transition screen for each transition. Fields hidden from the screen are not returned. Use this information to populate the `fields` and `update` fields in [Transition issue](#api-rest-api-3-issue-issueIdOrKey-transitions-post).
   --transitionId: string # The ID of the transition.
   --skipRemoteOnlyCondition: oneof<nothing, bool> # Whether transitions with the condition *Hide From User Condition* are included in the response. Available to Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
@@ -5703,7 +5918,7 @@ export def "rest-3-issue-transitions get" [
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/transitions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Transition issue
@@ -5720,6 +5935,7 @@ export def "rest-3-issue-transitions doTransition" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-fields: record # List of issue screen fields to update, specifying the sub-field to update and its value for each field. This field provides a straightforward option when setting a sub-field. When multiple sub-fields or other operations are required, use `update`. Fields included in here cannot be included in `update`.
   --historyMetadata: any # Additional issue history details.
   --properties: list # Details of issue properties to be add or update. — item shape: {key?: string, value?: any}
@@ -5734,7 +5950,7 @@ export def "rest-3-issue-transitions doTransition" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete vote
@@ -5750,13 +5966,14 @@ export def "rest-3-issue-votes removeVote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/votes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get votes
@@ -5772,13 +5989,14 @@ export def "rest-3-issue-votes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<hasVoted: bool, self: string, voters: table<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, votes: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/votes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add vote
@@ -5794,13 +6012,14 @@ export def "rest-3-issue-votes addVote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/votes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete watcher
@@ -5816,6 +6035,7 @@ export def "rest-3-issue-watchers removeWatcher" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. Required. (e.g. 5b10ac8d82e05b22cc7d4ef5)
 ]: nothing -> any {
@@ -5825,7 +6045,7 @@ export def "rest-3-issue-watchers removeWatcher" [
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/watchers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issue watchers
@@ -5841,13 +6061,14 @@ export def "rest-3-issue-watchers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<isWatching: bool, self: string, watchCount: int, watchers: table<accountId: string, accountType: string, active: bool, avatarUrls: record, displayName: string, emailAddress: string, key: string, name: string, self: string, timeZone: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/watchers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add watcher
@@ -5863,6 +6084,7 @@ export def "rest-3-issue-watchers addWatcher" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -5872,7 +6094,7 @@ export def "rest-3-issue-watchers addWatcher" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk delete worklogs
@@ -5888,6 +6110,7 @@ export def "rest-3-issue-worklog bulkDeleteWorklogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --adjustEstimate: string@adjustEstimate-completer # Defines how to update the issue's time estimate, the options are:   *  `leave` Leaves the estimate unchanged.  *  `auto` Reduces the estimate by the aggregate value of `timeSpent` across all worklogs being deleted. (default: auto)
   --overrideEditableFlag: oneof<nothing, bool> # Whether the work log entries should be removed to the issue even if the issue is not editable, because jira.issue.editable set to false or missing. For example, the issue is closed. Connect and Forge app users with admin permission can use this flag. (default: false)
   ids: list # A list of worklog IDs.
@@ -5901,7 +6124,7 @@ export def "rest-3-issue-worklog bulkDeleteWorklogs" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get issue worklogs
@@ -5917,6 +6140,7 @@ export def "rest-3-issue-worklog list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 5000)
   --startedAfter: int # The worklog start date and time, as a UNIX timestamp in milliseconds, after which worklogs are returned. (format: int64)
@@ -5929,7 +6153,7 @@ export def "rest-3-issue-worklog list" [
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/worklog" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add worklog
@@ -5946,6 +6170,7 @@ export def "rest-3-issue-worklog addWorklog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --notifyUsers: oneof<nothing, bool> # Whether users watching the issue are notified by email. (default: true)
   --adjustEstimate: string@adjustEstimate-completer-1 # Defines how to update the issue's time estimate, the options are:   *  `new` Sets the estimate to a specific value, defined in `newEstimate`.  *  `leave` Leaves the estimate unchanged.  *  `manual` Reduces the estimate by amount specified in `reduceBy`.  *  `auto` Reduces the estimate by the value of `timeSpent` in the worklog. (default: auto)
   --newEstimate: string # The value to set as the issue's remaining time estimate, as days (\#d), hours (\#h), or minutes (\#m or \#). For example, *2d*. Required when `adjustEstimate` is `new`.
@@ -5968,7 +6193,7 @@ export def "rest-3-issue-worklog addWorklog" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk move worklogs
@@ -5984,6 +6209,7 @@ export def "rest-3-issue-worklog-move bulkMoveWorklogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --adjustEstimate: string@adjustEstimate-completer # Defines how to update the issues' time estimate, the options are:   *  `leave` Leaves the estimate unchanged.  *  `auto` Reduces the estimate by the aggregate value of `timeSpent` across all worklogs being moved in the source issue, and increases it in the destination issue. (default: auto)
   --overrideEditableFlag: oneof<nothing, bool> # Whether the work log entry should be moved to and from the issues even if the issues are not editable, because jira.issue.editable set to false or missing. For example, the issue is closed. Connect and Forge app users with admin permission can use this flag. (default: false)
   --ids: list # A list of worklog IDs.
@@ -5998,7 +6224,7 @@ export def "rest-3-issue-worklog-move bulkMoveWorklogs" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete worklog
@@ -6015,6 +6241,7 @@ export def "rest-3-issue-worklog delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --notifyUsers: oneof<nothing, bool> # Whether users watching the issue are notified by email. (default: true)
   --adjustEstimate: string@adjustEstimate-completer-1 # Defines how to update the issue's time estimate, the options are:   *  `new` Sets the estimate to a specific value, defined in `newEstimate`.  *  `leave` Leaves the estimate unchanged.  *  `manual` Increases the estimate by amount specified in `increaseBy`.  *  `auto` Reduces the estimate by the value of `timeSpent` in the worklog. (default: auto)
   --newEstimate: string # The value to set as the issue's remaining time estimate, as days (\#d), hours (\#h), or minutes (\#m or \#). For example, *2d*. Required when `adjustEstimate` is `new`.
@@ -6027,7 +6254,7 @@ export def "rest-3-issue-worklog delete" [
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/worklog/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get worklog
@@ -6044,6 +6271,7 @@ export def "rest-3-issue-worklog get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information about work logs in the response. This parameter accepts  `properties`, which returns worklog properties. (default: )
 ]: nothing -> record<author: record<accountId: string, accountType: string, active: bool, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, key: string, name: string, self: string, timeZone: string>, comment: any, created: string, id: string, issueId: string, properties: table<key: string, value: any>, self: string, started: string, timeSpent: string, timeSpentSeconds: int, updateAuthor: record<accountId: string, accountType: string, active: bool, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, key: string, name: string, self: string, timeZone: string>, updated: string, visibility: record<identifier: string, type: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6052,7 +6280,7 @@ export def "rest-3-issue-worklog get" [
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/worklog/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update worklog
@@ -6070,6 +6298,7 @@ export def "rest-3-issue-worklog updateWorklog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --notifyUsers: oneof<nothing, bool> # Whether users watching the issue are notified by email. (default: true)
   --adjustEstimate: string@adjustEstimate-completer-1 # Defines how to update the issue's time estimate, the options are:   *  `new` Sets the estimate to a specific value, defined in `newEstimate`.  *  `leave` Leaves the estimate unchanged.  *  `auto` Updates the estimate by the difference between the original and updated value of `timeSpent` or `timeSpentSeconds`. (default: auto)
   --newEstimate: string # The value to set as the issue's remaining time estimate, as days (\#d), hours (\#h), or minutes (\#m or \#). For example, *2d*. Required when `adjustEstimate` is `new`.
@@ -6091,7 +6320,7 @@ export def "rest-3-issue-worklog updateWorklog" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get worklog property keys
@@ -6108,13 +6337,14 @@ export def "rest-3-issue-worklog-properties list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/worklog/($worklogId)/properties")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete worklog property
@@ -6132,13 +6362,14 @@ export def "rest-3-issue-worklog-properties delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/worklog/($worklogId)/properties/($propertyKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get worklog property
@@ -6156,13 +6387,14 @@ export def "rest-3-issue-worklog-properties get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/worklog/($worklogId)/properties/($propertyKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set worklog property
@@ -6180,6 +6412,7 @@ export def "rest-3-issue-worklog-properties setWorklogProperty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -6189,7 +6422,7 @@ export def "rest-3-issue-worklog-properties setWorklogProperty" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create issue link
@@ -6208,6 +6441,7 @@ export def "rest-3-issue-link linkIssues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --comment: record # A comment. — shape: {body?: any, properties?: list, visibility?: any}
   inwardIssue: record # The ID or key of a linked issue. — shape: {id?: string, key?: string}
   outwardIssue: record # The ID or key of a linked issue. — shape: {id?: string, key?: string}
@@ -6221,7 +6455,7 @@ export def "rest-3-issue-link linkIssues" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete issue link
@@ -6237,13 +6471,14 @@ export def "rest-3-issue-link delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issueLink/($linkId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issue link
@@ -6259,13 +6494,14 @@ export def "rest-3-issue-link get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, inwardIssue: record<fields: record<assignee: record, issueType: record, issuetype: record, priority: record, status: record, summary: string, timetracking: record>, id: string, key: string, self: string>, outwardIssue: record<fields: record<assignee: record, issueType: record, issuetype: record, priority: record, status: record, summary: string, timetracking: record>, id: string, key: string, self: string>, self: string, type: record<id: string, inward: string, name: string, outward: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issueLink/($linkId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issue link types
@@ -6280,13 +6516,14 @@ export def "rest-3-issue-link-type list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<issueLinkTypes: table<id: string, inward: string, name: string, outward: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/issueLinkType")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create issue link type
@@ -6301,6 +6538,7 @@ export def "rest-3-issue-link-type createIssueLinkType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The ID of the issue link type and is used as follows:   *  In the [ issueLink](#api-rest-api-3-issueLink-post) resource it is the type of issue link. Required on create when `name` isn't provided. Otherwise, read only.  *  In the [ issueLinkType](#api-rest-api-3-issueLinkType-post) resource it is read only.
   --inward: string # The description of the issue link type inward link and is used as follows:   *  In the [ issueLink](#api-rest-api-3-issueLink-post) resource it is read only.  *  In the [ issueLinkType](#api-rest-api-3-issueLinkType-post) resource it is required on create and optional on update. Otherwise, read only.
   --name: string # The name of the issue link type and is used as follows:   *  In the [ issueLink](#api-rest-api-3-issueLink-post) resource it is the type of issue link. Required on create when `id` isn't provided. Otherwise, read only.  *  In the [ issueLinkType](#api-rest-api-3-issueLinkType-post) resource it is required on create and optional on update. Otherwise, read only.
@@ -6314,7 +6552,7 @@ export def "rest-3-issue-link-type createIssueLinkType" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete issue link type
@@ -6330,13 +6568,14 @@ export def "rest-3-issue-link-type delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issueLinkType/($issueLinkTypeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issue link type
@@ -6352,13 +6591,14 @@ export def "rest-3-issue-link-type get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, inward: string, name: string, outward: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issueLinkType/($issueLinkTypeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update issue link type
@@ -6374,6 +6614,7 @@ export def "rest-3-issue-link-type updateIssueLinkType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The ID of the issue link type and is used as follows:   *  In the [ issueLink](#api-rest-api-3-issueLink-post) resource it is the type of issue link. Required on create when `name` isn't provided. Otherwise, read only.  *  In the [ issueLinkType](#api-rest-api-3-issueLinkType-post) resource it is read only.
   --inward: string # The description of the issue link type inward link and is used as follows:   *  In the [ issueLink](#api-rest-api-3-issueLink-post) resource it is read only.  *  In the [ issueLinkType](#api-rest-api-3-issueLinkType-post) resource it is required on create and optional on update. Otherwise, read only.
   --name: string # The name of the issue link type and is used as follows:   *  In the [ issueLink](#api-rest-api-3-issueLink-post) resource it is the type of issue link. Required on create when `id` isn't provided. Otherwise, read only.  *  In the [ issueLinkType](#api-rest-api-3-issueLinkType-post) resource it is required on create and optional on update. Otherwise, read only.
@@ -6387,7 +6628,7 @@ export def "rest-3-issue-link-type updateIssueLinkType" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Export archived issue(s)
@@ -6403,6 +6644,7 @@ export def "rest-3-issues-archive-export exportArchivedIssues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --archivedBy: list # List archived issues archived by a specified account ID.
   --archivedDateRange: record # List issues archived within a specified date range. — shape: {dateAfter: string, dateBefore: string}
   --issueTypes: list # List archived issues with a specified issue type ID.
@@ -6417,7 +6659,7 @@ export def "rest-3-issues-archive-export exportArchivedIssues" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get issue security schemes
@@ -6432,13 +6674,14 @@ export def "rest-3-issuesecurityschemes list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<issueSecuritySchemes: table<defaultSecurityLevelId: int, description: string, id: int, levels: list, name: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/issuesecurityschemes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create issue security scheme
@@ -6454,6 +6697,7 @@ export def "rest-3-issuesecurityschemes createIssueSecurityScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the issue security scheme.
   --levels: list # The list of scheme levels which should be added to the security scheme. — item shape: {description?: string, isDefault?: bool, members?: list, name: string}
   name: string # The name of the issue security scheme. Must be unique (case-insensitive).
@@ -6466,7 +6710,7 @@ export def "rest-3-issuesecurityschemes createIssueSecurityScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get issue security levels
@@ -6481,6 +6725,7 @@ export def "rest-3-issuesecurityschemes-level get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: string # The index of the first item to return in a page of results (page offset). (default: 0)
   --maxResults: string # The maximum number of items to return per page. (default: 50)
   --id: list # The list of issue security scheme level IDs. To include multiple issue security levels, separate IDs with an ampersand: `id=10000&id=10001`.
@@ -6493,7 +6738,7 @@ export def "rest-3-issuesecurityschemes-level get" [
   let full_url = (build-url $base "/rest/api/3/issuesecurityschemes/level" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set default issue security levels
@@ -6509,6 +6754,7 @@ export def "rest-3-issuesecurityschemes-level-default setDefaultLevels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   defaultValues: list # List of objects with issue security scheme ID and new default level ID. — item shape: {defaultLevelId: string, issueSecuritySchemeId: string}
 ]: any -> any {
   let input = $in
@@ -6519,7 +6765,7 @@ export def "rest-3-issuesecurityschemes-level-default setDefaultLevels" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get issue security level members
@@ -6534,6 +6780,7 @@ export def "rest-3-issuesecurityschemes-level-member get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: string # The index of the first item to return in a page of results (page offset). (default: 0)
   --maxResults: string # The maximum number of items to return per page. (default: 50)
   --id: list # The list of issue security level member IDs. To include multiple issue security level members separate IDs with an ampersand: `id=10000&id=10001`.
@@ -6547,7 +6794,7 @@ export def "rest-3-issuesecurityschemes-level-member get" [
   let full_url = (build-url $base "/rest/api/3/issuesecurityschemes/level/member" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get projects using issue security schemes
@@ -6562,6 +6809,7 @@ export def "rest-3-issuesecurityschemes-project searchProjectsUsingSecuritySchem
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: string # The index of the first item to return in a page of results (page offset). (default: 0)
   --maxResults: string # The maximum number of items to return per page. (default: 50)
   --issueSecuritySchemeId: list # The list of security scheme IDs to be filtered out.
@@ -6573,7 +6821,7 @@ export def "rest-3-issuesecurityschemes-project searchProjectsUsingSecuritySchem
   let full_url = (build-url $base "/rest/api/3/issuesecurityschemes/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Associate security scheme to project
@@ -6589,6 +6837,7 @@ export def "rest-3-issuesecurityschemes-project associateSchemesToProjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --oldToNewSecurityLevelMappings: list # The list of scheme levels which should be remapped to new levels of the issue security scheme. — item shape: {newLevelId: string, oldLevelId: string}
   projectId: string # The ID of the project.
   schemeId: string # The ID of the issue security scheme. Providing null will clear the association with the issue security scheme.
@@ -6601,7 +6850,7 @@ export def "rest-3-issuesecurityschemes-project associateSchemesToProjects" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search issue security schemes
@@ -6616,6 +6865,7 @@ export def "rest-3-issuesecurityschemes-search searchSecuritySchemes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: string # The index of the first item to return in a page of results (page offset). (default: 0)
   --maxResults: string # The maximum number of items to return per page. (default: 50)
   --id: list # The list of issue security scheme IDs. To include multiple issue security scheme IDs, separate IDs with an ampersand: `id=10000&id=10001`.
@@ -6627,7 +6877,7 @@ export def "rest-3-issuesecurityschemes-search searchSecuritySchemes" [
   let full_url = (build-url $base "/rest/api/3/issuesecurityschemes/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issue security scheme
@@ -6643,13 +6893,14 @@ export def "rest-3-issuesecurityschemes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<defaultSecurityLevelId: int, description: string, id: int, levels: table<description: string, id: string, isDefault: bool, issueSecuritySchemeId: string, name: string, self: string>, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issuesecurityschemes/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update issue security scheme
@@ -6665,6 +6916,7 @@ export def "rest-3-issuesecurityschemes updateIssueSecurityScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the security scheme scheme.
   --name: string # The name of the security scheme scheme. Must be unique.
 ]: any -> any {
@@ -6676,7 +6928,7 @@ export def "rest-3-issuesecurityschemes updateIssueSecurityScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get issue security level members by issue security scheme
@@ -6692,6 +6944,7 @@ export def "rest-3-issuesecurityschemes-members get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --issueSecurityLevelId: list # The list of issue security level IDs. To include multiple issue security levels separate IDs with ampersand: `issueSecurityLevelId=10000&issueSecurityLevelId=10001`.
@@ -6703,7 +6956,7 @@ export def "rest-3-issuesecurityschemes-members get" [
   let full_url = (build-url $base $"/rest/api/3/issuesecurityschemes/($issueSecuritySchemeId)/members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete issue security scheme
@@ -6719,13 +6972,14 @@ export def "rest-3-issuesecurityschemes delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issuesecurityschemes/($schemeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add issue security levels
@@ -6742,6 +6996,7 @@ export def "rest-3-issuesecurityschemes-level addSecurityLevel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --levels: list # The list of scheme levels which should be added to the security scheme. — item shape: {description?: string, isDefault?: bool, members?: list, name: string}
 ]: any -> any {
   let input = $in
@@ -6752,7 +7007,7 @@ export def "rest-3-issuesecurityschemes-level addSecurityLevel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove issue security level
@@ -6769,6 +7024,7 @@ export def "rest-3-issuesecurityschemes-level removeLevel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --replaceWith: string # The ID of the issue security level that will replace the currently selected level.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6777,7 +7033,7 @@ export def "rest-3-issuesecurityschemes-level removeLevel" [
   let full_url = (build-url $base $"/rest/api/3/issuesecurityschemes/($schemeId)/level/($levelId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update issue security level
@@ -6794,6 +7050,7 @@ export def "rest-3-issuesecurityschemes-level updateSecurityLevel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the issue security scheme level.
   --name: string # The name of the issue security scheme level. Must be unique.
 ]: any -> any {
@@ -6805,7 +7062,7 @@ export def "rest-3-issuesecurityschemes-level updateSecurityLevel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add issue security level members
@@ -6823,6 +7080,7 @@ export def "rest-3-issuesecurityschemes-level-member addSecurityLevelMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --members: list # The list of level members which should be added to the issue security scheme level. — item shape: {parameter?: string, type: string}
 ]: any -> any {
   let input = $in
@@ -6833,7 +7091,7 @@ export def "rest-3-issuesecurityschemes-level-member addSecurityLevelMembers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove member from issue security level
@@ -6851,13 +7109,14 @@ export def "rest-3-issuesecurityschemes-level-member removeMemberFromSecurityLev
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issuesecurityschemes/($schemeId)/level/($levelId)/member/($memberId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all issue types for user
@@ -6872,13 +7131,14 @@ export def "rest-3-issuetype list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<avatarId: int, description: string, entityId: string, hierarchyLevel: int, iconUrl: string, id: string, name: string, scope: record<project: record, type: string>, self: string, subtask: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/issuetype")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create issue type
@@ -6893,6 +7153,7 @@ export def "rest-3-issuetype createIssueType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the issue type.
   --hierarchyLevel: int # The hierarchy level of the issue type. Use:   *  `-1` for Subtask.  *  `0` for Base.  Defaults to `0`. (format: int32)
   name: string # The unique name for the issue type. The maximum length is 60 characters.
@@ -6906,7 +7167,7 @@ export def "rest-3-issuetype createIssueType" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get issue types for project
@@ -6921,6 +7182,7 @@ export def "rest-3-issuetype-project get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: int # The ID of the project. (format: int64)
   --level: int # The level of the issue type to filter by. Use:   *  `-1` for Subtask.  *  `0` for Base.  *  `1` for Epic. (format: int32)
 ]: nothing -> table<avatarId: int, description: string, entityId: string, hierarchyLevel: int, iconUrl: string, id: string, name: string, scope: record<project: record, type: string>, self: string, subtask: bool> {
@@ -6930,7 +7192,7 @@ export def "rest-3-issuetype-project get" [
   let full_url = (build-url $base "/rest/api/3/issuetype/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete issue type
@@ -6946,6 +7208,7 @@ export def "rest-3-issuetype delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --alternativeIssueTypeId: string # The ID of the replacement issue type.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6954,7 +7217,7 @@ export def "rest-3-issuetype delete" [
   let full_url = (build-url $base $"/rest/api/3/issuetype/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issue type
@@ -6970,13 +7233,14 @@ export def "rest-3-issuetype get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<avatarId: int, description: string, entityId: string, hierarchyLevel: int, iconUrl: string, id: string, name: string, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, subtask: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issuetype/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update issue type
@@ -6992,6 +7256,7 @@ export def "rest-3-issuetype updateIssueType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --avatarId: int # The ID of an issue type avatar. This can be obtained be obtained from the following endpoints:   *  [System issue type avatar IDs only](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-avatars/#api-rest-api-3-avatar-type-system-get)  *  [System and custom issue type avatar IDs](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-avatars/#api-rest-api-3-universal-avatar-type-type-owner-entityid-get) (format: int64)
   --description: string # The description of the issue type.
   --name: string # The unique name for the issue type. The maximum length is 60 characters.
@@ -7004,7 +7269,7 @@ export def "rest-3-issuetype updateIssueType" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get alternative issue types
@@ -7020,13 +7285,14 @@ export def "rest-3-issuetype-alternatives get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<avatarId: int, description: string, entityId: string, hierarchyLevel: int, iconUrl: string, id: string, name: string, scope: record<project: record, type: string>, self: string, subtask: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issuetype/($id)/alternatives")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load issue type avatar
@@ -7042,6 +7308,7 @@ export def "rest-3-issuetype-avatar2 createIssueTypeAvatar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x: int # The X coordinate of the top-left corner of the crop region. (format: int32, default: 0)
   --y: int # The Y coordinate of the top-left corner of the crop region. (format: int32, default: 0)
   --size: int # The length of each side of the crop region. (format: int32)
@@ -7055,7 +7322,7 @@ export def "rest-3-issuetype-avatar2 createIssueTypeAvatar" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Get issue type property keys
@@ -7071,13 +7338,14 @@ export def "rest-3-issuetype-properties list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issuetype/($issueTypeId)/properties")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete issue type property
@@ -7094,13 +7362,14 @@ export def "rest-3-issuetype-properties delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issuetype/($issueTypeId)/properties/($propertyKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issue type property
@@ -7117,13 +7386,14 @@ export def "rest-3-issuetype-properties get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issuetype/($issueTypeId)/properties/($propertyKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set issue type property
@@ -7140,6 +7410,7 @@ export def "rest-3-issuetype-properties setIssueTypeProperty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -7149,7 +7420,7 @@ export def "rest-3-issuetype-properties setIssueTypeProperty" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all issue type schemes
@@ -7164,6 +7435,7 @@ export def "rest-3-issuetypescheme get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --id: list # The list of issue type schemes IDs. To include multiple IDs, provide an ampersand-separated list. For example, `id=10000&id=10001`.
@@ -7177,7 +7449,7 @@ export def "rest-3-issuetypescheme get" [
   let full_url = (build-url $base "/rest/api/3/issuetypescheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create issue type scheme
@@ -7192,6 +7464,7 @@ export def "rest-3-issuetypescheme createIssueTypeScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --defaultIssueTypeId: string # The ID of the default issue type of the issue type scheme. This ID must be included in `issueTypeIds`.
   --description: string # The description of the issue type scheme. The maximum length is 4000 characters.
   issueTypeIds: list # The list of issue types IDs of the issue type scheme. At least one standard issue type ID is required.
@@ -7205,7 +7478,7 @@ export def "rest-3-issuetypescheme createIssueTypeScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get issue type scheme items
@@ -7220,6 +7493,7 @@ export def "rest-3-issuetypescheme-mapping get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --issueTypeSchemeId: list # The list of issue type scheme IDs. To include multiple IDs, provide an ampersand-separated list. For example, `issueTypeSchemeId=10000&issueTypeSchemeId=10001`.
@@ -7230,7 +7504,7 @@ export def "rest-3-issuetypescheme-mapping get" [
   let full_url = (build-url $base "/rest/api/3/issuetypescheme/mapping" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issue type schemes for projects
@@ -7245,6 +7519,7 @@ export def "rest-3-issuetypescheme-project get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --projectId: list # The list of project IDs. To include multiple project IDs, provide an ampersand-separated list. For example, `projectId=10000&projectId=10001`.
@@ -7255,7 +7530,7 @@ export def "rest-3-issuetypescheme-project get" [
   let full_url = (build-url $base "/rest/api/3/issuetypescheme/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign issue type scheme to project
@@ -7270,6 +7545,7 @@ export def "rest-3-issuetypescheme-project assignIssueTypeSchemeToProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   issueTypeSchemeId: string # The ID of the issue type scheme.
   projectId: string # The ID of the project.
 ]: any -> any {
@@ -7281,7 +7557,7 @@ export def "rest-3-issuetypescheme-project assignIssueTypeSchemeToProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete issue type scheme
@@ -7297,13 +7573,14 @@ export def "rest-3-issuetypescheme delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issuetypescheme/($issueTypeSchemeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update issue type scheme
@@ -7319,6 +7596,7 @@ export def "rest-3-issuetypescheme updateIssueTypeScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --defaultIssueTypeId: string # The ID of the default issue type of the issue type scheme.
   --description: string # The description of the issue type scheme. The maximum length is 4000 characters.
   --name: string # The name of the issue type scheme. The name must be unique. The maximum length is 255 characters.
@@ -7331,7 +7609,7 @@ export def "rest-3-issuetypescheme updateIssueTypeScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add issue types to issue type scheme
@@ -7347,6 +7625,7 @@ export def "rest-3-issuetypescheme-issuetype addIssueTypesToIssueTypeScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   issueTypeIds: list # The list of issue type IDs.
 ]: any -> any {
   let input = $in
@@ -7357,7 +7636,7 @@ export def "rest-3-issuetypescheme-issuetype addIssueTypesToIssueTypeScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Change order of issue types
@@ -7373,6 +7652,7 @@ export def "rest-3-issuetypescheme-issuetype-move reorderIssueTypesInIssueTypeSc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --after: string # The ID of the issue type to place the moved issue types after. Required if `position` isn't provided.
   issueTypeIds: list # A list of the issue type IDs to move. The order of the issue type IDs in the list is the order they are given after the move.
   --position: string@position-completer # The position the issue types should be moved to. Required if `after` isn't provided.
@@ -7385,7 +7665,7 @@ export def "rest-3-issuetypescheme-issuetype-move reorderIssueTypesInIssueTypeSc
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove issue type from issue type scheme
@@ -7402,13 +7682,14 @@ export def "rest-3-issuetypescheme-issuetype removeIssueTypeFromIssueTypeScheme"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issuetypescheme/($issueTypeSchemeId)/issuetype/($issueTypeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issue type screen schemes
@@ -7423,6 +7704,7 @@ export def "rest-3-issuetypescreenscheme get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --id: list # The list of issue type screen scheme IDs. To include multiple IDs, provide an ampersand-separated list. For example, `id=10000&id=10001`.
@@ -7436,7 +7718,7 @@ export def "rest-3-issuetypescreenscheme get" [
   let full_url = (build-url $base "/rest/api/3/issuetypescreenscheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create issue type screen scheme
@@ -7452,6 +7734,7 @@ export def "rest-3-issuetypescreenscheme createIssueTypeScreenScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the issue type screen scheme. The maximum length is 255 characters.
   issueTypeMappings: list # The IDs of the screen schemes for the issue type IDs and *default*. A *default* entry is required to create an issue type screen scheme, it defines the mapping for all issue types without a screen scheme. — item shape: {issueTypeId: string, screenSchemeId: string}
   name: string # The name of the issue type screen scheme. The name must be unique. The maximum length is 255 characters.
@@ -7464,7 +7747,7 @@ export def "rest-3-issuetypescreenscheme createIssueTypeScreenScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get issue type screen scheme items
@@ -7479,6 +7762,7 @@ export def "rest-3-issuetypescreenscheme-mapping get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --issueTypeScreenSchemeId: list # The list of issue type screen scheme IDs. To include multiple issue type screen schemes, separate IDs with ampersand: `issueTypeScreenSchemeId=10000&issueTypeScreenSchemeId=10001`.
@@ -7489,7 +7773,7 @@ export def "rest-3-issuetypescreenscheme-mapping get" [
   let full_url = (build-url $base "/rest/api/3/issuetypescreenscheme/mapping" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issue type screen schemes for projects
@@ -7504,6 +7788,7 @@ export def "rest-3-issuetypescreenscheme-project list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --projectId: list # The list of project IDs. To include multiple projects, separate IDs with ampersand: `projectId=10000&projectId=10001`.
@@ -7514,7 +7799,7 @@ export def "rest-3-issuetypescreenscheme-project list" [
   let full_url = (build-url $base "/rest/api/3/issuetypescreenscheme/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign issue type screen scheme to project
@@ -7529,6 +7814,7 @@ export def "rest-3-issuetypescreenscheme-project assignIssueTypeScreenSchemeToPr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --issueTypeScreenSchemeId: string # The ID of the issue type screen scheme.
   --projectId: string # The ID of the project.
 ]: any -> any {
@@ -7540,7 +7826,7 @@ export def "rest-3-issuetypescreenscheme-project assignIssueTypeScreenSchemeToPr
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete issue type screen scheme
@@ -7556,13 +7842,14 @@ export def "rest-3-issuetypescreenscheme delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/issuetypescreenscheme/($issueTypeScreenSchemeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update issue type screen scheme
@@ -7578,6 +7865,7 @@ export def "rest-3-issuetypescreenscheme updateIssueTypeScreenScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the issue type screen scheme. The maximum length is 255 characters.
   --name: string # The name of the issue type screen scheme. The name must be unique. The maximum length is 255 characters.
 ]: any -> any {
@@ -7589,7 +7877,7 @@ export def "rest-3-issuetypescreenscheme updateIssueTypeScreenScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Append mappings to issue type screen scheme
@@ -7606,6 +7894,7 @@ export def "rest-3-issuetypescreenscheme-mapping appendMappingsForIssueTypeScree
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   issueTypeMappings: list # The list of issue type to screen scheme mappings. A *default* entry cannot be specified because a default entry is added when an issue type screen scheme is created. — item shape: {issueTypeId: string, screenSchemeId: string}
 ]: any -> any {
   let input = $in
@@ -7616,7 +7905,7 @@ export def "rest-3-issuetypescreenscheme-mapping appendMappingsForIssueTypeScree
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update issue type screen scheme default screen scheme
@@ -7632,6 +7921,7 @@ export def "rest-3-issuetypescreenscheme-mapping-default updateDefaultScreenSche
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   screenSchemeId: string # The ID of the screen scheme.
 ]: any -> any {
   let input = $in
@@ -7642,7 +7932,7 @@ export def "rest-3-issuetypescreenscheme-mapping-default updateDefaultScreenSche
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove mappings from issue type screen scheme
@@ -7658,6 +7948,7 @@ export def "rest-3-issuetypescreenscheme-mapping-remove removeMappingsFromIssueT
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   issueTypeIds: list # The list of issue type IDs.
 ]: any -> any {
   let input = $in
@@ -7668,7 +7959,7 @@ export def "rest-3-issuetypescreenscheme-mapping-remove removeMappingsFromIssueT
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get issue type screen scheme projects
@@ -7684,6 +7975,7 @@ export def "rest-3-issuetypescreenscheme-project get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --qp-query: string # default: 
@@ -7694,7 +7986,7 @@ export def "rest-3-issuetypescreenscheme-project get" [
   let full_url = (build-url $base $"/rest/api/3/issuetypescreenscheme/($issueTypeScreenSchemeId)/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get field reference data (GET)
@@ -7709,13 +8001,14 @@ export def "rest-3-jql-autocompletedata get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<jqlReservedWords: list<string>, visibleFieldNames: table<auto: string, cfid: string, deprecated: string, deprecatedSearcherKey: string, displayName: string, operators: list, orderable: string, searchable: string, types: list, value: string>, visibleFunctionNames: table<displayName: string, isList: string, supportsListAndSingleValueOperators: string, types: list, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/jql/autocompletedata")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get field reference data (POST)
@@ -7730,6 +8023,7 @@ export def "rest-3-jql-autocompletedata post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeCollapsedFields: oneof<nothing, bool> # Include collapsed fields for fields that have non-unique names. (default: false)
   --projectIds: list # List of project IDs used to filter the visible field details returned.
 ]: any -> record<jqlReservedWords: list<string>, visibleFieldNames: table<auto: string, cfid: string, deprecated: string, deprecatedSearcherKey: string, displayName: string, operators: list, orderable: string, searchable: string, types: list, value: string>, visibleFunctionNames: table<displayName: string, isList: string, supportsListAndSingleValueOperators: string, types: list, value: string>> {
@@ -7741,7 +8035,7 @@ export def "rest-3-jql-autocompletedata post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get field auto complete suggestions
@@ -7756,6 +8050,7 @@ export def "rest-3-jql-autocompletedata-suggestions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fieldName: string # The name of the field. (e.g. reporter)
   --fieldValue: string # The partial field item name entered by the user.
   --predicateName: string # The name of the [ CHANGED operator predicate](https://confluence.atlassian.com/x/hQORLQ#Advancedsearching-operatorsreference-CHANGEDCHANGED) for which the suggestions are generated. The valid predicate operators are *by*, *from*, and *to*.
@@ -7767,7 +8062,7 @@ export def "rest-3-jql-autocompletedata-suggestions get" [
   let full_url = (build-url $base "/rest/api/3/jql/autocompletedata/suggestions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get precomputations (apps)
@@ -7782,6 +8077,7 @@ export def "rest-3-jql-function-computation get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --functionKey: list # The function key in format:   *  Forge: `ari:cloud:ecosystem::extension/[App ID]/[Environment ID]/static/[Function key from manifest]`  *  Connect: `[App key]__[Module key]`
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 100)
@@ -7793,7 +8089,7 @@ export def "rest-3-jql-function-computation get" [
   let full_url = (build-url $base "/rest/api/3/jql/function/computation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update precomputations (apps)
@@ -7809,6 +8105,7 @@ export def "rest-3-jql-function-computation updatePrecomputations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --skipNotFoundPrecomputations: oneof<nothing, bool> # default: false
   --values: list # item shape: {error?: string, id: string, value?: string}
 ]: any -> record<notFoundPrecomputationIDs: list<string>> {
@@ -7821,7 +8118,7 @@ export def "rest-3-jql-function-computation updatePrecomputations" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get precomputations by ID (apps)
@@ -7836,6 +8133,7 @@ export def "rest-3-jql-function-computation-search post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orderBy: string # [Order](#ordering) the results by a field:   *  `functionKey` Sorts by the functionKey.  *  `used` Sorts by the used timestamp.  *  `created` Sorts by the created timestamp.  *  `updated` Sorts by the updated timestamp.
   --precomputationIDs: list
 ]: any -> record<notFoundPrecomputationIDs: list<string>, precomputations: table<arguments: list, created: string, error: string, field: string, functionKey: string, functionName: string, id: string, operator: string, updated: string, used: string, value: string>> {
@@ -7848,7 +8146,7 @@ export def "rest-3-jql-function-computation-search post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check issues against JQL
@@ -7863,6 +8161,7 @@ export def "rest-3-jql-match matchIssues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   issueIds: list # A list of issue IDs.
   jqls: list # A list of JQL queries.
 ]: any -> record<matches: table<errors: list, matchedIssues: list>> {
@@ -7874,7 +8173,7 @@ export def "rest-3-jql-match matchIssues" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Parse JQL query
@@ -7889,6 +8188,7 @@ export def "rest-3-jql-parse parseJqlQueries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --validation: string@validation-completer # How to validate the JQL query and treat the validation results. Validation options include:   *  `strict` Returns all errors. If validation fails, the query structure is not returned.  *  `warn` Returns all errors. If validation fails but the JQL query is correctly formed, the query structure is returned.  *  `none` No validation is performed. If JQL query is correctly formed, the query structure is returned. (default: strict)
   queries: list # A list of queries to parse.
 ]: any -> record<queries: table<errors: list, query: string, structure: record, warnings: list>> {
@@ -7901,7 +8201,7 @@ export def "rest-3-jql-parse parseJqlQueries" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Convert user identifiers to account IDs in JQL queries
@@ -7916,6 +8216,7 @@ export def "rest-3-jql-pdcleaner migrateQueries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --queryStrings: list # A list of queries with user identifiers. Maximum of 100 queries.
 ]: any -> record<queriesWithUnknownUsers: table<convertedQuery: string, originalQuery: string>, queryStrings: list<string>> {
   let input = $in
@@ -7926,7 +8227,7 @@ export def "rest-3-jql-pdcleaner migrateQueries" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Sanitize JQL queries
@@ -7942,6 +8243,7 @@ export def "rest-3-jql-sanitize sanitiseJqlQueries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   queries: list # The list of JQL queries to sanitize. Must contain unique values. Maximum of 20 queries. — item shape: {accountId?: string, query: string}
 ]: any -> record<queries: table<accountId: string, errors: record, initialQuery: string, sanitizedQuery: string>> {
   let input = $in
@@ -7952,7 +8254,7 @@ export def "rest-3-jql-sanitize sanitiseJqlQueries" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all labels
@@ -7967,6 +8269,7 @@ export def "rest-3-label get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 1000)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: list<string>> {
@@ -7976,7 +8279,7 @@ export def "rest-3-label get" [
   let full_url = (build-url $base "/rest/api/3/label" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get approximate license count
@@ -7991,13 +8294,14 @@ export def "rest-3-license-approximate-license-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/license/approximateLicenseCount")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get approximate application license count
@@ -8013,13 +8317,14 @@ export def "rest-3-license-approximate-license-count-product get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/license/approximateLicenseCount/product/($applicationKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get my permissions
@@ -8034,6 +8339,7 @@ export def "rest-3-mypermissions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectKey: string # The key of project. Ignored if `projectId` is provided.
   --projectId: string # The ID of project.
   --issueKey: string # The key of the issue. Ignored if `issueId` is provided.
@@ -8049,7 +8355,7 @@ export def "rest-3-mypermissions get" [
   let full_url = (build-url $base "/rest/api/3/mypermissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete preference
@@ -8064,6 +8370,7 @@ export def "rest-3-mypreferences removePreference" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # The key of the preference.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8072,7 +8379,7 @@ export def "rest-3-mypreferences removePreference" [
   let full_url = (build-url $base "/rest/api/3/mypreferences" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get preference
@@ -8087,6 +8394,7 @@ export def "rest-3-mypreferences get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # The key of the preference.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8095,7 +8403,7 @@ export def "rest-3-mypreferences get" [
   let full_url = (build-url $base "/rest/api/3/mypreferences" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set preference
@@ -8110,6 +8418,7 @@ export def "rest-3-mypreferences setPreference" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # The key of the preference. The maximum length is 255 characters.
   --body: record
 ]: any -> any {
@@ -8121,7 +8430,7 @@ export def "rest-3-mypreferences setPreference" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get locale
@@ -8136,13 +8445,14 @@ export def "rest-3-mypreferences-locale get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<locale: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/mypreferences/locale")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set locale
@@ -8159,6 +8469,7 @@ export def "rest-3-mypreferences-locale setLocale" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # The locale code. The Java the locale format is used: a two character language code (ISO 639), an underscore, and two letter country code (ISO 3166). For example, en\_US represents a locale of English (United States). Required on create.
 ]: any -> any {
   let input = $in
@@ -8169,7 +8480,7 @@ export def "rest-3-mypreferences-locale setLocale" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get current user
@@ -8184,6 +8495,7 @@ export def "rest-3-myself get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information about user in the response. This parameter accepts a comma-separated list. Expand options include:   *  `groups` Returns all groups, including nested groups, the user belongs to.  *  `applicationRoles` Returns the application roles the user is assigned to.
 ]: nothing -> record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list<record>, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list<record>, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8192,7 +8504,7 @@ export def "rest-3-myself get" [
   let full_url = (build-url $base "/rest/api/3/myself" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get notification schemes paginated
@@ -8207,6 +8519,7 @@ export def "rest-3-notificationscheme list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: string # The index of the first item to return in a page of results (page offset). (default: 0)
   --maxResults: string # The maximum number of items to return per page. (default: 50)
   --id: list # The list of notification schemes IDs to be filtered by
@@ -8220,7 +8533,7 @@ export def "rest-3-notificationscheme list" [
   let full_url = (build-url $base "/rest/api/3/notificationscheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create notification scheme
@@ -8236,6 +8549,7 @@ export def "rest-3-notificationscheme createNotificationScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the notification scheme.
   name: string # The name of the notification scheme. Must be unique (case-insensitive).
   --notificationSchemeEvents: list # The list of notifications which should be added to the notification scheme. — item shape: {event: any, notifications: list}
@@ -8248,7 +8562,7 @@ export def "rest-3-notificationscheme createNotificationScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get projects using notification schemes paginated
@@ -8263,6 +8577,7 @@ export def "rest-3-notificationscheme-project get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: string # The index of the first item to return in a page of results (page offset). (default: 0)
   --maxResults: string # The maximum number of items to return per page. (default: 50)
   --notificationSchemeId: list # The list of notifications scheme IDs to be filtered out
@@ -8274,7 +8589,7 @@ export def "rest-3-notificationscheme-project get" [
   let full_url = (build-url $base "/rest/api/3/notificationscheme/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get notification scheme
@@ -8290,6 +8605,7 @@ export def "rest-3-notificationscheme get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts a comma-separated list. Expand options include:   *  `all` Returns all expandable information  *  `field` Returns information about any custom fields assigned to receive an event  *  `group` Returns information about any groups assigned to receive an event  *  `notificationSchemeEvents` Returns a list of event associations. This list is returned for all expandable information  *  `projectRole` Returns information about any project roles assigned to receive an event  *  `user` Returns information about any users assigned to receive an event
 ]: nothing -> record<description: string, expand: string, id: int, name: string, notificationSchemeEvents: table<event: record, notifications: list>, projects: list<int>, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8298,7 +8614,7 @@ export def "rest-3-notificationscheme get" [
   let full_url = (build-url $base $"/rest/api/3/notificationscheme/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update notification scheme
@@ -8314,6 +8630,7 @@ export def "rest-3-notificationscheme updateNotificationScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the notification scheme.
   --name: string # The name of the notification scheme. Must be unique.
 ]: any -> any {
@@ -8325,7 +8642,7 @@ export def "rest-3-notificationscheme updateNotificationScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add notifications to notification scheme
@@ -8342,6 +8659,7 @@ export def "rest-3-notificationscheme-notification addNotifications" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   notificationSchemeEvents: list # The list of notifications which should be added to the notification scheme. — item shape: {event: any, notifications: list}
 ]: any -> any {
   let input = $in
@@ -8352,7 +8670,7 @@ export def "rest-3-notificationscheme-notification addNotifications" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete notification scheme
@@ -8368,13 +8686,14 @@ export def "rest-3-notificationscheme delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/notificationscheme/($notificationSchemeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove notification from notification scheme
@@ -8391,13 +8710,14 @@ export def "rest-3-notificationscheme-notification removeNotificationFromNotific
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/notificationscheme/($notificationSchemeId)/notification/($notificationId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all permissions
@@ -8412,13 +8732,14 @@ export def "rest-3-permissions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<permissions: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/permissions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get bulk permissions
@@ -8434,6 +8755,7 @@ export def "rest-3-permissions-check post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: string # The account ID of a user.
   --globalPermissions: list # Global permissions to look up.
   --projectPermissions: list # Project permissions with associated projects and issues to look up. — item shape: {issues?: list, permissions: list, projects?: list}
@@ -8446,7 +8768,7 @@ export def "rest-3-permissions-check post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get permitted projects
@@ -8461,6 +8783,7 @@ export def "rest-3-permissions-project post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   permissions: list # A list of permission keys.
 ]: any -> record<projects: table<id: int, key: string>> {
   let input = $in
@@ -8471,7 +8794,7 @@ export def "rest-3-permissions-project post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all permission schemes
@@ -8486,6 +8809,7 @@ export def "rest-3-permissionscheme list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use expand to include additional information in the response. This parameter accepts a comma-separated list. Note that permissions are included when you specify any value. Expand options include:   *  `all` Returns all expandable information.  *  `field` Returns information about the custom field granted the permission.  *  `group` Returns information about the group that is granted the permission.  *  `permissions` Returns all permission grants for each permission scheme.  *  `projectRole` Returns information about the project role granted the permission.  *  `user` Returns information about the user who is granted the permission.
 ]: nothing -> record<permissionSchemes: table<description: string, expand: string, id: int, name: string, permissions: list, scope: record, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8494,7 +8818,7 @@ export def "rest-3-permissionscheme list" [
   let full_url = (build-url $base "/rest/api/3/permissionscheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create permission scheme
@@ -8510,6 +8834,7 @@ export def "rest-3-permissionscheme createPermissionScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use expand to include additional information in the response. This parameter accepts a comma-separated list. Note that permissions are always included when you specify any value. Expand options include:   *  `all` Returns all expandable information.  *  `field` Returns information about the custom field granted the permission.  *  `group` Returns information about the group that is granted the permission.  *  `permissions` Returns all permission grants for each permission scheme.  *  `projectRole` Returns information about the project role granted the permission.  *  `user` Returns information about the user who is granted the permission.
   --description: string # A description for the permission scheme.
   name: string # The name of the permission scheme. Must be unique.
@@ -8525,7 +8850,7 @@ export def "rest-3-permissionscheme createPermissionScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete permission scheme
@@ -8541,13 +8866,14 @@ export def "rest-3-permissionscheme delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/permissionscheme/($schemeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get permission scheme
@@ -8563,6 +8889,7 @@ export def "rest-3-permissionscheme get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use expand to include additional information in the response. This parameter accepts a comma-separated list. Note that permissions are included when you specify any value. Expand options include:   *  `all` Returns all expandable information.  *  `field` Returns information about the custom field granted the permission.  *  `group` Returns information about the group that is granted the permission.  *  `permissions` Returns all permission grants for each permission scheme.  *  `projectRole` Returns information about the project role granted the permission.  *  `user` Returns information about the user who is granted the permission.
 ]: nothing -> record<description: string, expand: string, id: int, name: string, permissions: table<holder: record, id: int, permission: string, self: string>, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8571,7 +8898,7 @@ export def "rest-3-permissionscheme get" [
   let full_url = (build-url $base $"/rest/api/3/permissionscheme/($schemeId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update permission scheme
@@ -8588,6 +8915,7 @@ export def "rest-3-permissionscheme updatePermissionScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use expand to include additional information in the response. This parameter accepts a comma-separated list. Note that permissions are always included when you specify any value. Expand options include:   *  `all` Returns all expandable information.  *  `field` Returns information about the custom field granted the permission.  *  `group` Returns information about the group that is granted the permission.  *  `permissions` Returns all permission grants for each permission scheme.  *  `projectRole` Returns information about the project role granted the permission.  *  `user` Returns information about the user who is granted the permission.
   --description: string # A description for the permission scheme.
   name: string # The name of the permission scheme. Must be unique.
@@ -8603,7 +8931,7 @@ export def "rest-3-permissionscheme updatePermissionScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get permission scheme grants
@@ -8619,6 +8947,7 @@ export def "rest-3-permissionscheme-permission list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use expand to include additional information in the response. This parameter accepts a comma-separated list. Note that permissions are always included when you specify any value. Expand options include:   *  `permissions` Returns all permission grants for each permission scheme.  *  `user` Returns information about the user who is granted the permission.  *  `group` Returns information about the group that is granted the permission.  *  `projectRole` Returns information about the project role granted the permission.  *  `field` Returns information about the custom field granted the permission.  *  `all` Returns all expandable information.
 ]: nothing -> record<expand: string, permissions: table<holder: record, id: int, permission: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8627,7 +8956,7 @@ export def "rest-3-permissionscheme-permission list" [
   let full_url = (build-url $base $"/rest/api/3/permissionscheme/($schemeId)/permission" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create permission grant
@@ -8643,6 +8972,7 @@ export def "rest-3-permissionscheme-permission createPermissionGrant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use expand to include additional information in the response. This parameter accepts a comma-separated list. Note that permissions are always included when you specify any value. Expand options include:   *  `permissions` Returns all permission grants for each permission scheme.  *  `user` Returns information about the user who is granted the permission.  *  `group` Returns information about the group that is granted the permission.  *  `projectRole` Returns information about the project role granted the permission.  *  `field` Returns information about the custom field granted the permission.  *  `all` Returns all expandable information.
   --holder: any # The user or group being granted the permission. It consists of a `type`, a type-dependent `parameter` and a type-dependent `value`. See [Holder object](../api-group-permission-schemes/#holder-object) in *Get all permission schemes* for more information.
   --permission: string # The permission to grant. This permission can be one of the built-in permissions or a custom permission added by an app. See [Built-in permissions](../api-group-permission-schemes/#built-in-permissions) in *Get all permission schemes* for more information about the built-in permissions. See the [project permission](https://developer.atlassian.com/cloud/jira/platform/modules/project-permission/) and [global permission](https://developer.atlassian.com/cloud/jira/platform/modules/global-permission/) module documentation for more information about custom permissions.
@@ -8656,7 +8986,7 @@ export def "rest-3-permissionscheme-permission createPermissionGrant" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete permission scheme grant
@@ -8673,13 +9003,14 @@ export def "rest-3-permissionscheme-permission delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/permissionscheme/($schemeId)/permission/($permissionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get permission scheme grant
@@ -8696,6 +9027,7 @@ export def "rest-3-permissionscheme-permission get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use expand to include additional information in the response. This parameter accepts a comma-separated list. Note that permissions are always included when you specify any value. Expand options include:   *  `all` Returns all expandable information.  *  `field` Returns information about the custom field granted the permission.  *  `group` Returns information about the group that is granted the permission.  *  `permissions` Returns all permission grants for each permission scheme.  *  `projectRole` Returns information about the project role granted the permission.  *  `user` Returns information about the user who is granted the permission.
 ]: nothing -> record<holder: record<expand: string, parameter: string, type: string, value: string>, id: int, permission: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8704,7 +9036,7 @@ export def "rest-3-permissionscheme-permission get" [
   let full_url = (build-url $base $"/rest/api/3/permissionscheme/($schemeId)/permission/($permissionId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get plans paginated
@@ -8719,6 +9051,7 @@ export def "rest-3-plans-plan list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeTrashed: oneof<nothing, bool> # Whether to include trashed plans in the results. (default: false)
   --includeArchived: oneof<nothing, bool> # Whether to include archived plans in the results. (default: false)
   --cursor: string # The cursor to start from. If not provided, the first page will be returned. (default: )
@@ -8730,7 +9063,7 @@ export def "rest-3-plans-plan list" [
   let full_url = (build-url $base "/rest/api/3/plans/plan" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create plan
@@ -8749,6 +9082,7 @@ export def "rest-3-plans-plan createPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --useGroupId: oneof<nothing, bool> # Whether to accept group IDs instead of group names. Group names are deprecated. (default: false)
   --crossProjectReleases: list # The cross-project releases to include in the plan. — item shape: {name: string, releaseIds?: list}
   --customFields: list # The custom fields for the plan. — item shape: {customFieldId: int, filter?: bool}
@@ -8768,7 +9102,7 @@ export def "rest-3-plans-plan createPlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get plan
@@ -8784,6 +9118,7 @@ export def "rest-3-plans-plan get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --useGroupId: oneof<nothing, bool> # Whether to return group IDs instead of group names. Group names are deprecated. (default: false)
 ]: nothing -> record<crossProjectReleases: table<name: string, releaseIds: list>, customFields: table<customFieldId: int, filter: bool>, exclusionRules: record<issueIds: list<int>, issueTypeIds: list<int>, numberOfDaysToShowCompletedIssues: int, releaseIds: list<int>, workStatusCategoryIds: list<int>, workStatusIds: list<int>>, id: int, issueSources: table<type: string, value: int>, lastSaved: string, leadAccountId: string, name: string, permissions: table<holder: record, type: string>, scheduling: record<dependencies: string, endDate: record<dateCustomFieldId: int, type: string>, estimation: string, inferredDates: string, startDate: record<dateCustomFieldId: int, type: string>>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8792,7 +9127,7 @@ export def "rest-3-plans-plan get" [
   let full_url = (build-url $base $"/rest/api/3/plans/plan/($planId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update plan
@@ -8808,6 +9143,7 @@ export def "rest-3-plans-plan updatePlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --useGroupId: oneof<nothing, bool> # Whether to accept group IDs instead of group names. Group names are deprecated. (default: false)
   --body: record
 ]: any -> any {
@@ -8819,7 +9155,7 @@ export def "rest-3-plans-plan updatePlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json-patch+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json-patch+json" $body
 }
 
 # Archive plan
@@ -8835,13 +9171,14 @@ export def "rest-3-plans-plan-archive archivePlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/plans/plan/($planId)/archive")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Duplicate plan
@@ -8857,6 +9194,7 @@ export def "rest-3-plans-plan-duplicate duplicatePlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The plan name.
 ]: any -> int {
   let input = $in
@@ -8867,7 +9205,7 @@ export def "rest-3-plans-plan-duplicate duplicatePlan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get teams in plan paginated
@@ -8883,6 +9221,7 @@ export def "rest-3-plans-plan-team get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # The cursor to start from. If not provided, the first page will be returned. (default: )
   --maxResults: int # The maximum number of plan teams to return per page. The maximum value is 50. The default value is 50. (format: int32, default: 50)
 ]: nothing -> record<cursor: string, last: bool, nextPageCursor: string, size: int, total: int, values: table<id: string, name: string, type: string>> {
@@ -8892,7 +9231,7 @@ export def "rest-3-plans-plan-team get" [
   let full_url = (build-url $base $"/rest/api/3/plans/plan/($planId)/team" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Atlassian team to plan
@@ -8908,6 +9247,7 @@ export def "rest-3-plans-plan-team-atlassian addAtlassianTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --capacity: float # The capacity for the Atlassian team. (format: double)
   id: string # The Atlassian team ID.
   --issueSourceId: int # The ID of the issue source for the Atlassian team. (format: int64)
@@ -8922,7 +9262,7 @@ export def "rest-3-plans-plan-team-atlassian addAtlassianTeam" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove Atlassian team from plan
@@ -8939,13 +9279,14 @@ export def "rest-3-plans-plan-team-atlassian removeAtlassianTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/plans/plan/($planId)/team/atlassian/($atlassianTeamId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Atlassian team in plan
@@ -8962,13 +9303,14 @@ export def "rest-3-plans-plan-team-atlassian get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<capacity: float, id: string, issueSourceId: int, planningStyle: string, sprintLength: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/plans/plan/($planId)/team/atlassian/($atlassianTeamId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Atlassian team in plan
@@ -8985,6 +9327,7 @@ export def "rest-3-plans-plan-team-atlassian updateAtlassianTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -8994,7 +9337,7 @@ export def "rest-3-plans-plan-team-atlassian updateAtlassianTeam" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json-patch+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json-patch+json" $body
 }
 
 # Create plan-only team
@@ -9010,6 +9353,7 @@ export def "rest-3-plans-plan-team-planonly createPlanOnlyTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --capacity: float # The capacity for the plan-only team. (format: double)
   --issueSourceId: int # The ID of the issue source for the plan-only team. (format: int64)
   --memberAccountIds: list # The account IDs of the plan-only team members.
@@ -9025,7 +9369,7 @@ export def "rest-3-plans-plan-team-planonly createPlanOnlyTeam" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete plan-only team
@@ -9042,13 +9386,14 @@ export def "rest-3-plans-plan-team-planonly delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/plans/plan/($planId)/team/planonly/($planOnlyTeamId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get plan-only team
@@ -9065,13 +9410,14 @@ export def "rest-3-plans-plan-team-planonly get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<capacity: float, id: int, issueSourceId: int, memberAccountIds: list<string>, name: string, planningStyle: string, sprintLength: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/plans/plan/($planId)/team/planonly/($planOnlyTeamId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update plan-only team
@@ -9088,6 +9434,7 @@ export def "rest-3-plans-plan-team-planonly updatePlanOnlyTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -9097,7 +9444,7 @@ export def "rest-3-plans-plan-team-planonly updatePlanOnlyTeam" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json-patch+json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json-patch+json" $body
 }
 
 # Trash plan
@@ -9113,13 +9460,14 @@ export def "rest-3-plans-plan-trash trashPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/plans/plan/($planId)/trash")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get priorities
@@ -9136,13 +9484,14 @@ export def "rest-3-priority list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<avatarId: int, description: string, iconUrl: string, id: string, isDefault: bool, name: string, schemes: record<maxResults: int, startAt: int, total: int>, self: string, statusColor: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/priority")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create priority
@@ -9159,6 +9508,7 @@ export def "rest-3-priority createPriority" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --avatarId: int # The ID for the avatar for the priority. Either the iconUrl or avatarId must be defined, but not both. This parameter is nullable and will become mandatory once the iconUrl parameter is deprecated. (format: int64)
   --description: string # The description of the priority. (nullable)
   --iconUrl: string@iconUrl-completer # The URL of an icon for the priority. Accepted protocols are HTTP and HTTPS. Built in icons can also be used. Either the iconUrl or avatarId must be defined, but not both. (nullable)
@@ -9173,7 +9523,7 @@ export def "rest-3-priority createPriority" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set default priority
@@ -9188,6 +9538,7 @@ export def "rest-3-priority-default setDefaultPriority" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string # The ID of the new default issue priority. Must be an existing ID or null. Setting this to null erases the default priority setting.
 ]: any -> any {
   let input = $in
@@ -9198,7 +9549,7 @@ export def "rest-3-priority-default setDefaultPriority" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Move priorities
@@ -9213,6 +9564,7 @@ export def "rest-3-priority-move movePriorities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --after: string # The ID of the priority. Required if `position` isn't provided.
   ids: list # The list of issue IDs to be reordered. Cannot contain duplicates nor after ID.
   --position: string # The position for issue priorities to be moved to. Required if `after` isn't provided.
@@ -9225,7 +9577,7 @@ export def "rest-3-priority-move movePriorities" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search priorities
@@ -9242,6 +9594,7 @@ export def "rest-3-priority-search searchPriorities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: string # The index of the first item to return in a page of results (page offset). (default: 0)
   --maxResults: string # The maximum number of items to return per page. (default: 50)
   --id: list # The list of priority IDs. To include multiple IDs, provide an ampersand-separated list. For example, `id=2&id=3`.
@@ -9256,7 +9609,7 @@ export def "rest-3-priority-search searchPriorities" [
   let full_url = (build-url $base "/rest/api/3/priority/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete priority
@@ -9272,13 +9625,14 @@ export def "rest-3-priority delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/priority/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get priority
@@ -9294,13 +9648,14 @@ export def "rest-3-priority get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<avatarId: int, description: string, iconUrl: string, id: string, isDefault: bool, name: string, schemes: record<maxResults: int, startAt: int, total: int>, self: string, statusColor: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/priority/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update priority
@@ -9318,6 +9673,7 @@ export def "rest-3-priority updatePriority" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --avatarId: int # The ID for the avatar for the priority. This parameter is nullable and both iconUrl and avatarId cannot be defined. (format: int64)
   --description: string # The description of the priority. (nullable)
   --iconUrl: string@iconUrl-completer # The URL of an icon for the priority. Accepted protocols are HTTP and HTTPS. Built in icons can also be used. Both iconUrl and avatarId cannot be defined. (nullable)
@@ -9332,7 +9688,7 @@ export def "rest-3-priority updatePriority" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get priority schemes
@@ -9347,6 +9703,7 @@ export def "rest-3-priorityscheme get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: string # The index of the first item to return in a page of results (page offset). (default: 0)
   --maxResults: string # The maximum number of items to return per page. (default: 50)
   --priorityId: list # A set of priority IDs to filter by. To include multiple IDs, provide an ampersand-separated list. For example, `priorityId=10000&priorityId=10001`.
@@ -9362,7 +9719,7 @@ export def "rest-3-priorityscheme get" [
   let full_url = (build-url $base "/rest/api/3/priorityscheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create priority scheme
@@ -9377,6 +9734,7 @@ export def "rest-3-priorityscheme createPriorityScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   defaultPriorityId: int # The ID of the default priority for the priority scheme. (format: int64)
   --description: string # The description of the priority scheme.
   --mappings: any # Instructions to migrate the priorities of issues.  `in` mappings are used to migrate the priorities of issues to priorities used within the priority scheme.  `out` mappings are used to migrate the priorities of issues to priorities not used within the priority scheme.   *  When **priorities** are **added** to the new priority scheme, no mapping needs to be provided as the new priorities are not used by any issues.  *  When **priorities** are **removed** from the new priority scheme, no mapping needs to be provided as the removed priorities are not used by any issues.  *  When **projects** are **added** to the priority scheme, the priorities of issues in those projects might need to be migrated to new priorities used by the priority scheme. This can occur when the current scheme does not use all the priorities in the project(s)' priority scheme(s).           *  An `in` mapping must be provided for each of these priorities.  *  When **projects** are **removed** from the priority scheme, no mapping needs to be provided as the removed projects are not using the priorities of the new priority scheme.  For more information on `in` and `out` mappings, see the child properties documentation for the `PriorityMapping` object below.
@@ -9392,7 +9750,7 @@ export def "rest-3-priorityscheme createPriorityScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Suggested priorities for mappings
@@ -9407,6 +9765,7 @@ export def "rest-3-priorityscheme-mappings suggestedPrioritiesForMappings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxResults: int # The maximum number of results that could be on the page. (format: int32)
   --priorities: any # The priority changes in the scheme.
   --projects: any # The project changes in the scheme.
@@ -9421,7 +9780,7 @@ export def "rest-3-priorityscheme-mappings suggestedPrioritiesForMappings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get available priorities by priority scheme
@@ -9436,6 +9795,7 @@ export def "rest-3-priorityscheme-priorities-available get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: string # The index of the first item to return in a page of results (page offset). (default: 0)
   --maxResults: string # The maximum number of items to return per page. (default: 50)
   --qp-query: string # The string to query priorities on by name. (default: )
@@ -9448,7 +9808,7 @@ export def "rest-3-priorityscheme-priorities-available get" [
   let full_url = (build-url $base "/rest/api/3/priorityscheme/priorities/available" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete priority scheme
@@ -9464,13 +9824,14 @@ export def "rest-3-priorityscheme delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/priorityscheme/($schemeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update priority scheme
@@ -9486,6 +9847,7 @@ export def "rest-3-priorityscheme updatePriorityScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --defaultPriorityId: int # The default priority of the scheme. (format: int64)
   --description: string # The description of the priority scheme.
   --mappings: any # Instructions to migrate the priorities of issues.  `in` mappings are used to migrate the priorities of issues to priorities used within the priority scheme.  `out` mappings are used to migrate the priorities of issues to priorities not used within the priority scheme.   *  When **priorities** are **added** to the priority scheme, no mapping needs to be provided as the new priorities are not used by any issues.  *  When **priorities** are **removed** from the priority scheme, issues that are using those priorities must be migrated to new priorities used by the priority scheme.           *  An `in` mapping must be provided for each of these priorities.  *  When **projects** are **added** to the priority scheme, the priorities of issues in those projects might need to be migrated to new priorities used by the priority scheme. This can occur when the current scheme does not use all the priorities in the project(s)' priority scheme(s).           *  An `in` mapping must be provided for each of these priorities.  *  When **projects** are **removed** from the priority scheme, the priorities of issues in those projects might need to be migrated to new priorities within the **Default Priority Scheme** that are not used by the priority scheme. This can occur when the **Default Priority Scheme** does not use all the priorities within the current scheme.           *  An `out` mapping must be provided for each of these priorities.  For more information on `in` and `out` mappings, see the child properties documentation for the `PriorityMapping` object below.
@@ -9501,7 +9863,7 @@ export def "rest-3-priorityscheme updatePriorityScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get priorities by priority scheme
@@ -9517,6 +9879,7 @@ export def "rest-3-priorityscheme-priorities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: string # The index of the first item to return in a page of results (page offset). (default: 0)
   --maxResults: string # The maximum number of items to return per page. (default: 50)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<description: string, iconUrl: string, id: string, isDefault: bool, name: string, self: string, sequence: string, statusColor: string>> {
@@ -9526,7 +9889,7 @@ export def "rest-3-priorityscheme-priorities get" [
   let full_url = (build-url $base $"/rest/api/3/priorityscheme/($schemeId)/priorities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get projects by priority scheme
@@ -9542,6 +9905,7 @@ export def "rest-3-priorityscheme-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: string # The index of the first item to return in a page of results (page offset). (default: 0)
   --maxResults: string # The maximum number of items to return per page. (default: 50)
   --projectId: list # The project IDs to filter by. For example, `projectId=10000&projectId=10001`.
@@ -9553,7 +9917,7 @@ export def "rest-3-priorityscheme-projects get" [
   let full_url = (build-url $base $"/rest/api/3/priorityscheme/($schemeId)/projects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all projects
@@ -9570,6 +9934,7 @@ export def "rest-3-project list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts a comma-separated list. Expanded options include:   *  `description` Returns the project description.  *  `issueTypes` Returns all issue types associated with the project.  *  `lead` Returns information about the project lead.  *  `projectKeys` Returns all project keys associated with the project.
   --recent: int # Returns the user's most recently accessed projects. You may specify the number of results to return up to a maximum of 20. If access is anonymous, then the recently accessed projects are based on the current HTTP session. (format: int32)
   --properties: list # A list of project properties to return for the project. This parameter accepts a comma-separated list.
@@ -9580,7 +9945,7 @@ export def "rest-3-project list" [
   let full_url = (build-url $base "/rest/api/3/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create project
@@ -9596,6 +9961,7 @@ export def "rest-3-project createProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --assigneeType: string@assigneeType-completer-1 # The default assignee when creating issues for this project.
   --avatarId: int # An integer value for the project's avatar. (format: int64)
   --categoryId: int # The ID of the project's category. A complete list of category IDs is found using the [Get all project categories](#api-rest-api-3-projectCategory-get) operation. (format: int64)
@@ -9624,7 +9990,7 @@ export def "rest-3-project createProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create custom project
@@ -9641,6 +10007,7 @@ export def "rest-3-project-template createProjectWithCustomTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --details: record # Project Details — shape: {accessLevel?: "open"|"limited"|"private"|"free", additionalProperties?: record, assigneeType?: "PROJECT_DEFAULT"|"COMPONENT_LEAD"|"PROJECT_LEAD"|"UNASSIGNED", avatarId?: int, categoryId?: int, description?: string, enableComponents?: bool, key?: string, language?: string, leadAccountId?: string, name?: string, url?: string}
   --template: record # The specific request object for creating a project with template. — shape: {boardFeatures?: record, boards?: record, field?: record, issueType?: record, notification?: record, permissionScheme?: record, project?: record, role?: record, scope?: record, security?: record, workflow?: record}
 ]: any -> any {
@@ -9652,7 +10019,7 @@ export def "rest-3-project-template createProjectWithCustomTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Edit a custom project template
@@ -9668,6 +10035,7 @@ export def "rest-3-project-template-edit-template editTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --templateDescription: string # The description of the template
   --templateGenerationOptions: record # shape: {enableScreenDelegatedAdminSupport?: bool, enableWorkflowDelegatedAdminSupport?: bool}
   --templateKey: string # The unique identifier of the template
@@ -9681,7 +10049,7 @@ export def "rest-3-project-template-edit-template editTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets a custom project template
@@ -9696,6 +10064,7 @@ export def "rest-3-project-template-live-template liveTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string # optional - The \{@link String\} containing the project key linked to the custom template to retrieve
   --templateKey: string # optional - The \{@link String\} containing the key of the custom template to retrieve
 ]: nothing -> record<archetype: record<realType: string, style: string, type: string>, defaultBoardView: string, description: string, liveTemplateProjectIdReference: int, name: string, projectTemplateKey: record<key: string, uuid: string>, snapshotTemplate: record, templateGenerationOptions: record<enableScreenDelegatedAdminSupport: bool, enableWorkflowDelegatedAdminSupport: bool>, type: string> {
@@ -9705,7 +10074,7 @@ export def "rest-3-project-template-live-template liveTemplate" [
   let full_url = (build-url $base "/rest/api/3/project-template/live-template" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a custom project template
@@ -9720,6 +10089,7 @@ export def "rest-3-project-template-remove-template removeTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --templateKey: string # The \{@link String\} containing the key of the custom template to remove
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -9728,7 +10098,7 @@ export def "rest-3-project-template-remove-template removeTemplate" [
   let full_url = (build-url $base "/rest/api/3/project-template/remove-template" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Save a custom project template
@@ -9744,6 +10114,7 @@ export def "rest-3-project-template-save-template saveTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --templateDescription: string # The description of the template
   --templateFromProjectRequest: record # The request details to generate template from a project — shape: {projectId?: int, templateGenerationOptions?: record, templateType?: "LIVE"|"SNAPSHOT"}
   --templateName: string # The name of the template
@@ -9756,7 +10127,7 @@ export def "rest-3-project-template-save-template saveTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get recent projects
@@ -9771,6 +10142,7 @@ export def "rest-3-project-recent get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts a comma-separated list. Expanded options include:   *  `description` Returns the project description.  *  `projectKeys` Returns all project keys associated with a project.  *  `lead` Returns information about the project lead.  *  `issueTypes` Returns all issue types associated with the project.  *  `url` Returns the URL associated with the project.  *  `permissions` Returns the permissions associated with the project.  *  `insight` EXPERIMENTAL. Returns the insight details of total issue count and last issue update time for the project.  *  `*` Returns the project with all available expand options.
   --properties: list # EXPERIMENTAL. A list of project properties to return for the project. This parameter accepts a comma-separated list. Invalid property names are ignored.
 ]: nothing -> table<archived: bool, archivedBy: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, archivedDate: string, assigneeType: string, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, components: list<record>, deleted: bool, deletedBy: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, deletedDate: string, description: string, email: string, expand: string, favourite: bool, id: string, insight: record<lastIssueUpdateTime: string, totalIssueCount: int>, isPrivate: bool, issueTypeHierarchy: record<baseLevelId: int, levels: list>, issueTypes: list<record>, key: string, landingPageInfo: record<attributes: record, boardId: int, boardName: string, projectKey: string, projectType: string, queueCategory: string, queueId: int, queueName: string, simpleBoard: bool, simplified: bool, url: string>, lead: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, permissions: record<canEdit: bool>, projectCategory: record<description: string, id: string, name: string, self: string>, projectTypeKey: string, properties: record, retentionTillDate: string, roles: record, self: string, simplified: bool, style: string, url: string, uuid: string, versions: list<record>> {
@@ -9780,7 +10152,7 @@ export def "rest-3-project-recent get" [
   let full_url = (build-url $base "/rest/api/3/project/recent" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get projects paginated
@@ -9795,6 +10167,7 @@ export def "rest-3-project-search searchProjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. Must be less than or equal to 100. If a value greater than 100 is provided, the `maxResults` parameter will default to 100. (format: int32, default: 50)
   --orderBy: string@orderBy-completer-8 # [Order](#ordering) the results by a field.   *  `category` Sorts by project category. A complete list of category IDs is found using [Get all project categories](#api-rest-api-3-projectCategory-get).  *  `issueCount` Sorts by the total number of issues in each project.  *  `key` Sorts by project key.  *  `lastIssueUpdatedTime` Sorts by the last issue update time.  *  `name` Sorts by project name.  *  `owner` Sorts by project lead.  *  `archivedDate` EXPERIMENTAL. Sorts by project archived date.  *  `deletedDate` EXPERIMENTAL. Sorts by project deleted date. (default: key)
@@ -9815,7 +10188,7 @@ export def "rest-3-project-search searchProjects" [
   let full_url = (build-url $base "/rest/api/3/project/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all project types
@@ -9830,13 +10203,14 @@ export def "rest-3-project-type list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<color: string, descriptionI18nKey: string, formattedKey: string, icon: string, key: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/project/type")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get licensed project types
@@ -9851,13 +10225,14 @@ export def "rest-3-project-type-accessible list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<color: string, descriptionI18nKey: string, formattedKey: string, icon: string, key: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/project/type/accessible")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project type by key
@@ -9873,13 +10248,14 @@ export def "rest-3-project-type get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<color: string, descriptionI18nKey: string, formattedKey: string, icon: string, key: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/project/type/($projectTypeKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get accessible project type by key
@@ -9895,13 +10271,14 @@ export def "rest-3-project-type-accessible get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<color: string, descriptionI18nKey: string, formattedKey: string, icon: string, key: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/project/type/($projectTypeKey)/accessible")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete project
@@ -9917,6 +10294,7 @@ export def "rest-3-project delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enableUndo: oneof<nothing, bool> # Whether this project is placed in the Jira recycle bin where it will be available for restoration. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -9925,7 +10303,7 @@ export def "rest-3-project delete" [
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project
@@ -9941,6 +10319,7 @@ export def "rest-3-project get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts a comma-separated list. Note that the project description, issue types, and project lead are included in all responses by default. Expand options include:   *  `description` The project description.  *  `issueTypes` The issue types associated with the project.  *  `lead` The project lead.  *  `projectKeys` All project keys associated with the project.  *  `issueTypeHierarchy` The project issue type hierarchy.
   --properties: list # A list of project properties to return for the project. This parameter accepts a comma-separated list.
 ]: nothing -> record<archived: bool, archivedBy: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, archivedDate: string, assigneeType: string, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, components: table<ari: string, assignee: record, assigneeType: string, description: string, id: string, isAssigneeTypeValid: bool, lead: record, leadAccountId: string, leadUserName: string, metadata: record, name: string, project: string, projectId: int, realAssignee: record, realAssigneeType: string, self: string>, deleted: bool, deletedBy: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, deletedDate: string, description: string, email: string, expand: string, favourite: bool, id: string, insight: record<lastIssueUpdateTime: string, totalIssueCount: int>, isPrivate: bool, issueTypeHierarchy: record<baseLevelId: int, levels: list<record>>, issueTypes: table<avatarId: int, description: string, entityId: string, hierarchyLevel: int, iconUrl: string, id: string, name: string, scope: record, self: string, subtask: bool>, key: string, landingPageInfo: record<attributes: record, boardId: int, boardName: string, projectKey: string, projectType: string, queueCategory: string, queueId: int, queueName: string, simpleBoard: bool, simplified: bool, url: string>, lead: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, permissions: record<canEdit: bool>, projectCategory: record<description: string, id: string, name: string, self: string>, projectTypeKey: string, properties: record, retentionTillDate: string, roles: record, self: string, simplified: bool, style: string, url: string, uuid: string, versions: table<approvers: list, archived: bool, description: string, driver: string, expand: string, id: string, issuesStatusForFixVersion: record, moveUnfixedIssuesTo: string, name: string, operations: list, overdue: bool, project: string, projectId: int, releaseDate: string, released: bool, self: string, startDate: string, userReleaseDate: string, userStartDate: string>> {
@@ -9950,7 +10329,7 @@ export def "rest-3-project get" [
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update project
@@ -9966,6 +10345,7 @@ export def "rest-3-project updateProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts a comma-separated list. Note that the project description, issue types, and project lead are included in all responses by default. Expand options include:   *  `description` The project description.  *  `issueTypes` The issue types associated with the project.  *  `lead` The project lead.  *  `projectKeys` All project keys associated with the project.
   --assigneeType: string@assigneeType-completer-1 # The default assignee when creating issues for this project.
   --avatarId: int # An integer value for the project's avatar. (format: int64)
@@ -9990,7 +10370,7 @@ export def "rest-3-project updateProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Archive project
@@ -10006,13 +10386,14 @@ export def "rest-3-project-archive archiveProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/archive")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set project avatar
@@ -10028,6 +10409,7 @@ export def "rest-3-project-avatar updateProjectAvatar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string # The ID of the avatar.
 ]: any -> any {
   let input = $in
@@ -10038,7 +10420,7 @@ export def "rest-3-project-avatar updateProjectAvatar" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete project avatar
@@ -10055,13 +10437,14 @@ export def "rest-3-project-avatar delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/avatar/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load project avatar
@@ -10077,6 +10460,7 @@ export def "rest-3-project-avatar2 createProjectAvatar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x: int # The X coordinate of the top-left corner of the crop region. (format: int32, default: 0)
   --y: int # The Y coordinate of the top-left corner of the crop region. (format: int32, default: 0)
   --size: int # The length of each side of the crop region. (format: int32, default: 0)
@@ -10090,7 +10474,7 @@ export def "rest-3-project-avatar2 createProjectAvatar" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Get all project avatars
@@ -10106,13 +10490,14 @@ export def "rest-3-project-avatars get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<custom: table<fileName: string, id: string, isDeletable: bool, isSelected: bool, isSystemAvatar: bool, owner: string, urls: record>, system: table<fileName: string, id: string, isDeletable: bool, isSelected: bool, isSystemAvatar: bool, owner: string, urls: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/avatars")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the classification configuration for a project
@@ -10128,13 +10513,14 @@ export def "rest-3-project-classification-config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/classification-config")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove the default data classification level from a project
@@ -10150,13 +10536,14 @@ export def "rest-3-project-classification-level-default removeDefaultProjectClas
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/classification-level/default")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the default data classification level of a project
@@ -10172,13 +10559,14 @@ export def "rest-3-project-classification-level-default get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/classification-level/default")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the default data classification level of a project
@@ -10194,6 +10582,7 @@ export def "rest-3-project-classification-level-default updateDefaultProjectClas
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string # The ID of the project classification.
 ]: any -> any {
   let input = $in
@@ -10204,7 +10593,7 @@ export def "rest-3-project-classification-level-default updateDefaultProjectClas
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get project components paginated
@@ -10220,6 +10609,7 @@ export def "rest-3-project-component get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --orderBy: string@orderBy-completer-9 # [Order](#ordering) the results by a field:   *  `description` Sorts by the component description.  *  `issueCount` Sorts by the count of issues associated with the component.  *  `lead` Sorts by the user key of the component's project lead.  *  `name` Sorts by component name.
@@ -10232,7 +10622,7 @@ export def "rest-3-project-component get" [
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/component" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project components
@@ -10248,6 +10638,7 @@ export def "rest-3-project-components get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --componentSource: string@componentSource-completer # The source of the components to return. Can be `jira` (default), `compass` or `auto`. When `auto` is specified, the API will return connected Compass components if the project is opted into Compass, otherwise it will return Jira components. Defaults to `jira`. (default: jira)
 ]: nothing -> table<ari: string, assignee: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, assigneeType: string, description: string, id: string, isAssigneeTypeValid: bool, lead: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, leadAccountId: string, leadUserName: string, metadata: record, name: string, project: string, projectId: int, realAssignee: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, realAssigneeType: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -10256,7 +10647,7 @@ export def "rest-3-project-components get" [
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/components" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete project asynchronously
@@ -10272,13 +10663,14 @@ export def "rest-3-project-delete post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/delete")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project features
@@ -10294,13 +10686,14 @@ export def "rest-3-project-features get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<features: table<feature: string, imageUri: string, localisedDescription: string, localisedName: string, prerequisites: list, projectId: int, state: string, toggleLocked: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/features")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set project feature state
@@ -10317,6 +10710,7 @@ export def "rest-3-project-features toggleFeatureForProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string@state-completer # The feature state.
 ]: any -> record<features: table<feature: string, imageUri: string, localisedDescription: string, localisedName: string, prerequisites: list, projectId: int, state: string, toggleLocked: bool>> {
   let input = $in
@@ -10327,7 +10721,7 @@ export def "rest-3-project-features toggleFeatureForProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get project property keys
@@ -10343,13 +10737,14 @@ export def "rest-3-project-properties list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/properties")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete project property
@@ -10366,13 +10761,14 @@ export def "rest-3-project-properties delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/properties/($propertyKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project property
@@ -10389,13 +10785,14 @@ export def "rest-3-project-properties get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/properties/($propertyKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set project property
@@ -10412,6 +10809,7 @@ export def "rest-3-project-properties setProjectProperty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -10421,7 +10819,7 @@ export def "rest-3-project-properties setProjectProperty" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Restore deleted or archived project
@@ -10437,13 +10835,14 @@ export def "rest-3-project-restore restore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<archived: bool, archivedBy: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, archivedDate: string, assigneeType: string, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, components: table<ari: string, assignee: record, assigneeType: string, description: string, id: string, isAssigneeTypeValid: bool, lead: record, leadAccountId: string, leadUserName: string, metadata: record, name: string, project: string, projectId: int, realAssignee: record, realAssigneeType: string, self: string>, deleted: bool, deletedBy: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, deletedDate: string, description: string, email: string, expand: string, favourite: bool, id: string, insight: record<lastIssueUpdateTime: string, totalIssueCount: int>, isPrivate: bool, issueTypeHierarchy: record<baseLevelId: int, levels: list<record>>, issueTypes: table<avatarId: int, description: string, entityId: string, hierarchyLevel: int, iconUrl: string, id: string, name: string, scope: record, self: string, subtask: bool>, key: string, landingPageInfo: record<attributes: record, boardId: int, boardName: string, projectKey: string, projectType: string, queueCategory: string, queueId: int, queueName: string, simpleBoard: bool, simplified: bool, url: string>, lead: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, permissions: record<canEdit: bool>, projectCategory: record<description: string, id: string, name: string, self: string>, projectTypeKey: string, properties: record, retentionTillDate: string, roles: record, self: string, simplified: bool, style: string, url: string, uuid: string, versions: table<approvers: list, archived: bool, description: string, driver: string, expand: string, id: string, issuesStatusForFixVersion: record, moveUnfixedIssuesTo: string, name: string, operations: list, overdue: bool, project: string, projectId: int, releaseDate: string, released: bool, self: string, startDate: string, userReleaseDate: string, userStartDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/restore")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project roles for project
@@ -10459,13 +10858,14 @@ export def "rest-3-project-role list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/role")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete actors from project role
@@ -10482,6 +10882,7 @@ export def "rest-3-project-role delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user: string # The user account ID of the user to remove from the project role. (e.g. 5b10ac8d82e05b22cc7d4ef5)
   --group: string # The name of the group to remove from the project role. This parameter cannot be used with the `groupId` parameter. As a group's name can change, use of `groupId` is recommended.
   --groupId: string # The ID of the group to remove from the project role. This parameter cannot be used with the `group` parameter.
@@ -10492,7 +10893,7 @@ export def "rest-3-project-role delete" [
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/role/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project role for project
@@ -10509,6 +10910,7 @@ export def "rest-3-project-role get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --excludeInactiveUsers: oneof<nothing, bool> # Exclude inactive users. (default: false)
 ]: nothing -> record<actors: table<actorGroup: record, actorUser: record, avatarUrl: string, displayName: string, id: int, name: string, type: string>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, translatedName: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -10517,7 +10919,7 @@ export def "rest-3-project-role get" [
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/role/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add actors to project role
@@ -10534,6 +10936,7 @@ export def "rest-3-project-role addActorUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --group: list # The name of the group to add. This parameter cannot be used with the `groupId` parameter. As a group's name can change, use of `groupId` is recommended.
   --groupId: list # The ID of the group to add. This parameter cannot be used with the `group` parameter.
   --user: list # The user account ID of the user to add.
@@ -10546,7 +10949,7 @@ export def "rest-3-project-role addActorUsers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set actors for project role
@@ -10563,6 +10966,7 @@ export def "rest-3-project-role setActors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --categorisedActors: record # The actors to add to the project role.  Add groups using:   *  `atlassian-group-role-actor` and a list of group names.  *  `atlassian-group-role-actor-id` and a list of group IDs.  As a group's name can change, use of `atlassian-group-role-actor-id` is recommended. For example, `"atlassian-group-role-actor-id":["eef79f81-0b89-4fca-a736-4be531a10869","77f6ab39-e755-4570-a6ae-2d7a8df0bcb8"]`.  Add users using `atlassian-user-role-actor` and a list of account IDs. For example, `"atlassian-user-role-actor":["12345678-9abc-def1-2345-6789abcdef12", "abcdef12-3456-789a-bcde-f123456789ab"]`.
 ]: any -> record<actors: table<actorGroup: record, actorUser: record, avatarUrl: string, displayName: string, id: int, name: string, type: string>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, translatedName: string> {
   let input = $in
@@ -10573,7 +10977,7 @@ export def "rest-3-project-role setActors" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get project role details
@@ -10589,6 +10993,7 @@ export def "rest-3-project-roledetails get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --currentMember: oneof<nothing, bool> # Whether the roles should be filtered to include only those the user is assigned to. (default: false)
   --excludeConnectAddons: oneof<nothing, bool> # default: false
   --excludeOtherServiceRoles: oneof<nothing, bool> # Do not return the default JSM company-managed space from CSM spaces, or the default CSM roles from JSM spaces. (default: false)
@@ -10599,7 +11004,7 @@ export def "rest-3-project-roledetails get" [
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/roledetails" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all statuses for project
@@ -10615,13 +11020,14 @@ export def "rest-3-project-statuses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, name: string, self: string, statuses: list<record>, subtask: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/statuses")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project versions paginated
@@ -10637,6 +11043,7 @@ export def "rest-3-project-version get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --orderBy: string@orderBy-completer-10 # [Order](#ordering) the results by a field:   *  `description` Sorts by version description.  *  `name` Sorts by version name.  *  `releaseDate` Sorts by release date, starting with the oldest date. Versions with no release date are listed last.  *  `sequence` Sorts by the order of appearance in the user interface.  *  `startDate` Sorts by start date, starting with the oldest date. Versions with no start date are listed last.
@@ -10650,7 +11057,7 @@ export def "rest-3-project-version get" [
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/version" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project versions
@@ -10666,6 +11073,7 @@ export def "rest-3-project-versions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts `operations`, which returns actions that can be performed on the version.
 ]: nothing -> table<approvers: list<record>, archived: bool, description: string, driver: string, expand: string, id: string, issuesStatusForFixVersion: record<done: int, inProgress: int, toDo: int, unmapped: int>, moveUnfixedIssuesTo: string, name: string, operations: list<record>, overdue: bool, project: string, projectId: int, releaseDate: string, released: bool, self: string, startDate: string, userReleaseDate: string, userStartDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -10674,7 +11082,7 @@ export def "rest-3-project-versions get" [
   let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/versions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project's sender email
@@ -10690,13 +11098,14 @@ export def "rest-3-project-email get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<emailAddress: string, emailAddressStatus: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/project/($projectId)/email")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set project's sender email
@@ -10712,6 +11121,7 @@ export def "rest-3-project-email updateProjectEmail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --emailAddress: string # The email address.
   --emailAddressStatus: list # When using a custom domain, the status of the email address.
 ]: any -> any {
@@ -10723,7 +11133,7 @@ export def "rest-3-project-email updateProjectEmail" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get project issue type hierarchy
@@ -10739,13 +11149,14 @@ export def "rest-3-project-hierarchy get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<hierarchy: table<entityId: string, issueTypes: list, level: int, name: string>, projectId: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/project/($projectId)/hierarchy")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project issue security scheme
@@ -10761,13 +11172,14 @@ export def "rest-3-project-issuesecuritylevelscheme get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<defaultSecurityLevelId: int, description: string, id: int, levels: table<description: string, id: string, isDefault: bool, issueSecuritySchemeId: string, name: string, self: string>, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/project/($projectKeyOrId)/issuesecuritylevelscheme")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project notification scheme
@@ -10783,6 +11195,7 @@ export def "rest-3-project-notificationscheme get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts a comma-separated list. Expand options include:   *  `all` Returns all expandable information  *  `field` Returns information about any custom fields assigned to receive an event  *  `group` Returns information about any groups assigned to receive an event  *  `notificationSchemeEvents` Returns a list of event associations. This list is returned for all expandable information  *  `projectRole` Returns information about any project roles assigned to receive an event  *  `user` Returns information about any users assigned to receive an event
 ]: nothing -> record<description: string, expand: string, id: int, name: string, notificationSchemeEvents: table<event: record, notifications: list>, projects: list<int>, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -10791,7 +11204,7 @@ export def "rest-3-project-notificationscheme get" [
   let full_url = (build-url $base $"/rest/api/3/project/($projectKeyOrId)/notificationscheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get assigned permission scheme
@@ -10807,6 +11220,7 @@ export def "rest-3-project-permissionscheme get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts a comma-separated list. Note that permissions are included when you specify any value. Expand options include:   *  `all` Returns all expandable information.  *  `field` Returns information about the custom field granted the permission.  *  `group` Returns information about the group that is granted the permission.  *  `permissions` Returns all permission grants for each permission scheme.  *  `projectRole` Returns information about the project role granted the permission.  *  `user` Returns information about the user who is granted the permission.
 ]: nothing -> record<description: string, expand: string, id: int, name: string, permissions: table<holder: record, id: int, permission: string, self: string>, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -10815,7 +11229,7 @@ export def "rest-3-project-permissionscheme get" [
   let full_url = (build-url $base $"/rest/api/3/project/($projectKeyOrId)/permissionscheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign permission scheme
@@ -10831,6 +11245,7 @@ export def "rest-3-project-permissionscheme assignPermissionScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts a comma-separated list. Note that permissions are included when you specify any value. Expand options include:   *  `all` Returns all expandable information.  *  `field` Returns information about the custom field granted the permission.  *  `group` Returns information about the group that is granted the permission.  *  `permissions` Returns all permission grants for each permission scheme.  *  `projectRole` Returns information about the project role granted the permission.  *  `user` Returns information about the user who is granted the permission.
   id: int # The ID of the permission scheme to associate with the project. Use the [Get all permission schemes](#api-rest-api-3-permissionscheme-get) resource to get a list of permission scheme IDs. (format: int64)
 ]: any -> record<description: string, expand: string, id: int, name: string, permissions: table<holder: record, id: int, permission: string, self: string>, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string> {
@@ -10843,7 +11258,7 @@ export def "rest-3-project-permissionscheme assignPermissionScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get project issue security levels
@@ -10859,13 +11274,14 @@ export def "rest-3-project-securitylevel get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<levels: table<description: string, id: string, isDefault: bool, issueSecuritySchemeId: string, name: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/project/($projectKeyOrId)/securitylevel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all project categories
@@ -10880,13 +11296,14 @@ export def "rest-3-project-category list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<description: string, id: string, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/projectCategory")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create project category
@@ -10901,6 +11318,7 @@ export def "rest-3-project-category createProjectCategory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the project category.
   --name: string # The name of the project category. Required on create, optional on update.
 ]: any -> record<description: string, id: string, name: string, self: string> {
@@ -10912,7 +11330,7 @@ export def "rest-3-project-category createProjectCategory" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete project category
@@ -10928,13 +11346,14 @@ export def "rest-3-project-category removeProjectCategory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/projectCategory/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project category by ID
@@ -10950,13 +11369,14 @@ export def "rest-3-project-category get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, id: string, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/projectCategory/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update project category
@@ -10972,6 +11392,7 @@ export def "rest-3-project-category updateProjectCategory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the project category.
   --name: string # The name of the project category. Required on create, optional on update.
 ]: any -> record<description: string, id: string, name: string, self: string> {
@@ -10983,7 +11404,7 @@ export def "rest-3-project-category updateProjectCategory" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get fields for projects
@@ -10998,6 +11419,7 @@ export def "rest-3-projects-fields get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --projectId: list # The IDs of projects to return fields for. (e.g. [10000, 10001])
@@ -11010,7 +11432,7 @@ export def "rest-3-projects-fields get" [
   let full_url = (build-url $base "/rest/api/3/projects/fields" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Validate project key
@@ -11025,6 +11447,7 @@ export def "rest-3-projectvalidate-key validateProjectKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # The project key. (e.g. HSP)
 ]: nothing -> record<errorMessages: list<string>, errors: record, status: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -11033,7 +11456,7 @@ export def "rest-3-projectvalidate-key validateProjectKey" [
   let full_url = (build-url $base "/rest/api/3/projectvalidate/key" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get valid project key
@@ -11048,6 +11471,7 @@ export def "rest-3-projectvalidate-valid-project-key get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # The project key. (e.g. HSP)
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -11056,7 +11480,7 @@ export def "rest-3-projectvalidate-valid-project-key get" [
   let full_url = (build-url $base "/rest/api/3/projectvalidate/validProjectKey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get valid project name
@@ -11071,6 +11495,7 @@ export def "rest-3-projectvalidate-valid-project-name get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The project name.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -11079,7 +11504,7 @@ export def "rest-3-projectvalidate-valid-project-name get" [
   let full_url = (build-url $base "/rest/api/3/projectvalidate/validProjectName" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Redact
@@ -11095,6 +11520,7 @@ export def "rest-3-redact redact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --redactions: list # item shape: {contentItem: record, externalId: string, reason: string, redactionPosition: record}
 ]: any -> string {
   let input = $in
@@ -11105,7 +11531,7 @@ export def "rest-3-redact redact" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get redaction status
@@ -11121,13 +11547,14 @@ export def "rest-3-redact-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<bulkRedactionResponse: record<results: list<record>>, jobStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/redact/status/($jobId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get resolutions
@@ -11144,13 +11571,14 @@ export def "rest-3-resolution list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<description: string, id: string, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/resolution")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create resolution
@@ -11165,6 +11593,7 @@ export def "rest-3-resolution createResolution" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the resolution.
   name: string # The name of the resolution. Must be unique (case-insensitive).
 ]: any -> record<id: string> {
@@ -11176,7 +11605,7 @@ export def "rest-3-resolution createResolution" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set default resolution
@@ -11191,6 +11620,7 @@ export def "rest-3-resolution-default setDefaultResolution" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string # The ID of the new default issue resolution. Must be an existing ID or null. Setting this to null erases the default resolution setting.
 ]: any -> any {
   let input = $in
@@ -11201,7 +11631,7 @@ export def "rest-3-resolution-default setDefaultResolution" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Move resolutions
@@ -11216,6 +11646,7 @@ export def "rest-3-resolution-move moveResolutions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --after: string # The ID of the resolution. Required if `position` isn't provided.
   ids: list # The list of resolution IDs to be reordered. Cannot contain duplicates nor after ID.
   --position: string # The position for issue resolutions to be moved to. Required if `after` isn't provided.
@@ -11228,7 +11659,7 @@ export def "rest-3-resolution-move moveResolutions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search resolutions
@@ -11243,6 +11674,7 @@ export def "rest-3-resolution-search searchResolutions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: string # The index of the first item to return in a page of results (page offset). (default: 0)
   --maxResults: string # The maximum number of items to return per page. (default: 50)
   --id: list # The list of resolutions IDs to be filtered out
@@ -11254,7 +11686,7 @@ export def "rest-3-resolution-search searchResolutions" [
   let full_url = (build-url $base "/rest/api/3/resolution/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete resolution
@@ -11270,6 +11702,7 @@ export def "rest-3-resolution delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --replaceWith: string # The ID of the issue resolution that will replace the currently selected resolution. (default: )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -11278,7 +11711,7 @@ export def "rest-3-resolution delete" [
   let full_url = (build-url $base $"/rest/api/3/resolution/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get resolution
@@ -11294,13 +11727,14 @@ export def "rest-3-resolution get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, id: string, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/resolution/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update resolution
@@ -11316,6 +11750,7 @@ export def "rest-3-resolution updateResolution" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the resolution.
   name: string # The name of the resolution. Must be unique.
 ]: any -> any {
@@ -11327,7 +11762,7 @@ export def "rest-3-resolution updateResolution" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all project roles
@@ -11342,13 +11777,14 @@ export def "rest-3-role list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<actors: list<record>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record, type: string>, self: string, translatedName: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/role")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create project role
@@ -11363,6 +11799,7 @@ export def "rest-3-role createProjectRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # A description of the project role. Required when fully updating a project role. Optional when creating or partially updating a project role.
   --name: string # The name of the project role. Must be unique. Cannot begin or end with whitespace. The maximum length is 255 characters. Required when creating a project role. Optional when partially updating a project role.
 ]: any -> record<actors: table<actorGroup: record, actorUser: record, avatarUrl: string, displayName: string, id: int, name: string, type: string>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, translatedName: string> {
@@ -11374,7 +11811,7 @@ export def "rest-3-role createProjectRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete project role
@@ -11390,6 +11827,7 @@ export def "rest-3-role delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --swap: int # The ID of the project role that will replace the one being deleted. The swap will attempt to swap the role in schemes (notifications, permissions, issue security), workflows, worklogs and comments. (format: int64)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -11398,7 +11836,7 @@ export def "rest-3-role delete" [
   let full_url = (build-url $base $"/rest/api/3/role/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project role by ID
@@ -11414,13 +11852,14 @@ export def "rest-3-role get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<actors: table<actorGroup: record, actorUser: record, avatarUrl: string, displayName: string, id: int, name: string, type: string>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, translatedName: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/role/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Partial update project role
@@ -11436,6 +11875,7 @@ export def "rest-3-role partialUpdateProjectRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # A description of the project role. Required when fully updating a project role. Optional when creating or partially updating a project role.
   --name: string # The name of the project role. Must be unique. Cannot begin or end with whitespace. The maximum length is 255 characters. Required when creating a project role. Optional when partially updating a project role.
 ]: any -> record<actors: table<actorGroup: record, actorUser: record, avatarUrl: string, displayName: string, id: int, name: string, type: string>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, translatedName: string> {
@@ -11447,7 +11887,7 @@ export def "rest-3-role partialUpdateProjectRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fully update project role
@@ -11463,6 +11903,7 @@ export def "rest-3-role fullyUpdateProjectRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # A description of the project role. Required when fully updating a project role. Optional when creating or partially updating a project role.
   --name: string # The name of the project role. Must be unique. Cannot begin or end with whitespace. The maximum length is 255 characters. Required when creating a project role. Optional when partially updating a project role.
 ]: any -> record<actors: table<actorGroup: record, actorUser: record, avatarUrl: string, displayName: string, id: int, name: string, type: string>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, translatedName: string> {
@@ -11474,7 +11915,7 @@ export def "rest-3-role fullyUpdateProjectRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete default actors from project role
@@ -11490,6 +11931,7 @@ export def "rest-3-role-actors delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user: string # The user account ID of the user to remove as a default actor. (e.g. 5b10ac8d82e05b22cc7d4ef5)
   --groupId: string # The group ID of the group to be removed as a default actor. This parameter cannot be used with the `group` parameter.
   --group: string # The group name of the group to be removed as a default actor.This parameter cannot be used with the `groupId` parameter. As a group's name can change, use of `groupId` is recommended.
@@ -11500,7 +11942,7 @@ export def "rest-3-role-actors delete" [
   let full_url = (build-url $base $"/rest/api/3/role/($id)/actors" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get default actors for project role
@@ -11516,13 +11958,14 @@ export def "rest-3-role-actors get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<actors: table<actorGroup: record, actorUser: record, avatarUrl: string, displayName: string, id: int, name: string, type: string>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, translatedName: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/role/($id)/actors")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add default actors to project role
@@ -11538,6 +11981,7 @@ export def "rest-3-role-actors addProjectRoleActorsToRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --group: list # The name of the group to add as a default actor. This parameter cannot be used with the `groupId` parameter. As a group's name can change,use of `groupId` is recommended. This parameter accepts a comma-separated list. For example, `"group":["project-admin", "jira-developers"]`.
   --groupId: list # The ID of the group to add as a default actor. This parameter cannot be used with the `group` parameter This parameter accepts a comma-separated list. For example, `"groupId":["77f6ab39-e755-4570-a6ae-2d7a8df0bcb8", "0c011f85-69ed-49c4-a801-3b18d0f771bc"]`.
   --user: list # The account IDs of the users to add as default actors. This parameter accepts a comma-separated list. For example, `"user":["5b10a2844c20165700ede21g", "5b109f2e9729b51b54dc274d"]`.
@@ -11550,7 +11994,7 @@ export def "rest-3-role-actors addProjectRoleActorsToRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get screens
@@ -11565,6 +12009,7 @@ export def "rest-3-screens get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 100)
   --id: list # The list of screen IDs. To include multiple IDs, provide an ampersand-separated list. For example, `id=10000&id=10001`.
@@ -11578,7 +12023,7 @@ export def "rest-3-screens get" [
   let full_url = (build-url $base "/rest/api/3/screens" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create screen
@@ -11593,6 +12038,7 @@ export def "rest-3-screens createScreen" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the screen. The maximum length is 255 characters.
   name: string # The name of the screen. The name must be unique. The maximum length is 255 characters.
 ]: any -> record<description: string, id: int, name: string, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>> {
@@ -11604,7 +12050,7 @@ export def "rest-3-screens createScreen" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add field to default screen
@@ -11620,13 +12066,14 @@ export def "rest-3-screens-add-to-default addFieldToDefaultScreen" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/screens/addToDefault/($fieldId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get bulk screen tabs
@@ -11641,6 +12088,7 @@ export def "rest-3-screens-tabs list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --screenId: list # The list of screen IDs. To include multiple screen IDs, provide an ampersand-separated list. For example, `screenId=10000&screenId=10001`.
   --tabId: list # The list of tab IDs. To include multiple tab IDs, provide an ampersand-separated list. For example, `tabId=10000&tabId=10001`.
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
@@ -11652,7 +12100,7 @@ export def "rest-3-screens-tabs list" [
   let full_url = (build-url $base "/rest/api/3/screens/tabs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete screen
@@ -11668,13 +12116,14 @@ export def "rest-3-screens delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/screens/($screenId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update screen
@@ -11690,6 +12139,7 @@ export def "rest-3-screens updateScreen" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the screen. The maximum length is 255 characters.
   --name: string # The name of the screen. The name must be unique. The maximum length is 255 characters.
 ]: any -> record<description: string, id: int, name: string, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>> {
@@ -11701,7 +12151,7 @@ export def "rest-3-screens updateScreen" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get available screen fields
@@ -11717,13 +12167,14 @@ export def "rest-3-screens-available-fields get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/screens/($screenId)/availableFields")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all screen tabs
@@ -11739,6 +12190,7 @@ export def "rest-3-screens-tabs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectKey: string # The key of the project.
 ]: nothing -> table<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -11747,7 +12199,7 @@ export def "rest-3-screens-tabs get" [
   let full_url = (build-url $base $"/rest/api/3/screens/($screenId)/tabs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create screen tab
@@ -11763,6 +12215,7 @@ export def "rest-3-screens-tabs addScreenTab" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the screen tab. The maximum length is 255 characters.
 ]: any -> record<id: int, name: string> {
   let input = $in
@@ -11773,7 +12226,7 @@ export def "rest-3-screens-tabs addScreenTab" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete screen tab
@@ -11790,13 +12243,14 @@ export def "rest-3-screens-tabs delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/screens/($screenId)/tabs/($tabId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update screen tab
@@ -11813,6 +12267,7 @@ export def "rest-3-screens-tabs renameScreenTab" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the screen tab. The maximum length is 255 characters.
 ]: any -> record<id: int, name: string> {
   let input = $in
@@ -11823,7 +12278,7 @@ export def "rest-3-screens-tabs renameScreenTab" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all screen tab fields
@@ -11840,6 +12295,7 @@ export def "rest-3-screens-tabs-fields get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectKey: string # The key of the project.
 ]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -11848,7 +12304,7 @@ export def "rest-3-screens-tabs-fields get" [
   let full_url = (build-url $base $"/rest/api/3/screens/($screenId)/tabs/($tabId)/fields" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add screen tab field
@@ -11865,6 +12321,7 @@ export def "rest-3-screens-tabs-fields addScreenTabField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --skipFieldAssociation: oneof<nothing, bool> # default: false
   fieldId: string # The ID of the field to add.
 ]: any -> record<id: string, name: string> {
@@ -11877,7 +12334,7 @@ export def "rest-3-screens-tabs-fields addScreenTabField" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove screen tab field
@@ -11895,13 +12352,14 @@ export def "rest-3-screens-tabs-fields removeScreenTabField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/screens/($screenId)/tabs/($tabId)/fields/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Move screen tab field
@@ -11919,6 +12377,7 @@ export def "rest-3-screens-tabs-fields-move moveScreenTabField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --after: string # The ID of the screen tab field after which to place the moved screen tab field. Required if `position` isn't provided. (format: uri)
   --position: string@position-completer-1 # The named position to which the screen tab field should be moved. Required if `after` isn't provided.
 ]: any -> any {
@@ -11930,7 +12389,7 @@ export def "rest-3-screens-tabs-fields-move moveScreenTabField" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Move screen tab
@@ -11948,13 +12407,14 @@ export def "rest-3-screens-tabs-move moveScreenTab" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/screens/($screenId)/tabs/($tabId)/move/($pos)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get screen schemes
@@ -11969,6 +12429,7 @@ export def "rest-3-screenscheme get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 25)
   --id: list # The list of screen scheme IDs. To include multiple IDs, provide an ampersand-separated list. For example, `id=10000&id=10001`.
@@ -11982,7 +12443,7 @@ export def "rest-3-screenscheme get" [
   let full_url = (build-url $base "/rest/api/3/screenscheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create screen scheme
@@ -11997,6 +12458,7 @@ export def "rest-3-screenscheme createScreenScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the screen scheme. The maximum length is 255 characters.
   name: string # The name of the screen scheme. The name must be unique. The maximum length is 255 characters.
   screens: any # The IDs of the screens for the screen types of the screen scheme. Only screens used in classic projects are accepted.
@@ -12009,7 +12471,7 @@ export def "rest-3-screenscheme createScreenScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete screen scheme
@@ -12025,13 +12487,14 @@ export def "rest-3-screenscheme delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/screenscheme/($screenSchemeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update screen scheme
@@ -12047,6 +12510,7 @@ export def "rest-3-screenscheme updateScreenScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the screen scheme. The maximum length is 255 characters.
   --name: string # The name of the screen scheme. The name must be unique. The maximum length is 255 characters.
   --screens: any # The IDs of the screens for the screen types of the screen scheme. Only screens used in classic projects are accepted.
@@ -12059,7 +12523,7 @@ export def "rest-3-screenscheme updateScreenScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Currently being removed. Search for issues using JQL (GET)
@@ -12076,6 +12540,7 @@ export def "rest-3-search searchForIssuesUsingJql" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --jql: string # The [JQL](https://confluence.atlassian.com/x/egORLQ) that defines the search. Note:   *  If no JQL expression is provided, all issues are returned.  *  `username` and `userkey` cannot be used as search terms due to privacy reasons. Use `accountId` instead.  *  If a user has hidden their email address in their user profile, partial matches of the email address will not find the user. An exact match is required. (e.g. project = HSP)
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int32, default: 0)
   --maxResults: int # The maximum number of items to return per page. To manage page size, Jira may return fewer items per page where a large number of fields or properties are requested. The greatest number of items returned per page is achieved when requesting `id` or `key` only. (format: int32, default: 50)
@@ -12092,7 +12557,7 @@ export def "rest-3-search searchForIssuesUsingJql" [
   let full_url = (build-url $base "/rest/api/3/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Currently being removed. Search for issues using JQL (POST)
@@ -12109,6 +12574,7 @@ export def "rest-3-search searchForIssuesUsingJqlPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Use [expand](#expansion) to include additional information about issues in the response. Note that, unlike the majority of instances where `expand` is specified, `expand` is defined as a list of values. The expand options are:   *  `renderedFields` Returns field values rendered in HTML format.  *  `names` Returns the display name of each field.  *  `schema` Returns the schema describing a field type.  *  `transitions` Returns all possible transitions for the issue.  *  `operations` Returns all possible operations for the issue.  *  `editmeta` Returns information about how each field can be edited.  *  `changelog` Returns a list of recent updates to an issue, sorted by date, starting from the most recent.  *  `versionedRepresentations` Instead of `fields`, returns `versionedRepresentations` a JSON array containing each version of a field's value, with the highest numbered item representing the most recent version.
   --body-fields: list # A list of fields to return for each issue, use it to retrieve a subset of fields. This parameter accepts a comma-separated list. Expand options include:   *  `*all` Returns all fields.  *  `*navigable` Returns navigable fields.  *  Any issue field, prefixed with a minus to exclude.  The default is `*navigable`.  Examples:   *  `summary,comment` Returns the summary and comments fields only.  *  `-description` Returns all navigable (default) fields except description.  *  `*all,-comment` Returns all fields except comments.  Multiple `fields` parameters can be included in a request.  Note: All navigable fields are returned by default. This differs from [GET issue](#api-rest-api-3-issue-issueIdOrKey-get) where the default is all fields.
   --fieldsByKeys: oneof<nothing, bool> # Reference fields by their key (rather than ID). The default is `false`.
@@ -12126,7 +12592,7 @@ export def "rest-3-search searchForIssuesUsingJqlPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Count issues using JQL
@@ -12141,6 +12607,7 @@ export def "rest-3-search-approximate-count countIssues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --jql: string # A [JQL](https://confluence.atlassian.com/x/egORLQ) expression. For performance reasons, this parameter requires a bounded query. A bounded query is a query with a search restriction.
 ]: any -> record<count: int> {
   let input = $in
@@ -12151,7 +12618,7 @@ export def "rest-3-search-approximate-count countIssues" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search for issues using JQL enhanced search (GET)
@@ -12166,6 +12633,7 @@ export def "rest-3-search-jql searchAndReconsileIssuesUsingJql" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --jql: string # A [JQL](https://confluence.atlassian.com/x/egORLQ) expression. For performance reasons, this parameter requires a bounded query. A bounded query is a query with a search restriction.   *  Example of an unbounded query: `order by key desc`.  *  Example of a bounded query: `assignee = currentUser() order by key`.  Additionally, `orderBy` clause can contain a maximum of 7 fields. (e.g. project = HSP)
   --nextPageToken: string # The token for a page to fetch that is not the first page. The first page has a `nextPageToken` of `null`. Use the `nextPageToken` to fetch the next page of issues.  Note: The `nextPageToken` field is **not included** in the response for the last page, indicating there is no next page. (e.g. <string>)
   --maxResults: int # The maximum number of items to return per page. To manage page size, API may return fewer items per page where a large number of fields or properties are requested. The greatest number of items returned per page is achieved when requesting `id` or `key` only. It returns max 5000 issues. (format: int32, default: 50, e.g. 114)
@@ -12182,7 +12650,7 @@ export def "rest-3-search-jql searchAndReconsileIssuesUsingJql" [
   let full_url = (build-url $base "/rest/api/3/search/jql" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for issues using JQL enhanced search (POST)
@@ -12197,6 +12665,7 @@ export def "rest-3-search-jql searchAndReconsileIssuesUsingJqlPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information about issues in the response. Note that, unlike the majority of instances where `expand` is specified, `expand` is defined as a comma-delimited string of values. The expand options are:   *  `renderedFields` Returns field values rendered in HTML format.  *  `names` Returns the display name of each field.  *  `schema` Returns the schema describing a field type.  *  `transitions` Returns all possible transitions for the issue.  *  `operations` Returns all possible operations for the issue.  *  `editmeta` Returns information about how each field can be edited.  *  `changelog` Returns a list of recent updates to an issue, sorted by date, starting from the most recent.  *  `versionedRepresentations` Instead of `fields`, returns `versionedRepresentations` a JSON array containing each version of a field's value, with the highest numbered item representing the most recent version.  Examples: `"names,changelog"` Returns the display name of each field as well as a list of recent updates to an issue.
   --body-fields: list # A list of fields to return for each issue. Use it to retrieve a subset of fields. This parameter accepts a comma-separated list. Expand options include:   *  `*all` Returns all fields.  *  `*navigable` Returns navigable fields.  *  `id` Returns only issue IDs.  *  Any issue field, prefixed with a dash to exclude.  The default is `id`.  Examples:   *  `summary,comment` Returns the summary and comments fields only.  *  `*all,-comment` Returns all fields except comments.  Multiple `fields` parameters can be included in a request.  Note: By default, this resource returns IDs only. This differs from [GET issue](#api-rest-api-3-issue-issueIdOrKey-get) where the default is all fields.
   --fieldsByKeys: oneof<nothing, bool> # Reference fields by their key (rather than ID). The default is `false`.
@@ -12214,7 +12683,7 @@ export def "rest-3-search-jql searchAndReconsileIssuesUsingJqlPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get issue security level
@@ -12230,13 +12699,14 @@ export def "rest-3-securitylevel get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, id: string, isDefault: bool, issueSecuritySchemeId: string, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/securitylevel/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Jira instance info
@@ -12251,13 +12721,14 @@ export def "rest-3-server-info get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<baseUrl: string, buildDate: string, buildNumber: int, deploymentType: string, displayUrl: string, displayUrlConfluence: string, displayUrlServicedeskHelpCenter: string, healthChecks: table<description: string, name: string, passed: bool>, scmInfo: string, serverTime: string, serverTimeZone: string, serverTitle: string, version: string, versionNumbers: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/serverInfo")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issue navigator default columns
@@ -12272,13 +12743,14 @@ export def "rest-3-settings-columns get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<label: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/settings/columns")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set issue navigator default columns
@@ -12293,6 +12765,7 @@ export def "rest-3-settings-columns setIssueNavigatorDefaultColumns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --columns: list
 ]: any -> any {
   let input = $in
@@ -12303,7 +12776,7 @@ export def "rest-3-settings-columns setIssueNavigatorDefaultColumns" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get all statuses
@@ -12318,13 +12791,14 @@ export def "rest-3-status list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<description: string, iconUrl: string, id: string, name: string, scope: record<project: record, type: string>, self: string, statusCategory: record<colorName: string, id: int, key: string, name: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get status
@@ -12340,13 +12814,14 @@ export def "rest-3-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, iconUrl: string, id: string, name: string, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, statusCategory: record<colorName: string, id: int, key: string, name: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/status/($idOrName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all status categories
@@ -12361,13 +12836,14 @@ export def "rest-3-statuscategory list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<colorName: string, id: int, key: string, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/statuscategory")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get status category
@@ -12383,13 +12859,14 @@ export def "rest-3-statuscategory get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<colorName: string, id: int, key: string, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/statuscategory/($idOrKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk delete Statuses
@@ -12404,6 +12881,7 @@ export def "rest-3-statuses delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # The list of status IDs. To include multiple IDs, provide an ampersand-separated list. For example, id=10000&id=10001.  Min items `1`, Max items `50`
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -12412,7 +12890,7 @@ export def "rest-3-statuses delete" [
   let full_url = (build-url $base "/rest/api/3/statuses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk get statuses
@@ -12427,6 +12905,7 @@ export def "rest-3-statuses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # The list of status IDs. To include multiple IDs, provide an ampersand-separated list. For example, id=10000&id=10001.  Min items `1`, Max items `50`
 ]: nothing -> table<description: string, id: string, name: string, scope: record<project: record, type: string>, statusCategory: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -12435,7 +12914,7 @@ export def "rest-3-statuses get" [
   let full_url = (build-url $base "/rest/api/3/statuses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk create statuses
@@ -12452,6 +12931,7 @@ export def "rest-3-statuses createStatuses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   scope: record # The scope of the status. — shape: {project?: record, type: "PROJECT"|"GLOBAL"}
   statuses: list # Details of the statuses being created. — item shape: {description?: string, name: string, statusCategory: "TODO"|"IN_PROGRESS"|"DONE"}
 ]: any -> table<description: string, id: string, name: string, scope: record<project: record, type: string>, statusCategory: string> {
@@ -12463,7 +12943,7 @@ export def "rest-3-statuses createStatuses" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk update statuses
@@ -12479,6 +12959,7 @@ export def "rest-3-statuses updateStatuses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   statuses: list # The list of statuses that will be updated. — item shape: {description?: string, id: string, name: string, statusCategory: "TODO"|"IN_PROGRESS"|"DONE"}
 ]: any -> any {
   let input = $in
@@ -12489,7 +12970,7 @@ export def "rest-3-statuses updateStatuses" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk get statuses by name
@@ -12504,6 +12985,7 @@ export def "rest-3-statuses-by-names get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: list # The list of status names. To include multiple names, provide an ampersand-separated list. For example, name=nameXX&name=nameYY.  Min items `1`, Max items `50`
   --projectId: string # The project the status is part of or null for global statuses.
 ]: nothing -> table<description: string, id: string, name: string, scope: record<project: record, type: string>, statusCategory: string> {
@@ -12513,7 +12995,7 @@ export def "rest-3-statuses-by-names get" [
   let full_url = (build-url $base "/rest/api/3/statuses/byNames" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search statuses paginated
@@ -12528,6 +13010,7 @@ export def "rest-3-statuses-search search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: string # The project the status is part of or null for global statuses.
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 200)
@@ -12540,7 +13023,7 @@ export def "rest-3-statuses-search search" [
   let full_url = (build-url $base "/rest/api/3/statuses/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issue type usages by status and project
@@ -12557,6 +13040,7 @@ export def "rest-3-statuses-project-issue-type-usages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --nextPageToken: string # The cursor for pagination
   --maxResults: int # The maximum number of results to return. Must be an integer between 1 and 200. (format: int32, default: 50)
 ]: nothing -> record<issueTypes: record<nextPageToken: string, values: list<record>>, projectId: string, statusId: string> {
@@ -12566,7 +13050,7 @@ export def "rest-3-statuses-project-issue-type-usages get" [
   let full_url = (build-url $base $"/rest/api/3/statuses/($statusId)/project/($projectId)/issueTypeUsages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project usages by status
@@ -12582,6 +13066,7 @@ export def "rest-3-statuses-project-usages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --nextPageToken: string # The cursor for pagination
   --maxResults: int # The maximum number of results to return. Must be an integer between 1 and 200. (format: int32, default: 50)
 ]: nothing -> record<projects: record<nextPageToken: string, values: list<record>>, statusId: string> {
@@ -12591,7 +13076,7 @@ export def "rest-3-statuses-project-usages get" [
   let full_url = (build-url $base $"/rest/api/3/statuses/($statusId)/projectUsages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get workflow usages by status
@@ -12607,6 +13092,7 @@ export def "rest-3-statuses-workflow-usages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --nextPageToken: string # The cursor for pagination
   --maxResults: int # The maximum number of results to return. Must be an integer between 1 and 200. (format: int32, default: 50)
 ]: nothing -> record<statusId: string, workflows: record<nextPageToken: string, values: list<record>>> {
@@ -12616,7 +13102,7 @@ export def "rest-3-statuses-workflow-usages get" [
   let full_url = (build-url $base $"/rest/api/3/statuses/($statusId)/workflowUsages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get task
@@ -12632,13 +13118,14 @@ export def "rest-3-task get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, elapsedRuntime: int, finished: int, id: string, lastUpdate: int, message: string, progress: int, result: any, self: string, started: int, status: string, submitted: int, submittedBy: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/task/($taskId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel task
@@ -12654,13 +13141,14 @@ export def "rest-3-task-cancel cancelTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/task/($taskId)/cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get UI modifications
@@ -12675,6 +13163,7 @@ export def "rest-3-ui-modifications get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --expand: string # Use expand to include additional information in the response. This parameter accepts a comma-separated list. Expand options include:   *  `data` Returns UI modification data.  *  `contexts` Returns UI modification contexts.
@@ -12685,7 +13174,7 @@ export def "rest-3-ui-modifications get" [
   let full_url = (build-url $base "/rest/api/3/uiModifications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create UI modification
@@ -12701,6 +13190,7 @@ export def "rest-3-ui-modifications createUiModification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contexts: list # List of contexts of the UI modification. The maximum number of contexts is 1000. — item shape: {issueTypeId?: string, portalId?: string, projectId?: string, requestTypeId?: string, viewType?: "GIC"|"IssueView"|"IssueTransition"|"JSMRequestCreate"}
   --data: string # The data of the UI modification. The maximum size of the data is 50000 characters.
   --description: string # The description of the UI modification. The maximum length is 255 characters.
@@ -12714,7 +13204,7 @@ export def "rest-3-ui-modifications createUiModification" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete UI modification
@@ -12730,13 +13220,14 @@ export def "rest-3-ui-modifications delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/uiModifications/($uiModificationId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update UI modification
@@ -12753,6 +13244,7 @@ export def "rest-3-ui-modifications updateUiModification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contexts: list # List of contexts of the UI modification. The maximum number of contexts is 1000. If provided, replaces all existing contexts. — item shape: {issueTypeId?: string, portalId?: string, projectId?: string, requestTypeId?: string, viewType?: "GIC"|"IssueView"|"IssueTransition"|"JSMRequestCreate"}
   --data: string # The data of the UI modification. The maximum size of the data is 50000 characters.
   --description: string # The description of the UI modification. The maximum length is 255 characters.
@@ -12766,7 +13258,7 @@ export def "rest-3-ui-modifications updateUiModification" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get avatars
@@ -12783,13 +13275,14 @@ export def "rest-3-universal-avatar-type-owner get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<custom: table<fileName: string, id: string, isDeletable: bool, isSelected: bool, isSystemAvatar: bool, owner: string, urls: record>, system: table<fileName: string, id: string, isDeletable: bool, isSelected: bool, isSystemAvatar: bool, owner: string, urls: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/universal_avatar/type/($type)/owner/($entityId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Load avatar
@@ -12806,6 +13299,7 @@ export def "rest-3-universal-avatar-type-owner storeAvatar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x: int # The X coordinate of the top-left corner of the crop region. (format: int32, default: 0)
   --y: int # The Y coordinate of the top-left corner of the crop region. (format: int32, default: 0)
   --size: int # The length of each side of the crop region. (format: int32, default: 0)
@@ -12819,7 +13313,7 @@ export def "rest-3-universal-avatar-type-owner storeAvatar" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Delete avatar
@@ -12837,13 +13331,14 @@ export def "rest-3-universal-avatar-type-owner-avatar delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/universal_avatar/type/($type)/owner/($owningObjectId)/avatar/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get avatar image by type
@@ -12859,6 +13354,7 @@ export def "rest-3-universal-avatar-view-type get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --size: string@size-completer # The size of the avatar image. If not provided the default size is returned.
   --format: string@format-completer # The format to return the avatar image in. If not provided the original content format is returned.
@@ -12869,7 +13365,7 @@ export def "rest-3-universal-avatar-view-type get" [
   let full_url = (build-url $base $"/rest/api/3/universal_avatar/view/type/($type)" $qp)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get avatar image by ID
@@ -12886,6 +13382,7 @@ export def "rest-3-universal-avatar-view-type-avatar get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --size: string@size-completer # The size of the avatar image. If not provided the default size is returned.
   --format: string@format-completer # The format to return the avatar image in. If not provided the original content format is returned.
@@ -12896,7 +13393,7 @@ export def "rest-3-universal-avatar-view-type-avatar get" [
   let full_url = (build-url $base $"/rest/api/3/universal_avatar/view/type/($type)/avatar/($id)" $qp)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get avatar image by owner
@@ -12913,6 +13410,7 @@ export def "rest-3-universal-avatar-view-type-owner get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --size: string@size-completer # The size of the avatar image. If not provided the default size is returned.
   --format: string@format-completer # The format to return the avatar image in. If not provided the original content format is returned.
@@ -12923,7 +13421,7 @@ export def "rest-3-universal-avatar-view-type-owner get" [
   let full_url = (build-url $base $"/rest/api/3/universal_avatar/view/type/($type)/owner/($entityId)" $qp)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete user
@@ -12938,6 +13436,7 @@ export def "rest-3-user removeUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --key: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
@@ -12948,7 +13447,7 @@ export def "rest-3-user removeUser" [
   let full_url = (build-url $base "/rest/api/3/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user
@@ -12963,6 +13462,7 @@ export def "rest-3-user get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. Required. (e.g. 5b10ac8d82e05b22cc7d4ef5)
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide) for details.
   --key: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide) for details.
@@ -12974,7 +13474,7 @@ export def "rest-3-user get" [
   let full_url = (build-url $base "/rest/api/3/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create user
@@ -12989,6 +13489,7 @@ export def "rest-3-user createUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationKeys: list # Deprecated, do not use.
   --displayName: string # This property is no longer available. If the user has an Atlassian account, their display name is not changed. If the user does not have an Atlassian account, they are sent an email asking them set up an account.
   emailAddress: string # The email address for the user.
@@ -13005,7 +13506,7 @@ export def "rest-3-user createUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Find users assignable to projects
@@ -13020,6 +13521,7 @@ export def "rest-3-user-assignable-multi-project-search findBulkAssignableUsers"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # A query string that is matched against user attributes, such as `displayName` and `emailAddress`, to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*. Required, unless `accountId` is specified. (e.g. query)
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --accountId: string # A query string that is matched exactly against user `accountId`. Required, unless `query` is specified.
@@ -13033,7 +13535,7 @@ export def "rest-3-user-assignable-multi-project-search findBulkAssignableUsers"
   let full_url = (build-url $base "/rest/api/3/user/assignable/multiProjectSearch" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find users assignable to issues
@@ -13048,6 +13550,7 @@ export def "rest-3-user-assignable-search findAssignableUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # A query string that is matched against user attributes, such as `displayName`, and `emailAddress`, to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*. Required, unless `username` or `accountId` is specified. (e.g. query)
   --sessionId: string # The sessionId of this request. SessionId is the same until the assignee is set.
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
@@ -13068,7 +13571,7 @@ export def "rest-3-user-assignable-search findAssignableUsers" [
   let full_url = (build-url $base "/rest/api/3/user/assignable/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk get users
@@ -13083,6 +13586,7 @@ export def "rest-3-user-bulk bulkGetUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 10)
   --username: list # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
@@ -13095,7 +13599,7 @@ export def "rest-3-user-bulk bulkGetUsers" [
   let full_url = (build-url $base "/rest/api/3/user/bulk" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get account IDs for users
@@ -13110,6 +13614,7 @@ export def "rest-3-user-bulk-migration bulkGetUsersMigration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 10)
   --username: list # Username of a user. To specify multiple users, pass multiple copies of this parameter. For example, `username=fred&username=barney`. Required if `key` isn't provided. Cannot be provided if `key` is present.
@@ -13121,7 +13626,7 @@ export def "rest-3-user-bulk-migration bulkGetUsersMigration" [
   let full_url = (build-url $base "/rest/api/3/user/bulk/migration" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reset user default columns
@@ -13136,6 +13641,7 @@ export def "rest-3-user-columns resetUserColumns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
 ]: nothing -> any {
@@ -13145,7 +13651,7 @@ export def "rest-3-user-columns resetUserColumns" [
   let full_url = (build-url $base "/rest/api/3/user/columns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user default columns
@@ -13160,6 +13666,7 @@ export def "rest-3-user-columns get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
   --username: string # This parameter is no longer available See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
 ]: nothing -> table<label: string, value: string> {
@@ -13169,7 +13676,7 @@ export def "rest-3-user-columns get" [
   let full_url = (build-url $base "/rest/api/3/user/columns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set user default columns
@@ -13184,6 +13691,7 @@ export def "rest-3-user-columns setUserColumns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
   --columns: list
 ]: any -> any {
@@ -13196,7 +13704,7 @@ export def "rest-3-user-columns setUserColumns" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get user email
@@ -13211,6 +13719,7 @@ export def "rest-3-user-email get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, `5b10ac8d82e05b22cc7d4ef5`.
 ]: nothing -> record<accountId: string, email: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -13219,7 +13728,7 @@ export def "rest-3-user-email get" [
   let full_url = (build-url $base "/rest/api/3/user/email" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user email bulk
@@ -13234,6 +13743,7 @@ export def "rest-3-user-email-bulk get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: list # The account IDs of the users for which emails are required. An `accountId` is an identifier that uniquely identifies the user across all Atlassian products. For example, `5b10ac8d82e05b22cc7d4ef5`. Note, this should be treated as an opaque identifier (that is, do not assume any structure in the value).
 ]: nothing -> record<accountId: string, email: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -13242,7 +13752,7 @@ export def "rest-3-user-email-bulk get" [
   let full_url = (build-url $base "/rest/api/3/user/email/bulk" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user groups
@@ -13257,6 +13767,7 @@ export def "rest-3-user-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --key: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
@@ -13267,7 +13778,7 @@ export def "rest-3-user-groups get" [
   let full_url = (build-url $base "/rest/api/3/user/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find users with permissions
@@ -13282,6 +13793,7 @@ export def "rest-3-user-permission-search findUsersWithAllPermissions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # A query string that is matched against user attributes, such as `displayName` and `emailAddress`, to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*. Required, unless `accountId` is specified. (e.g. query)
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --accountId: string # A query string that is matched exactly against user `accountId`. Required, unless `query` is specified.
@@ -13297,7 +13809,7 @@ export def "rest-3-user-permission-search findUsersWithAllPermissions" [
   let full_url = (build-url $base "/rest/api/3/user/permission/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find users for picker
@@ -13312,6 +13824,7 @@ export def "rest-3-user-picker findUsersForPicker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # A query string that is matched against user attributes, such as `displayName`, and `emailAddress`, to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*.
   --maxResults: int # The maximum number of items to return. The total number of matched users is returned in `total`. (format: int32, default: 50)
   --showAvatar: oneof<nothing, bool> # Include the URI to the user's avatar. (default: false)
@@ -13326,7 +13839,7 @@ export def "rest-3-user-picker findUsersForPicker" [
   let full_url = (build-url $base "/rest/api/3/user/picker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user property keys
@@ -13341,6 +13854,7 @@ export def "rest-3-user-properties list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
   --userKey: string # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --username: string # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
@@ -13351,7 +13865,7 @@ export def "rest-3-user-properties list" [
   let full_url = (build-url $base "/rest/api/3/user/properties" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete user property
@@ -13367,6 +13881,7 @@ export def "rest-3-user-properties delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
   --userKey: string # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --username: string # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
@@ -13377,7 +13892,7 @@ export def "rest-3-user-properties delete" [
   let full_url = (build-url $base $"/rest/api/3/user/properties/($propertyKey)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user property
@@ -13393,6 +13908,7 @@ export def "rest-3-user-properties get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
   --userKey: string # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --username: string # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
@@ -13403,7 +13919,7 @@ export def "rest-3-user-properties get" [
   let full_url = (build-url $base $"/rest/api/3/user/properties/($propertyKey)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set user property
@@ -13419,6 +13935,7 @@ export def "rest-3-user-properties setUserProperty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
   --userKey: string # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --username: string # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
@@ -13432,7 +13949,7 @@ export def "rest-3-user-properties setUserProperty" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Find users
@@ -13447,6 +13964,7 @@ export def "rest-3-user-search findUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # A query string that is matched against user attributes ( `displayName`, and `emailAddress`) to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*. Required, unless `accountId` or `property` is specified. (e.g. query)
   --username: string
   --accountId: string # A query string that is matched exactly against a user `accountId`. Required, unless `query` or `property` is specified.
@@ -13460,7 +13978,7 @@ export def "rest-3-user-search findUsers" [
   let full_url = (build-url $base "/rest/api/3/user/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find users by query
@@ -13475,6 +13993,7 @@ export def "rest-3-user-search-query findUsersByQuery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # The search query.
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 100)
@@ -13485,7 +14004,7 @@ export def "rest-3-user-search-query findUsersByQuery" [
   let full_url = (build-url $base "/rest/api/3/user/search/query" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find user keys by query
@@ -13500,6 +14019,7 @@ export def "rest-3-user-search-query-key findUserKeysByQuery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # The search query.
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResult: int # The maximum number of items to return per page. (format: int32, default: 100)
@@ -13510,7 +14030,7 @@ export def "rest-3-user-search-query-key findUserKeysByQuery" [
   let full_url = (build-url $base "/rest/api/3/user/search/query/key" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find users with browse permission
@@ -13525,6 +14045,7 @@ export def "rest-3-user-viewissue-search findUsersWithBrowsePermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # A query string that is matched against user attributes, such as `displayName` and `emailAddress`, to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*. Required, unless `accountId` is specified. (e.g. query)
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --accountId: string # A query string that is matched exactly against user `accountId`. Required, unless `query` is specified.
@@ -13539,7 +14060,7 @@ export def "rest-3-user-viewissue-search findUsersWithBrowsePermission" [
   let full_url = (build-url $base "/rest/api/3/user/viewissue/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all users default
@@ -13554,6 +14075,7 @@ export def "rest-3-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return. (format: int32, default: 0)
   --maxResults: int # The maximum number of items to return (limited to 1000). (format: int32, default: 50)
   --expand: string
@@ -13564,7 +14086,7 @@ export def "rest-3-users get" [
   let full_url = (build-url $base "/rest/api/3/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all users
@@ -13579,6 +14101,7 @@ export def "rest-3-users-search get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return. (format: int32, default: 0)
   --maxResults: int # The maximum number of items to return (limited to 1000). (format: int32, default: 50)
   --expand: string
@@ -13589,7 +14112,7 @@ export def "rest-3-users-search get" [
   let full_url = (build-url $base "/rest/api/3/users/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create version
@@ -13605,6 +14128,7 @@ export def "rest-3-version createVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --archived: oneof<nothing, bool> # Indicates that the version is archived. Optional when creating or updating a version.
   --description: string # The description of the version. Optional when creating or updating a version. The maximum size is 16,384 bytes.
   --driver: string # The Atlassian account ID of the version driver. Optional when creating or updating a version. If the expand option `driver` is used, returns the Atlassian account ID of the driver.
@@ -13625,7 +14149,7 @@ export def "rest-3-version createVersion" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete version
@@ -13643,6 +14167,7 @@ export def "rest-3-version delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --moveFixIssuesTo: string # The ID of the version to update `fixVersion` to when the field contains the deleted version. The replacement version must be in the same project as the version being deleted and cannot be the version being deleted.
   --moveAffectedIssuesTo: string # The ID of the version to update `affectedVersion` to when the field contains the deleted version. The replacement version must be in the same project as the version being deleted and cannot be the version being deleted.
 ]: nothing -> any {
@@ -13652,7 +14177,7 @@ export def "rest-3-version delete" [
   let full_url = (build-url $base $"/rest/api/3/version/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get version
@@ -13668,6 +14193,7 @@ export def "rest-3-version get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information about version in the response. This parameter accepts a comma-separated list. Expand options include:   *  `operations` Returns the list of operations available for this version.  *  `issuesstatus` Returns the count of issues in this version for each of the status categories *to do*, *in progress*, *done*, and *unmapped*. The *unmapped* property represents the number of issues with a status other than *to do*, *in progress*, and *done*.  *  `driver` Returns the Atlassian account ID of the version driver.  *  `approvers` Returns a list containing the Atlassian account IDs of approvers for this version.
 ]: nothing -> record<approvers: table<accountId: string, declineReason: string, description: string, status: string>, archived: bool, description: string, driver: string, expand: string, id: string, issuesStatusForFixVersion: record<done: int, inProgress: int, toDo: int, unmapped: int>, moveUnfixedIssuesTo: string, name: string, operations: table<href: string, iconClass: string, id: string, label: string, styleClass: string, title: string, weight: int>, overdue: bool, project: string, projectId: int, releaseDate: string, released: bool, self: string, startDate: string, userReleaseDate: string, userStartDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -13676,7 +14202,7 @@ export def "rest-3-version get" [
   let full_url = (build-url $base $"/rest/api/3/version/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update version
@@ -13693,6 +14219,7 @@ export def "rest-3-version updateVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --archived: oneof<nothing, bool> # Indicates that the version is archived. Optional when creating or updating a version.
   --description: string # The description of the version. Optional when creating or updating a version. The maximum size is 16,384 bytes.
   --driver: string # The Atlassian account ID of the version driver. Optional when creating or updating a version. If the expand option `driver` is used, returns the Atlassian account ID of the driver.
@@ -13713,7 +14240,7 @@ export def "rest-3-version updateVersion" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Merge versions
@@ -13730,13 +14257,14 @@ export def "rest-3-version-mergeto mergeVersions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/version/($id)/mergeto/($moveIssuesTo)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Move version
@@ -13752,6 +14280,7 @@ export def "rest-3-version-move moveVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --after: string # The URL (self link) of the version after which to place the moved version. Cannot be used with `position`. (format: uri)
   --position: string@position-completer-1 # An absolute position in which to place the moved version. Cannot be used with `after`.
 ]: any -> record<approvers: table<accountId: string, declineReason: string, description: string, status: string>, archived: bool, description: string, driver: string, expand: string, id: string, issuesStatusForFixVersion: record<done: int, inProgress: int, toDo: int, unmapped: int>, moveUnfixedIssuesTo: string, name: string, operations: table<href: string, iconClass: string, id: string, label: string, styleClass: string, title: string, weight: int>, overdue: bool, project: string, projectId: int, releaseDate: string, released: bool, self: string, startDate: string, userReleaseDate: string, userStartDate: string> {
@@ -13763,7 +14292,7 @@ export def "rest-3-version-move moveVersion" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get version's related issues count
@@ -13779,13 +14308,14 @@ export def "rest-3-version-related-issue-counts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<customFieldUsage: table<customFieldId: int, fieldName: string, issueCountWithVersionInCustomField: int>, issueCountWithCustomFieldsShowingVersion: int, issuesAffectedCount: int, issuesFixedCount: int, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/version/($id)/relatedIssueCounts")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get related work
@@ -13801,13 +14331,14 @@ export def "rest-3-version-relatedwork get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<category: string, issueId: int, relatedWorkId: string, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/version/($id)/relatedwork")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create related work
@@ -13823,6 +14354,7 @@ export def "rest-3-version-relatedwork createRelatedWork" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   category: string # The category of the related work
   --title: string # The title of the related work
   --body-url: string # The URL of the related work. Will be null for the native release note related work item, but is otherwise required. (format: uri)
@@ -13835,7 +14367,7 @@ export def "rest-3-version-relatedwork createRelatedWork" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update related work
@@ -13851,6 +14383,7 @@ export def "rest-3-version-relatedwork updateRelatedWork" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   category: string # The category of the related work
   --title: string # The title of the related work
   --body-url: string # The URL of the related work. Will be null for the native release note related work item, but is otherwise required. (format: uri)
@@ -13863,7 +14396,7 @@ export def "rest-3-version-relatedwork updateRelatedWork" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete and replace version
@@ -13880,6 +14413,7 @@ export def "rest-3-version-remove-and-swap post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --customFieldReplacementList: list # An array of custom field IDs (`customFieldId`) and version IDs (`moveTo`) to update when the fields contain the deleted version. — item shape: {customFieldId?: int, moveTo?: int}
   --moveAffectedIssuesTo: int # The ID of the version to update `affectedVersion` to when the field contains the deleted version. (format: int64)
   --moveFixIssuesTo: int # The ID of the version to update `fixVersion` to when the field contains the deleted version. (format: int64)
@@ -13892,7 +14426,7 @@ export def "rest-3-version-remove-and-swap post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get version's unresolved issues count
@@ -13908,13 +14442,14 @@ export def "rest-3-version-unresolved-issue-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<issuesCount: int, issuesUnresolvedCount: int, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/version/($id)/unresolvedIssueCount")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete related work
@@ -13931,13 +14466,14 @@ export def "rest-3-version-relatedwork delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/version/($versionId)/relatedwork/($relatedWorkId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete webhooks by ID
@@ -13952,6 +14488,7 @@ export def "rest-3-webhook delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   webhookIds: list # A list of webhook IDs.
 ]: any -> any {
   let input = $in
@@ -13962,7 +14499,7 @@ export def "rest-3-webhook delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get dynamic webhooks for app
@@ -13977,6 +14514,7 @@ export def "rest-3-webhook get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 100)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<events: list, expirationDate: int, fieldIdsFilter: list, id: int, issuePropertyKeysFilter: list, jqlFilter: string, url: string>> {
@@ -13986,7 +14524,7 @@ export def "rest-3-webhook get" [
   let full_url = (build-url $base "/rest/api/3/webhook" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Register dynamic webhooks
@@ -14002,6 +14540,7 @@ export def "rest-3-webhook registerDynamicWebhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-url: string # The URL that specifies where to send the webhooks. This URL must use the same base URL as the Connect app. Only a single URL per app is allowed to be registered.
   webhooks: list # A list of webhooks. — item shape: {events: list, fieldIdsFilter?: list, issuePropertyKeysFilter?: list, jqlFilter: string}
 ]: any -> record<webhookRegistrationResult: table<createdWebhookId: int, errors: list>> {
@@ -14013,7 +14552,7 @@ export def "rest-3-webhook registerDynamicWebhooks" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get failed webhooks
@@ -14028,6 +14567,7 @@ export def "rest-3-webhook-failed get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxResults: int # The maximum number of webhooks to return per page. If obeying the maxResults directive would result in records with the same failure time being split across pages, the directive is ignored and all records with the same failure time included on the page. (format: int32)
   --after: int # The time after which any webhook failure must have occurred for the record to be returned, expressed as milliseconds since the UNIX epoch. (format: int64)
 ]: nothing -> record<maxResults: int, next: string, values: table<body: string, failureTime: int, id: string, url: string>> {
@@ -14037,7 +14577,7 @@ export def "rest-3-webhook-failed get" [
   let full_url = (build-url $base "/rest/api/3/webhook/failed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Extend webhook life
@@ -14052,6 +14592,7 @@ export def "rest-3-webhook-refresh refreshWebhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   webhookIds: list # A list of webhook IDs.
 ]: any -> record<expirationDate: int> {
   let input = $in
@@ -14062,7 +14603,7 @@ export def "rest-3-webhook-refresh refreshWebhooks" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Read workflow version from history
@@ -14077,6 +14618,7 @@ export def "rest-3-workflow-history readWorkflowFromHistory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: int # format: int64
   --workflowId: string
 ]: any -> record<statuses: table<description: string, id: string, name: string, scope: record, statusCategory: string, statusReference: string>, workflows: table<created: string, description: string, id: string, lastUpdateAuthorAAID: string, loopedTransitionContainerLayout: record, name: string, scope: record, startPointLayout: record, statuses: list, transitions: list, updated: string, version: record>> {
@@ -14088,7 +14630,7 @@ export def "rest-3-workflow-history readWorkflowFromHistory" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List workflow history entries
@@ -14103,6 +14645,7 @@ export def "rest-3-workflow-history-list listWorkflowHistory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts a comma-separated list. Expand options include:   *  `includeIntermediateWorkflows` Includes intermediate workflow versions that are sometimes created during workflow updates or migrations. By default, these are omitted from the response.
   --workflowId: string # The id of the workflow to read the history for.
 ]: any -> record<entries: table<isIntermediate: bool, workflowId: string, workflowVersion: int, writtenAt: string>> {
@@ -14115,7 +14658,7 @@ export def "rest-3-workflow-history-list listWorkflowHistory" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get workflow transition rule configurations
@@ -14130,6 +14673,7 @@ export def "rest-3-workflow-rule-config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 10)
   --types: list # The types of the transition rules to return.
@@ -14145,7 +14689,7 @@ export def "rest-3-workflow-rule-config get" [
   let full_url = (build-url $base "/rest/api/3/workflow/rule/config" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update workflow transition rule configurations
@@ -14161,6 +14705,7 @@ export def "rest-3-workflow-rule-config updateWorkflowTransitionRuleConfiguratio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   workflows: list # The list of workflows with transition rules to update. — item shape: {conditions?: list, postFunctions?: list, validators?: list, workflowId: record}
 ]: any -> record<updateResults: table<ruleUpdateErrors: record, updateErrors: list, workflowId: record>> {
   let input = $in
@@ -14171,7 +14716,7 @@ export def "rest-3-workflow-rule-config updateWorkflowTransitionRuleConfiguratio
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete workflow transition rule configurations
@@ -14187,6 +14732,7 @@ export def "rest-3-workflow-rule-config-delete put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   workflows: list # The list of workflows with transition rules to delete. — item shape: {workflowId: record, workflowRuleIds: list}
 ]: any -> record<updateResults: table<ruleUpdateErrors: record, updateErrors: list, workflowId: record>> {
   let input = $in
@@ -14197,7 +14743,7 @@ export def "rest-3-workflow-rule-config-delete put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get workflows paginated
@@ -14214,6 +14760,7 @@ export def "rest-3-workflow-search get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --workflowName: list # The name of a workflow to return. To include multiple workflows, provide an ampersand-separated list. For example, `workflowName=name1&workflowName=name2`.
@@ -14228,7 +14775,7 @@ export def "rest-3-workflow-search get" [
   let full_url = (build-url $base "/rest/api/3/workflow/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete workflow transition property
@@ -14246,6 +14793,7 @@ export def "rest-3-workflow-transitions-properties delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # The name of the transition property to delete, also known as the name of the property.
   --workflowName: string # The name of the workflow that the transition belongs to.
   --workflowMode: string@workflowMode-completer # The workflow status. Set to `live` for inactive workflows or `draft` for draft workflows. Active workflows cannot be edited.
@@ -14256,7 +14804,7 @@ export def "rest-3-workflow-transitions-properties delete" [
   let full_url = (build-url $base $"/rest/api/3/workflow/transitions/($transitionId)/properties" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get workflow transition properties
@@ -14274,6 +14822,7 @@ export def "rest-3-workflow-transitions-properties get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeReservedKeys: oneof<nothing, bool> # Some properties with keys that have the *jira.* prefix are reserved, which means they are not editable. To include these properties in the results, set this parameter to *true*. (default: false)
   --key: string # The key of the property being returned, also known as the name of the property. If this parameter is not specified, all properties on the transition are returned.
   --workflowName: string # The name of the workflow that the transition belongs to.
@@ -14285,7 +14834,7 @@ export def "rest-3-workflow-transitions-properties get" [
   let full_url = (build-url $base $"/rest/api/3/workflow/transitions/($transitionId)/properties" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create workflow transition property
@@ -14303,6 +14852,7 @@ export def "rest-3-workflow-transitions-properties createWorkflowTransitionPrope
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # The key of the property being added, also known as the name of the property. Set this to the same value as the `key` defined in the request body.
   --workflowName: string # The name of the workflow that the transition belongs to.
   --workflowMode: string@workflowMode-completer # The workflow status. Set to *live* for inactive workflows or *draft* for draft workflows. Active workflows cannot be edited. (default: live)
@@ -14317,7 +14867,7 @@ export def "rest-3-workflow-transitions-properties createWorkflowTransitionPrope
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update workflow transition property
@@ -14335,6 +14885,7 @@ export def "rest-3-workflow-transitions-properties updateWorkflowTransitionPrope
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # The key of the property being updated, also known as the name of the property. Set this to the same value as the `key` defined in the request body.
   --workflowName: string # The name of the workflow that the transition belongs to.
   --workflowMode: string@workflowMode-completer # The workflow status. Set to `live` for inactive workflows or `draft` for draft workflows. Active workflows cannot be edited.
@@ -14349,7 +14900,7 @@ export def "rest-3-workflow-transitions-properties updateWorkflowTransitionPrope
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete inactive workflow
@@ -14365,13 +14916,14 @@ export def "rest-3-workflow delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/workflow/($entityId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issue types in a project that are using a given workflow
@@ -14388,6 +14940,7 @@ export def "rest-3-workflow-project-issue-type-usages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --nextPageToken: string # The cursor for pagination
   --maxResults: int # The maximum number of results to return. Must be an integer between 1 and 200. (format: int32, default: 50)
 ]: nothing -> record<issueTypes: record<nextPageToken: string, values: list<record>>, projectId: string, workflowId: string> {
@@ -14397,7 +14950,7 @@ export def "rest-3-workflow-project-issue-type-usages get" [
   let full_url = (build-url $base $"/rest/api/3/workflow/($workflowId)/project/($projectId)/issueTypeUsages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get projects using a given workflow
@@ -14413,6 +14966,7 @@ export def "rest-3-workflow-project-usages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --nextPageToken: string # The cursor for pagination
   --maxResults: int # The maximum number of results to return. Must be an integer between 1 and 200. (format: int32, default: 50)
 ]: nothing -> record<projects: record<nextPageToken: string, values: list<record>>, workflowId: string> {
@@ -14422,7 +14976,7 @@ export def "rest-3-workflow-project-usages get" [
   let full_url = (build-url $base $"/rest/api/3/workflow/($workflowId)/projectUsages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get workflow schemes which are using a given workflow
@@ -14438,6 +14992,7 @@ export def "rest-3-workflow-workflow-schemes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --nextPageToken: string # The cursor for pagination
   --maxResults: int # The maximum number of results to return. Must be an integer between 1 and 200. (format: int32, default: 50)
 ]: nothing -> record<workflowId: string, workflowSchemes: record<nextPageToken: string, values: list<record>>> {
@@ -14447,7 +15002,7 @@ export def "rest-3-workflow-workflow-schemes get" [
   let full_url = (build-url $base $"/rest/api/3/workflow/($workflowId)/workflowSchemes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk get workflows
@@ -14463,6 +15018,7 @@ export def "rest-3-workflows readWorkflows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectAndIssueTypes: list # The list of projects and issue types to query. — item shape: {issueTypeId: string, projectId: string}
   --workflowIds: list # The list of workflow IDs to query.
   --workflowNames: list # The list of workflow names to query.
@@ -14475,7 +15031,7 @@ export def "rest-3-workflows readWorkflows" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get available workflow capabilities
@@ -14490,6 +15046,7 @@ export def "rest-3-workflows-capabilities workflowCapabilities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --workflowId: string
   --projectId: string
   --issueTypeId: string
@@ -14500,7 +15057,7 @@ export def "rest-3-workflows-capabilities workflowCapabilities" [
   let full_url = (build-url $base "/rest/api/3/workflows/capabilities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk create workflows
@@ -14518,6 +15075,7 @@ export def "rest-3-workflows-create createWorkflows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scope: record # The scope of the workflow. — shape: {project?: record, type?: "PROJECT"|"GLOBAL"}
   --statuses: list # The statuses to associate with the workflows. — item shape: {description?: string, id?: string, name: string, statusCategory: "TODO"|"IN_PROGRESS"|"DONE", statusReference: string}
   --workflows: list # The details of the workflows to create. — item shape: {description?: string, loopedTransitionContainerLayout?: record, name: string, startPointLayout?: record, statuses: list, transitions: list}
@@ -14530,7 +15088,7 @@ export def "rest-3-workflows-create createWorkflows" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate create workflows
@@ -14547,6 +15105,7 @@ export def "rest-3-workflows-create-validation validateCreateWorkflows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   payload: record # The create workflows payload. — shape: {scope?: record, statuses?: list, workflows?: list}
   --validationOptions: record # The level of validation to return from the API. If no values are provided, the default would return `WARNING` and `ERROR` level validation results. — shape: {levels?: list}
 ]: any -> record<errors: table<additionalDetails: string, code: string, elementReference: record, level: string, message: string, type: string>> {
@@ -14558,7 +15117,7 @@ export def "rest-3-workflows-create-validation validateCreateWorkflows" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the user's default workflow editor
@@ -14573,13 +15132,14 @@ export def "rest-3-workflows-default-editor get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/workflows/defaultEditor")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Preview workflow
@@ -14594,6 +15154,7 @@ export def "rest-3-workflows-preview readWorkflowPreviews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --issueTypeIds: list # The list of issue type IDs. At most 25 issue type IDs can be specified.
   projectId: string # The projectId parameter is required and will be used for permission checks. In addition, you must supply at least one of the following lookup terms: *workflowNames*, *workflowIds*, or *issueTypeIds*. The specified workflows must be associated with the given project.
   --workflowIds: list # The list of workflow IDs to be returned. At most 25 workflow IDs can be specified.
@@ -14607,7 +15168,7 @@ export def "rest-3-workflows-preview readWorkflowPreviews" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search workflows
@@ -14622,6 +15183,7 @@ export def "rest-3-workflows-search searchWorkflows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64)
   --maxResults: int # The maximum number of items to return per page. (format: int32)
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts a comma-separated list. Expand options include:   *  `values.transitions` Returns the transitions that each workflow is associated with.
@@ -14636,7 +15198,7 @@ export def "rest-3-workflows-search searchWorkflows" [
   let full_url = (build-url $base "/rest/api/3/workflows/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk update workflows
@@ -14653,6 +15215,7 @@ export def "rest-3-workflows-update updateWorkflows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --statuses: list # The statuses to associate with the workflows. — item shape: {description?: string, id?: string, name: string, statusCategory: "TODO"|"IN_PROGRESS"|"DONE", statusReference: string}
   --workflows: list # The details of the workflows to update. — item shape: {defaultStatusMappings?: list, description?: string, id: string, loopedTransitionContainerLayout?: record, startPointLayout?: record, statusMappings?: list, statuses: list, transitions: list, version: record}
 ]: any -> record<statuses: table<description: string, id: string, name: string, scope: record, statusCategory: string, statusReference: string>, taskId: string, workflows: table<created: string, description: string, id: string, isEditable: bool, loopedTransitionContainerLayout: record, name: string, scope: record, startPointLayout: record, statuses: list, taskId: string, transitions: list, updated: string, version: record>> {
@@ -14664,7 +15227,7 @@ export def "rest-3-workflows-update updateWorkflows" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Validate update workflows
@@ -14681,6 +15244,7 @@ export def "rest-3-workflows-update-validation validateUpdateWorkflows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   payload: record # The update workflows payload. — shape: {statuses?: list, workflows?: list}
   --validationOptions: record # The level of validation to return from the API. If no values are provided, the default would return `WARNING` and `ERROR` level validation results. — shape: {levels?: list}
 ]: any -> record<errors: table<additionalDetails: string, code: string, elementReference: record, level: string, message: string, type: string>> {
@@ -14692,7 +15256,7 @@ export def "rest-3-workflows-update-validation validateUpdateWorkflows" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all workflow schemes
@@ -14707,6 +15271,7 @@ export def "rest-3-workflowscheme list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool>> {
@@ -14716,7 +15281,7 @@ export def "rest-3-workflowscheme list" [
   let full_url = (build-url $base "/rest/api/3/workflowscheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create workflow scheme
@@ -14731,6 +15296,7 @@ export def "rest-3-workflowscheme createWorkflowScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --defaultWorkflow: string # The name of the default workflow for the workflow scheme. The default workflow has *All Unassigned Issue Types* assigned to it in Jira. If `defaultWorkflow` is not specified when creating a workflow scheme, it is set to *Jira Workflow (jira)*.
   --description: string # The description of the workflow scheme.
   --issueTypeMappings: record # The issue type to workflow mappings, where each mapping is an issue type ID and workflow name pair. Note that an issue type can only be mapped to one workflow in a workflow scheme.
@@ -14745,7 +15311,7 @@ export def "rest-3-workflowscheme createWorkflowScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get workflow scheme project associations
@@ -14760,6 +15326,7 @@ export def "rest-3-workflowscheme-project get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectId: list # The ID of a project to return the workflow schemes for. To include multiple projects, provide an ampersand-Jim: oneseparated list. For example, `projectId=10000&projectId=10001`.
 ]: nothing -> record<values: table<projectIds: list, workflowScheme: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -14768,7 +15335,7 @@ export def "rest-3-workflowscheme-project get" [
   let full_url = (build-url $base "/rest/api/3/workflowscheme/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign workflow scheme to project
@@ -14783,6 +15350,7 @@ export def "rest-3-workflowscheme-project assignSchemeToProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   projectId: string # The ID of the project.
   --workflowSchemeId: string # The ID of the workflow scheme. If the workflow scheme ID is `null`, the operation assigns the default workflow scheme.
 ]: any -> any {
@@ -14794,7 +15362,7 @@ export def "rest-3-workflowscheme-project assignSchemeToProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Switch workflow scheme for project
@@ -14810,6 +15378,7 @@ export def "rest-3-workflowscheme-project-switch switchWorkflowSchemeForProject"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --mappingsByIssueTypeOverride: list # The mappings for migrating issues from old statuses to new statuses when switching from one workflow scheme to another. This field is required if any statuses in the current project's workflows would no longer exist in the target workflow scheme. Each mapping defines how to update issues from an old status to the corresponding new status in the issue’s new workflow. — item shape: {issueTypeId?: string, statusMappings?: list}
   --projectId: string # The ID of the project to switch the workflow scheme for (e.g. 10001)
   --targetSchemeId: string # The ID of the target workflow scheme to switch to (e.g. 10002)
@@ -14822,7 +15391,7 @@ export def "rest-3-workflowscheme-project-switch switchWorkflowSchemeForProject"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk get workflow schemes
@@ -14837,6 +15406,7 @@ export def "rest-3-workflowscheme-read readWorkflowSchemes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projectIds: list # The list of project IDs to query. (nullable)
   --workflowSchemeIds: list # The list of workflow scheme IDs to query. (nullable)
 ]: any -> table<defaultWorkflow: record<description: string, id: string, name: string, version: record>, description: string, id: string, name: string, scope: record<project: record, type: string>, taskId: string, version: record<id: string, versionNumber: int>, workflowsForIssueTypes: list<record>> {
@@ -14848,7 +15418,7 @@ export def "rest-3-workflowscheme-read readWorkflowSchemes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update workflow scheme
@@ -14867,6 +15437,7 @@ export def "rest-3-workflowscheme-update updateSchemes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --defaultWorkflowId: string # The ID of the workflow for issue types without having a mapping defined in this workflow scheme. Only used in global-scoped workflow schemes. If the `defaultWorkflowId` isn't specified, this is set to *Jira Workflow (jira)*.
   description: string # The new description for this workflow scheme.
   id: string # The ID of this workflow scheme.
@@ -14884,7 +15455,7 @@ export def "rest-3-workflowscheme-update updateSchemes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get required status mappings for workflow scheme update
@@ -14900,6 +15471,7 @@ export def "rest-3-workflowscheme-update-mappings post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --defaultWorkflowId: string # The ID of the new default workflow for this workflow scheme. Only used in global-scoped workflow schemes. If it isn't specified, is set to *Jira Workflow (jira)*. (nullable)
   id: string # The ID of the workflow scheme.
   workflowsForIssueTypes: list # The new workflow to issue type mappings for this workflow scheme. — item shape: {issueTypeIds: list, workflowId: string}
@@ -14912,7 +15484,7 @@ export def "rest-3-workflowscheme-update-mappings post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete workflow scheme
@@ -14928,13 +15500,14 @@ export def "rest-3-workflowscheme delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get workflow scheme
@@ -14950,6 +15523,7 @@ export def "rest-3-workflowscheme get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --returnDraftIfExists: oneof<nothing, bool> # Returns the workflow scheme's draft rather than scheme itself, if set to true. If the workflow scheme does not have a draft, then the workflow scheme is returned. (default: false)
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -14958,7 +15532,7 @@ export def "rest-3-workflowscheme get" [
   let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Classic update workflow scheme
@@ -14974,6 +15548,7 @@ export def "rest-3-workflowscheme updateWorkflowScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --defaultWorkflow: string # The name of the default workflow for the workflow scheme. The default workflow has *All Unassigned Issue Types* assigned to it in Jira. If `defaultWorkflow` is not specified when creating a workflow scheme, it is set to *Jira Workflow (jira)*.
   --description: string # The description of the workflow scheme.
   --issueTypeMappings: record # The issue type to workflow mappings, where each mapping is an issue type ID and workflow name pair. Note that an issue type can only be mapped to one workflow in a workflow scheme.
@@ -14988,7 +15563,7 @@ export def "rest-3-workflowscheme updateWorkflowScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create draft workflow scheme
@@ -15004,13 +15579,14 @@ export def "rest-3-workflowscheme-createdraft createWorkflowSchemeDraftFromParen
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/createdraft")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete default workflow
@@ -15026,6 +15602,7 @@ export def "rest-3-workflowscheme-default delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --updateDraftIfNeeded: oneof<nothing, bool> # Set to true to create or update the draft of a workflow scheme and delete the mapping from the draft, when the workflow scheme cannot be edited. Defaults to `false`.
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -15034,7 +15611,7 @@ export def "rest-3-workflowscheme-default delete" [
   let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/default" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get default workflow
@@ -15050,6 +15627,7 @@ export def "rest-3-workflowscheme-default get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --returnDraftIfExists: oneof<nothing, bool> # Set to `true` to return the default workflow for the workflow scheme's draft rather than scheme itself. If the workflow scheme does not have a draft, then the default workflow for the workflow scheme is returned. (default: false)
 ]: nothing -> record<updateDraftIfNeeded: bool, workflow: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -15058,7 +15636,7 @@ export def "rest-3-workflowscheme-default get" [
   let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/default" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update default workflow
@@ -15074,6 +15652,7 @@ export def "rest-3-workflowscheme-default updateDefaultWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --updateDraftIfNeeded: oneof<nothing, bool> # Whether a draft workflow scheme is created or updated when updating an active workflow scheme. The draft is updated with the new default workflow. Defaults to `false`.
   workflow: string # The name of the workflow to set as the default workflow.
 ]: any -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
@@ -15085,7 +15664,7 @@ export def "rest-3-workflowscheme-default updateDefaultWorkflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete draft workflow scheme
@@ -15101,13 +15680,14 @@ export def "rest-3-workflowscheme-draft delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/draft")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get draft workflow scheme
@@ -15123,13 +15703,14 @@ export def "rest-3-workflowscheme-draft get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/draft")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update draft workflow scheme
@@ -15145,6 +15726,7 @@ export def "rest-3-workflowscheme-draft updateWorkflowSchemeDraft" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --defaultWorkflow: string # The name of the default workflow for the workflow scheme. The default workflow has *All Unassigned Issue Types* assigned to it in Jira. If `defaultWorkflow` is not specified when creating a workflow scheme, it is set to *Jira Workflow (jira)*.
   --description: string # The description of the workflow scheme.
   --issueTypeMappings: record # The issue type to workflow mappings, where each mapping is an issue type ID and workflow name pair. Note that an issue type can only be mapped to one workflow in a workflow scheme.
@@ -15159,7 +15741,7 @@ export def "rest-3-workflowscheme-draft updateWorkflowSchemeDraft" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete draft default workflow
@@ -15175,13 +15757,14 @@ export def "rest-3-workflowscheme-draft-default delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/draft/default")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get draft default workflow
@@ -15197,13 +15780,14 @@ export def "rest-3-workflowscheme-draft-default get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<updateDraftIfNeeded: bool, workflow: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/draft/default")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update draft default workflow
@@ -15219,6 +15803,7 @@ export def "rest-3-workflowscheme-draft-default updateDraftDefaultWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --updateDraftIfNeeded: oneof<nothing, bool> # Whether a draft workflow scheme is created or updated when updating an active workflow scheme. The draft is updated with the new default workflow. Defaults to `false`.
   workflow: string # The name of the workflow to set as the default workflow.
 ]: any -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
@@ -15230,7 +15815,7 @@ export def "rest-3-workflowscheme-draft-default updateDraftDefaultWorkflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete workflow for issue type in draft workflow scheme
@@ -15247,13 +15832,14 @@ export def "rest-3-workflowscheme-draft-issuetype delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/draft/issuetype/($issueType)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get workflow for issue type in draft workflow scheme
@@ -15270,13 +15856,14 @@ export def "rest-3-workflowscheme-draft-issuetype get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<issueType: string, updateDraftIfNeeded: bool, workflow: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/draft/issuetype/($issueType)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set workflow for issue type in draft workflow scheme
@@ -15293,6 +15880,7 @@ export def "rest-3-workflowscheme-draft-issuetype setWorkflowSchemeDraftIssueTyp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-issueType: string # The ID of the issue type. Not required if updating the issue type-workflow mapping.
   --updateDraftIfNeeded: oneof<nothing, bool> # Set to true to create or update the draft of a workflow scheme and update the mapping in the draft, when the workflow scheme cannot be edited. Defaults to `false`. Only applicable when updating the workflow-issue types mapping.
   --workflow: string # The name of the workflow.
@@ -15305,7 +15893,7 @@ export def "rest-3-workflowscheme-draft-issuetype setWorkflowSchemeDraftIssueTyp
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Publish draft workflow scheme
@@ -15322,6 +15910,7 @@ export def "rest-3-workflowscheme-draft-publish publishDraftWorkflowScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --validateOnly: oneof<nothing, bool> # Whether the request only performs a validation. (default: false)
   --statusMappings: list # Mappings of statuses to new statuses for issue types. — item shape: {issueTypeId: string, newStatusId: string, statusId: string}
 ]: any -> any {
@@ -15334,7 +15923,7 @@ export def "rest-3-workflowscheme-draft-publish publishDraftWorkflowScheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete issue types for workflow in draft workflow scheme
@@ -15350,6 +15939,7 @@ export def "rest-3-workflowscheme-draft-workflow delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --workflowName: string # The name of the workflow.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -15358,7 +15948,7 @@ export def "rest-3-workflowscheme-draft-workflow delete" [
   let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/draft/workflow" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issue types for workflows in draft workflow scheme
@@ -15374,6 +15964,7 @@ export def "rest-3-workflowscheme-draft-workflow get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --workflowName: string # The name of a workflow in the scheme. Limits the results to the workflow-issue type mapping for the specified workflow.
 ]: nothing -> record<defaultMapping: bool, issueTypes: list<string>, updateDraftIfNeeded: bool, workflow: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -15382,7 +15973,7 @@ export def "rest-3-workflowscheme-draft-workflow get" [
   let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/draft/workflow" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set issue types for workflow in workflow scheme
@@ -15398,6 +15989,7 @@ export def "rest-3-workflowscheme-draft-workflow updateDraftWorkflowMapping" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --workflowName: string # The name of the workflow.
   --defaultMapping: oneof<nothing, bool> # Whether the workflow is the default workflow for the workflow scheme.
   --issueTypes: list # The list of issue type IDs.
@@ -15413,7 +16005,7 @@ export def "rest-3-workflowscheme-draft-workflow updateDraftWorkflowMapping" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete workflow for issue type in workflow scheme
@@ -15430,6 +16022,7 @@ export def "rest-3-workflowscheme-issuetype delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --updateDraftIfNeeded: oneof<nothing, bool> # Set to true to create or update the draft of a workflow scheme and update the mapping in the draft, when the workflow scheme cannot be edited. Defaults to `false`. (default: false)
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -15438,7 +16031,7 @@ export def "rest-3-workflowscheme-issuetype delete" [
   let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/issuetype/($issueType)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get workflow for issue type in workflow scheme
@@ -15455,6 +16048,7 @@ export def "rest-3-workflowscheme-issuetype get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --returnDraftIfExists: oneof<nothing, bool> # Returns the mapping from the workflow scheme's draft rather than the workflow scheme, if set to true. If no draft exists, the mapping from the workflow scheme is returned. (default: false)
 ]: nothing -> record<issueType: string, updateDraftIfNeeded: bool, workflow: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -15463,7 +16057,7 @@ export def "rest-3-workflowscheme-issuetype get" [
   let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/issuetype/($issueType)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set workflow for issue type in workflow scheme
@@ -15480,6 +16074,7 @@ export def "rest-3-workflowscheme-issuetype setWorkflowSchemeIssueType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-issueType: string # The ID of the issue type. Not required if updating the issue type-workflow mapping.
   --updateDraftIfNeeded: oneof<nothing, bool> # Set to true to create or update the draft of a workflow scheme and update the mapping in the draft, when the workflow scheme cannot be edited. Defaults to `false`. Only applicable when updating the workflow-issue types mapping.
   --workflow: string # The name of the workflow.
@@ -15492,7 +16087,7 @@ export def "rest-3-workflowscheme-issuetype setWorkflowSchemeIssueType" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete issue types for workflow in workflow scheme
@@ -15508,6 +16103,7 @@ export def "rest-3-workflowscheme-workflow delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --workflowName: string # The name of the workflow.
   --updateDraftIfNeeded: oneof<nothing, bool> # Set to true to create or update the draft of a workflow scheme and delete the mapping from the draft, when the workflow scheme cannot be edited. Defaults to `false`. (default: false)
 ]: nothing -> any {
@@ -15517,7 +16113,7 @@ export def "rest-3-workflowscheme-workflow delete" [
   let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/workflow" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issue types for workflows in workflow scheme
@@ -15533,6 +16129,7 @@ export def "rest-3-workflowscheme-workflow get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --workflowName: string # The name of a workflow in the scheme. Limits the results to the workflow-issue type mapping for the specified workflow.
   --returnDraftIfExists: oneof<nothing, bool> # Returns the mapping from the workflow scheme's draft rather than the workflow scheme, if set to true. If no draft exists, the mapping from the workflow scheme is returned. (default: false)
 ]: nothing -> record<defaultMapping: bool, issueTypes: list<string>, updateDraftIfNeeded: bool, workflow: string> {
@@ -15542,7 +16139,7 @@ export def "rest-3-workflowscheme-workflow get" [
   let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/workflow" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set issue types for workflow in workflow scheme
@@ -15558,6 +16155,7 @@ export def "rest-3-workflowscheme-workflow updateWorkflowMapping" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --workflowName: string # The name of the workflow.
   --defaultMapping: oneof<nothing, bool> # Whether the workflow is the default workflow for the workflow scheme.
   --issueTypes: list # The list of issue type IDs.
@@ -15573,7 +16171,7 @@ export def "rest-3-workflowscheme-workflow updateWorkflowMapping" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get projects which are using a given workflow scheme
@@ -15589,6 +16187,7 @@ export def "rest-3-workflowscheme-project-usages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --nextPageToken: string # The cursor for pagination
   --maxResults: int # The maximum number of results to return. Must be an integer between 1 and 200. (format: int32, default: 50)
 ]: nothing -> record<projects: record<nextPageToken: string, values: list<record>>, workflowSchemeId: string> {
@@ -15598,7 +16197,7 @@ export def "rest-3-workflowscheme-project-usages get" [
   let full_url = (build-url $base $"/rest/api/3/workflowscheme/($workflowSchemeId)/projectUsages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get IDs of deleted worklogs
@@ -15613,6 +16212,7 @@ export def "rest-3-worklog-deleted get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since: int # The date and time, as a UNIX timestamp in milliseconds, after which deleted worklogs are returned. (format: int64, default: 0)
 ]: nothing -> record<lastPage: bool, nextPage: string, self: string, since: int, until: int, values: table<properties: list, updatedTime: int, worklogId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -15621,7 +16221,7 @@ export def "rest-3-worklog-deleted get" [
   let full_url = (build-url $base "/rest/api/3/worklog/deleted" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get worklogs
@@ -15636,6 +16236,7 @@ export def "rest-3-worklog-list post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information about worklogs in the response. This parameter accepts `properties` that returns the properties of each worklog. (default: )
   ids: list # A list of worklog IDs.
 ]: any -> table<author: record<accountId: string, accountType: string, active: bool, avatarUrls: record, displayName: string, emailAddress: string, key: string, name: string, self: string, timeZone: string>, comment: any, created: string, id: string, issueId: string, properties: list<record>, self: string, started: string, timeSpent: string, timeSpentSeconds: int, updateAuthor: record<accountId: string, accountType: string, active: bool, avatarUrls: record, displayName: string, emailAddress: string, key: string, name: string, self: string, timeZone: string>, updated: string, visibility: record<identifier: string, type: string, value: string>> {
@@ -15648,7 +16249,7 @@ export def "rest-3-worklog-list post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get IDs of updated worklogs
@@ -15663,6 +16264,7 @@ export def "rest-3-worklog-updated get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since: int # The date and time, as a UNIX timestamp in milliseconds, after which updated worklogs are returned. (format: int64, default: 0)
   --expand: string # Use [expand](#expansion) to include additional information about worklogs in the response. This parameter accepts `properties` that returns the properties of each worklog. (default: )
 ]: nothing -> record<lastPage: bool, nextPage: string, self: string, since: int, until: int, values: table<properties: list, updatedTime: int, worklogId: int>> {
@@ -15672,7 +16274,7 @@ export def "rest-3-worklog-updated get" [
   let full_url = (build-url $base "/rest/api/3/worklog/updated" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get app properties
@@ -15688,13 +16290,14 @@ export def "rest-atlassian-connect-1-addons-properties list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/atlassian-connect/1/addons/($addonKey)/properties")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete app property
@@ -15711,13 +16314,14 @@ export def "rest-atlassian-connect-1-addons-properties delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/atlassian-connect/1/addons/($addonKey)/properties/($propertyKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get app property
@@ -15734,13 +16338,14 @@ export def "rest-atlassian-connect-1-addons-properties get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/atlassian-connect/1/addons/($addonKey)/properties/($propertyKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set app property
@@ -15757,6 +16362,7 @@ export def "rest-atlassian-connect-1-addons-properties put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<message: string, statusCode: int> {
   let input = $in
@@ -15766,7 +16372,7 @@ export def "rest-atlassian-connect-1-addons-properties put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove modules
@@ -15781,6 +16387,7 @@ export def "rest-atlassian-connect-1-app-module-dynamic delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --moduleKey: list # The key of the module to remove. To include multiple module keys, provide multiple copies of this parameter. For example, `moduleKey=dynamic-attachment-entity-property&moduleKey=dynamic-select-field`. Nonexistent keys are ignored.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15789,7 +16396,7 @@ export def "rest-atlassian-connect-1-app-module-dynamic delete" [
   let full_url = (build-url $base "/rest/atlassian-connect/1/app/module/dynamic" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get modules
@@ -15804,13 +16411,14 @@ export def "rest-atlassian-connect-1-app-module-dynamic get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<modules: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/atlassian-connect/1/app/module/dynamic")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Register modules
@@ -15825,6 +16433,7 @@ export def "rest-atlassian-connect-1-app-module-dynamic post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   modules: list # A list of app modules in the same format as the `modules` property in the [app descriptor](https://developer.atlassian.com/cloud/jira/platform/app-descriptor/).
 ]: any -> any {
   let input = $in
@@ -15835,7 +16444,7 @@ export def "rest-atlassian-connect-1-app-module-dynamic post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk update custom field value
@@ -15851,6 +16460,7 @@ export def "rest-atlassian-connect-1-migration-field put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Atlassian-Transfer-Id: string # The ID of the transfer.
   --updateValueList: list # The list of custom field update details. — item shape: {_type: "StringIssueField"|"NumberIssueField"|"RichTextIssueField"|"SingleSelectIssueField"|"MultiSelectIssueField"|"TextIssueField", fieldID: int, issueID: int, number?: float, optionID?: string, richText?: string, string?: string, text?: string}
 ]: any -> any {
@@ -15864,7 +16474,7 @@ export def "rest-atlassian-connect-1-migration-field put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk update entity properties
@@ -15880,6 +16490,7 @@ export def "rest-atlassian-connect-1-migration-properties put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Atlassian-Transfer-Id: string # The app migration transfer ID.
   --body: record
 ]: any -> any {
@@ -15892,7 +16503,7 @@ export def "rest-atlassian-connect-1-migration-properties put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get workflow transition rule configurations
@@ -15907,6 +16518,7 @@ export def "rest-atlassian-connect-1-migration-workflow-rule-search post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Atlassian-Transfer-Id: string # The app migration transfer ID.
   --expand: string # Use expand to include additional information in the response. This parameter accepts `transition` which, for each rule, returns information about the transition the rule is assigned to. (e.g. transition)
   ruleIds: list # The list of workflow rule IDs.
@@ -15922,7 +16534,7 @@ export def "rest-atlassian-connect-1-migration-workflow-rule-search post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Connect issue field migration task
@@ -15939,13 +16551,14 @@ export def "rest-atlassian-connect-1-migration-task get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, elapsedRuntime: int, finished: string, id: string, lastUpdate: string, message: string, progress: int, result: any, self: string, started: string, status: string, submitted: string, submittedBy: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/atlassian-connect/1/migration/($connectKey)/($jiraIssueFieldsKey)/task")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Submit Connect issue field migration task
@@ -15962,13 +16575,14 @@ export def "rest-atlassian-connect-1-migration-task post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/atlassian-connect/1/migration/($connectKey)/($jiraIssueFieldsKey)/task")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the attributes of service registries
@@ -15983,6 +16597,7 @@ export def "rest-atlassian-connect-1-service-registry get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --serviceIds: list # The ID of the services (the strings starting with "b:" need to be decoded in Base64). (e.g. ["ari:cloud:graph::service/ca075ed7-6ea7-4563-acb3-000000000000/f51d7252-61e0-11ee-b94d-000000000000", "ari:cloud:graph::service/ca075ed7-6ea7-4563-acb3-000000000000/f51d7252-61e0-11ee-b94d-000000000001"])
 ]: nothing -> table<description: string, id: string, name: string, organizationId: string, revision: string, serviceTier: record<description: string, id: string, level: int, name: string, nameKey: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15991,7 +16606,7 @@ export def "rest-atlassian-connect-1-service-registry get" [
   let full_url = (build-url $base "/rest/atlassian-connect/1/service-registry" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get app property keys (Forge)
@@ -16006,13 +16621,14 @@ export def "rest-forge-1-app-properties list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/forge/1/app/properties")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete app property (Forge)
@@ -16028,13 +16644,14 @@ export def "rest-forge-1-app-properties delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/forge/1/app/properties/($propertyKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get app property (Forge)
@@ -16050,13 +16667,14 @@ export def "rest-forge-1-app-properties get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/forge/1/app/properties/($propertyKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set app property (Forge)
@@ -16072,6 +16690,7 @@ export def "rest-forge-1-app-properties put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<message: string, statusCode: int> {
   let input = $in
@@ -16081,7 +16700,7 @@ export def "rest-forge-1-app-properties put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get worklogs by issue id and worklog id
@@ -16097,6 +16716,7 @@ export def "rest-internal-latest-worklog-bulk post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --requests: list # A list of issue and worklog ID pairs. — item shape: {issueId?: int, worklogId?: int}
 ]: any -> record<worklogs: table<issueId: int, worklogId: int>> {
   let input = $in
@@ -16107,5 +16727,5 @@ export def "rest-internal-latest-worklog-bulk post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

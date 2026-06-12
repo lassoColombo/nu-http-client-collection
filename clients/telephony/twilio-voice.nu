@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -71,7 +72,7 @@ def StatusCallbackMethod-completer [] { ["GET" "POST"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "archives-calls DeleteArchivedCall" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -106,13 +107,14 @@ export def "archives-calls DeleteArchivedCall" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
   let full_url = (build-url $base $"/v1/Archives/($Date)/Calls/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/ByocTrunks
@@ -126,6 +128,7 @@ export def "byoc-trunks CreateByocTrunk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # A descriptive string that you create to describe the resource. It is not unique and can be up to 255 characters long.
   --VoiceUrl: string # The URL we should call when the BYOC Trunk receives a call. (format: uri)
   --VoiceMethod: string@VoiceMethod-completer # The HTTP method we should use to call `voice_url`. Can be: `GET` or `POST`. (format: http-method)
@@ -145,7 +148,7 @@ export def "byoc-trunks CreateByocTrunk" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # GET /v1/ByocTrunks
@@ -159,6 +162,7 @@ export def "byoc-trunks ListByocTrunk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -169,7 +173,7 @@ export def "byoc-trunks ListByocTrunk" [
   let full_url = (build-url $base "/v1/ByocTrunks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/ByocTrunks/{Sid}
@@ -184,13 +188,14 @@ export def "byoc-trunks FetchByocTrunk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, sid: string, friendly_name: string, voice_url: string, voice_method: string, voice_fallback_url: string, voice_fallback_method: string, status_callback_url: string, status_callback_method: string, cnam_lookup_enabled: bool, connection_policy_sid: string, from_domain_sid: string, date_created: string, date_updated: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
   let full_url = (build-url $base $"/v1/ByocTrunks/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/ByocTrunks/{Sid}
@@ -205,6 +210,7 @@ export def "byoc-trunks UpdateByocTrunk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # A descriptive string that you create to describe the resource. It is not unique and can be up to 255 characters long.
   --VoiceUrl: string # The URL we should call when the BYOC Trunk receives a call. (format: uri)
   --VoiceMethod: string@VoiceMethod-completer # The HTTP method we should use to call `voice_url` (format: http-method)
@@ -224,7 +230,7 @@ export def "byoc-trunks UpdateByocTrunk" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # DELETE /v1/ByocTrunks/{Sid}
@@ -239,13 +245,14 @@ export def "byoc-trunks DeleteByocTrunk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
   let full_url = (build-url $base $"/v1/ByocTrunks/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/ConnectionPolicies
@@ -259,6 +266,7 @@ export def "connection-policies CreateConnectionPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # A descriptive string that you create to describe the resource. It is not unique and can be up to 255 characters long.
 ]: any -> record<account_sid: string, sid: string, friendly_name: string, date_created: string, date_updated: string, url: string, links: record> {
   let input = $in
@@ -269,7 +277,7 @@ export def "connection-policies CreateConnectionPolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # GET /v1/ConnectionPolicies
@@ -283,6 +291,7 @@ export def "connection-policies ListConnectionPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -293,7 +302,7 @@ export def "connection-policies ListConnectionPolicy" [
   let full_url = (build-url $base "/v1/ConnectionPolicies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/ConnectionPolicies/{Sid}
@@ -308,13 +317,14 @@ export def "connection-policies FetchConnectionPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, sid: string, friendly_name: string, date_created: string, date_updated: string, url: string, links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
   let full_url = (build-url $base $"/v1/ConnectionPolicies/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/ConnectionPolicies/{Sid}
@@ -329,6 +339,7 @@ export def "connection-policies UpdateConnectionPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # A descriptive string that you create to describe the resource. It is not unique and can be up to 255 characters long.
 ]: any -> record<account_sid: string, sid: string, friendly_name: string, date_created: string, date_updated: string, url: string, links: record> {
   let input = $in
@@ -339,7 +350,7 @@ export def "connection-policies UpdateConnectionPolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # DELETE /v1/ConnectionPolicies/{Sid}
@@ -354,13 +365,14 @@ export def "connection-policies DeleteConnectionPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
   let full_url = (build-url $base $"/v1/ConnectionPolicies/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/ConnectionPolicies/{ConnectionPolicySid}/Targets
@@ -375,6 +387,7 @@ export def "connection-policies-targets CreateConnectionPolicyTarget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Target: string # The SIP address you want Twilio to route your calls to. This must be a `sip:` schema. `sips` is NOT supported. (format: uri)
   --FriendlyName: string # A descriptive string that you create to describe the resource. It is not unique and can be up to 255 characters long.
   --Priority: int # The relative importance of the target. Can be an integer from 0 to 65535, inclusive, and the default is 10. The lowest number represents the most important target.
@@ -389,7 +402,7 @@ export def "connection-policies-targets CreateConnectionPolicyTarget" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # GET /v1/ConnectionPolicies/{ConnectionPolicySid}/Targets
@@ -404,6 +417,7 @@ export def "connection-policies-targets ListConnectionPolicyTarget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -414,7 +428,7 @@ export def "connection-policies-targets ListConnectionPolicyTarget" [
   let full_url = (build-url $base $"/v1/ConnectionPolicies/($ConnectionPolicySid)/Targets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/ConnectionPolicies/{ConnectionPolicySid}/Targets/{Sid}
@@ -430,13 +444,14 @@ export def "connection-policies-targets FetchConnectionPolicyTarget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, connection_policy_sid: string, sid: string, friendly_name: string, target: string, priority: int, weight: int, enabled: bool, date_created: string, date_updated: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
   let full_url = (build-url $base $"/v1/ConnectionPolicies/($ConnectionPolicySid)/Targets/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/ConnectionPolicies/{ConnectionPolicySid}/Targets/{Sid}
@@ -452,6 +467,7 @@ export def "connection-policies-targets UpdateConnectionPolicyTarget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # A descriptive string that you create to describe the resource. It is not unique and can be up to 255 characters long.
   --Target: string # The SIP address you want Twilio to route your calls to. This must be a `sip:` schema. `sips` is NOT supported. (format: uri)
   --Priority: int # The relative importance of the target. Can be an integer from 0 to 65535, inclusive. The lowest number represents the most important target.
@@ -466,7 +482,7 @@ export def "connection-policies-targets UpdateConnectionPolicyTarget" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # DELETE /v1/ConnectionPolicies/{ConnectionPolicySid}/Targets/{Sid}
@@ -482,13 +498,14 @@ export def "connection-policies-targets DeleteConnectionPolicyTarget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
   let full_url = (build-url $base $"/v1/ConnectionPolicies/($ConnectionPolicySid)/Targets/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve voice dialing country permissions identified by the given ISO country code
@@ -504,13 +521,14 @@ export def "dialing-permissions-countries FetchDialingPermissionsCountry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<iso_code: string, name: string, continent: string, country_codes: list<string>, low_risk_numbers_enabled: bool, high_risk_special_numbers_enabled: bool, high_risk_tollfraud_numbers_enabled: bool, url: string, links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
   let full_url = (build-url $base $"/v1/DialingPermissions/Countries/($IsoCode)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve all voice dialing country permissions for this account
@@ -525,6 +543,7 @@ export def "dialing-permissions-countries ListDialingPermissionsCountry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --IsoCode: string # Filter to retrieve the country permissions by specifying the [ISO country code](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) (format: iso-country-code)
   --Continent: string # Filter to retrieve the country permissions by specifying the continent
   --CountryCode: string # Filter the results by specified [country codes](https://www.itu.int/itudoc/itu-t/ob-lists/icc/e164_763.html)
@@ -541,7 +560,7 @@ export def "dialing-permissions-countries ListDialingPermissionsCountry" [
   let full_url = (build-url $base "/v1/DialingPermissions/Countries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a bulk update request to change voice dialing country permissions of one or more countries identified by the corresponding [ISO country code](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2)
@@ -556,6 +575,7 @@ export def "dialing-permissions-bulk-country-updates CreateDialingPermissionsCou
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   UpdateRequest: string # URL encoded JSON array of update objects. example : `[ { "iso_code": "GB", "low_risk_numbers_enabled": "true", "high_risk_special_numbers_enabled":"true", "high_risk_tollfraud_numbers_enabled": "false" } ]`
 ]: any -> record<update_count: int, update_request: string> {
   let input = $in
@@ -566,7 +586,7 @@ export def "dialing-permissions-bulk-country-updates CreateDialingPermissionsCou
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Fetch the high-risk special services prefixes from the country resource corresponding to the [ISO country code](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2)
@@ -582,6 +602,7 @@ export def "dialing-permissions-countries-high-risk-special-prefixes ListDialing
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -592,7 +613,7 @@ export def "dialing-permissions-countries-high-risk-special-prefixes ListDialing
   let full_url = (build-url $base $"/v1/DialingPermissions/Countries/($IsoCode)/HighRiskSpecialPrefixes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve voice dialing permissions inheritance for the sub-account
@@ -607,13 +628,14 @@ export def "settings FetchDialingPermissionsSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<dialing_permissions_inheritance: bool, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
   let full_url = (build-url $base "/v1/Settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update voice dialing permissions inheritance for the sub-account
@@ -628,6 +650,7 @@ export def "settings UpdateDialingPermissionsSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --DialingPermissionsInheritance: oneof<nothing, bool> # `true` for the sub-account to inherit voice dialing permissions from the Master Project; otherwise `false`.
 ]: any -> record<dialing_permissions_inheritance: bool, url: string> {
   let input = $in
@@ -638,7 +661,7 @@ export def "settings UpdateDialingPermissionsSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # POST /v1/IpRecords
@@ -652,6 +675,7 @@ export def "ip-records CreateIpRecord" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   IpAddress: string # An IP address in dotted decimal notation, IPv4 only.
   --FriendlyName: string # A descriptive string that you create to describe the resource. It is not unique and can be up to 255 characters long.
   --CidrPrefixLength: int # An integer representing the length of the [CIDR](https://tools.ietf.org/html/rfc4632) prefix to use with this IP address. By default the entire IP address is used, which for IPv4 is value 32.
@@ -664,7 +688,7 @@ export def "ip-records CreateIpRecord" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # GET /v1/IpRecords
@@ -678,6 +702,7 @@ export def "ip-records ListIpRecord" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -688,7 +713,7 @@ export def "ip-records ListIpRecord" [
   let full_url = (build-url $base "/v1/IpRecords" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/IpRecords/{Sid}
@@ -703,13 +728,14 @@ export def "ip-records FetchIpRecord" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, sid: string, friendly_name: string, ip_address: string, cidr_prefix_length: int, date_created: string, date_updated: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
   let full_url = (build-url $base $"/v1/IpRecords/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/IpRecords/{Sid}
@@ -724,6 +750,7 @@ export def "ip-records UpdateIpRecord" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # A descriptive string that you create to describe the resource. It is not unique and can be up to 255 characters long.
 ]: any -> record<account_sid: string, sid: string, friendly_name: string, ip_address: string, cidr_prefix_length: int, date_created: string, date_updated: string, url: string> {
   let input = $in
@@ -734,7 +761,7 @@ export def "ip-records UpdateIpRecord" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # DELETE /v1/IpRecords/{Sid}
@@ -749,13 +776,14 @@ export def "ip-records DeleteIpRecord" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
   let full_url = (build-url $base $"/v1/IpRecords/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/SourceIpMappings
@@ -769,6 +797,7 @@ export def "source-ip-mappings CreateSourceIpMapping" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   IpRecordSid: string # The Twilio-provided string that uniquely identifies the IP Record resource to map from.
   SipDomainSid: string # The SID of the SIP Domain that the IP Record should be mapped to.
 ]: any -> record<sid: string, ip_record_sid: string, sip_domain_sid: string, date_created: string, date_updated: string, url: string> {
@@ -780,7 +809,7 @@ export def "source-ip-mappings CreateSourceIpMapping" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # GET /v1/SourceIpMappings
@@ -794,6 +823,7 @@ export def "source-ip-mappings ListSourceIpMapping" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -804,7 +834,7 @@ export def "source-ip-mappings ListSourceIpMapping" [
   let full_url = (build-url $base "/v1/SourceIpMappings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /v1/SourceIpMappings/{Sid}
@@ -819,13 +849,14 @@ export def "source-ip-mappings FetchSourceIpMapping" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<sid: string, ip_record_sid: string, sip_domain_sid: string, date_created: string, date_updated: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
   let full_url = (build-url $base $"/v1/SourceIpMappings/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /v1/SourceIpMappings/{Sid}
@@ -840,6 +871,7 @@ export def "source-ip-mappings UpdateSourceIpMapping" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   SipDomainSid: string # The SID of the SIP Domain that the IP Record should be mapped to.
 ]: any -> record<sid: string, ip_record_sid: string, sip_domain_sid: string, date_created: string, date_updated: string, url: string> {
   let input = $in
@@ -850,7 +882,7 @@ export def "source-ip-mappings UpdateSourceIpMapping" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # DELETE /v1/SourceIpMappings/{Sid}
@@ -865,11 +897,12 @@ export def "source-ip-mappings DeleteSourceIpMapping" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://voice.twilio.com")
   let full_url = (build-url $base $"/v1/SourceIpMappings/($Sid)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

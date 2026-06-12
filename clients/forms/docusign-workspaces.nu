@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -70,7 +71,7 @@ def sort-completer [] { ["email_asc" "email_desc" "first_name_asc" "first_name_d
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-workspaces-brand get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -105,13 +106,14 @@ export def "accounts-workspaces-brand get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<brand_id: string, brand_name: string, brand_company: string, colors: table<name: string, value: string>, logos: record<primary: string, secondary: string, email: string>, brand_languages: list<string>, default_brand_language: string, is_sending_default: bool, is_signing_default: bool, primary_logo_id: string, secondary_logo_id: string, email_logo_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($accountId)/workspaces/($workspaceId)/brand")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates brand for an existing workspace
@@ -128,6 +130,7 @@ export def "accounts-workspaces-brand updateWorkspaceBrand" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --brand-id: string # A GUID value that identifies a brand. For more information, see <a href="https://developers.docusign.com/docs/esign-rest-api/esign101/concepts/branding/">Branding</a> (nullable, format: uuid)
 ]: any -> record<brand_id: string, brand_name: string, brand_company: string, colors: table<name: string, value: string>, logos: record<primary: string, secondary: string, email: string>, brand_languages: list<string>, default_brand_language: string, is_sending_default: bool, is_signing_default: bool, primary_logo_id: string, secondary_logo_id: string, email_logo_id: string> {
   let input = $in
@@ -138,7 +141,7 @@ export def "accounts-workspaces-brand updateWorkspaceBrand" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get documents in the workspace accessible to the calling user
@@ -155,6 +158,7 @@ export def "accounts-workspaces-documents list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # Number of documents to return. Defaults to the maximum which is 100 (format: int32)
   --start-position: int # Position of the first item in the total results. Defaults to 0 (format: int32)
   --name-filter: string # Filter documents where Name contains the filter. Defaults to null, to not filter
@@ -165,7 +169,7 @@ export def "accounts-workspaces-documents list" [
   let full_url = (build-url $base $"/v1/accounts/($accountId)/workspaces/($workspaceId)/documents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a document to a workspace via file contents upload
@@ -182,6 +186,7 @@ export def "accounts-workspaces-documents addWorkspaceDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # The file within the multipart/form-data (format: binary)
 ]: any -> record<document_id: string, name: string, owner_id: string, size: int, created_date: string, last_updated_date: string, owner: record<user_id: string, first_name: string, last_name: string>> {
   let input = $in
@@ -192,7 +197,7 @@ export def "accounts-workspaces-documents addWorkspaceDocument" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get information about the document
@@ -210,13 +215,14 @@ export def "accounts-workspaces-documents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<workspace_id: string, document_id: string, name: string, owner_id: string, size: int, created_date: string, content_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($accountId)/workspaces/($workspaceId)/documents/($documentId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a document in the workspace
@@ -234,13 +240,14 @@ export def "accounts-workspaces-documents delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($accountId)/workspaces/($workspaceId)/documents/($documentId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the file contents of the document
@@ -258,13 +265,14 @@ export def "accounts-workspaces-documents-contents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($accountId)/workspaces/($workspaceId)/documents/($documentId)/contents")
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new upload request within a workspace
@@ -282,6 +290,7 @@ export def "accounts-workspaces-upload-requests createWorkspaceUploadRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the upload request (nullable)
   --description: string # The description of the upload request (nullable)
   due_date: string # The due date for the upload request (format: date-time)
@@ -296,7 +305,7 @@ export def "accounts-workspaces-upload-requests createWorkspaceUploadRequest" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets upload requests within a workspace
@@ -313,13 +322,14 @@ export def "accounts-workspaces-upload-requests list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<upload_request_id: string, workspace_id: string, name: string, description: string, upload_request_owner: record, status: string, documents: list, assignments: list, created_date: string, updated_date: string, due_date: string, sent_date: string, completed_date: string, can_view: bool, can_edit: bool, can_delete: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($accountId)/workspaces/($workspaceId)/upload-requests")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets details for a specific upload request
@@ -337,13 +347,14 @@ export def "accounts-workspaces-upload-requests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<upload_request_id: string, workspace_id: string, name: string, description: string, upload_request_owner: record<user_id: string>, status: string, documents: table<document_name: string, document_id: string>, assignments: table<assignee_user_id: string, upload_request_responsibility_type_id: string>, created_date: string, updated_date: string, due_date: string, sent_date: string, completed_date: string, can_view: bool, can_edit: bool, can_delete: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($accountId)/workspaces/($workspaceId)/upload-requests/($uploadRequestId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a specific upload request
@@ -364,6 +375,7 @@ export def "accounts-workspaces-upload-requests updateWorkspaceUploadRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --upload-request-id: string # The ID of the upload request (nullable, format: uuid)
   --workspace-id: string # The ID of the workspace (nullable, format: uuid)
   --name: string # The name of the upload request (editable) (nullable)
@@ -389,7 +401,7 @@ export def "accounts-workspaces-upload-requests updateWorkspaceUploadRequest" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a specific upload request
@@ -407,13 +419,14 @@ export def "accounts-workspaces-upload-requests delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($accountId)/workspaces/($workspaceId)/upload-requests/($uploadRequestId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a document to an upload request via file upload
@@ -431,6 +444,7 @@ export def "accounts-workspaces-upload-requests-documents addWorkspaceUploadRequ
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # The file within the multipart/form-data (format: binary)
 ]: any -> record<upload_request_id: string, document_id: string, document_name: string> {
   let input = $in
@@ -441,7 +455,7 @@ export def "accounts-workspaces-upload-requests-documents addWorkspaceUploadRequ
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Complete an upload request
@@ -459,13 +473,14 @@ export def "accounts-workspaces-upload-requests-actions-complete completeWorkspa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($accountId)/workspaces/($workspaceId)/upload-requests/($uploadRequestId)/actions/complete")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the list of users in the given workspace
@@ -482,6 +497,7 @@ export def "accounts-workspaces-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # Number of workspace users to return. Defaults to the maximum which is 100. (format: int32)
   --start-position: int # Position of the first item in the total results. Defaults to 0. (format: int32)
   --filter: string # Returns workspace users filtered by Name and Email
@@ -493,7 +509,7 @@ export def "accounts-workspaces-users get" [
   let full_url = (build-url $base $"/v1/accounts/($accountId)/workspaces/($workspaceId)/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a user to the workspace by email address
@@ -510,6 +526,7 @@ export def "accounts-workspaces-users addWorkspaceUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The email address of the added user. May be an internal user to the account or an external user
   first_name: string # The first name of the added user
   last_name: string # The last name of the added user
@@ -523,7 +540,7 @@ export def "accounts-workspaces-users addWorkspaceUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the specified user's role
@@ -541,6 +558,7 @@ export def "accounts-workspaces-users updateWorkspaceUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --role-id: string # The ID of the role to update to (format: uuid)
 ]: any -> record<role_id: string> {
   let input = $in
@@ -551,7 +569,7 @@ export def "accounts-workspaces-users updateWorkspaceUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revokes the specified user's access to the workspace
@@ -569,6 +587,7 @@ export def "accounts-workspaces-users-actions-revoke-access revokeWorkspaceUserA
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --revocation-date: string # The optional date in the future to initiate the revocation. If not specified, the revocation will be immediate (nullable, format: date-time)
 ]: any -> any {
   let input = $in
@@ -579,7 +598,7 @@ export def "accounts-workspaces-users-actions-revoke-access revokeWorkspaceUserA
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Restores the specified user's access to the workspace
@@ -597,13 +616,14 @@ export def "accounts-workspaces-users-actions-restore-access restoreWorkspaceUse
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($accountId)/workspaces/($workspaceId)/users/($userId)/actions/restore-access")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets workspaces available to the calling user
@@ -619,6 +639,7 @@ export def "accounts-workspaces list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # Number of workspaces to return. Defaults to the maximum which is 100 (format: int32)
   --start-position: int # Position of the first item in the total results. Defaults to 0 (format: int32)
 ]: nothing -> record<workspaces: table<workspace_id: string, name: string, created_date: string, created_by_user_id: string>, result_set_size: int, start_position: int, end_position: int, total_row_count: int> {
@@ -628,7 +649,7 @@ export def "accounts-workspaces list" [
   let full_url = (build-url $base $"/v1/accounts/($accountId)/workspaces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new workspace
@@ -644,6 +665,7 @@ export def "accounts-workspaces createWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the workspace (nullable)
   --brand-id: string # A GUID value that identifies a brand. For more information, see <a href="https://developers.docusign.com/docs/esign-rest-api/esign101/concepts/branding/">Branding</a> (nullable, format: uuid)
 ]: any -> record<workspace_id: string, name: string, created_date: string, created_by_user_id: string, workspace_owner_ids: list<string>> {
@@ -655,7 +677,7 @@ export def "accounts-workspaces createWorkspace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates an existing workspace
@@ -672,6 +694,7 @@ export def "accounts-workspaces updateWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The updated name of the workspace (nullable)
 ]: any -> record<workspace_id: string, name: string, created_date: string, created_by_user_id: string, workspace_owner_ids: list<string>> {
   let input = $in
@@ -682,7 +705,7 @@ export def "accounts-workspaces updateWorkspace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns details about the workspace
@@ -699,13 +722,14 @@ export def "accounts-workspaces get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<workspace_id: string, name: string, created_date: string, created_by_user_id: string, workspace_owner_ids: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($accountId)/workspaces/($workspaceId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the roles the caller can assign to workspace users
@@ -722,6 +746,7 @@ export def "accounts-workspaces-assignable-roles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # A search filter that returns assignable roles by the beginning of the role name
   --start-position: int # The index position within the total result set from which to start returning values. The default value is 0 (format: int32)
   --count: int # The number of results to return. This value must be a number between 1 and 100 (default) (format: int32)
@@ -732,7 +757,7 @@ export def "accounts-workspaces-assignable-roles get" [
   let full_url = (build-url $base $"/v1/accounts/($accountId)/workspaces/($workspaceId)/assignable-roles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates an envelope with the given documents. Returns the ID of the created envelope
@@ -749,6 +774,7 @@ export def "accounts-workspaces-envelopes createWorkspaceEnvelope" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --envelope-name: string # The name for the envelope (nullable)
   --document-ids: list # The optional list of document IDs to be added to the envelope (nullable)
 ]: any -> record<envelope_id: string> {
@@ -760,7 +786,7 @@ export def "accounts-workspaces-envelopes createWorkspaceEnvelope" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns the envelopes associated with the given workspace
@@ -777,11 +803,12 @@ export def "accounts-workspaces-envelopes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<envelopes: table<envelope_id: string, status: string, name: string, subject: string, created_date: string, last_updated_date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/accounts/($accountId)/workspaces/($workspaceId)/envelopes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

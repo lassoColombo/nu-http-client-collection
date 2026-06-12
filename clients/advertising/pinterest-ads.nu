@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -131,7 +132,7 @@ def feed-type-completer [] { ["ALL" "CREATOR_ONLY" "RANKED" "RANKED_CREATOR_ONLY
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "ad-accounts accounts/list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -164,6 +165,7 @@ export def "ad-accounts accounts/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-shared-accounts: oneof<nothing, bool> # Include shared ad accounts (default: true)
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
@@ -174,7 +176,7 @@ export def "ad-accounts accounts/list" [
   let full_url = (build-url $base "/ad_accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create ad account
@@ -189,6 +191,7 @@ export def "ad-accounts accounts/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --country: string@country-completer # Country ID from ISO 3166-1 alpha-2.
   --currency: string@currency-completer # Currency Codes from ISO 4217
   --name: string # Ad account name.
@@ -203,7 +206,7 @@ export def "ad-accounts accounts/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get ad account
@@ -219,13 +222,14 @@ export def "ad-accounts accounts/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<country: string, created_time: int, currency: string, id: string, name: string, owner: record<id: string, username: string>, permissions: list<string>, time_zone: string, updated_time: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List ad groups
@@ -241,6 +245,7 @@ export def "ad-accounts-ad-groups groups/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --order: string@order-completer # The order in which to sort the items returned: "ASCENDING" or "DESCENDING" by ID. Note that higher-value IDs are associated with more-recently added items.
@@ -255,7 +260,7 @@ export def "ad-accounts-ad-groups groups/list" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/ad_groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create ad groups
@@ -271,6 +276,7 @@ export def "ad-accounts-ad-groups groups/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<items: table<data: record, exceptions: list>> {
   let input = $in
@@ -280,7 +286,7 @@ export def "ad-accounts-ad-groups groups/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update ad groups
@@ -296,6 +302,7 @@ export def "ad-accounts-ad-groups groups/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<items: table<data: record, exceptions: list>> {
   let input = $in
@@ -305,7 +312,7 @@ export def "ad-accounts-ad-groups groups/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get ad group analytics
@@ -321,6 +328,7 @@ export def "ad-accounts-ad-groups-analytics groups/analytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Metric report start date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days back from today. (format: date)
   --end-date: string # Metric report end date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days past start_date. (format: date)
   --ad-group-ids: list # List of Ad group Ids to use to filter the results.
@@ -339,7 +347,7 @@ export def "ad-accounts-ad-groups-analytics groups/analytics" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/ad_groups/analytics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get audience sizing
@@ -357,6 +365,7 @@ export def "ad-accounts-ad-groups-audience-sizing sizing" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auto-targeting-enabled: oneof<nothing, bool> # Enable auto-targeting for ad group. Default value is True. Also known as [Pinterest Performance+ targeting](https://help.pinterest.com/en/business/article/performance-plus-targeting). (default: true)
   --creative-types: list # Pin creative types filter. **Note:** SHOP_THE_PIN has been deprecated. Please use COLLECTION instead. (nullable)
   --keywords: list # Array of keyword objects. If the keywords field is missing, all keywords will be targeted. (nullable) — item shape: {match_type: "BROAD"|"PHRASE"|"EXACT"|"EXACT_NEGATIVE"|"PHRASE_NEGATIVE", value: string}
@@ -372,7 +381,7 @@ export def "ad-accounts-ad-groups-audience-sizing sizing" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get targeting analytics for ad groups
@@ -388,6 +397,7 @@ export def "ad-accounts-ad-groups-targeting-analytics analytics/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-group-ids: list # List of Ad group Ids to use to filter the results.
   --start-date: string # Metric report start date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days back from today. (format: date)
   --end-date: string # Metric report end date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days past start_date. (format: date)
@@ -409,7 +419,7 @@ export def "ad-accounts-ad-groups-targeting-analytics analytics/get" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/ad_groups/targeting_analytics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get ad group
@@ -426,13 +436,14 @@ export def "ad-accounts-ad-groups groups/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auto_targeting_enabled: bool, bid_multiplier: float, budget_type: string, pacing_delivery_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/ad_groups/($ad_group_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Process dynamic titles CSV
@@ -449,6 +460,7 @@ export def "ad-accounts-ad-groups-dynamic-titles csv" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   request_id: string # The request_id returned from the GET uploads endpoint.
 ]: any -> record<errors: table<error_type: string, row_number: int>, status: string> {
   let input = $in
@@ -459,7 +471,7 @@ export def "ad-accounts-ad-groups-dynamic-titles csv" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get dynamic titles CSV download URL
@@ -476,13 +488,14 @@ export def "ad-accounts-ad-groups-dynamic-titles-csv csv" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<download_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/ad_groups/($ad_group_id)/dynamic_titles/csv")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get dynamic titles status
@@ -499,13 +512,14 @@ export def "ad-accounts-ad-groups-dynamic-titles-status status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<generated_count: int, is_ready: bool, reviewed_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/ad_groups/($ad_group_id)/dynamic_titles/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get dynamic titles upload URL
@@ -522,13 +536,14 @@ export def "ad-accounts-ad-groups-dynamic-titles-uploads url" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<existing_filename: string, request_id: string, upload_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/ad_groups/($ad_group_id)/dynamic_titles/uploads")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create ad preview with pin or image
@@ -544,6 +559,7 @@ export def "ad-accounts-ad-previews previews/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --image-url: string # Image URL. (e.g. https://somewebsite.com/someimage.jpg)
   --promotion-id: string # Promotion id for the ad to preview, optional and only applicable when creating ad preview for an existing promotion. (e.g. 7834020404549)
   --title: string # Title displayed below ad. (e.g. My Preview Image)
@@ -568,7 +584,7 @@ export def "ad-accounts-ad-previews previews/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List ads
@@ -584,6 +600,7 @@ export def "ad-accounts-ads ads/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --order: string@order-completer # The order in which to sort the items returned: "ASCENDING" or "DESCENDING" by ID. Note that higher-value IDs are associated with more-recently added items.
@@ -598,7 +615,7 @@ export def "ad-accounts-ads ads/list" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/ads" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create ads
@@ -614,6 +631,7 @@ export def "ad-accounts-ads ads/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<items: table<data: record, exceptions: record>> {
   let input = $in
@@ -623,7 +641,7 @@ export def "ad-accounts-ads ads/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update ads
@@ -639,6 +657,7 @@ export def "ad-accounts-ads ads/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<items: table<data: record, exceptions: record>> {
   let input = $in
@@ -648,7 +667,7 @@ export def "ad-accounts-ads ads/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get ad analytics
@@ -664,6 +683,7 @@ export def "ad-accounts-ads-analytics ads/analytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pin-ids: list # List of Pin IDs.
   --start-date: string # Metric report start date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days back from today. (format: date)
   --end-date: string # Metric report end date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days past start_date. (format: date)
@@ -683,7 +703,7 @@ export def "ad-accounts-ads-analytics ads/analytics" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/ads/analytics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get targeting analytics for ads
@@ -699,6 +719,7 @@ export def "ad-accounts-ads-targeting-analytics analytics/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-ids: list # List of Ad Ids to use to filter the results.
   --start-date: string # Metric report start date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days back from today. (format: date)
   --end-date: string # Metric report end date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days past start_date. (format: date)
@@ -720,7 +741,7 @@ export def "ad-accounts-ads-targeting-analytics analytics/get" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/ads/targeting_analytics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get ad
@@ -737,13 +758,14 @@ export def "ad-accounts-ads ads/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ad_account_id: string, ad_group_id: string, android_deep_link: string, campaign_id: string, carousel_android_deep_links: list<string>, carousel_destination_urls: list<string>, carousel_ios_deep_links: list<string>, carting_platform_type: record, carting_products: table<carting_product_id: string, display_preferred_retailers_only: bool, display_product_price: bool, preferred_retailers: list, randomize_preferred_retailers: bool>, click_tracking_url: string, collection_items_destination_url_template: string, collections_header_type: record, created_time: int, creative_type: string, customizable_cta_type: string, destination_url: string, disclosure_type: string, disclosure_url: string, grid_click_type: string, id: string, ios_deep_link: string, is_carting: bool, is_collage_accepted_terms: bool, is_collage_single_destination: bool, is_pin_deleted: bool, is_removable: bool, lead_form_id: string, name: string, pin_id: string, quiz_pin_data: record, rejected_reasons: list<string>, rejection_labels: list<string>, review_status: record, status: string, summary_status: record, tracking_urls: record<audience_verification: list<string>, buyable_button: list<string>, click: list<string>, engagement: list<string>, impression: list<string>>, type: string, updated_time: int, view_tracking_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/ads/($ad_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get ads credit discounts
@@ -759,6 +781,7 @@ export def "ad-accounts-ads-credit-discounts discounts/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
 ]: nothing -> record<bookmark: string, items: table<active: bool, advertiser_id: string, discountCurrency: string, discountInMicroCurrency: float, discountType: record, remainingDiscountInMicroCurrency: float, title: string>> {
@@ -768,7 +791,7 @@ export def "ad-accounts-ads-credit-discounts discounts/get" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/ads_credit/discounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Redeem ad credits
@@ -784,6 +807,7 @@ export def "ad-accounts-ads-credit-redeem credit/redeem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   offerCodeHash: string # Takes in a SHA256 hash of the offerCode. (e.g. 138e9e0ff7e38cf511b880975eb574c09aa9d5e1657590ab0431040da68caa67)
   --validateOnly: oneof<nothing, bool> # If true, only validate if we can redeem offer code. Otherwise it will actually apply the offer code to the account (e.g. true)
 ]: any -> record<errorCode: int, errorMessage: string, success: bool> {
@@ -795,7 +819,7 @@ export def "ad-accounts-ads-credit-redeem credit/redeem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get advertiser defined events
@@ -811,13 +835,14 @@ export def "ad-accounts-advertiser-defined-events events/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<items: table<mapped_conversion_type: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/advertiser_defined_events")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create advertiser defined events
@@ -834,6 +859,7 @@ export def "ad-accounts-advertiser-defined-events events/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   items: list # List of advertiser defined events to create or update — item shape: {mapped_conversion_type: any, name: string}
 ]: any -> record<items: table<exceptions: list, name: string, status: string>> {
   let input = $in
@@ -844,7 +870,7 @@ export def "ad-accounts-advertiser-defined-events events/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update advertiser defined events
@@ -861,6 +887,7 @@ export def "ad-accounts-advertiser-defined-events events/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   items: list # List of advertiser defined events to create or update — item shape: {mapped_conversion_type: any, name: string}
 ]: any -> record<items: table<exceptions: list, name: string, status: string>> {
   let input = $in
@@ -871,7 +898,7 @@ export def "ad-accounts-advertiser-defined-events events/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete advertiser defined events
@@ -887,6 +914,7 @@ export def "ad-accounts-advertiser-defined-events events/delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --event-names: list # List of event names to delete
 ]: nothing -> record<items: table<exceptions: list, name: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -895,7 +923,7 @@ export def "ad-accounts-advertiser-defined-events events/delete" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/advertiser_defined_events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get ad account analytics
@@ -911,6 +939,7 @@ export def "ad-accounts-analytics account/analytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Metric report start date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days back from today. (format: date)
   --end-date: string # Metric report end date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days past start_date. (format: date)
   --columns: list # Columns to retrieve, encoded as a comma-separated string. **NOTE**: Any metrics defined as MICRO_DOLLARS returns a value based on the advertiser profile's currency field. For USD, ($1/1,000,000, or $0.000001 - one one-ten-thousandth of a cent). it's microdollars. Otherwise, it's in microunits of the advertiser's currency.  For example, if the advertiser's currency is GBP (British pound sterling), all MICRO_DOLLARS fields will be in GBP microunits (1/1,000,000 British pound).  If a column has no value, it may not be returned.
@@ -927,7 +956,7 @@ export def "ad-accounts-analytics account/analytics" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/analytics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get audience insights
@@ -943,6 +972,7 @@ export def "ad-accounts-audience-insights insights/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --audience-insight-type: string@audience-insight-type-completer # Type of audience insights. (e.g. YOUR_TOTAL_AUDIENCE)
 ]: nothing -> record<categories: table<id: string, index: float, key: string, name: string, ratio: float, subcategories: list>, date: string, demographics: record<ages: list<record>, countries: list<record>, devices: list<record>, genders: list<record>, metros: list<record>>, size: int, size_is_upper_bound: bool, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -951,7 +981,7 @@ export def "ad-accounts-audience-insights insights/get" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/audience_insights" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create audience
@@ -968,6 +998,7 @@ export def "ad-accounts-audiences audiences/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-ad-account-id: string # Ad account ID.
   --audience-type: any # [Audience types](/docs/reference/glossary/#Audience Types): ACTALIKE, ENGAGEMENT, CUSTOMER_LIST and VISITOR
   --description: string # Audience description. (nullable)
@@ -982,7 +1013,7 @@ export def "ad-accounts-audiences audiences/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List audiences
@@ -998,6 +1029,7 @@ export def "ad-accounts-audiences audiences/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --order: string@order-completer # The order in which to sort the items returned: "ASCENDING" or "DESCENDING" by ID. Note that higher-value IDs are associated with more-recently added items.
@@ -1010,7 +1042,7 @@ export def "ad-accounts-audiences audiences/list" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/audiences" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update audience sharing between ad accounts
@@ -1026,6 +1058,7 @@ export def "ad-accounts-audiences-ad-accounts-shared audience" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   audience_id: any # Unique identifier of an audience (e.g. 2542621871096)
   operation_type: string@operation-type-completer # Operation type to share a specific audience or revoke access to a previously shared audience
   recipient_account_ids: list # Ad account IDs to share with or revoke from (request) / that received the audience (response).
@@ -1038,7 +1071,7 @@ export def "ad-accounts-audiences-ad-accounts-shared audience" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update audience sharing from an ad account to businesses
@@ -1054,6 +1087,7 @@ export def "ad-accounts-audiences-businesses-shared audience" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   audience_id: any # Unique identifier of an audience (e.g. 2542621871096)
   operation_type: string@operation-type-completer # Operation type to share a specific audience or revoke access to a previously shared audience
   recipient_business_ids: list # Business IDs to share with or revoke from (request) / that received the audience (response).
@@ -1066,7 +1100,7 @@ export def "ad-accounts-audiences-businesses-shared audience" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List accounts with access to an audience owned by an ad account
@@ -1082,6 +1116,7 @@ export def "ad-accounts-audiences-shared-accounts accounts/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --audience-id: string # Unique identifier of the audience to use to filter the results.
   --account-type: string@account-type-completer # Filter accounts by account type.
   --bookmark: string # Cursor used to fetch the next page of items
@@ -1093,7 +1128,7 @@ export def "ad-accounts-audiences-shared-accounts accounts/list" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/audiences/shared/accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update audience
@@ -1111,6 +1146,7 @@ export def "ad-accounts-audiences audiences/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-ad-account-id: string # Ad account ID.
   --audience-type: any # [Audience types](/docs/reference/glossary/#Audience Types): ACTALIKE, ENGAGEMENT, CUSTOMER_LIST and VISITOR
   --description: string # Audience description. (nullable)
@@ -1126,7 +1162,7 @@ export def "ad-accounts-audiences audiences/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get audience
@@ -1143,13 +1179,14 @@ export def "ad-accounts-audiences audiences/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ad_account_id: string, audience_type: record, created_by_company_name: string, created_timestamp: int, description: string, id: string, is_nca: bool, name: string, rule: record<ad_account_id: string, ad_id: list<string>, campaign_id: list<string>, country: string, customer_list_id: string, engagement_domain: list<string>, engagement_type: string, engager_type: int, event: string, event_data: record<currency: record, lead_type: string, line_items: record, order_id: string, order_quantity: int, page_name: string, promo_code: string, property: string, search_query: string, value: string, video_title: string>, event_source: record, ingestion_source: record, objective_type: list<string>, percentage: any, pin_id: list<string>, prefill: bool, retention_days: int, seed_id: any, url: list<string>, visitor_source_id: any>, size: int, status: record, type: string, updated_timestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/audiences/($audience_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get bid floors
@@ -1166,6 +1203,7 @@ export def "ad-accounts-bid-floor floor/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   bid_floor_specs: list # List of bid floor specifications. — item shape: {billable_event: any, countries?: list, creative_type?: any, currency: any, objective_type?: any, optimization_goal_metadata?: any}
   --targeting-spec: any # Ad group targeting specification defining the ad group target audience.
 ]: any -> record<bid_floors: list<int>, type: string> {
@@ -1177,7 +1215,7 @@ export def "ad-accounts-bid-floor floor/get" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get download url for a billing invoice
@@ -1194,13 +1232,14 @@ export def "ad-accounts-billing-invoice-download download/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<download_url: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/billing_invoice/($billing_invoice_id)/download")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get billing invoices
@@ -1216,6 +1255,7 @@ export def "ad-accounts-billing-invoices invoices/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --order: string@order-completer # The order in which to sort the items returned: "ASCENDING" or "DESCENDING" by ID. Note that higher-value IDs are associated with more-recently added items.
@@ -1231,7 +1271,7 @@ export def "ad-accounts-billing-invoices invoices/get" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/billing_invoices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get billing profiles
@@ -1247,6 +1287,7 @@ export def "ad-accounts-billing-profiles profiles/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --is-active: oneof<nothing, bool> # Return active billing profiles, if false return all billing profiles.
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
@@ -1257,7 +1298,7 @@ export def "ad-accounts-billing-profiles profiles/get" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/billing_profiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get advertiser entities in bulk
@@ -1274,6 +1315,7 @@ export def "ad-accounts-bulk-download download/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaign-filter: record # shape: {campaign_status?: list, end_time?: string, name?: string, objective_type?: list, start_time?: string}
   --entity-ids: list # All entities specified by these IDs as well as their children and grandchildren will be downloaded if the entity type is one of the types requested to be downloaded.
   --entity-types: list # All entity types specified will be downloaded. Fewer types result in faster downloads. (e.g. [CAMPAIGN, AD_GROUP])
@@ -1288,7 +1330,7 @@ export def "ad-accounts-bulk-download download/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create/update ad entities in bulk
@@ -1306,6 +1348,7 @@ export def "ad-accounts-bulk-upsert upsert/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --create: record # Request for creation of entities in bulk. — shape: {ad_groups?: list, ads?: list, campaigns?: list, catalog_product_groups?: list, keywords?: list, labels?: list, product_groups?: list, schedules?: list}
   --update: record # Request for creation of entities in bulk. — shape: {ad_groups?: list, ads?: list, campaigns?: list, catalog_product_groups?: list, keywords?: list, labels?: list, product_groups?: list, schedules?: list}
 ]: any -> record<request_id: string> {
@@ -1317,7 +1360,7 @@ export def "ad-accounts-bulk-upsert upsert/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Download advertiser entities in bulk
@@ -1334,6 +1377,7 @@ export def "ad-accounts-bulk request/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-details: oneof<nothing, bool> # If set to True then attach the errors/details to all the requests (default: false)
 ]: nothing -> record<result_url: string, status: string, workload_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1342,7 +1386,7 @@ export def "ad-accounts-bulk request/get" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/bulk/($bulk_request_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create ad preview records for one or more ad groups
@@ -1358,6 +1402,7 @@ export def "ad-accounts-campaign-ad-preview preview/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> table<data: any> {
   let input = $in
@@ -1367,7 +1412,7 @@ export def "ad-accounts-campaign-ad-preview preview/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetch ad preview records for one or more ad groups
@@ -1383,6 +1428,7 @@ export def "ad-accounts-campaign-ad-preview preview/read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-group-ids: list # List of Ad group Ids to use to filter the results.
 ]: nothing -> table<ad_account_id: string, ad_group_id: string, client_id: int, expires_at: int, is_active: bool, pin_id: int, pin_promotion_id: int, promoted_product_group_id: int, url: string, user_id: int, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1391,7 +1437,7 @@ export def "ad-accounts-campaign-ad-preview preview/read" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/campaign_ad_preview" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete ad preview records for one or more ad groups
@@ -1407,6 +1453,7 @@ export def "ad-accounts-campaign-ad-preview preview/delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-group-ids: list # List of Ad group Ids to use to filter the results.
 ]: nothing -> table<status: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1415,7 +1462,7 @@ export def "ad-accounts-campaign-ad-preview preview/delete" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/campaign_ad_preview" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List campaigns
@@ -1431,6 +1478,7 @@ export def "ad-accounts-campaigns campaigns/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --order: string@order-completer # The order in which to sort the items returned: "ASCENDING" or "DESCENDING" by ID. Note that higher-value IDs are associated with more-recently added items.
@@ -1443,7 +1491,7 @@ export def "ad-accounts-campaigns campaigns/list" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/campaigns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create campaigns
@@ -1459,6 +1507,7 @@ export def "ad-accounts-campaigns campaigns/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<items: table<data: record, exceptions: list>> {
   let input = $in
@@ -1468,7 +1517,7 @@ export def "ad-accounts-campaigns campaigns/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update campaigns
@@ -1484,6 +1533,7 @@ export def "ad-accounts-campaigns campaigns/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<items: table<data: record, exceptions: list>> {
   let input = $in
@@ -1493,7 +1543,7 @@ export def "ad-accounts-campaigns campaigns/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get campaign analytics
@@ -1509,6 +1559,7 @@ export def "ad-accounts-campaigns-analytics campaigns/analytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Metric report start date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days back from today. (format: date)
   --end-date: string # Metric report end date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days past start_date. (format: date)
   --campaign-ids: list # List of Campaign Ids to use to filter the results.
@@ -1527,7 +1578,7 @@ export def "ad-accounts-campaigns-analytics campaigns/analytics" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/campaigns/analytics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get campaign delivery estimates
@@ -1543,6 +1594,7 @@ export def "ad-accounts-campaigns-delivery-estimates estimates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<curves: table<estimation_type: record, points: list>, derived_metrics: record<cpc: float, cpc_lower: float, cpc_upper: float, cpm: float, cpm_lower: float, cpm_upper: float, lifetime_frequency: float, lifetime_frequency_lower: float, lifetime_frequency_upper: float, lifetime_impression: float, lifetime_impression_lower: float, lifetime_impression_upper: float, lifetime_reach: float, lifetime_reach_lower: float, lifetime_reach_upper: float, weekly_click: float, weekly_click_lower: float, weekly_click_upper: float, weekly_frequency: float, weekly_frequency_lower: float, weekly_frequency_upper: float, weekly_impression: float, weekly_impression_lower: float, weekly_impression_upper: float, weekly_reach: float, weekly_reach_lower: float, weekly_reach_upper: float>, max_potential_spend: int> {
   let input = $in
@@ -1552,7 +1604,7 @@ export def "ad-accounts-campaigns-delivery-estimates estimates" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get targeting analytics for campaigns
@@ -1568,6 +1620,7 @@ export def "ad-accounts-campaigns-targeting-analytics analytics/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaign-ids: list # List of Campaign Ids to use to filter the results.
   --start-date: string # Metric report start date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days back from today. (format: date)
   --end-date: string # Metric report end date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days past start_date. (format: date)
@@ -1587,7 +1640,7 @@ export def "ad-accounts-campaigns-targeting-analytics analytics/get" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/campaigns/targeting_analytics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get campaign
@@ -1604,13 +1657,14 @@ export def "ad-accounts-campaigns campaigns/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ad_account_id: string, bid_options: record<age_bucket_multipliers: record<AGE_BUCKET: record>, app_type_multipliers: record<APP_TYPE: record>, audience_multipliers: record<AUDIENCE_ID: string>, freq_bid_multiplier_time_window: record, frequency_multipliers: record, gender_multipliers: record<GENDER: record>, placement_multipliers: record<PLACEMENT: record>>, created_time: int, daily_spend_cap: int, default_ad_group_budget_in_micro_currency: int, end_time: int, id: string, intended_promotion_type: string, is_automated_campaign: bool, is_campaign_budget_optimization: bool, is_carting: bool, is_flexible_daily_budgets: bool, is_ltv_optimized: bool, is_performance_plus: bool, is_top_of_search: bool, lifetime_spend_cap: int, name: string, objective_type: string, order_line_id: string, performance_plus_campaign_settings: record, start_time: int, status: string, summary_status: record, tracking_urls: record, type: string, updated_time: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/campaigns/($campaign_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List conversion deletion requests
@@ -1626,6 +1680,7 @@ export def "ad-accounts-conversion-deletion-requests request/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --order: string@order-completer # The order in which to sort the items returned: "ASCENDING" or "DESCENDING" by ID. Note that higher-value IDs are associated with more-recently added items.
@@ -1636,7 +1691,7 @@ export def "ad-accounts-conversion-deletion-requests request/list" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/conversion_deletion_requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a conversion deletion request
@@ -1652,6 +1707,7 @@ export def "ad-accounts-conversion-deletion-requests request/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   deletion_targets: any # Object containing the targets of the conversion deletion request. Users can be identified with user_emails, epiks, or both within the same request.
 ]: any -> record<created_time: string, processed_time: string, request_id: string, status: record> {
   let input = $in
@@ -1662,7 +1718,7 @@ export def "ad-accounts-conversion-deletion-requests request/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a single conversion deletion request
@@ -1679,13 +1735,14 @@ export def "ad-accounts-conversion-deletion-requests request/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created_time: string, processed_time: string, request_id: string, status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/conversion_deletion_requests/($request_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a conversion deletion request
@@ -1702,13 +1759,14 @@ export def "ad-accounts-conversion-deletion-requests request/delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created_time: string, processed_time: string, request_id: string, status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/conversion_deletion_requests/($request_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get event quality score (EQS)
@@ -1724,6 +1782,7 @@ export def "ad-accounts-conversion-eqs eqs/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --lookback-period: string@lookback-period-completer # Lookback window (number of days).
   --source-platform: string@source-platform-completer # Source platform of event.
   --ingestion-source: string@ingestion-source-completer # Ingestion source of event.
@@ -1734,7 +1793,7 @@ export def "ad-accounts-conversion-eqs eqs/list" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/conversion_eqs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create conversion tag
@@ -1750,6 +1809,7 @@ export def "ad-accounts-conversion-tags tags/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --aem-db-enabled: oneof<nothing, bool> # Whether Automatic Enhanced Match birthdate is enabled. See [Enhanced match](https://help.pinterest.com/en/business/article/enhanced-match) for more information. (nullable, default: false)
   --aem-enabled: oneof<nothing, bool> # Whether Automatic Enhanced Match email is enabled. See [Enhanced match](https://help.pinterest.com/en/business/article/enhanced-match) for more information. (nullable, default: false)
   --aem-external-id-enabled: oneof<nothing, bool> # Whether Automatic Enhanced Match location is enabled. See [Enhanced match](https://help.pinterest.com/en/business/article/enhanced-match) for more information. (nullable, default: false)
@@ -1768,7 +1828,7 @@ export def "ad-accounts-conversion-tags tags/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List conversion tags
@@ -1784,6 +1844,7 @@ export def "ad-accounts-conversion-tags tags/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter-deleted: oneof<nothing, bool> # Filter by deleted status (default: false)
 ]: nothing -> record<items: table<ad_account_id: string, status: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1792,7 +1853,7 @@ export def "ad-accounts-conversion-tags tags/list" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/conversion_tags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Ocpm eligible conversion tags
@@ -1808,13 +1869,14 @@ export def "ad-accounts-conversion-tags-ocpm-eligible tags/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/conversion_tags/ocpm_eligible")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get page visit conversion tags
@@ -1830,6 +1892,7 @@ export def "ad-accounts-conversion-tags-page-visit tags/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --order: string@order-completer # The order in which to sort the items returned: "ASCENDING" or "DESCENDING" by ID. Note that higher-value IDs are associated with more-recently added items.
@@ -1840,7 +1903,7 @@ export def "ad-accounts-conversion-tags-page-visit tags/get" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/conversion_tags/page_visit" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get conversion tag
@@ -1857,13 +1920,14 @@ export def "ad-accounts-conversion-tags tags/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ad_account_id: string, status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/conversion_tags/($conversion_tag_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get customer lists
@@ -1879,6 +1943,7 @@ export def "ad-accounts-customer-lists lists/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --order: string@order-completer # The order in which to sort the items returned: "ASCENDING" or "DESCENDING" by ID. Note that higher-value IDs are associated with more-recently added items.
@@ -1890,7 +1955,7 @@ export def "ad-accounts-customer-lists lists/list" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/customer_lists" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create customer lists
@@ -1907,6 +1972,7 @@ export def "ad-accounts-customer-lists lists/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --is-nca: oneof<nothing, bool> # Whether the list was uploaded for new customer acquisition (expanded matching). Immutable after creation.
   --list-type: any # Type of customer list (e.g., EMAIL, IDFA, MAID). (default: EMAIL)
   name: string # Customer list name. (e.g. The Glengarry Glen Ross leads)
@@ -1921,7 +1987,7 @@ export def "ad-accounts-customer-lists lists/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get customer list
@@ -1938,13 +2004,14 @@ export def "ad-accounts-customer-lists lists/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ad_account_id: string, created_time: float, exceptions: record, id: string, is_nca: bool, name: string, num_batches: float, num_removed_user_records: float, num_uploaded_user_records: float, status: record, type: string, updated_time: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/customer_lists/($customer_list_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update customer list
@@ -1962,6 +2029,7 @@ export def "ad-accounts-customer-lists lists/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   operation_type: any # Customer list update operation type (add or remove). Only valid in update request body.
   --records: string # Records list. Can be any combination of emails, MAIDs, or IDFAs. Emails must be lowercase and can be plain text or hashed using SHA1, SHA256, or MD5. MAIDs and IDFAs must be hashed with SHA1, SHA256, or MD5. (e.g. email1@pinterest.com,email2@pinterest.com,..<more records>)
   --records-v2: list # Multi-field record format. Array of objects with optional email, maid, ip_address, user_agent, external_id, hashed_pinner_id, hashed_phone_number, and liveramp_envelope per row. Provide exactly one of records or records_v2. — item shape: {email?: string, external_id?: string, hashed_phone_number?: string, hashed_pinner_id?: string, ip_address?: string, liveramp_envelope?: string, maid?: string, user_agent?: string}
@@ -1974,7 +2042,7 @@ export def "ad-accounts-customer-lists lists/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create customer list upload
@@ -1991,6 +2059,7 @@ export def "ad-accounts-customer-lists-uploads uploads/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   operation: string@operation-completer # User list operation type (add or remove) (e.g. REMOVE)
   total_parts: int # Number of parts to upload the file in. (e.g. 2)
 ]: any -> record<customer_list_upload: record<ad_account_id: record, creation_time: int, customer_list_id: record, error_counts: list<record>, id: record, operation: string, record_counts: record<invalid: int, processed: int, valid: int>, state: record, updated_time: int>, s3_multipart_upload_data: record<file_parts: list<record>>> {
@@ -2002,7 +2071,7 @@ export def "ad-accounts-customer-lists-uploads uploads/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get customer list upload
@@ -2020,13 +2089,14 @@ export def "ad-accounts-customer-lists-uploads uploads/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ad_account_id: record, creation_time: int, customer_list_id: record, error_counts: table<count: int, error_code: int, message: string>, id: record, operation: string, record_counts: record<invalid: int, processed: int, valid: int>, state: record, updated_time: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/customer_lists/($customer_list_id)/uploads/($customer_list_upload_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Run customer list upload
@@ -2044,13 +2114,14 @@ export def "ad-accounts-customer-lists-uploads-run uploads/run" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ad_account_id: record, creation_time: int, customer_list_id: record, error_counts: table<count: int, error_code: int, message: string>, id: record, operation: string, record_counts: record<invalid: int, processed: int, valid: int>, state: record, updated_time: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/customer_lists/($customer_list_id)/uploads/($customer_list_upload_id)/run")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List customer segments
@@ -2066,6 +2137,7 @@ export def "ad-accounts-customer-segments segment/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --order: string@order-completer # The order in which to sort the items returned: "ASCENDING" or "DESCENDING" by ID. Note that higher-value IDs are associated with more-recently added items.
@@ -2078,7 +2150,7 @@ export def "ad-accounts-customer-segments segment/list" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/customer_segments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create customer segments
@@ -2094,6 +2166,7 @@ export def "ad-accounts-customer-segments segment/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   audience_ids: list # Audience IDs included in the customer segment.
   name: string # Customer segment name.
 ]: any -> record<ad_account_id: string, audience_ids: list<string>, created_time: int, id: string, name: string, status: record, updated_time: int> {
@@ -2105,7 +2178,7 @@ export def "ad-accounts-customer-segments segment/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update customer segments
@@ -2121,6 +2194,7 @@ export def "ad-accounts-customer-segments segment/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --audience-ids: list # Audience IDs to update the customer segment to. Only applicable for UPDATE operations.
   id: string # Customer segment ID.
   operation_type: string@operation-type-completer-1 # Audience operation type (update or remove). (e.g. UPDATE)
@@ -2133,7 +2207,7 @@ export def "ad-accounts-customer-segments segment/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send conversions
@@ -2150,6 +2224,7 @@ export def "ad-accounts-events events/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --test: oneof<nothing, bool> # Include query param ?test=true to mark the request as a test request. The events will not be recorded but the API will still return the same response messages. Use this mode to verify your requests are working and your events are constructed correctly. Warning: If you use this query parameter, be certain that it is off (set to false or deleted) before sending a legitimate (non-testing) request.
   data: list # A list of events (one or more) encapsulated by a data object. (e.g. [{event_name: checkout, action_source: app_ios, event_time: 1769818893, event_id: eventId0001, event_source_url: https://www.my-clothing-shop.org/, opt_out: false, advertiser_tracking_enabled: true, partner_name: ss-partnername, user_data: {em: [411e44ce1261728ffd2c0686e44e3fffe413c0e2c5adc498bc7da883d476b9c8, 09831ea51bd1b7b32a836683a00a9ccaf3d05f59499f42d9883412ed79289969], hashed_maids: [0192518eb84137ccfe82c8b6322d29631dae7e28ed9d0f6dd5f245d73a58c5f1, 837b850ac46d62b2272a71de73c27801ff011ac1e36c5432620c8755cf90db46], client_ip_address: 216.3.128.12, client_user_agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/67.0.3396.87 Safari/537.36, ph: [45df139772a81b6011bdc1c9cc3d1cb408fc0b10ec0c5cb9d4d4e107f0ddc49d], ge: [0d248e82c62c9386878327d491c762a002152d42ab2c391a31c44d9f62675ddf], db: [d4426a0086d10f12ad265539ae8d54221dc67786053d511407204b76e99d7739], ln: [7e546b3aa43f989dd359672e6c3409d4f9d4e8f155ae1e9b90ee060985468c19], fn: [ec1e6a072231703f1bc41429052fff8c00a7e0c6aaec2e7107241ca8f3ceb6b2], ct: [4ac01a129bfd10385c9278c2cf2c46fac5ab57350841234f587c8522a2e4ce36], st: [49a6d05b8e4b516656e464271d9dd38d0a7e0142f7f49546f4dabd2720cafc34], zp: [fd5f56b40a79a385708428e7b32ab996a681080a166a2206e750eb4819186145], country: [9b202ecbc6d45c6d8901d989a918878397a3eb9d00e8f48022fc051b19d21a1d], external_id: [6a7a73766627eb611720883d5a11cc62b5bfee237b00a6658d78c50032ec4aee], click_id: dj0yJnU9b2JDcFFHekV4SHJNcmVrbFBkUEdqakh0akdUT1VjVVUmcD0yJm49cnNBQ3F2Q2dOVDBXWWhkWklrUGxBUSZ0PUFBQUFBR1BaY3Bv, partner_id: BUJrTlRRzGJmWhRXFZdkioV6wKPBve7Lom__GU9J74hq2NIQj4O3nOZJrp3mcUr5MptkXsI14juMOIM9mNZnM4zEUFT2JLVaFhcOfuuWz3IWEDtBf6I0DPc}, custom_data: {currency: USD, value: 66.95, content_ids: [product-id-001, product-id-002], content_name: pinterest-themed-clothing, content_category: shirts, content_brand: pinterest-brand, contents: [{id: product-id-001, item_price: 14.99, quantity: 3, item_name: pinterest-shirt-girl, item_category: pinterest-clothing-shirts, item_brand: pinterest}, {id: product-id-002, item_price: 10.99, quantity: 2, item_name: pinterest-shirt-men, item_category: pinterest-clothing-shirts, item_brand: pinterest}], num_items: 5, order_id: my_order_id, search_string: sample string, opt_out_type: LDP, predicted_ltv: 2794.82}, app_id: 429047995, app_name: Pinterest, app_version: 7.9, device_brand: Apple, device_carrier: T-Mobile, device_model: iPhone X, device_type: iPhone, os_version: 12.1.4, wifi: false, language: en, device_info: {brand: Apple, Samsung, Motorola, type: iPhone, Android, model: 16 Pro, Galaxy S25 Ultra, form_factor: cellphone, os_family: ios, os_name: 10, os_version: 18.3, os_release_name: 18.3, kernel_version: 6.15, carrier: T-Mobile, screen_width: 1320, screen_height: 2868, screen_density: 460, cpu_cores: 8, storage_size: 256, storage_free_space: 184, external_storage_size: 512, external_storage_free_space: 126, locale: en-us, languages: [en, de, lt], timezone: USA/New York, timezone_abbr: PDT, network_type: wifi, battery_level: 78}, app_info: {app_name: MyAwesomeApp, app_package_name: com.company.myawesomeapp, app_id: 429047995, app_version: 7.9, app_store: Google Play Store, window_width: 1678, window_height: 900, install_time: 1739222269, user_agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36}}]) — item shape: {action_source: string, app_id?: string, app_info?: record, app_name?: string, app_version?: string, custom_data?: record, device_brand?: string, device_carrier?: string, device_info?: record, device_model?: string, device_type?: string, event_id: string, event_name: string, event_source_url?: string, event_time: int, language?: string, opt_out?: bool, os_version?: string, partner_name?: string, user_data: any, wifi?: bool}
 ]: any -> record<events: table<error_message: string, status: record, warning_message: string>, num_events_processed: int, num_events_received: int> {
@@ -2162,7 +2237,7 @@ export def "ad-accounts-events events/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get audience insights scope and type
@@ -2178,13 +2253,14 @@ export def "ad-accounts-insights-audiences type/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<items: table<date: string, scope: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/insights/audiences")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get keywords
@@ -2200,6 +2276,7 @@ export def "ad-accounts-keywords keywords/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaign-id: string # Campaign Id to use to filter the results.
   --ad-group-id: string # Ad group Id.
   --ad-group-ids: list # List of Ad group Ids to retrieve keywords from. This feature is currently in BETA and is not available to all users.
@@ -2213,7 +2290,7 @@ export def "ad-accounts-keywords keywords/get" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/keywords" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create keywords
@@ -2230,6 +2307,7 @@ export def "ad-accounts-keywords keywords/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   keywords: list # Keywords — item shape: {bid?: int, match_type: any, value: string}
   parent_id: string # Keyword data
 ]: any -> record<errors: table<data: record, error_messages: list>, keywords: table<archived: bool, bid: int, id: string, match_type: record, parent_id: string, parent_type: string, type: string, value: string>> {
@@ -2241,7 +2319,7 @@ export def "ad-accounts-keywords keywords/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update keywords
@@ -2258,6 +2336,7 @@ export def "ad-accounts-keywords keywords/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --keywords: list # Keywords — item shape: {archived?: bool, bid?: int, id: string}
 ]: any -> record<errors: table<data: record, error_messages: list>, keywords: table<archived: bool, bid: int, id: string, match_type: record, parent_id: string, parent_type: string, type: string, value: string>> {
   let input = $in
@@ -2268,7 +2347,7 @@ export def "ad-accounts-keywords keywords/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get country's keyword metrics
@@ -2284,6 +2363,7 @@ export def "ad-accounts-keywords-metrics metrics/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --country-code: string # Two letter country code (ISO 3166-1 alpha-2)
   --keywords: list # Comma-separated keywords
 ]: nothing -> record<data: table<keyword: string, metrics: record>> {
@@ -2293,7 +2373,7 @@ export def "ad-accounts-keywords-metrics metrics/get" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/keywords/metrics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List labels
@@ -2309,6 +2389,7 @@ export def "ad-accounts-labels labels/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaign-ids: list # List of Campaign Ids to use to filter the results.
   --label-ids: list # List of Label Ids to use to filter the results.
   --entity-statuses: list # Label entity status (default: [ACTIVE])
@@ -2322,7 +2403,7 @@ export def "ad-accounts-labels labels/list" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/labels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create labels
@@ -2339,6 +2420,7 @@ export def "ad-accounts-labels labels/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   labels: list # Labels that you are applying to the campaign. — item shape: {label_type: "BRAND"|"CUSTOM", value: string}
 ]: any -> record<errors: table<data: record, error_messages: list>, labels: table<id: record, label_type: string, status: string, value: string>> {
   let input = $in
@@ -2349,7 +2431,7 @@ export def "ad-accounts-labels labels/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update labels
@@ -2366,6 +2448,7 @@ export def "ad-accounts-labels labels/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   labels: list # Labels that you are applying to the campaign. — item shape: {id: any, status?: "ACTIVE"|"ARCHIVED", value?: string}
 ]: any -> record<errors: table<data: record, error_messages: list>, labels: table<id: record, label_type: string, status: string, value: string>> {
   let input = $in
@@ -2376,7 +2459,7 @@ export def "ad-accounts-labels labels/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Apply label to entity
@@ -2393,6 +2476,7 @@ export def "ad-accounts-labels-apply labels/apply" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   entity_ids: list # Entity IDs to apply label to.
 ]: any -> record<entities_labels: table<entity_id: string, entity_type: record, label_id: string, status: record>, errors: table<data: record, error_messages: list>> {
   let input = $in
@@ -2403,7 +2487,7 @@ export def "ad-accounts-labels-apply labels/apply" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove label from entities
@@ -2420,6 +2504,7 @@ export def "ad-accounts-labels-remove labels/remove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   entity_ids: list # Entity IDs to apply label to.
 ]: any -> record<entities_labels: table<entity_id: string, entity_type: record, label_id: string, status: record>, errors: table<data: record, error_messages: list>> {
   let input = $in
@@ -2430,7 +2515,7 @@ export def "ad-accounts-labels-remove labels/remove" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List lead forms
@@ -2446,6 +2531,7 @@ export def "ad-accounts-lead-forms forms/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --order: string@order-completer # The order in which to sort the items returned: "ASCENDING" or "DESCENDING" by ID. Note that higher-value IDs are associated with more-recently added items.
@@ -2456,7 +2542,7 @@ export def "ad-accounts-lead-forms forms/list" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/lead_forms" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create lead forms
@@ -2472,6 +2558,7 @@ export def "ad-accounts-lead-forms forms/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<items: table<data: record, exceptions: list>> {
   let input = $in
@@ -2481,7 +2568,7 @@ export def "ad-accounts-lead-forms forms/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update lead forms
@@ -2497,6 +2584,7 @@ export def "ad-accounts-lead-forms forms/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<items: table<data: record, exceptions: list>> {
   let input = $in
@@ -2506,7 +2594,7 @@ export def "ad-accounts-lead-forms forms/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get lead form by id
@@ -2523,13 +2611,14 @@ export def "ad-accounts-lead-forms form/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ad_account_id: string, completion_message: string, created_time: int, disclosure_language: string, has_accepted_terms: bool, id: string, name: string, policy_links: table<label: string, link: string>, privacy_policy_link: string, questions: table<custom_question_field_type: string, custom_question_label: string, custom_question_options: list, question_type: string>, status: string, updated_time: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/lead_forms/($lead_form_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create lead form test data
@@ -2546,6 +2635,7 @@ export def "ad-accounts-lead-forms-test test/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   answers: list # Test lead answers. Should follow the creation order. (e.g. [John, Doe, abc@email.com, 987654321])
 ]: any -> record<subscription_id: string> {
   let input = $in
@@ -2556,7 +2646,7 @@ export def "ad-accounts-lead-forms-test test/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get lead ads subscriptions
@@ -2572,6 +2662,7 @@ export def "ad-accounts-leads-subscriptions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
 ]: nothing -> record<bookmark: string, items: table<ad_account_id: string, api_version: string, created_time: int, cryptographic_algorithm: string, cryptographic_key: string, id: string, lead_form_id: string, user_account_id: string, webhook_url: string>> {
@@ -2581,7 +2672,7 @@ export def "ad-accounts-leads-subscriptions list" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/leads/subscriptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create lead ads subscription
@@ -2597,6 +2688,7 @@ export def "ad-accounts-leads-subscriptions subscriptions/post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --partner-access-token: string # Partner access token. Only for clients that requires authentication. We recommend to avoid this param.
   --partner-metadata: any # Partner metadata. Only for clients that requires special handling. We recommend to avoid this param.
   --partner-refresh-token: string # Partner refresh token. Only for clients that requires authentication. We recommend to avoid this param.
@@ -2611,7 +2703,7 @@ export def "ad-accounts-leads-subscriptions subscriptions/post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get lead ads subscription by ID
@@ -2628,13 +2720,14 @@ export def "ad-accounts-leads-subscriptions id-by-ad_account_id-subscription_id"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ad_account_id: string, api_version: string, created_time: int, cryptographic_algorithm: string, cryptographic_key: string, id: string, lead_form_id: string, user_account_id: string, webhook_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/leads/subscriptions/($subscription_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete lead ads subscription
@@ -2651,13 +2744,14 @@ export def "ad-accounts-leads-subscriptions id-by-ad_account_id-subscription_id-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ad_account_id: string, api_version: string, created_time: int, cryptographic_algorithm: string, cryptographic_key: string, id: string, lead_form_id: string, user_account_id: string, webhook_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/leads/subscriptions/($subscription_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a request to export leads collected from a lead ad
@@ -2673,6 +2767,7 @@ export def "ad-accounts-leads-export export/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   ad_id: string # ID for the ad collecting leads. (e.g. 687201361754)
   end_date: string # Export leads collected on and before end date (UTC). Format: YYYY-MM-DD. (e.g. 2020-12-20)
   start_date: string # Export leads collected on and after start date (UTC). Format: YYYY-MM-DD. (e.g. 2020-12-20)
@@ -2685,7 +2780,7 @@ export def "ad-accounts-leads-export export/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the lead export from the lead export create call
@@ -2702,13 +2797,14 @@ export def "ad-accounts-leads-export export/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<download_url: string, export_status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/leads_export/($leads_export_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get advertiser Marketing Mix Modeling (MMM) report.
@@ -2724,6 +2820,7 @@ export def "ad-accounts-mmm-reports report-by-ad_account_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Token returned from the post request creation call
 ]: nothing -> record<message: string, report_status: record, size: float, status: string, token: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2732,7 +2829,7 @@ export def "ad-accounts-mmm-reports report-by-ad_account_id" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/mmm_reports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a request for a Marketing Mix Modeling (MMM) report
@@ -2748,6 +2845,7 @@ export def "ad-accounts-mmm-reports report-by-ad_account_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --advertiser-ids: list # Advertiser IDs for multi-advertiser report
   columns: list # Metric and entity columns
   --countries: list # A List of countries for filtering
@@ -2767,7 +2865,7 @@ export def "ad-accounts-mmm-reports report-by-ad_account_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send Measurement Source Of Truth (MSOT) attributed conversion events
@@ -2784,6 +2882,7 @@ export def "ad-accounts-msot-events events/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action-timestamps: list # Timestamp(s) when the ad action(s) happened. Unix timestamp in seconds. (e.g. [1451410040])
   ad_group_id: any # The ID of the ad group that was attributed to the conversion event. (e.g. 2680060704746)
   --attribution-model: any # The attribution model used to attribute the conversion event. (e.g. multi_touch)
@@ -2809,7 +2908,7 @@ export def "ad-accounts-msot-events events/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get order lines.
@@ -2825,6 +2924,7 @@ export def "ad-accounts-order-lines lines/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --order: string@order-completer # The order in which to sort the items returned: "ASCENDING" or "DESCENDING" by ID. Note that higher-value IDs are associated with more-recently added items.
@@ -2835,7 +2935,7 @@ export def "ad-accounts-order-lines lines/list" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/order_lines" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get order line
@@ -2852,13 +2952,14 @@ export def "ad-accounts-order-lines lines/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ad_account_id: string, budget: float, campaign_ids: list<string>, end_time: float, id: string, name: string, paid_budget: float, paid_type: record, purchase_order_id: string, start_time: float, status: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/order_lines/($order_line_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pins analytics
@@ -2874,6 +2975,7 @@ export def "ad-accounts-pins-analytics pins/analytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaign-id: string # Campaign Id to use to filter the results.
   --pin-ids: list # List of Pin IDs.
   --start-date: string # Metric report start date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days back from today. (format: date)
@@ -2891,7 +2993,7 @@ export def "ad-accounts-pins-analytics pins/analytics" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/pins/analytics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create product group promotions
@@ -2908,6 +3010,7 @@ export def "ad-accounts-product-group-promotions promotions/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   ad_group_id: string # ID of the ad group the product group promotion belongs to. (e.g. 2680059592705)
   product_group_promotion: list # List of product group promotions to create or update. (e.g. [{slideshow_collections_description: Description, creative_type: REGULAR, collections_hero_pin_id: 123123, catalog_product_group_name: catalogProductGroupName to create, collections_hero_destination_url: http://www.pinterest.com, tracking_url: https://www.pinterest.com, slideshow_collections_title: Title, status: ACTIVE, is_mdl: true}, {id: 2680059592705, catalog_product_group_id: 1234123, slideshow_collections_description: Description, creative_type: REGULAR, collections_hero_pin_id: 123123, catalog_product_group_name: catalogProductGroupName to update, collections_hero_destination_url: http://www.pinterest.com, tracking_url: https://www.pinterest.com, slideshow_collections_title: Title, status: ACTIVE}]) — item shape: {ad_group_id?: string, bid_in_micro_currency?: int, catalog_product_group_id?: string, catalog_product_group_name?: string, collections_header_type?: "SHOP_THIS_COLLECTION"|"EXPLORE_THIS_COLLECTION"|"NO_HEADER"|"ON_SALE"|"GET_DEAL"|"", collections_hero_destination_url?: string, collections_hero_pin_id?: string, creative_type?: "REGULAR"|"VIDEO"|"SHOPPING"|"CAROUSEL"|"MAX_VIDEO"|"SHOP_THE_PIN"|"COLLECTION"|"IDEA"|"SHOWCASE"|"QUIZ"|"COLLAGE"|"MAX_WIDTH_REGULAR_COLLECTION"|"MAX_WIDTH_VIDEO_COLLECTION"|"APP", customizable_cta_type?: "GET_OFFER"|"LEARN_MORE"|"ORDER_NOW"|"SHOP_NOW"|"SIGN_UP"|"SUBSCRIBE"|"BUY_NOW"|"CONTACT_US"|"GET_QUOTE"|"VISIT_SITE"|"APPLY_NOW"|"BOOK_NOW"|"REGISTER_NOW"|"FIND_A_DEALER"|"WATCH_NOW"|"READ_MORE"|"BUY_TICKETS"|"DONATE_NOW"|"DOWNLOAD"|"EXPLORE_MORE"|"FIND_A_LOCATION"|"GET_DEAL"|"GET_RECIPE"|"GET_SHOWTIMES"|"ON_SALE"|"PLAY_GAME"|"TRY_IT"|"BUY_ONLINE_PICKUP_IN_STORE"|"SHOP_ON_ADVERTISER"|"SHOP_THE_COLLECTION"|"GET_IT_NOW"|"TAKE_A_PEEK"|"TAKE_A_CLOSER_LOOK", definition?: string, grid_click_type?: "CLOSEUP"|"DIRECT_TO_DESTINATION", id?: string, included?: bool, is_generate_background?: bool, is_image_auto_resizing?: bool, is_mdl?: bool, parent_id?: string, preferred_media_type?: "VIDEO"|"IMAGE"|"", relative_definition?: string, selected_image_tag?: string, selected_video_tag?: string, slideshow_collections_description?: string, slideshow_collections_title?: string, status?: "ACTIVE"|"PAUSED"|"ARCHIVED"|"DRAFT"|"DELETED_DRAFT", tracking_url?: string}
 ]: any -> record<items: table<data: record, exceptions: list>> {
@@ -2919,7 +3022,7 @@ export def "ad-accounts-product-group-promotions promotions/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update product group promotions
@@ -2936,6 +3039,7 @@ export def "ad-accounts-product-group-promotions promotions/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   ad_group_id: string # ID of the ad group the product group promotion belongs to. (e.g. 2680059592705)
   product_group_promotion: list # List of product group promotions to create or update. (e.g. [{slideshow_collections_description: Description, creative_type: REGULAR, collections_hero_pin_id: 123123, catalog_product_group_name: catalogProductGroupName to create, collections_hero_destination_url: http://www.pinterest.com, tracking_url: https://www.pinterest.com, slideshow_collections_title: Title, status: ACTIVE, is_mdl: true}, {id: 2680059592705, catalog_product_group_id: 1234123, slideshow_collections_description: Description, creative_type: REGULAR, collections_hero_pin_id: 123123, catalog_product_group_name: catalogProductGroupName to update, collections_hero_destination_url: http://www.pinterest.com, tracking_url: https://www.pinterest.com, slideshow_collections_title: Title, status: ACTIVE}]) — item shape: {ad_group_id?: string, bid_in_micro_currency?: int, catalog_product_group_id?: string, catalog_product_group_name?: string, collections_header_type?: "SHOP_THIS_COLLECTION"|"EXPLORE_THIS_COLLECTION"|"NO_HEADER"|"ON_SALE"|"GET_DEAL"|"", collections_hero_destination_url?: string, collections_hero_pin_id?: string, creative_type?: "REGULAR"|"VIDEO"|"SHOPPING"|"CAROUSEL"|"MAX_VIDEO"|"SHOP_THE_PIN"|"COLLECTION"|"IDEA"|"SHOWCASE"|"QUIZ"|"COLLAGE"|"MAX_WIDTH_REGULAR_COLLECTION"|"MAX_WIDTH_VIDEO_COLLECTION"|"APP", customizable_cta_type?: "GET_OFFER"|"LEARN_MORE"|"ORDER_NOW"|"SHOP_NOW"|"SIGN_UP"|"SUBSCRIBE"|"BUY_NOW"|"CONTACT_US"|"GET_QUOTE"|"VISIT_SITE"|"APPLY_NOW"|"BOOK_NOW"|"REGISTER_NOW"|"FIND_A_DEALER"|"WATCH_NOW"|"READ_MORE"|"BUY_TICKETS"|"DONATE_NOW"|"DOWNLOAD"|"EXPLORE_MORE"|"FIND_A_LOCATION"|"GET_DEAL"|"GET_RECIPE"|"GET_SHOWTIMES"|"ON_SALE"|"PLAY_GAME"|"TRY_IT"|"BUY_ONLINE_PICKUP_IN_STORE"|"SHOP_ON_ADVERTISER"|"SHOP_THE_COLLECTION"|"GET_IT_NOW"|"TAKE_A_PEEK"|"TAKE_A_CLOSER_LOOK", definition?: string, grid_click_type?: "CLOSEUP"|"DIRECT_TO_DESTINATION", id?: string, included?: bool, is_generate_background?: bool, is_image_auto_resizing?: bool, is_mdl?: bool, parent_id?: string, preferred_media_type?: "VIDEO"|"IMAGE"|"", relative_definition?: string, selected_image_tag?: string, selected_video_tag?: string, slideshow_collections_description?: string, slideshow_collections_title?: string, status?: "ACTIVE"|"PAUSED"|"ARCHIVED"|"DRAFT"|"DELETED_DRAFT", tracking_url?: string}
 ]: any -> record<items: table<data: record, exceptions: list>> {
@@ -2947,7 +3051,7 @@ export def "ad-accounts-product-group-promotions promotions/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get product group promotions
@@ -2963,6 +3067,7 @@ export def "ad-accounts-product-group-promotions promotions/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --order: string@order-completer # The order in which to sort the items returned: "ASCENDING" or "DESCENDING" by ID. Note that higher-value IDs are associated with more-recently added items.
@@ -2976,7 +3081,7 @@ export def "ad-accounts-product-group-promotions promotions/list" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/product_group_promotions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a product group promotion by id
@@ -2993,13 +3098,14 @@ export def "ad-accounts-product-group-promotions promotions/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ad_group_id: string, bid_in_micro_currency: int, catalog_product_group_id: string, catalog_product_group_name: string, collections_header_type: string, collections_hero_destination_url: string, collections_hero_pin_id: string, creative_type: string, customizable_cta_type: string, definition: string, grid_click_type: string, id: string, included: bool, is_generate_background: bool, is_image_auto_resizing: bool, is_mdl: bool, parent_id: string, preferred_media_type: string, relative_definition: string, selected_image_tag: string, selected_video_tag: string, slideshow_collections_description: string, slideshow_collections_title: string, status: string, tracking_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/product_group_promotions/($product_group_promotion_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get product group analytics
@@ -3015,6 +3121,7 @@ export def "ad-accounts-product-groups-analytics groups/analytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Metric report start date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days back from today. (format: date)
   --end-date: string # Metric report end date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days past start_date. (format: date)
   --product-group-ids: list # List of Product group Ids to use to filter the results.
@@ -3032,7 +3139,7 @@ export def "ad-accounts-product-groups-analytics groups/analytics" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/product_groups/analytics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List of ad groups using promotions IDs.
@@ -3048,6 +3155,7 @@ export def "ad-accounts-promotion-applied-entities ids/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --order: string@order-completer # The order in which to sort the items returned: "ASCENDING" or "DESCENDING" by ID. Note that higher-value IDs are associated with more-recently added items.
@@ -3059,7 +3167,7 @@ export def "ad-accounts-promotion-applied-entities ids/list" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/promotion_applied_entities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get promotions
@@ -3075,6 +3183,7 @@ export def "ad-accounts-promotions promotions/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --order: string@order-completer # The order in which to sort the items returned: "ASCENDING" or "DESCENDING" by ID. Note that higher-value IDs are associated with more-recently added items.
@@ -3085,7 +3194,7 @@ export def "ad-accounts-promotions promotions/list" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/promotions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create promotions
@@ -3101,6 +3210,7 @@ export def "ad-accounts-promotions promotions/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<promotions: table<data: record, exception: record>> {
   let input = $in
@@ -3110,7 +3220,7 @@ export def "ad-accounts-promotions promotions/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update promotions
@@ -3126,6 +3236,7 @@ export def "ad-accounts-promotions promotions/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<promotions: table<data: record, exception: record>> {
   let input = $in
@@ -3135,7 +3246,7 @@ export def "ad-accounts-promotions promotions/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get promotion by id
@@ -3152,13 +3263,14 @@ export def "ad-accounts-promotions promotions/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ad_account_id: string, discount_status: string, end_time: int, external_id: string, id: string, platform_type: string, promotion_code: string, promotion_custom_id: string, promotion_title: string, promotion_type: string, start_time: int, status: record, template_values: table<amount: float, currency_code: string, custom_text: string, percent: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/promotions/($promotion_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete promotion by id
@@ -3175,13 +3287,14 @@ export def "ad-accounts-promotions promotions/delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ad_account_id: string, discount_status: string, end_time: int, external_id: string, id: string, platform_type: string, promotion_code: string, promotion_custom_id: string, promotion_title: string, promotion_type: string, start_time: int, status: record, template_values: table<amount: float, currency_code: string, custom_text: string, percent: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/promotions/($promotion_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the account analytics report created by the async call
@@ -3197,6 +3310,7 @@ export def "ad-accounts-reports report-by-ad_account_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Token returned from the post request creation call
 ]: nothing -> record<report_status: string, size: float, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3205,7 +3319,7 @@ export def "ad-accounts-reports report-by-ad_account_id" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/reports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create async request for an account analytics report
@@ -3223,6 +3337,7 @@ export def "ad-accounts-reports report-by-ad_account_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-group-ids: list # List of ad group ids
   --ad-group-statuses: list # List of values for filtering
   --ad-ids: list # List of ad ids. This parameter is not supported for Product Item level reports.
@@ -3263,7 +3378,7 @@ export def "ad-accounts-reports report-by-ad_account_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get advertiser brand, category, SKU report
@@ -3279,6 +3394,7 @@ export def "ad-accounts-reports-brand-category-sku report-by-ad_account_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Token returned from the post request creation call
 ]: nothing -> record<message: string, report_status: record, size: float, token: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3287,7 +3403,7 @@ export def "ad-accounts-reports-brand-category-sku report-by-ad_account_id" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/reports/brand_category_sku" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a request for a brand, category, SKU report
@@ -3303,6 +3419,7 @@ export def "ad-accounts-reports-brand-category-sku report-by-ad_account_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-group-ids: list #   List of ad group ids.   Only support ad_group_ids field when level of the report is AD_GROUP. (e.g. [12345678])
   --campaign-ids: list #   List of campaign ids.   Only support campaign_ids field when level of the report is CAMPAIGN. (e.g. [12345678])
   --campaign-objective-types: list # List of values for filtering. Default is ['CONSIDERATION','AWARENESS','WEB_CONVERSION','VIDEO_COMPLETION'].
@@ -3327,7 +3444,7 @@ export def "ad-accounts-reports-brand-category-sku report-by-ad_account_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete ads data for ad account in API Sandbox
@@ -3343,13 +3460,14 @@ export def "ad-accounts-sandbox sandbox/delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/sandbox")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Schedules
@@ -3365,6 +3483,7 @@ export def "ad-accounts-schedules schedules/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --order: string@order-completer # The order in which to sort the items returned: "ASCENDING" or "DESCENDING" by ID. Note that higher-value IDs are associated with more-recently added items.
@@ -3378,7 +3497,7 @@ export def "ad-accounts-schedules schedules/list" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/schedules" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create schedules
@@ -3394,6 +3513,7 @@ export def "ad-accounts-schedules schedules/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> table<data: any> {
   let input = $in
@@ -3403,7 +3523,7 @@ export def "ad-accounts-schedules schedules/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update schedules
@@ -3419,6 +3539,7 @@ export def "ad-accounts-schedules schedules/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> table<data: any> {
   let input = $in
@@ -3428,7 +3549,7 @@ export def "ad-accounts-schedules schedules/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Salesforce account details including bill-to information.
@@ -3444,13 +3565,14 @@ export def "ad-accounts-ssio-accounts accounts/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<billto_infos: table<addresses: list, id: string, io_terms: string, io_terms_id: string, io_type: string, row_terms: string, row_terms_id: string, us_terms: string, us_terms_id: string>, can_edit: bool, currency: string, eligible: bool, error: string, pmp_names: table<id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/ssio/accounts")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create insertion order through SSIO.
@@ -3466,6 +3588,7 @@ export def "ad-accounts-ssio-insertion-orders order/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   accepted_terms_id: string # The SFDC id for the terms
   --accepted-terms-time: int # The UTC timestamp (to the nearest sec) of when terms were accepted
   --agency-link: string # URL link for agency
@@ -3497,7 +3620,7 @@ export def "ad-accounts-ssio-insertion-orders order/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Edit insertion order through SSIO.
@@ -3513,6 +3636,7 @@ export def "ad-accounts-ssio-insertion-orders order/edit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ads-manager-order-line-id: string # Ads manager OrderLineId
   --agency-link: string # URL link for agency
   --billing-contact-email: string # The billing contact email
@@ -3538,7 +3662,7 @@ export def "ad-accounts-ssio-insertion-orders order/edit" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get insertion order status by ad account id.
@@ -3554,6 +3678,7 @@ export def "ad-accounts-ssio-insertion-orders-status account" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
 ]: nothing -> record<bookmark: string, items: table<creation_time: string, pin_order_id: string, status: string>> {
@@ -3563,7 +3688,7 @@ export def "ad-accounts-ssio-insertion-orders-status account" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/ssio/insertion_orders/status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get insertion order status by pin order id.
@@ -3580,13 +3705,14 @@ export def "ad-accounts-ssio-insertion-orders-status id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/ssio/insertion_orders/($pin_order_id)/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Salesforce order lines by ad account id.
@@ -3602,6 +3728,7 @@ export def "ad-accounts-ssio-order-lines account" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pin-order-id: string # The pin order id associated with the SSIO insertion order
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
@@ -3612,7 +3739,7 @@ export def "ad-accounts-ssio-order-lines account" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/ssio/order_lines" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get targeting analytics for an ad account
@@ -3628,6 +3755,7 @@ export def "ad-accounts-targeting-analytics analytics/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Metric report start date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days back from today. (format: date)
   --end-date: string # Metric report end date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days past start_date. (format: date)
   --targeting-types: list # Targeting type breakdowns for the report. The reporting per targeting type is independent from each other. ["AGE_BUCKET_AND_GENDER"] is in BETA and not yet available to all users.
@@ -3646,7 +3774,7 @@ export def "ad-accounts-targeting-analytics analytics/get" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/targeting_analytics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List targeting templates
@@ -3662,6 +3790,7 @@ export def "ad-accounts-targeting-templates template/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --order: string@order-completer # The order in which to sort the items returned: "ASCENDING" or "DESCENDING" by ID. Note that higher-value IDs are associated with more-recently added items.
@@ -3674,7 +3803,7 @@ export def "ad-accounts-targeting-templates template/list" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/targeting_templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create targeting templates
@@ -3692,6 +3821,7 @@ export def "ad-accounts-targeting-templates template/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auto-targeting-enabled: oneof<nothing, bool> # Enable auto-targeting for ad group. Also known as ["expanded targeting"](https://help.pinterest.com/en/business/article/expanded-targeting). (default: true)
   --keywords: list # item shape: {match_type?: "BROAD"|"PHRASE"|"EXACT"|"EXACT_NEGATIVE"|"PHRASE_NEGATIVE", value?: string}
   name: string # targeting template name
@@ -3707,7 +3837,7 @@ export def "ad-accounts-targeting-templates template/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update targeting templates
@@ -3723,6 +3853,7 @@ export def "ad-accounts-targeting-templates template/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: string # Targeting template ID (e.g. 643)
   operation_type: string@operation-type-completer-1 # Audience operation type (update or remove). (e.g. UPDATE)
   --targeting-attributes: any # targeting profile attributes
@@ -3735,7 +3866,7 @@ export def "ad-accounts-targeting-templates template/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List templates
@@ -3751,6 +3882,7 @@ export def "ad-accounts-templates templates/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --order: string@order-completer # The order in which to sort the items returned: "ASCENDING" or "DESCENDING" by ID. Note that higher-value IDs are associated with more-recently added items.
@@ -3761,7 +3893,7 @@ export def "ad-accounts-templates templates/list" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create async request for an analytics report using a template
@@ -3778,6 +3910,7 @@ export def "ad-accounts-templates-reports report" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Metric report start date (UTC). Format: YYYY-MM-DD. Cannot be more than 2.5 years back from today. (format: date)
   --end-date: string # Metric report end date (UTC). Format: YYYY-MM-DD. Cannot be more than 2.5 years past start date. (format: date)
   --granularity: string@granularity-completer #   TOTAL - metrics are aggregated over the specified date range.    DAY - metrics are broken down daily.    HOUR - metrics are broken down hourly.    WEEK - metrics are broken down weekly.    MONTH - metrics are broken down monthly
@@ -3788,7 +3921,7 @@ export def "ad-accounts-templates-reports report" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/templates/($template_id)/reports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get terms of service
@@ -3804,6 +3937,7 @@ export def "ad-accounts-terms-of-service service/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-html: oneof<nothing, bool> # Return HTML in TOS text. (default: false)
   --tos-type: string # Request type.
 ]: nothing -> record<ad_account_id: string, has_accepted: bool, html: string, id: string> {
@@ -3813,7 +3947,7 @@ export def "ad-accounts-terms-of-service service/get" [
   let full_url = (build-url $base $"/ad_accounts/($ad_account_id)/terms_of_service" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get item bid options (POST)
@@ -3829,6 +3963,7 @@ export def "advanced-auction-items-get get/post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   catalog_id: any # Catalog id pertaining to the retail item (e.g. 2680059592705)
   items: list # A list of retail catalog items to fetch bid options for — item shape: {country: "AD"|"AE"|"AF"|"AG"|"AI"|"AL"|"AM"|"AO"|"AQ"|"AR"|"AS"|"AT"|"AU"|"AW"|"AX"|"AZ"|"BA"|"BB"|"BD"|"BE"|"BF"|"BG"|"BH"|"BI"|"BJ"|"BL"|"BM"|"BN"|"BO"|"BQ"|"BR"|"BS"|"BT"|"BV"|"BW"|"BY"|"BZ"|"CA"|"CC"|"CD"|"CF"|"CG"|"CH"|"CI"|"CK"|"CL"|"CM"|"CN"|"CO"|"CR"|"CU"|"CV"|"CW"|"CX"|"CY"|"CZ"|"DE"|"DJ"|"DK"|"DM"|"DO"|"DZ"|"EC"|"EE"|"EG"|"EH"|"ER"|"ES"|"ET"|"FI"|"FJ"|"FK"|"FM"|"FO"|"FR"|"GA"|"GB"|"GD"|"GE"|"GF"|"GG"|"GH"|"GI"|"GL"|"GM"|"GN"|"GP"|"GQ"|"GR"|"GS"|"GT"|"GU"|"GW"|"GY"|"HK"|"HM"|"HN"|"HR"|"HT"|"HU"|"ID"|"IE"|"IL"|"IM"|"IN"|"IO"|"IQ"|"IR"|"IS"|"IT"|"JE"|"JM"|"JO"|"JP"|"KE"|"KG"|"KH"|"KI"|"KM"|"KN"|"KR"|"KW"|"KY"|"KZ"|"LA"|"LB"|"LC"|"LI"|"LK"|"LR"|"LS"|"LT"|"LU"|"LV"|"LY"|"MA"|"MC"|"MD"|"ME"|"MF"|"MG"|"MH"|"MK"|"ML"|"MM"|"MN"|"MO"|"MP"|"MQ"|"MR"|"MS"|"MT"|"MU"|"MV"|"MW"|"MX"|"MY"|"MZ"|"NA"|"NC"|"NE"|"NF"|"NG"|"NI"|"NL"|"NO"|"NP"|"NR"|"NU"|"NZ"|"OM"|"PA"|"PE"|"PF"|"PG"|"PH"|"PK"|"PL"|"PM"|"PN"|"PR"|"PS"|"PT"|"PW"|"PY"|"QA"|"RE"|"RO"|"RS"|"RU"|"RW"|"SA"|"SB"|"SC"|"SD"|"SE"|"SG"|"SH"|"SI"|"SJ"|"SK"|"SL"|"SM"|"SN"|"SO"|"SR"|"SS"|"ST"|"SV"|"SX"|"SY"|"SZ"|"TC"|"TD"|"TF"|"TG"|"TH"|"TJ"|"TK"|"TL"|"TM"|"TN"|"TO"|"TR"|"TT"|"TV"|"TW"|"TZ"|"UA"|"UG"|"UM"|"US"|"UY"|"UZ"|"VA"|"VC"|"VE"|"VG"|"VI"|"VN"|"VU"|"WF"|"WS"|"YE"|"YT"|"ZA"|"ZM"|"ZW", item_id: string, language: "AM"|"AR"|"AZ"|"BG"|"BN"|"BS"|"CA"|"CS"|"DA"|"DV"|"DZ"|"DE"|"EL"|"EN"|"ES"|"ET"|"FA"|"FI"|"FR"|"HE"|"HI"|"HR"|"HU"|"HY"|"ID"|"IN"|"IS"|"IT"|"IW"|"JA"|"KA"|"KM"|"KO"|"LO"|"LT"|"LV"|"MK"|"MN"|"MS"|"MY"|"NB"|"NE"|"NL"|"NO"|"PL"|"PT"|"RO"|"RU"|"SK"|"SL"|"SQ"|"SR"|"SV"|"TL"|"UK"|"VI"|"TE"|"TH"|"TR"|"XX"|"ZH"}
@@ -3842,7 +3977,7 @@ export def "advanced-auction-items-get get/post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Operate on item level bid options
@@ -3857,6 +3992,7 @@ export def "advanced-auction-items-submit submit/post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   catalog_id: any # Catalog id pertaining to all items (e.g. 2680059592705)
   items: list # Array of item bid option operations
@@ -3870,7 +4006,7 @@ export def "advanced-auction-items-submit submit/post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create board
@@ -3885,6 +4021,7 @@ export def "boards boards/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --description: string # nullable, e.g. My favorite summer recipes
   --is-ads-only: oneof<nothing, bool> # If set to `true`, the board will be ad-only and can store ad-only Pins. (default: false, e.g. true)
@@ -3900,7 +4037,7 @@ export def "boards boards/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List boards
@@ -3915,6 +4052,7 @@ export def "boards boards/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --privacy: string@privacy-completer # The privacy level of the board
   --bookmark: string # Cursor used to fetch the next page of items
@@ -3926,7 +4064,7 @@ export def "boards boards/list" [
   let full_url = (build-url $base "/boards" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get board
@@ -3942,6 +4080,7 @@ export def "boards boards/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
 ]: nothing -> record<privacy: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3950,7 +4089,7 @@ export def "boards boards/get" [
   let full_url = (build-url $base $"/boards/($board_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete board
@@ -3966,6 +4105,7 @@ export def "boards boards/delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
 ]: nothing -> record<privacy: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3974,7 +4114,7 @@ export def "boards boards/delete" [
   let full_url = (build-url $base $"/boards/($board_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update board
@@ -3990,6 +4130,7 @@ export def "boards boards/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --description: string # nullable, e.g. My favorite summer recipes
   --name: string #     Name of the board.      **Note:** If you create an ad-only board by setting `is_ads_only`     to `true`, the board name automatically becomes "Ad-only Pins". (e.g. Summer recipes)
@@ -4004,7 +4145,7 @@ export def "boards boards/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Pins on board
@@ -4020,6 +4161,7 @@ export def "boards-pins pins" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --creative-types: list # Pin creative types filter. **Note:** SHOP_THE_PIN has been deprecated. Please use COLLECTION instead.
   --ad-account-id: string # Unique identifier of an ad account.
   --pin-metrics: oneof<nothing, bool> # Specify whether to return 90d and lifetime Pin metrics. Total comments and total reactions are only available with lifetime Pin metrics. If Pin was created before `2023-03-20` lifetime metrics will only be available for Video and Idea Pin formats. Lifetime metrics are available for all Pin formats since then. (default: false)
@@ -4032,7 +4174,7 @@ export def "boards-pins pins" [
   let full_url = (build-url $base $"/boards/($board_id)/pins" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List board sections
@@ -4048,6 +4190,7 @@ export def "boards-sections sections/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
@@ -4058,7 +4201,7 @@ export def "boards-sections sections/list" [
   let full_url = (build-url $base $"/boards/($board_id)/sections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create board section
@@ -4074,6 +4217,7 @@ export def "boards-sections sections/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --id: string # e.g. 549755885175
   name: string # e.g. Salads
@@ -4087,7 +4231,7 @@ export def "boards-sections sections/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete board section
@@ -4104,6 +4248,7 @@ export def "boards-sections sections/delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
 ]: nothing -> record<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4112,7 +4257,7 @@ export def "boards-sections sections/delete" [
   let full_url = (build-url $base $"/boards/($board_id)/sections/($section_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update board section
@@ -4129,6 +4274,7 @@ export def "boards-sections sections/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --id: string # e.g. 549755885175
   name: string # e.g. Salads
@@ -4142,7 +4288,7 @@ export def "boards-sections sections/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Pins on board section
@@ -4159,6 +4305,7 @@ export def "boards-sections-pins pins" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
@@ -4169,7 +4316,7 @@ export def "boards-sections-pins pins" [
   let full_url = (build-url $base $"/boards/($board_id)/sections/($section_id)/pins" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Brand Account
@@ -4186,6 +4333,7 @@ export def "business-access-business-hierarchy-brand-accounts accounts/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --about: string # Brand Account about information
   country: string@country-completer # Country ID from ISO 3166-1 alpha-2.
   name: string # Brand Account name
@@ -4201,7 +4349,7 @@ export def "business-access-business-hierarchy-brand-accounts accounts/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a Brand Account
@@ -4219,6 +4367,7 @@ export def "business-access-business-hierarchy-brand-accounts accounts/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --about: string # Brand Account about information
   --country: string@country-completer # Country ID from ISO 3166-1 alpha-2.
   --name: string # Brand Account name
@@ -4234,7 +4383,7 @@ export def "business-access-business-hierarchy-brand-accounts accounts/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List business employers for user
@@ -4249,6 +4398,7 @@ export def "businesses-employers employers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --assets-summary: oneof<nothing, bool> # Include assets summary in the response if this is true. Defaults to true.  The assets summary returns a dictionary representing a summary of the assets for the business user ID, with information like the ad accounts and profiles the user has permissions for and what those permissions are (default: true)
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
@@ -4259,7 +4409,7 @@ export def "businesses-employers employers" [
   let full_url = (build-url $base "/businesses/employers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Accept or decline an invite/request
@@ -4275,6 +4425,7 @@ export def "businesses-invites invites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   invites: list # item shape: {action: record, invite_id: string}
 ]: any -> record<items: table<exception: record, invite: record>> {
   let input = $in
@@ -4285,7 +4436,7 @@ export def "businesses-invites invites" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new asset group.
@@ -4302,6 +4453,7 @@ export def "businesses-asset-groups group/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset-group: record # shape: {ad_accounts_ids: list, asset_group_description: string, asset_group_name: string, asset_group_types: list, catalogs_ids: list, created_by: any, created_time: int, id: string, owner: any, profiles_ids: list, updated_time: int}
   asset_group_description: string # Asset group description. (e.g. Asset groups that has ad accounts shared in Canada)
   asset_group_name: string # Asset Group name. (e.g. Canada Ad Accounts)
@@ -4315,7 +4467,7 @@ export def "businesses-asset-groups group/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update asset groups.
@@ -4334,6 +4486,7 @@ export def "businesses-asset-groups group/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset-groups-to-update: list # A list of asset groups and the data that will be used to update them. — item shape: {asset_group_id: string, asset_group_types?: list, assets_to_add?: list, assets_to_remove?: list, description?: string, name?: string}
 ]: any -> record<exceptions: table<asset_group_id: string, code: int, message: string>, updated_asset_groups: table<ad_accounts_ids: list, asset_group_description: string, asset_group_name: string, asset_group_types: list, catalogs_ids: list, created_by: record, created_time: int, id: string, owner: record, profiles_ids: list, updated_time: int>> {
   let input = $in
@@ -4344,7 +4497,7 @@ export def "businesses-asset-groups group/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete asset groups.
@@ -4360,6 +4513,7 @@ export def "businesses-asset-groups group/delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   asset_groups_to_delete: list
 ]: any -> record<deleted_asset_groups: list<string>, exceptions: table<asset_group_id: string, code: int, message: string>> {
   let input = $in
@@ -4370,7 +4524,7 @@ export def "businesses-asset-groups group/delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List business assets
@@ -4386,6 +4540,7 @@ export def "businesses-assets assets/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --permissions: list # A list of asset permissions used to filter the assets. Only assets where the requesting business has at least one of the specified permissions will be returned.
   --child-asset-id: string # A child asset unique identifier. Used to fetch asset groups that contain the asset id as a child.
   --asset-group-id: string # An asset group unique identifier. Used to fetch assets contained within the specified asset group.
@@ -4400,7 +4555,7 @@ export def "businesses-assets assets/get" [
   let full_url = (build-url $base $"/businesses/($business_id)/assets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get members with access to asset
@@ -4417,6 +4572,7 @@ export def "businesses-assets-members members/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-index: int # An index to start fetching the results from. Only the results starting from this index will be returned. (default: 0)
   --fetch-system-users: oneof<nothing, bool> # Fetches system users if True. Fetches regular user employees if False. (default: false)
   --bookmark: string # Cursor used to fetch the next page of items
@@ -4428,7 +4584,7 @@ export def "businesses-assets-members members/get" [
   let full_url = (build-url $base $"/businesses/($business_id)/assets/($asset_id)/members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get partners with access to asset
@@ -4445,6 +4601,7 @@ export def "businesses-assets-partners partners/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-index: int # An index to start fetching the results from. Only the results starting from this index will be returned. (default: 0)
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
@@ -4455,7 +4612,7 @@ export def "businesses-assets-partners partners/get" [
   let full_url = (build-url $base $"/businesses/($business_id)/assets/($asset_id)/partners" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List received audiences for a business
@@ -4471,6 +4628,7 @@ export def "businesses-audiences business/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string@order-completer # The order in which to sort the items returned: "ASCENDING" or "DESCENDING" by ID. Note that higher-value IDs are associated with more-recently added items.
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
@@ -4481,7 +4639,7 @@ export def "businesses-audiences business/list" [
   let full_url = (build-url $base $"/businesses/($business_id)/audiences" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update audience sharing from a business to ad accounts
@@ -4497,6 +4655,7 @@ export def "businesses-audiences-ad-accounts-shared audience" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   audience_id: any # Unique identifier of an audience (e.g. 2542621871096)
   operation_type: string@operation-type-completer # Operation type to share a specific audience or revoke access to a previously shared audience
   recipient_account_ids: list # Ad account IDs to share with or revoke from (request) / that received the audience (response).
@@ -4509,7 +4668,7 @@ export def "businesses-audiences-ad-accounts-shared audience" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update audience sharing between businesses
@@ -4525,6 +4684,7 @@ export def "businesses-audiences-businesses-shared audience" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   audience_id: any # Unique identifier of an audience (e.g. 2542621871096)
   operation_type: string@operation-type-completer # Operation type to share a specific audience or revoke access to a previously shared audience
   recipient_business_ids: list # Business IDs to share with or revoke from (request) / that received the audience (response).
@@ -4537,7 +4697,7 @@ export def "businesses-audiences-businesses-shared audience" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List accounts with access to an audience owned by a business
@@ -4553,6 +4713,7 @@ export def "businesses-audiences-shared-accounts accounts/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --audience-id: string # Unique identifier of the audience to use to filter the results.
   --account-type: string@account-type-completer # Filter accounts by account type.
   --bookmark: string # Cursor used to fetch the next page of items
@@ -4564,7 +4725,7 @@ export def "businesses-audiences-shared-accounts accounts/list" [
   let full_url = (build-url $base $"/businesses/($business_id)/audiences/shared/accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get invites/requests
@@ -4580,6 +4741,7 @@ export def "businesses-invites get/invites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --is-member: oneof<nothing, bool> # A boolean field to indicate whether the invite is to create a partnership or a membership. (default: true)
   --invite-status: list # A list of invite statuses to filter invites by. Only invites whose status is in the provided statuses will be returned.
   --invite-type: string@invite-type-completer # Invite type to filter invites by. Only invites of the specified type will be returned. (e.g. MEMBER_INVITE)
@@ -4592,7 +4754,7 @@ export def "businesses-invites get/invites" [
   let full_url = (build-url $base $"/businesses/($business_id)/invites" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create invites or requests
@@ -4608,6 +4770,7 @@ export def "businesses-invites invites-by-business_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   business_role: any # e.g. BIZ_ADMIN
   invite_type: string@invite-type-completer # The type of invite. MEMBER_INVITE invites a member to access your business assets. PARTNER_INVITE invites a partner to access your business assets. PARTNER_REQUEST requests access to a partner's business assets. (e.g. MEMBER_INVITE)
   --members: list # A list of usernames, emails, or a mix of them. Should be used if invite_type is MEMBER_INVITE (e.g. [business0101, user@business.com])
@@ -4621,7 +4784,7 @@ export def "businesses-invites invites-by-business_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel invites/requests
@@ -4637,6 +4800,7 @@ export def "businesses-invites requests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   invite_ids: list # A list of invite/request ids to cancel.
 ]: any -> record<items: table<exception: record, invite: record>> {
   let input = $in
@@ -4647,7 +4811,7 @@ export def "businesses-invites requests" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update invite/request with an asset permission
@@ -4664,6 +4828,7 @@ export def "businesses-invites-assets-access invites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   invites: list # item shape: {asset_id_to_permissions: record, invite_id: string, invite_type: "MEMBER_INVITE"|"PARTNER_INVITE"|"PARTNER_REQUEST"}
 ]: any -> record<items: table<exception: record, invite: record>> {
   let input = $in
@@ -4674,7 +4839,7 @@ export def "businesses-invites-assets-access invites" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get business members
@@ -4690,6 +4855,7 @@ export def "businesses-members members" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fetch-system-users: oneof<nothing, bool> # Fetches system users if True. Fetches regular user employees if False. (default: false)
   --assets-summary: oneof<nothing, bool> # Include assets summary in the response if this is true.  The assets summary returns a dictionary representing a summary of the assets for the business user ID, with information like the ad accounts and profiles the user has permissions for and what those permissions are (default: false)
   --business-roles: list # A list of business roles to filter the members by. Only members whose roles are in the specified roles will be returned.
@@ -4704,7 +4870,7 @@ export def "businesses-members members" [
   let full_url = (build-url $base $"/businesses/($business_id)/members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Terminate business memberships
@@ -4721,6 +4887,7 @@ export def "businesses-members membership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   members: list # item shape: {business_role: "EMPLOYEE"|"BIZ_ADMIN", member_id: string}
 ]: any -> record<deleted_members: list<string>> {
   let input = $in
@@ -4731,7 +4898,7 @@ export def "businesses-members membership" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update member's business role
@@ -4747,6 +4914,7 @@ export def "businesses-members memberships" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<items: table<business_role: string, member_id: string>> {
   let input = $in
@@ -4756,7 +4924,7 @@ export def "businesses-members memberships" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Assign/Update member asset permissions
@@ -4773,6 +4941,7 @@ export def "businesses-members-assets-access access/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   accesses: list # List of member asset accesses to assign or update. — item shape: {asset_id: string, member_id: string, permissions: list}
 ]: any -> record<items: table<response: record>> {
   let input = $in
@@ -4783,7 +4952,7 @@ export def "businesses-members-assets-access access/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete member access to asset
@@ -4800,6 +4969,7 @@ export def "businesses-members-assets-access access/delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   accesses: list # List of members asset access to be deleted — item shape: {asset_id: string, member_id: string}
 ]: any -> record<items: table<asset_id: string, member_id: string>> {
   let input = $in
@@ -4810,7 +4980,7 @@ export def "businesses-members-assets-access access/delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get assets assigned to a member
@@ -4827,6 +4997,7 @@ export def "businesses-members-assets assets/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --asset-type: string@asset-type-completer-1 # A resource type to filter the assets by. Only assets of the specified type will be returned. (default: AD_ACCOUNT)
   --start-index: int # An index to start fetching the results from. Only the results starting from this index will be returned. (default: 0)
   --sort-by: string@sort-by-completer # The field to sort member assets by (e.g. NAME)
@@ -4844,7 +5015,7 @@ export def "businesses-members-assets assets/get" [
   let full_url = (build-url $base $"/businesses/($business_id)/members/($member_id)/assets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get business partners
@@ -4860,6 +5031,7 @@ export def "businesses-partners partners-by-business_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --assets-summary: oneof<nothing, bool> # Include assets summary in the response if this is true.  The assets summary returns a dictionary representing a summary of the assets for the business user ID, with information like the ad accounts and profiles the user has permissions for and what those permissions are (default: false)
   --partner-type: string@partner-type-completer # Specifies whether to fetch internal or external (shared) partners. If partner_type=INTERNAL, the asset being queried is for accesses the partner has to your business assets. If partner_type=EXTERNAL, the asset being queried is for the accesses you have to the partner's business asset. (e.g. INTERNAL)
   --partner-ids: string # A list of business partner ids separated by commas used to filter the results. Only partners with the specified ids will be returned.
@@ -4874,7 +5046,7 @@ export def "businesses-partners partners-by-business_id" [
   let full_url = (build-url $base $"/businesses/($business_id)/partners" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Terminate business partnerships
@@ -4890,6 +5062,7 @@ export def "businesses-partners partners-by-business_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   partner_ids: list # A list of partner ids to be deleted
   --partner-type: any # nullable
 ]: any -> record<deleted_partners: list<string>> {
@@ -4901,7 +5074,7 @@ export def "businesses-partners partners-by-business_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Assign/Update partner asset permissions
@@ -4918,6 +5091,7 @@ export def "businesses-partners-assets impl-by-business_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   accesses: list # List of partner asset accesses to assign or update. — item shape: {asset_id: string, partner_id: string, permissions: list}
 ]: any -> record<items: table<asset_id: string, asset_type: string, partner_id: string, permissions: list>> {
   let input = $in
@@ -4928,7 +5102,7 @@ export def "businesses-partners-assets impl-by-business_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete partner access to asset
@@ -4945,6 +5119,7 @@ export def "businesses-partners-assets impl-by-business_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   accesses: list # List of partner asset accesses to delete. — item shape: {asset_id: string, partner_id: string, partner_type?: "INTERNAL"|"EXTERNAL"}
 ]: any -> record<items: table<asset_id: string, asset_type: string, is_shared_partner: bool, partner_id: string, permissions: list>> {
   let input = $in
@@ -4955,7 +5130,7 @@ export def "businesses-partners-assets impl-by-business_id-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get assets assigned to a partner or assets assigned by a partner
@@ -4972,6 +5147,7 @@ export def "businesses-partners-assets access/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --partner-type: string@partner-type-completer # Specifies whether to fetch internal or external (shared) partners.  If partner_type=INTERNAL, the asset being queried is for accesses the partner has to your business assets.  If partner_type=EXTERNAL, the asset being queried is for the accesses you have to the partner's business asset. (default: INTERNAL)
   --asset-type: string@asset-type-completer-2 # A resource type to filter the assets by. Only assets of the specified type will be returned. (default: AD_ACCOUNT)
   --start-index: int # An index to start fetching the results from. Only the results starting from this index will be returned. (default: 0)
@@ -4988,7 +5164,7 @@ export def "businesses-partners-assets access/get" [
   let full_url = (build-url $base $"/businesses/($business_id)/partners/($partner_id)/assets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a request to access an existing partner's assets.
@@ -5005,6 +5181,7 @@ export def "businesses-requests-assets-access requests/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   asset_requests: list # item shape: {asset_id_to_permissions: record, partner_id: string}
 ]: any -> record<exceptions: table<code: int, messages: list>, invites: record> {
   let input = $in
@@ -5015,7 +5192,7 @@ export def "businesses-requests-assets-access requests/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a system user information.
@@ -5032,6 +5209,7 @@ export def "businesses-system-users user/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # New system user name
 ]: any -> record<code: int, message: string> {
   let input = $in
@@ -5042,7 +5220,7 @@ export def "businesses-system-users user/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List catalogs
@@ -5057,6 +5235,7 @@ export def "catalogs catalogs/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
@@ -5067,7 +5246,7 @@ export def "catalogs catalogs/list" [
   let full_url = (build-url $base "/catalogs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create catalog
@@ -5082,6 +5261,7 @@ export def "catalogs catalogs/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   catalog_type: string@catalog-type-completer # Type of the catalog entity.
   name: string # A human-friendly name associated to a catalog entity.
@@ -5095,7 +5275,7 @@ export def "catalogs catalogs/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List available filter values
@@ -5111,6 +5291,7 @@ export def "catalogs-available-filter-values values" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --catalog-id: string # Filter entities for a given catalog_id.
   --feed-id: string # Filter entities for a given feed_id. If not given, all feeds are considered.
   --country: string@country-completer # Country for the Catalogs Items
@@ -5123,7 +5304,7 @@ export def "catalogs-available-filter-values values" [
   let full_url = (build-url $base "/catalogs/available_filter_values" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List feeds
@@ -5138,6 +5319,7 @@ export def "catalogs-feeds feeds/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --catalog-id: string # Filter entities for a given catalog_id. If not given, all catalogs are considered.
   --ad-account-id: string # Unique identifier of an ad account.
   --bookmark: string # Cursor used to fetch the next page of items
@@ -5149,7 +5331,7 @@ export def "catalogs-feeds feeds/list" [
   let full_url = (build-url $base "/catalogs/feeds" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create feed
@@ -5167,6 +5349,7 @@ export def "catalogs-feeds feeds/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --credentials: record # This field is **OPTIONAL**. Use this if your feed file requires username and password. (nullable) — shape: {password: string, username: string}
   --default-availability: string@default-availability-completer # Default availability for products in a feed. (nullable)
@@ -5188,7 +5371,7 @@ export def "catalogs-feeds feeds/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get feed
@@ -5205,6 +5388,7 @@ export def "catalogs-feeds feeds/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5213,7 +5397,7 @@ export def "catalogs-feeds feeds/get" [
   let full_url = (build-url $base $"/catalogs/feeds/($feed_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update feed
@@ -5232,6 +5416,7 @@ export def "catalogs-feeds feeds/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --credentials: record # This field is **OPTIONAL**. Use this if your feed file requires username and password. (nullable) — shape: {password: string, username: string}
   --default-availability: string@default-availability-completer # Default availability for products in a feed. (nullable)
@@ -5251,7 +5436,7 @@ export def "catalogs-feeds feeds/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete feed
@@ -5268,6 +5453,7 @@ export def "catalogs-feeds feeds/delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5276,7 +5462,7 @@ export def "catalogs-feeds feeds/delete" [
   let full_url = (build-url $base $"/catalogs/feeds/($feed_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Ingest feed items
@@ -5292,6 +5478,7 @@ export def "catalogs-feeds-ingest feeds/ingest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
 ]: nothing -> record<created_at: string, feed_id: string, id: string, status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5300,7 +5487,7 @@ export def "catalogs-feeds-ingest feeds/ingest" [
   let full_url = (build-url $base $"/catalogs/feeds/($feed_id)/ingest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List feed processing results
@@ -5316,6 +5503,7 @@ export def "catalogs-feeds-processing-results results/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
@@ -5326,7 +5514,7 @@ export def "catalogs-feeds-processing-results results/list" [
   let full_url = (build-url $base $"/catalogs/feeds/($feed_id)/processing_results" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get catalogs items (POST)
@@ -5342,6 +5530,7 @@ export def "catalogs-items items/post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   country: string@country-completer # Country ID from ISO 3166-1 alpha-2.
   filters: record # shape: {catalog_id?: string, catalog_type: "RETAIL"|"HOTEL"|"CREATIVE_ASSETS", item_ids?: list, hotel_ids?: list, creative_assets_ids?: list}
@@ -5356,7 +5545,7 @@ export def "catalogs-items items/post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Operate on item batch
@@ -5372,6 +5561,7 @@ export def "catalogs-items-batch batch/post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --body: record
 ]: any -> record {
@@ -5383,7 +5573,7 @@ export def "catalogs-items-batch batch/post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get item batch status
@@ -5400,6 +5590,7 @@ export def "catalogs-items-batch batch/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5408,7 +5599,7 @@ export def "catalogs-items-batch batch/get" [
   let full_url = (build-url $base $"/catalogs/items/batch/($batch_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List item issues
@@ -5424,6 +5615,7 @@ export def "catalogs-processing-results-item-issues issues/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --item-numbers: list # Item number based on order of appearance in the Catalogs Feed. For example, '0' refers to first item found in a feed that was downloaded from a 'location' specified during feed creation.
   --item-validation-issue: string@item-validation-issue-completer # Filter item validation issues that have a given type of item validation issue.
   --ad-account-id: string # Unique identifier of an ad account.
@@ -5436,7 +5628,7 @@ export def "catalogs-processing-results-item-issues issues/list" [
   let full_url = (build-url $base $"/catalogs/processing_results/($processing_result_id)/item_issues" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List product groups
@@ -5451,6 +5643,7 @@ export def "catalogs-product-groups groups/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # Comma-separated list of product group ids
   --feed-id: string # Filter entities for a given feed_id. If not given, all feeds are considered.
   --catalog-id: string # Filter entities for a given catalog_id. If not given, all catalogs are considered.
@@ -5464,7 +5657,7 @@ export def "catalogs-product-groups groups/list" [
   let full_url = (build-url $base "/catalogs/product_groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create product group
@@ -5481,6 +5674,7 @@ export def "catalogs-product-groups groups/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --description: string # nullable
   --feed-id: string # Catalog Feed id pertaining to the catalog product group. (e.g. 2680059592705)
@@ -5497,7 +5691,7 @@ export def "catalogs-product-groups groups/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete product groups
@@ -5512,6 +5706,7 @@ export def "catalogs-product-groups-multiple many" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # Comma-separated list of product group ids
   --ad-account-id: string # Unique identifier of an ad account.
 ]: nothing -> record<code: int, message: string> {
@@ -5521,7 +5716,7 @@ export def "catalogs-product-groups-multiple many" [
   let full_url = (build-url $base "/catalogs/product_groups/multiple" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create product groups
@@ -5536,6 +5731,7 @@ export def "catalogs-product-groups-multiple many-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --body: record
 ]: any -> list<string> {
@@ -5547,7 +5743,7 @@ export def "catalogs-product-groups-multiple many-1" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get product group
@@ -5564,6 +5760,7 @@ export def "catalogs-product-groups groups/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5572,7 +5769,7 @@ export def "catalogs-product-groups groups/get" [
   let full_url = (build-url $base $"/catalogs/product_groups/($product_group_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update single product group
@@ -5590,6 +5787,7 @@ export def "catalogs-product-groups groups/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --description: string # nullable
   --filters: any # Object holding a group of filters for request on catalog product group.  This is a distinct schema. It is not possible to create or update a Product Group with empty filters. But some automatically generated Product Groups might have empty filters.
@@ -5605,7 +5803,7 @@ export def "catalogs-product-groups groups/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete product group
@@ -5622,6 +5820,7 @@ export def "catalogs-product-groups groups/delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5630,7 +5829,7 @@ export def "catalogs-product-groups groups/delete" [
   let full_url = (build-url $base $"/catalogs/product_groups/($product_group_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get product counts
@@ -5647,6 +5846,7 @@ export def "catalogs-product-groups-product-counts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5655,7 +5855,7 @@ export def "catalogs-product-groups-product-counts get" [
   let full_url = (build-url $base $"/catalogs/product_groups/($product_group_id)/product_counts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List products by product group
@@ -5671,6 +5871,7 @@ export def "catalogs-product-groups-products pins/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --pin-metrics: oneof<nothing, bool> # Specify whether to return 90d and lifetime Pin metrics. Total comments and total reactions are only available with lifetime Pin metrics. If Pin was created before `2023-03-20` lifetime metrics will only be available for Video and Idea Pin formats. Lifetime metrics are available for all Pin formats since then. (default: false)
   --bookmark: string # Cursor used to fetch the next page of items
@@ -5682,7 +5883,7 @@ export def "catalogs-product-groups-products pins/list" [
   let full_url = (build-url $base $"/catalogs/product_groups/($product_group_id)/products" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List products by filter
@@ -5697,6 +5898,7 @@ export def "catalogs-products-get-by-product-group-filters filter/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --ad-account-id: string # Unique identifier of an ad account.
@@ -5713,7 +5915,7 @@ export def "catalogs-products-get-by-product-group-filters filter/list" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get catalogs report
@@ -5728,6 +5930,7 @@ export def "catalogs-reports reports/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --qp-token: string # Token returned from the post request creation call
 ]: nothing -> record<report_status: string, size: float, url: string> {
@@ -5737,7 +5940,7 @@ export def "catalogs-reports reports/get" [
   let full_url = (build-url $base "/catalogs/reports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Build catalogs report
@@ -5754,6 +5957,7 @@ export def "catalogs-reports reports/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   catalog_type: string@catalog-type-completer-1
   --report: record # shape: {feed_id?: string, processing_result_id?: string, report_type: "FEED_INGESTION_ISSUES"|"DISTRIBUTION_ISSUES"|"ALL_ITEMS", catalog_id?: string, product_group_id?: string}
@@ -5767,7 +5971,7 @@ export def "catalogs-reports reports/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List report stats
@@ -5782,6 +5986,7 @@ export def "catalogs-reports-stats reports/stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --parameters: record # Contains the parameters for report identification.
   --bookmark: string # Cursor used to fetch the next page of items
@@ -5793,7 +5998,7 @@ export def "catalogs-reports-stats reports/stats" [
   let full_url = (build-url $base "/catalogs/reports/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Operate on local inventory item batch
@@ -5809,6 +6014,7 @@ export def "catalogs-local-inventory-items-batch batch/operate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   operations: list # Array of inventory operations. Up to 1000 items per request.
 ]: any -> record<batch_id: string, completed_time: string, created_time: string, operation_results: list<record>, status: record> {
@@ -5821,7 +6027,7 @@ export def "catalogs-local-inventory-items-batch batch/operate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get local inventory items (POST)
@@ -5838,6 +6044,7 @@ export def "catalogs-local-inventory-items-query items/post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   item_filters: list # Array of local inventory item identifiers. Each item requires an item_id and store_code pair. Up to 1000 items. — item shape: {item_id: string, store_code: string}
 ]: any -> record<items: table<ad_link: string, availability: record, created_at: int, item_id: string, last_updated_time: int, price: string, sale_price: string, store_metadata: record>> {
@@ -5850,7 +6057,7 @@ export def "catalogs-local-inventory-items-query items/post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List local stores
@@ -5866,6 +6073,7 @@ export def "catalogs-local-stores stores/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # List of local store IDs to filter by.
   --ad-account-id: string # Unique identifier of an ad account.
   --bookmark: string # Cursor used to fetch the next page of items
@@ -5877,7 +6085,7 @@ export def "catalogs-local-stores stores/list" [
   let full_url = (build-url $base $"/catalogs/($catalog_id)/local_stores" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create local stores
@@ -5893,6 +6101,7 @@ export def "catalogs-local-stores stores/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --body: record
 ]: any -> table<data: any> {
@@ -5904,7 +6113,7 @@ export def "catalogs-local-stores stores/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update local stores
@@ -5920,6 +6129,7 @@ export def "catalogs-local-stores stores/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --body: record
 ]: any -> table<data: any> {
@@ -5931,7 +6141,7 @@ export def "catalogs-local-stores stores/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete local stores
@@ -5947,6 +6157,7 @@ export def "catalogs-local-stores stores/delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # List of local store IDs to filter by.
   --ad-account-id: string # Unique identifier of an ad account.
 ]: nothing -> table<id: string, status: any> {
@@ -5956,7 +6167,7 @@ export def "catalogs-local-stores stores/delete" [
   let full_url = (build-url $base $"/catalogs/($catalog_id)/local_stores" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get supplemental items batch status
@@ -5973,6 +6184,7 @@ export def "catalogs-supplemental-items-batch batch/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
 ]: nothing -> record<batch_id: string, completed_time: string, created_time: string, operation_results: list<record>, status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5981,7 +6193,7 @@ export def "catalogs-supplemental-items-batch batch/get" [
   let full_url = (build-url $base $"/catalogs/($catalog_id)/supplemental_items/batch/($batch_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get integration metadata list
@@ -5996,6 +6208,7 @@ export def "integrations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
 ]: nothing -> record<bookmark: string, items: table<additional_id_1: string, connected_advertiser_id: string, connected_lba_id: string, connected_merchant_id: string, connected_tag_id: string, connected_user_id: string, created_time: int, external_business_id: string, id: record, partner_access_token: string, partner_access_token_expiry: int, partner_metadata: string, partner_primary_email: string, partner_refresh_token: string, partner_refresh_token_expiry: int, scopes: string, updated_time: int>> {
@@ -6005,7 +6218,7 @@ export def "integrations list" [
   let full_url = (build-url $base "/integrations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create commerce integration
@@ -6020,6 +6233,7 @@ export def "integrations-commerce commerce/post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-id-1: string
   --connected-advertiser-id: string
   --connected-lba-id: string
@@ -6042,7 +6256,7 @@ export def "integrations-commerce commerce/post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get commerce integration
@@ -6058,13 +6272,14 @@ export def "integrations-commerce commerce/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<additional_id_1: string, connected_advertiser_id: string, connected_lba_id: string, connected_merchant_id: string, connected_tag_id: string, connected_user_id: string, created_timestamp: float, external_business_id: string, id: record, partner_access_token_expiry: float, partner_metadata: string, partner_refresh_token_expiry: float, scopes: string, updated_timestamp: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/integrations/commerce/($external_business_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update commerce integration
@@ -6080,6 +6295,7 @@ export def "integrations-commerce commerce/patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-id-1: string
   --connected-advertiser-id: string
   --connected-lba-id: string
@@ -6101,7 +6317,7 @@ export def "integrations-commerce commerce/patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete commerce integration
@@ -6117,13 +6333,14 @@ export def "integrations-commerce commerce/del" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<additional_id_1: string, connected_advertiser_id: string, connected_lba_id: string, connected_merchant_id: string, connected_tag_id: string, connected_user_id: string, created_timestamp: float, external_business_id: string, id: record, partner_access_token_expiry: float, partner_metadata: string, partner_refresh_token_expiry: float, scopes: string, updated_timestamp: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/integrations/commerce/($external_business_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Receives batched logs from integration applications.
@@ -6139,6 +6356,7 @@ export def "integrations-logs logs/post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   logs: list # item shape: {advertiser_id?: string, app_version_number?: string, client_timestamp: int, error?: record, event_type: any, external_business_id?: string, feed_profile_id?: string, log_level: any, merchant_id?: string, message?: string, platform_version_number?: string, request?: record, tag_id?: string}
 ]: any -> record<message: string> {
   let input = $in
@@ -6149,7 +6367,7 @@ export def "integrations-logs logs/post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get integration metadata
@@ -6165,13 +6383,14 @@ export def "integrations id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<additional_id_1: string, connected_advertiser_id: string, connected_lba_id: string, connected_merchant_id: string, connected_tag_id: string, connected_user_id: string, created_time: int, external_business_id: string, id: record, partner_access_token: string, partner_access_token_expiry: int, partner_metadata: string, partner_primary_email: string, partner_refresh_token: string, partner_refresh_token_expiry: int, scopes: string, updated_time: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/integrations/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List media uploads
@@ -6186,6 +6405,7 @@ export def "media media/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
 ]: nothing -> record<bookmark: string, items: table<media_id: string, media_type: record, status: record>> {
@@ -6195,7 +6415,7 @@ export def "media media/list" [
   let full_url = (build-url $base "/media" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Register media upload
@@ -6210,6 +6430,7 @@ export def "media media/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   media_type: any # e.g. video
 ]: any -> record<media_id: string, media_type: record, upload_parameters: record<Content_Type: string, key: string, policy: string, x_amz_algorithm: string, x_amz_credential: string, x_amz_date: string, x_amz_security_token: string, x_amz_signature: string>, upload_url: string> {
   let input = $in
@@ -6220,7 +6441,7 @@ export def "media media/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get media upload details
@@ -6236,13 +6457,14 @@ export def "media media/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<media_id: string, media_type: record, status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/media/($media_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Receive notifications from external partners.
@@ -6257,6 +6479,7 @@ export def "notifications notification/post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<error_msg: string, received_at: int, success: bool> {
   let input = $in
@@ -6266,7 +6489,7 @@ export def "notifications notification/post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate OAuth access token for conversion API
@@ -6281,13 +6504,14 @@ export def "oauth-conversion-token token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<access_token: string, token_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/conversion_token")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate OAuth access token
@@ -6302,6 +6526,7 @@ export def "oauth-token oauth/token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --code: string
   --continuous-refresh: string #   If your app was created before **September 25, 2025**, set to `true` to generate a [continuous refresh token](/docs/getting-started/set-up-authentication-and-authorization/#exchange-the-default-refresh-token-for-a-continuous-refresh-token), which has a 60-day expiration window. We no longer support the legacy refresh token, which has a 365-day expiration window.    If your app was created on or after **September 25, 2025**, ignore this parameter. You automatically receive a continuous refresh token when you request an access token.
   grant_type: string@grant-type-completer # The type of OAuth grant being requested.
@@ -6317,7 +6542,7 @@ export def "oauth-token oauth/token" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Revoke a token
@@ -6332,6 +6557,7 @@ export def "oauth-token-revoke token/revoke" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # The token to revoke. (e.g. pinr.eyJhbGciOiJS...)
   --token-type-hint: any # The type of the token to revoke. Please refer to [our developer guide for more information](https://developers.pinterest.com/docs/getting-started/set-up-authentication-and-authorization/) for more information.
 ]: any -> record<code: int, message: string> {
@@ -6343,7 +6569,7 @@ export def "oauth-token-revoke token/revoke" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create Pin
@@ -6359,6 +6585,7 @@ export def "pins pins/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --ai-disclosures: any # AI disclosure declarations the creator has made about this Pin.
   --alt-text: string # nullable
@@ -6381,7 +6608,7 @@ export def "pins pins/create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Pins
@@ -6396,6 +6623,7 @@ export def "pins pins/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pin-filter: string@pin-filter-completer # The filter to apply to the pins
   --pin-metrics: oneof<nothing, bool> # Specify whether to return 90d and lifetime Pin metrics. Total comments and total reactions are only available with lifetime Pin metrics. If Pin was created before `2023-03-20` lifetime metrics will only be available for Video and Idea Pin formats. Lifetime metrics are available for all Pin formats since then. (default: false)
   --include-protected-pins: oneof<nothing, bool> # Whether to include protected pins in the results (default: false)
@@ -6414,7 +6642,7 @@ export def "pins pins/list" [
   let full_url = (build-url $base "/pins" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple Pin analytics
@@ -6429,6 +6657,7 @@ export def "pins-analytics list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pin-ids: list # List of Pin IDs.
   --start-date: string # Metric report start date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days back from today. (format: date)
   --end-date: string # Metric report end date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days past start_date. (format: date)
@@ -6442,7 +6671,7 @@ export def "pins-analytics list" [
   let full_url = (build-url $base "/pins/analytics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Pin
@@ -6458,6 +6687,7 @@ export def "pins pins/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --pin-metrics: oneof<nothing, bool> # Specify whether to return 90d and lifetime Pin metrics. Total comments and total reactions are only available with lifetime Pin metrics. If Pin was created before `2023-03-20` lifetime metrics will only be available for Video and Idea Pin formats. Lifetime metrics are available for all Pin formats since then. (default: false)
 ]: nothing -> record<alt_text: string, description: string, link: string, title: string> {
@@ -6467,7 +6697,7 @@ export def "pins pins/get" [
   let full_url = (build-url $base $"/pins/($pin_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Pin
@@ -6484,6 +6714,7 @@ export def "pins pins/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --ai-disclosures: any # AI disclosure declarations the creator has made about this Pin.
   --alt-text: string # nullable
@@ -6503,7 +6734,7 @@ export def "pins pins/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Pin
@@ -6519,6 +6750,7 @@ export def "pins pins/delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
 ]: nothing -> record<alt_text: string, description: string, link: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6527,7 +6759,7 @@ export def "pins pins/delete" [
   let full_url = (build-url $base $"/pins/($pin_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Pin analytics
@@ -6543,6 +6775,7 @@ export def "pins-analytics pins/analytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Metric report start date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days back from today. (format: date)
   --end-date: string # Metric report end date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days past start_date. (format: date)
   --app-types: string@app-types-completer # Apps or devices to get data for, default is all. (default: ALL)
@@ -6556,7 +6789,7 @@ export def "pins-analytics pins/analytics" [
   let full_url = (build-url $base $"/pins/($pin_id)/analytics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add product tags to pin
@@ -6573,6 +6806,7 @@ export def "pins-product-tags add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   product_tags: list # List of product tags to add. Maximum 24 items allowed. — item shape: {pin_id: string}
 ]: any -> record<product_tags: table<pin_id: string>> {
   let input = $in
@@ -6583,7 +6817,7 @@ export def "pins-product-tags add" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get product tags for pin
@@ -6599,13 +6833,14 @@ export def "pins-product-tags tags/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<product_tags: table<pin_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pins/($pin_id)/product_tags")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete product tags from pin
@@ -6622,6 +6857,7 @@ export def "pins-product-tags-bulk-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   product_tags: list # List of product tags to delete. — item shape: {pin_id: string}
 ]: any -> record<code: int, message: string> {
   let input = $in
@@ -6632,7 +6868,7 @@ export def "pins-product-tags-bulk-delete delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Save Pin
@@ -6648,6 +6884,7 @@ export def "pins-save pins/save" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --board-id: string # Unique identifier of the board to which the pin will be saved. (nullable)
   --board-section-id: string # Unique identifier of the board section to which the pin will be saved. (nullable)
@@ -6661,7 +6898,7 @@ export def "pins-save pins/save" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get ad accounts countries
@@ -6676,13 +6913,14 @@ export def "resources-ad-account-countries countries/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<items: table<code: record, currency: string, index: float, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/resources/ad_account_countries")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get available metrics' definitions
@@ -6697,6 +6935,7 @@ export def "resources-delivery-metrics metrics/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --report-type: string@report-type-completer # Report type.
 ]: nothing -> record<items: table<category: string, definition: string, display_name: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6705,7 +6944,7 @@ export def "resources-delivery-metrics metrics/get" [
   let full_url = (build-url $base "/resources/delivery_metrics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get lead form questions
@@ -6720,13 +6959,14 @@ export def "resources-lead-form-questions questions/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/resources/lead_form_questions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get metrics ready state
@@ -6741,6 +6981,7 @@ export def "resources-metrics-ready-state state/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # Analytics reports request date (UTC). Format: YYYY-MM-DD
 ]: nothing -> record<conversion_metrics_ready: bool, non_conversion_metrics_ready: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6749,7 +6990,7 @@ export def "resources-metrics-ready-state state/get" [
   let full_url = (build-url $base "/resources/metrics_ready_state" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get interest details
@@ -6765,13 +7006,14 @@ export def "resources-targeting-interests options/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<child_interests: list<string>, id: string, level: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/resources/targeting/interests/($interest_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get targeting options
@@ -6787,6 +7029,7 @@ export def "resources-targeting options/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --client-id: string # Client ID
   --oauth-signature: string # Oauth signature
@@ -6798,7 +7041,7 @@ export def "resources-targeting options/get" [
   let full_url = (build-url $base $"/resources/targeting/($targeting_type)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search user's boards
@@ -6813,6 +7056,7 @@ export def "search-boards boards/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --qp-query: string # Search query. Can contain pin description keywords or comma-separated pin IDs.
   --bookmark: string # Cursor used to fetch the next page of items
@@ -6824,7 +7068,7 @@ export def "search-boards boards/get" [
   let full_url = (build-url $base "/search/boards" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search pins by a given search term
@@ -6839,6 +7083,7 @@ export def "search-partner-pins pins" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --term: string # Search term to look up pins.
   --country-code: string # Two letter country code (ISO 3166-1 alpha-2)
   --bookmark: string # Cursor used to fetch the next page of items
@@ -6851,7 +7096,7 @@ export def "search-partner-pins pins" [
   let full_url = (build-url $base "/search/partner/pins" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search user's Pins
@@ -6866,6 +7111,7 @@ export def "search-pins pins/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --qp-query: string # Search query. Can contain pin description keywords or comma-separated pin IDs.
   --bookmark: string # Cursor used to fetch the next page of items
@@ -6876,7 +7122,7 @@ export def "search-pins pins/list" [
   let full_url = (build-url $base "/search/pins" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List related terms
@@ -6891,6 +7137,7 @@ export def "terms-related related/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --terms: list # List of input terms.
 ]: nothing -> record<id: string, related_term_count: int, related_terms_list: table<related_terms: list, term: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6899,7 +7146,7 @@ export def "terms-related related/list" [
   let full_url = (build-url $base "/terms/related" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List suggested terms
@@ -6914,6 +7161,7 @@ export def "terms-suggested suggested/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --term: string # Input term.
   --limit: int # Max suggested terms to return. (default: 4)
 ]: nothing -> list<string> {
@@ -6923,7 +7171,7 @@ export def "terms-suggested suggested/list" [
   let full_url = (build-url $base "/terms/suggested" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns editorial articles for a given region
@@ -6938,6 +7186,7 @@ export def "trends-editorial-articles articles/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string@region-completer #      The geographic region of interest. Only top product categories within the specified region will be returned.      The `region` parameter is formatted as ISO 3166-2 country codes delimited by `+`.      - `US` - United States     - `GB+IE` - Great Britain & Ireland     - `CA` - Canada
 ]: nothing -> table<board_url: string, description: string, interests: list<string>, pins_url: list<string>, related_keywords: list<record>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6946,7 +7195,7 @@ export def "trends-editorial-articles articles/list" [
   let full_url = (build-url $base "/trends/editorial_articles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List trending keywords
@@ -6963,6 +7212,7 @@ export def "trends-keywords-top keywords/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --interests: list #   The list of supported interests is:   - `animals` - Animals   - `architecture` - Architecture   - `art` - Art   - `beauty` - Beauty   - `childrens_fashion` - Children's Fashion   - `design` - Design   - `diy_and_crafts` - DIY & Crafts   - `education` - Education   - `electronics` - Electronics   - `entertainment` - Entertainment   - `event_planning` - Event Planning   - `finance` - Finance   - `food_and_drinks` - Food & Drink   - `gardening` - Gardening   - `health` - Health   - `home_decor` - Home Decor   - `mens_fashion` - Men's Fashion   - `parenting` - Parenting   - `quotes` - Quotes   - `sport` - Sports   - `travel` - Travel   - `vehicles` - Vehicles   - `wedding` - Wedding   - `womens_fashion` - Women's Fashion
   --genders: list # If set, filters the results to trends among users who identify with the specified gender(s). If unset, trends among all genders will be returned. The `unknown` group includes users with unspecified or customized gender profile settings.
   --ages: list # If set, filters the results to trends among users in the specified age range(s). If unset, trends among all age groups will be returned.
@@ -6977,7 +7227,7 @@ export def "trends-keywords-top keywords/list" [
   let full_url = (build-url $base $"/trends/keywords/($region)/top/($trend_type)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get product category details
@@ -6992,6 +7242,7 @@ export def "trends-product-categories-details details/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --product-categories: list # List of product categories
   --region: string@region-completer #      The geographic region of interest. Only top product categories within the specified region will be returned.      The `region` parameter is formatted as ISO 3166-2 country codes delimited by `+`.      - `US` - United States     - `GB+IE` - Great Britain & Ireland     - `CA` - Canada
   --lookback-window: float@lookback-window-completer #   Time period for historical data analysis in days. The lookback window defines how far back in time the API will analyze data to compute trend metrics.   - `90` - Last 90 days (3 months)   - `180` - Last 180 days (6 months)   - `365` - Last 365 days (1 year)   - `730` - Last 730 days (2 years)
@@ -7003,7 +7254,7 @@ export def "trends-product-categories-details details/list" [
   let full_url = (build-url $base "/trends/product_categories/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of growing Shopping Product Categories
@@ -7018,6 +7269,7 @@ export def "trends-product-categories-trending trending/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --region: string@region-completer #      The geographic region of interest. Only top product categories within the specified region will be returned.      The `region` parameter is formatted as ISO 3166-2 country codes delimited by `+`.      - `US` - United States     - `GB+IE` - Great Britain & Ireland     - `CA` - Canada
   --verticals: list # List of verticals to filter by
   --ages: list # Age to filter by. If not provided, the results will be filtered by all ages.
@@ -7030,7 +7282,7 @@ export def "trends-product-categories-trending trending/list" [
   let full_url = (build-url $base "/trends/product_categories/trending" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get featured topics
@@ -7045,6 +7297,7 @@ export def "trends-topics-featured topics/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --interest: string@interest-completer # Interest to filter by
   --region: string@region-completer #      The geographic region of interest. Only top product categories within the specified region will be returned.      The `region` parameter is formatted as ISO 3166-2 country codes delimited by `+`.      - `US` - United States     - `GB+IE` - Great Britain & Ireland     - `CA` - Canada
 ]: nothing -> table<interest: record, market: record, trends: list<record>> {
@@ -7054,7 +7307,7 @@ export def "trends-topics-featured topics/list" [
   let full_url = (build-url $base "/trends/topics/featured" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user account
@@ -7069,6 +7322,7 @@ export def "user-account account/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
 ]: nothing -> record<about: string, account_type: record, board_count: int, business_name: string, follower_count: int, following_count: int, id: string, monthly_views: int, pin_count: int, profile_image: string, username: string, website_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7077,7 +7331,7 @@ export def "user-account account/get" [
   let full_url = (build-url $base "/user_account" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user account analytics
@@ -7092,6 +7346,7 @@ export def "user-account-analytics account/analytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Metric report start date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days back from today. (format: date)
   --end-date: string # Metric report end date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days past start_date. (format: date)
   --from-claimed-content: string@from-claimed-content-completer # Filter on Pins that match your claimed domain. (default: BOTH)
@@ -7109,7 +7364,7 @@ export def "user-account-analytics account/analytics" [
   let full_url = (build-url $base "/user_account/analytics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user account top pins analytics
@@ -7124,6 +7379,7 @@ export def "user-account-analytics-top-pins pins" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Metric report start date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days back from today. (format: date)
   --end-date: string # Metric report end date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days past start_date. (format: date)
   --sort-by: string@sort-by-completer-1 # Specify sorting order for metrics
@@ -7143,7 +7399,7 @@ export def "user-account-analytics-top-pins pins" [
   let full_url = (build-url $base "/user_account/analytics/top_pins" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user account top video pins analytics
@@ -7158,6 +7414,7 @@ export def "user-account-analytics-top-video-pins pins" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Metric report start date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days back from today. (format: date)
   --end-date: string # Metric report end date (UTC). Format: YYYY-MM-DD. Cannot be more than 90 days past start_date. (format: date)
   --sort-by: string@sort-by-completer-2 # Specify sorting order for video metrics
@@ -7177,7 +7434,7 @@ export def "user-account-analytics-top-video-pins pins" [
   let full_url = (build-url $base "/user_account/analytics/top_video_pins" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List linked businesses
@@ -7192,13 +7449,14 @@ export def "user-account-businesses accounts/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<image_large_url: string, image_medium_url: string, image_small_url: string, image_xlarge_url: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user_account/businesses")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List followers
@@ -7213,6 +7471,7 @@ export def "user-account-followers followers/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
 ]: nothing -> record<bookmark: string, items: table<type: string, username: string>> {
@@ -7222,7 +7481,7 @@ export def "user-account-followers followers/list" [
   let full_url = (build-url $base "/user_account/followers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List following
@@ -7237,6 +7496,7 @@ export def "user-account-following following/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --explicit-following: oneof<nothing, bool> # Whether or not to include implicit user follows, which means followees with board follows. When explicit_following is True, it means we only want explicit user follows. (default: false)
   --feed-type: string@feed-type-completer # Thrift param specifying what type of followees will be kept. Default to include all followees. (default: ALL, e.g. CREATOR_ONLY)
@@ -7249,7 +7509,7 @@ export def "user-account-following following/get" [
   let full_url = (build-url $base "/user_account/following" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List following boards
@@ -7264,6 +7524,7 @@ export def "user-account-following-boards follows/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --explicit-following: oneof<nothing, bool> # Whether or not to include implicit user follows, which means followees with board follows. When explicit_following is True, it means we only want explicit user follows. (default: false)
   --bookmark: string # Cursor used to fetch the next page of items
@@ -7275,7 +7536,7 @@ export def "user-account-following-boards follows/list" [
   let full_url = (build-url $base "/user_account/following/boards" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Follow user
@@ -7291,6 +7552,7 @@ export def "user-account-following user/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auto-follow: oneof<nothing, bool> #   Whether this request comes as result of auto-follow after clicking on a link.   Follow links can be used by partners on their site or in emails.   Only selected partners can be followed this way. We verify that partner can be auto-followed.
 ]: any -> record<type: string, username: string> {
   let input = $in
@@ -7301,7 +7563,7 @@ export def "user-account-following user/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get user websites
@@ -7316,6 +7578,7 @@ export def "user-account-websites websites/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
 ]: nothing -> record<bookmark: string, items: table<status: string, verified_at: string, website: string>> {
@@ -7325,7 +7588,7 @@ export def "user-account-websites websites/get" [
   let full_url = (build-url $base "/user_account/websites" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Verify website
@@ -7340,6 +7603,7 @@ export def "user-account-websites website/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
   --verification-method: any # Method used to verify website ownership. (default: METATAG)
   --website: string # Website with path or domain only
@@ -7353,7 +7617,7 @@ export def "user-account-websites website/update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unverify website
@@ -7368,6 +7632,7 @@ export def "user-account-websites website/delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --website: string # Website with path or domain only
 ]: nothing -> record<status: string, verified_at: string, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7376,7 +7641,7 @@ export def "user-account-websites website/delete" [
   let full_url = (build-url $base "/user_account/websites" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user verification code for website claiming
@@ -7391,6 +7656,7 @@ export def "user-account-websites-verification verification/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ad-account-id: string # Unique identifier of an ad account.
 ]: nothing -> record<dns_txt_record: string, file_content: string, filename: string, metatag: string, verification_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7399,7 +7665,7 @@ export def "user-account-websites-verification verification/get" [
   let full_url = (build-url $base "/user_account/websites/verification" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List following interests
@@ -7415,6 +7681,7 @@ export def "users-interests-follow interests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
 ]: nothing -> record<bookmark: string, items: table<canonical_url: string, id: string, key: string, name: string>> {
@@ -7424,5 +7691,5 @@ export def "users-interests-follow interests" [
   let full_url = (build-url $base $"/users/($username)/interests/follow" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -78,7 +79,7 @@ def candidate-office-completer [] { ["" "H" "P" "S"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "audit-case get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -110,6 +111,7 @@ export def "audit-case get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --audit-case-id: list #  Primary/foreign key for audit tables
   --cycle: list #  Filter records to only those that are applicable to a given two-year period. This cycle follows the traditional House election cycle and subdivides the presidential and Senate elections into comparable two-year blocks. The cycle begins with an odd year and is named for its ending, even year.
   --sub-category-id: string #  The finding id of an audit. Finding are a category of broader issues. Each category has an unique ID.  (default: all)
@@ -137,7 +139,7 @@ export def "audit-case get" [
   let full_url = (build-url $base "/audit-case/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  This lists the options for the categories and subcategories available in the /audit-search/ endpoint.
@@ -151,6 +153,7 @@ export def "audit-category get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --primary-category-name: list # Primary Audit Category     - No Findings or Issues/Not a Committee     - Net Outstanding Campaign/Convention Expenditures/Obligations     - Payments/Disgorgements     - Allocation Issues     - Prohibited Contributions     - Disclosure     - Recordkeeping     - Repayment to US Treasury     - Other     - Misstatement of Financial Activity     - Excessive Contributions     - Failure to File Reports/Schedules/Notices     - Loans     - Referred Findings Not Listed
@@ -167,7 +170,7 @@ export def "audit-category get" [
   let full_url = (build-url $base "/audit-category/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  This lists the options for the primary categories available in the /audit-search/ endpoint.
@@ -181,6 +184,7 @@ export def "audit-primary-category get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --primary-category-name: list # Primary Audit Category     - No Findings or Issues/Not a Committee     - Net Outstanding Campaign/Convention Expenditures/Obligations     - Payments/Disgorgements     - Allocation Issues     - Prohibited Contributions     - Disclosure     - Recordkeeping     - Repayment to US Treasury     - Other     - Misstatement of Financial Activity     - Excessive Contributions     - Failure to File Reports/Schedules/Notices     - Loans     - Referred Findings Not Listed
@@ -197,7 +201,7 @@ export def "audit-primary-category get" [
   let full_url = (build-url $base "/audit-primary-category/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Combines the election and reporting dates with Commission meetings, conferences, outreach, Advisory Opinions, rules, litigation dates and other events into one calendar.  State and report type filtering is no longer available.
@@ -211,6 +215,7 @@ export def "calendar-dates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --min-start-date: string #  The minimum start date.(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
@@ -233,7 +238,7 @@ export def "calendar-dates get" [
   let full_url = (build-url $base "/calendar-dates/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Returns CSV or ICS for downloading directly into calendar applications like Google, Outlook or other applications.  Combines the election and reporting dates with Commission meetings, conferences, outreach, Advisory Opinions, rules, litigation dates and other events into one calendar.  State filtering now applies to elections, reports and reporting periods.  Presidential pre-primary report due dates are not shown on even years. Filers generally opt to file monthly rather than submit over 50 pre-primary election reports. All reporting deadlines are available at /reporting-dates/ for reference.  This is [the sql function](https://github.com/fecgov/openFEC/blob/develop/data/migrations/V40__omnibus_dates.sql) that creates the calendar. 
@@ -247,6 +252,7 @@ export def "calendar-dates-export get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --renderer: string@renderer-completer # default: ics
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -270,7 +276,7 @@ export def "calendar-dates-export get" [
   let full_url = (build-url $base "/calendar-dates/export/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  This endpoint is useful for finding detailed information about a particular candidate. Use the `candidate_id` to find the most recent information about that candidate.
@@ -285,6 +291,7 @@ export def "candidate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --office: list # Federal office candidate runs for: H, S or P
   --candidate-status: list # One-letter code explaining if the candidate is:         - C present candidate         - F future candidate         - N not yet a candidate         - P prior candidate
   --cycle: list #  Two-year election cycle in which a candidate runs for office. Calculated from Form 2. The cycle begins with an odd year and is named for its ending, even year. This cycle follows the traditional house election cycle and subdivides the presidential and Senate elections into comparable two-year blocks. To retrieve data for the entire four years of a presidential term or six years of a senatorial term, you will need the `election_full` flag.
@@ -311,7 +318,7 @@ export def "candidate get" [
   let full_url = (build-url $base $"/candidate/($candidate_id)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  This endpoint is useful for finding detailed information about a particular committee or filer. Use the `committee_id` to find the most recent information about the committee.
@@ -326,6 +333,7 @@ export def "candidate-committees get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --designation: list # The one-letter designation code of the organization:          - A authorized by a candidate          - J joint fundraising committee          - P principal campaign committee of a candidate          - U unauthorized          - B lobbyist/registrant PAC          - D leadership PAC
   --committee-type: list # The one-letter type code of the organization:         - C communication cost         - D delegate         - E electioneering communication         - H House         - I independent expenditure filer (not a committee)         - N PAC - nonqualified         - O independent expenditure-only (super PACs)         - P presidential         - Q PAC - qualified         - S Senate         - U single candidate independent expenditure         - V PAC with non-contribution account, nonqualified         - W PAC with non-contribution account, qualified         - X party, nonqualified         - Y party, qualified         - Z national party non-federal account
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -346,7 +354,7 @@ export def "candidate-committees get" [
   let full_url = (build-url $base $"/candidate/($candidate_id)/committees/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Explore a filer's characteristics over time. This can be particularly useful if the committees change treasurers, designation, or `committee_type`.
@@ -361,6 +369,7 @@ export def "candidate-committees-history list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --designation: list # The one-letter designation code of the organization:          - A authorized by a candidate          - J joint fundraising committee          - P principal campaign committee of a candidate          - U unauthorized          - B lobbyist/registrant PAC          - D leadership PAC
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -377,7 +386,7 @@ export def "candidate-committees-history list" [
   let full_url = (build-url $base $"/candidate/($candidate_id)/committees/history/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Explore a filer's characteristics over time. This can be particularly useful if the committees change treasurers, designation, or `committee_type`.
@@ -393,6 +402,7 @@ export def "candidate-committees-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --designation: list # The one-letter designation code of the organization:          - A authorized by a candidate          - J joint fundraising committee          - P principal campaign committee of a candidate          - U unauthorized          - B lobbyist/registrant PAC          - D leadership PAC
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -409,7 +419,7 @@ export def "candidate-committees-history get" [
   let full_url = (build-url $base $"/candidate/($candidate_id)/committees/history/($cycle)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  All official records and reports filed by or delivered to the FEC.  Note: because the filings data includes many records, counts for large result sets are approximate; you will want to page through the records until no records are returned.
@@ -424,6 +434,7 @@ export def "candidate-filings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --office: list # Federal office candidate runs for: H, S or P
   --file-number: list # Filing ID number
   --form-category: list #  The forms filed are categorized based on the nature of the filing:     - REPORT F3, F3X, F3P, F3L, F4, F5, F7, F13     - NOTICE F5, F24, F6, F9, F10, F11     - STATEMENT F1, F2     - OTHER F1M, F8, F99, F12, FRQ
@@ -460,7 +471,7 @@ export def "candidate-filings get" [
   let full_url = (build-url $base $"/candidate/($candidate_id)/filings/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Find out a candidate's characteristics over time. This is particularly useful if the candidate runs for the same office in different districts or you want to know more about a candidate's previous races.  This information is organized by `candidate_id`, so it won't help you find a candidate who ran for different offices over time; candidates get a new ID for each office.
@@ -475,6 +486,7 @@ export def "candidate-history list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
@@ -490,7 +502,7 @@ export def "candidate-history list" [
   let full_url = (build-url $base $"/candidate/($candidate_id)/history/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Find out a candidate's characteristics over time. This is particularly useful if the candidate runs for the same office in different districts or you want to know more about a candidate's previous races.  This information is organized by `candidate_id`, so it won't help you find a candidate who ran for different offices over time; candidates get a new ID for each office.
@@ -506,6 +518,7 @@ export def "candidate-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
@@ -521,7 +534,7 @@ export def "candidate-history get" [
   let full_url = (build-url $base $"/candidate/($candidate_id)/history/($cycle)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  This endpoint provides information about a committee's Form 3, Form 3X, or Form 3P financial reports, which are aggregated by two-year period. We refer to two-year periods as a `cycle`.  The cycle is named after the even-numbered year and includes the year before it. To obtain totals from 2013 and 2014, you would use 2014. In odd-numbered years, the current cycle is the next year — for example, in 2015, the current cycle is 2016.  For presidential and Senate candidates, multiple two-year cycles exist between elections. 
@@ -536,6 +549,7 @@ export def "candidate-totals get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -552,7 +566,7 @@ export def "candidate-totals get" [
   let full_url = (build-url $base $"/candidate/($candidate_id)/totals/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Fetch basic information about candidates, and use parameters to filter results to the candidates you're looking for.  Each result reflects a unique FEC candidate ID. That ID is particular to the candidate for a particular office sought. If a candidate runs for the same office multiple times, the ID stays the same. If the same person runs for another office — for example, a House candidate runs for a Senate office — that candidate will get a unique ID for each office.
@@ -566,6 +580,7 @@ export def "candidates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --office: list # Federal office candidate runs for: H, S or P
   --candidate-status: list # One-letter code explaining if the candidate is:         - C present candidate         - F future candidate         - N not yet a candidate         - P prior candidate
   --cycle: list #  Two-year election cycle in which a candidate runs for office. Calculated from Form 2. The cycle begins with an odd year and is named for its ending, even year. This cycle follows the traditional house election cycle and subdivides the presidential and Senate elections into comparable two-year blocks. To retrieve data for the entire four years of a presidential term or six years of a senatorial term, you will need the `election_full` flag.
@@ -597,7 +612,7 @@ export def "candidates get" [
   let full_url = (build-url $base "/candidates/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Fetch basic information about candidates and their principal committees.  Each result reflects a unique FEC candidate ID. That ID is assigned to the candidate for a particular office sought. If a candidate runs for the same office over time, that ID stays the same. If the same person runs for multiple offices — for example, a House candidate runs for a Senate office — that candidate will get a unique ID for each office.  The candidate endpoints primarily use data from FEC registration [Form 1](https://www.fec.gov/pdf/forms/fecfrm1.pdf) for committee information and [Form 2](https://www.fec.gov/pdf/forms/fecfrm2.pdf) for candidate information.
@@ -611,6 +626,7 @@ export def "candidates-search get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --office: list # Federal office candidate runs for: H, S or P
   --candidate-status: list # One-letter code explaining if the candidate is:         - C present candidate         - F future candidate         - N not yet a candidate         - P prior candidate
   --cycle: list #  Two-year election cycle in which a candidate runs for office. Calculated from Form 2. The cycle begins with an odd year and is named for its ending, even year. This cycle follows the traditional house election cycle and subdivides the presidential and Senate elections into comparable two-year blocks. To retrieve data for the entire four years of a presidential term or six years of a senatorial term, you will need the `election_full` flag.
@@ -642,7 +658,7 @@ export def "candidates-search get" [
   let full_url = (build-url $base "/candidates/search/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Aggregated candidate receipts and disbursements grouped by cycle.
@@ -656,6 +672,7 @@ export def "candidates-totals get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --office: list # Federal office candidate runs for: H, S or P
   --min-receipts: string # Minimum aggregated receipts
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
@@ -690,7 +707,7 @@ export def "candidates-totals get" [
   let full_url = (build-url $base "/candidates/totals/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Candidate total receipts and disbursements aggregated by `aggregate_by`.
@@ -704,6 +721,7 @@ export def "candidates-totals-aggregates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --office: string@office-completer # Federal office candidate runs for: H, S or P
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --district: list # Two-digit US House distirict of the office the candidate is running for. Presidential, Senate and House at-large candidates will have District 00.
@@ -728,7 +746,7 @@ export def "candidates-totals-aggregates get" [
   let full_url = (build-url $base "/candidates/totals/aggregates/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Aggregated candidate receipts and disbursements grouped by office by cycle.
@@ -742,6 +760,7 @@ export def "candidates-totals-by-office get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --office: string@office-completer # Federal office candidate runs for: H, S or P
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -762,7 +781,7 @@ export def "candidates-totals-by-office get" [
   let full_url = (build-url $base "/candidates/totals/by_office/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Aggregated candidate receipts and disbursements grouped by office by party by cycle.
@@ -776,6 +795,7 @@ export def "candidates-totals-by-office-by-party get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --office: string@office-completer # Federal office candidate runs for: H, S or P
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -794,7 +814,7 @@ export def "candidates-totals-by-office-by-party get" [
   let full_url = (build-url $base "/candidates/totals/by_office/by_party/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  This endpoint is useful for finding detailed information about a particular committee or filer. Use the `committee_id` to find the most recent information about the committee.
@@ -809,6 +829,7 @@ export def "committee get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --designation: list # The one-letter designation code of the organization:          - A authorized by a candidate          - J joint fundraising committee          - P principal campaign committee of a candidate          - U unauthorized          - B lobbyist/registrant PAC          - D leadership PAC
   --committee-type: list # The one-letter type code of the organization:         - C communication cost         - D delegate         - E electioneering communication         - H House         - I independent expenditure filer (not a committee)         - N PAC - nonqualified         - O independent expenditure-only (super PACs)         - P presidential         - Q PAC - qualified         - S Senate         - U single candidate independent expenditure         - V PAC with non-contribution account, nonqualified         - W PAC with non-contribution account, qualified         - X party, nonqualified         - Y party, qualified         - Z national party non-federal account
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -829,7 +850,7 @@ export def "committee get" [
   let full_url = (build-url $base $"/committee/($committee_id)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  This endpoint is useful for finding detailed information about a particular candidate. Use the `candidate_id` to find the most recent information about that candidate.
@@ -844,6 +865,7 @@ export def "committee-candidates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --office: list # Federal office candidate runs for: H, S or P
   --candidate-status: list # One-letter code explaining if the candidate is:         - C present candidate         - F future candidate         - N not yet a candidate         - P prior candidate
   --cycle: list #  Two-year election cycle in which a candidate runs for office. Calculated from Form 2. The cycle begins with an odd year and is named for its ending, even year. This cycle follows the traditional house election cycle and subdivides the presidential and Senate elections into comparable two-year blocks. To retrieve data for the entire four years of a presidential term or six years of a senatorial term, you will need the `election_full` flag.
@@ -870,7 +892,7 @@ export def "committee-candidates get" [
   let full_url = (build-url $base $"/committee/($committee_id)/candidates/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Find out a candidate's characteristics over time. This is particularly useful if the candidate runs for the same office in different districts or you want to know more about a candidate's previous races.  This information is organized by `candidate_id`, so it won't help you find a candidate who ran for different offices over time; candidates get a new ID for each office.
@@ -885,6 +907,7 @@ export def "committee-candidates-history list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
@@ -900,7 +923,7 @@ export def "committee-candidates-history list" [
   let full_url = (build-url $base $"/committee/($committee_id)/candidates/history/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Find out a candidate's characteristics over time. This is particularly useful if the candidate runs for the same office in different districts or you want to know more about a candidate's previous races.  This information is organized by `candidate_id`, so it won't help you find a candidate who ran for different offices over time; candidates get a new ID for each office.
@@ -916,6 +939,7 @@ export def "committee-candidates-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
@@ -931,7 +955,7 @@ export def "committee-candidates-history get" [
   let full_url = (build-url $base $"/committee/($committee_id)/candidates/history/($cycle)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  All official records and reports filed by or delivered to the FEC.  Note: because the filings data includes many records, counts for large result sets are approximate; you will want to page through the records until no records are returned.
@@ -946,6 +970,7 @@ export def "committee-filings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --office: list # Federal office candidate runs for: H, S or P
   --file-number: list # Filing ID number
   --form-category: list #  The forms filed are categorized based on the nature of the filing:     - REPORT F3, F3X, F3P, F3L, F4, F5, F7, F13     - NOTICE F5, F24, F6, F9, F10, F11     - STATEMENT F1, F2     - OTHER F1M, F8, F99, F12, FRQ
@@ -982,7 +1007,7 @@ export def "committee-filings get" [
   let full_url = (build-url $base $"/committee/($committee_id)/filings/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Explore a filer's characteristics over time. This can be particularly useful if the committees change treasurers, designation, or `committee_type`.
@@ -997,6 +1022,7 @@ export def "committee-history list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --designation: list # The one-letter designation code of the organization:          - A authorized by a candidate          - J joint fundraising committee          - P principal campaign committee of a candidate          - U unauthorized          - B lobbyist/registrant PAC          - D leadership PAC
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -1013,7 +1039,7 @@ export def "committee-history list" [
   let full_url = (build-url $base $"/committee/($committee_id)/history/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Explore a filer's characteristics over time. This can be particularly useful if the committees change treasurers, designation, or `committee_type`.
@@ -1029,6 +1055,7 @@ export def "committee-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --designation: list # The one-letter designation code of the organization:          - A authorized by a candidate          - J joint fundraising committee          - P principal campaign committee of a candidate          - U unauthorized          - B lobbyist/registrant PAC          - D leadership PAC
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -1045,7 +1072,7 @@ export def "committee-history get" [
   let full_url = (build-url $base $"/committee/($committee_id)/history/($cycle)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Each report represents the summary information from Form 3, Form 3X and Form 3P. These reports have key statistics that illuminate the financial status of a given committee. Things like cash on hand, debts owed by committee, total receipts, and total disbursements are especially helpful for understanding a committee's financial dealings.  By default, this endpoint includes both amended and final versions of each report. To restrict to only the final versions of each report, use `is_amended=false`; to retrieve only reports that have been amended, use `is_amended=true`.  Several different reporting structures exist, depending on the type of organization that submits financial information. To see an example of these reporting requirements, look at the summary and detailed summary pages of Form 3, Form 3X, and Form 3P.  DISCLAIMER: The field labels contained within this resource are subject to change.  We are attempting to succinctly label these fields while conveying clear meaning to ensure accessibility for all users.
@@ -1060,6 +1087,7 @@ export def "committee-reports get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --min-debts-owed-amount: string #  Filter for all amounts greater than a value.
   --max-disbursements-amount: string #  Filter for all amounts less than a value.
   --max-total-contributions: string #  Filter for all amounts less than a value.
@@ -1095,7 +1123,7 @@ export def "committee-reports get" [
   let full_url = (build-url $base $"/committee/($committee_id)/reports/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  This endpoint provides information about a committee's Form 3, Form 3X, or Form 3P financial reports, which are aggregated by two-year period. We refer to two-year periods as a `cycle`.  The cycle is named after the even-numbered year and includes the year before it. To obtain totals from 2013 and 2014, you would use 2014. In odd-numbered years, the current cycle is the next year — for example, in 2015, the current cycle is 2016.  For presidential and Senate candidates, multiple two-year cycles exist between elections. 
@@ -1110,6 +1138,7 @@ export def "committee-totals get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
@@ -1125,7 +1154,7 @@ export def "committee-totals get" [
   let full_url = (build-url $base $"/committee/($committee_id)/totals/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Fetch basic information about committees and filers. Use parameters to filter for particular characteristics. 
@@ -1139,6 +1168,7 @@ export def "committees get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --designation: list # The one-letter designation code of the organization:          - A authorized by a candidate          - J joint fundraising committee          - P principal campaign committee of a candidate          - U unauthorized          - B lobbyist/registrant PAC          - D leadership PAC
   --max-first-f1-date: string # Filter for committees whose first Form 1 was received on or before this date. (format: date)
   --min-first-f1-date: string # Filter for committees whose first Form 1 was received on or after this date. (format: date)
@@ -1172,7 +1202,7 @@ export def "committees get" [
   let full_url = (build-url $base "/committees/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  52 U.S.C. 30118 allows "communications by a corporation to its stockholders and executive or administrative personnel and their families or by a labor organization to its members and their families on any subject," including the express advocacy of the election or defeat of any Federal candidate.  The costs of such communications must be reported to the Federal Election Commission under certain circumstances.
@@ -1186,6 +1216,7 @@ export def "communication-costs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-amount: string # Filter for all amounts less than a value.
   --max-image-number: string # Maxium image number of the page where the schedule item is reported
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
@@ -1211,7 +1242,7 @@ export def "communication-costs get" [
   let full_url = (build-url $base "/communication_costs/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Communication cost aggregated by candidate ID and committee ID.
@@ -1225,6 +1256,7 @@ export def "communication-costs-aggregates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
@@ -1243,7 +1275,7 @@ export def "communication-costs-aggregates get" [
   let full_url = (build-url $base "/communication_costs/aggregates/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Communication cost aggregated by candidate ID and committee ID.
@@ -1257,6 +1289,7 @@ export def "communication-costs-by-candidate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --office: string@office-completer-1 # Federal office candidate runs for: H, S or P
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
@@ -1278,7 +1311,7 @@ export def "communication-costs-by-candidate get" [
   let full_url = (build-url $base "/communication_costs/by_candidate/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Total communications costs aggregated across committees on supported or opposed candidates by cycle or candidate election year.
@@ -1292,6 +1325,7 @@ export def "communication-costs-totals-by-candidate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -1309,7 +1343,7 @@ export def "communication-costs-totals-by-candidate get" [
   let full_url = (build-url $base "/communication_costs/totals/by_candidate/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Basic information about electronic files coming into the FEC, posted as they are received.
@@ -1323,6 +1357,7 @@ export def "efile-filings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file-number: list # Filing ID number
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -1342,7 +1377,7 @@ export def "efile-filings get" [
   let full_url = (build-url $base "/efile/filings/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Key financial data reported periodically by committees as they are reported. This feed includes summary information from the the House F3 reports, the presidential F3p reports and the PAC and party F3x reports.  Generally, committees file reports on a quarterly or monthly basis, but some must also submit a report 12 days before primary elections. Therefore, during the primary season, the period covered by this file may be different for different committees. These totals also incorporate any changes made by committees, if any report covering the period is amended.  DISCLAIMER: The field labels contained within this resource are subject to change.  We are attempting to succinctly label these fields while conveying clear meaning to ensure accessibility for all users.
@@ -1356,6 +1391,7 @@ export def "efile-reports-house-senate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file-number: list # Filing ID number
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -1375,7 +1411,7 @@ export def "efile-reports-house-senate get" [
   let full_url = (build-url $base "/efile/reports/house-senate/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Key financial data reported periodically by committees as they are reported. This feed includes summary information from the the House F3 reports, the presidential F3p reports and the PAC and party F3x reports.  Generally, committees file reports on a quarterly or monthly basis, but some must also submit a report 12 days before primary elections. Therefore, during the primary season, the period covered by this file may be different for different committees. These totals also incorporate any changes made by committees, if any report covering the period is amended.  DISCLAIMER: The field labels contained within this resource are subject to change.  We are attempting to succinctly label these fields while conveying clear meaning to ensure accessibility for all users.
@@ -1389,6 +1425,7 @@ export def "efile-reports-pac-party get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file-number: list # Filing ID number
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -1408,7 +1445,7 @@ export def "efile-reports-pac-party get" [
   let full_url = (build-url $base "/efile/reports/pac-party/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Key financial data reported periodically by committees as they are reported. This feed includes summary information from the the House F3 reports, the presidential F3p reports and the PAC and party F3x reports.  Generally, committees file reports on a quarterly or monthly basis, but some must also submit a report 12 days before primary elections. Therefore, during the primary season, the period covered by this file may be different for different committees. These totals also incorporate any changes made by committees, if any report covering the period is amended.  DISCLAIMER: The field labels contained within this resource are subject to change.  We are attempting to succinctly label these fields while conveying clear meaning to ensure accessibility for all users.
@@ -1422,6 +1459,7 @@ export def "efile-reports-presidential get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file-number: list # Filing ID number
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -1441,7 +1479,7 @@ export def "efile-reports-presidential get" [
   let full_url = (build-url $base "/efile/reports/presidential/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  FEC election dates since 1995.
@@ -1455,6 +1493,7 @@ export def "election-dates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-update-date: string #  The maximum date this record was last updated.(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
@@ -1483,7 +1522,7 @@ export def "election-dates get" [
   let full_url = (build-url $base "/election-dates/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  An electioneering communication is any broadcast, cable or satellite communication that fulfills each of the following conditions:  _The communication refers to a clearly identified federal candidate._  _The communication is publicly distributed by a television station, radio station, cable television system or satellite system for a fee._  _The communication is distributed within 60 days prior to a general election or 30 days prior to a primary election to federal office._
@@ -1497,6 +1536,7 @@ export def "electioneering get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
   --max-amount: string # Filter for all amounts less than a value.
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
@@ -1520,7 +1560,7 @@ export def "electioneering get" [
   let full_url = (build-url $base "/electioneering/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Electioneering communications costs aggregates
@@ -1534,6 +1574,7 @@ export def "electioneering-aggregates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -1551,7 +1592,7 @@ export def "electioneering-aggregates get" [
   let full_url = (build-url $base "/electioneering/aggregates/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Electioneering costs aggregated by candidate
@@ -1565,6 +1606,7 @@ export def "electioneering-by-candidate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --office: string@office-completer-1 # Federal office candidate runs for: H, S or P
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
@@ -1585,7 +1627,7 @@ export def "electioneering-by-candidate get" [
   let full_url = (build-url $base "/electioneering/by_candidate/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Total electioneering communications spent on candidates by cycle or candidate election year
@@ -1599,6 +1641,7 @@ export def "electioneering-totals-by-candidate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -1616,7 +1659,7 @@ export def "electioneering-totals-by-candidate get" [
   let full_url = (build-url $base "/electioneering/totals/by_candidate/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Look at the top-level financial information for all candidates running for the same office.  Choose a 2-year cycle, and `house`, `senate` or `presidential`.  If you are looking for a Senate seat, you will need to select the state using a two-letter abbreviation.  House races require state and a two-digit district number.  Since this endpoint reflects financial information, it will only have candidates once they file financial reporting forms. Query the `/candidates` endpoint to retrieve an-up-to-date list of all the candidates that filed to run for a particular seat.
@@ -1630,6 +1673,7 @@ export def "elections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --office: string@office-completer-1 # Federal office candidate runs for: H, S or P
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --district: string # Two-digit US House distirict of the office the candidate is running for. Presidential, Senate and House at-large candidates will have District 00.
@@ -1649,7 +1693,7 @@ export def "elections get" [
   let full_url = (build-url $base "/elections/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  List elections by cycle, office, state, and district.
@@ -1663,6 +1707,7 @@ export def "elections-search get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --office: list
   --cycle: list #  Two-year election cycle in which a candidate runs for office. Calculated from Form 2. The cycle begins with an odd year and is named for its ending, even year. This cycle follows the traditional house election cycle and subdivides the presidential and Senate elections into comparable two-year blocks. To retrieve data for the entire four years of a presidential term or six years of a senatorial term, you will need the `election_full` flag.
   --district: list # Two-digit US House distirict of the office the candidate is running for. Presidential, Senate and House at-large candidates will have District 00.
@@ -1682,7 +1727,7 @@ export def "elections-search get" [
   let full_url = (build-url $base "/elections/search/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  List elections by cycle, office, state, and district.
@@ -1696,6 +1741,7 @@ export def "elections-summary get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --office: string@office-completer-1 # Federal office candidate runs for: H, S or P
   --cycle: int #  Two-year election cycle in which a candidate runs for office. Calculated from Form 2. The cycle begins with an odd year and is named for its ending, even year. This cycle follows the traditional house election cycle and subdivides the presidential and Senate elections into comparable two-year blocks. To retrieve data for the entire four years of a presidential term or six years of a senatorial term, you will need the `election_full` flag.  (format: int32)
   --district: string # Two-digit US House distirict of the office the candidate is running for. Presidential, Senate and House at-large candidates will have District 00.
@@ -1709,7 +1755,7 @@ export def "elections-summary get" [
   let full_url = (build-url $base "/elections/summary/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  All official records and reports filed by or delivered to the FEC.  Note: because the filings data includes many records, counts for large result sets are approximate; you will want to page through the records until no records are returned.
@@ -1723,6 +1769,7 @@ export def "filings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --office: list # Federal office candidate runs for: H, S or P
   --file-number: list # Filing ID number
   --form-category: list #  The forms filed are categorized based on the nature of the filing:     - REPORT F3, F3X, F3P, F3L, F4, F5, F7, F13     - NOTICE F5, F24, F6, F9, F10, F11     - STATEMENT F1, F2     - OTHER F1M, F8, F99, F12, FRQ
@@ -1761,7 +1808,7 @@ export def "filings get" [
   let full_url = (build-url $base "/filings/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Search legal documents by document type, or across all document types using keywords, parameter values and ranges.
@@ -1775,6 +1822,7 @@ export def "legal-search get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hits-returned: int #  Number of results to return (max 10)  (format: int32)
   --af-report-year: string #  Admin fine report year
   --case-max-open-date: string #  The latest date opened of case  (format: date)
@@ -1825,7 +1873,7 @@ export def "legal-search get" [
   let full_url = (build-url $base "/legal/search/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Search for candidates or committees by name. If you're looking for information on a particular person or group, using a name to find the `candidate_id` or `committee_id` on this endpoint can be a helpful first step.
@@ -1839,6 +1887,7 @@ export def "names-audit-candidates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --q: list # Name (candidate or committee) to search for
 ]: nothing -> record<results: table<id: string, name: string>> {
@@ -1848,7 +1897,7 @@ export def "names-audit-candidates get" [
   let full_url = (build-url $base "/names/audit_candidates/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Search for candidates or committees by name. If you're looking for information on a particular person or group, using a name to find the `candidate_id` or `committee_id` on this endpoint can be a helpful first step.
@@ -1862,6 +1911,7 @@ export def "names-audit-committees get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --q: list # Name (candidate or committee) to search for
 ]: nothing -> record<results: table<id: string, name: string>> {
@@ -1871,7 +1921,7 @@ export def "names-audit-committees get" [
   let full_url = (build-url $base "/names/audit_committees/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Search for candidates or committees by name. If you're looking for information on a particular person or group, using a name to find the `candidate_id` or `committee_id` on this endpoint can be a helpful first step.
@@ -1885,6 +1935,7 @@ export def "names-candidates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --q: list # Name (candidate or committee) to search for
 ]: nothing -> record<results: table<id: string, name: string, office_sought: string>> {
@@ -1894,7 +1945,7 @@ export def "names-candidates get" [
   let full_url = (build-url $base "/names/candidates/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Search for candidates or committees by name. If you're looking for information on a particular person or group, using a name to find the `candidate_id` or `committee_id` on this endpoint can be a helpful first step.
@@ -1908,6 +1959,7 @@ export def "names-committees get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --q: list # Name (candidate or committee) to search for
 ]: nothing -> record<results: table<id: string, is_active: bool, name: string>> {
@@ -1917,7 +1969,7 @@ export def "names-committees get" [
   let full_url = (build-url $base "/names/committees/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  The Operations log contains details of each report loaded into the database. It is primarily used as status check to determine when all of the data processes, from initial entry through review are complete.
@@ -1931,6 +1983,7 @@ export def "operations-log get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-coverage-end-date: string #  Ending date of the reporting period before this date(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --amendment-indicator: list # Amendent types:     -N   new     -A   amendment     -T   terminated     -C   consolidated     -M   multi-candidate     -S   secondary  NULL might be new or amendment. If amendment indicator is null and the filings is the first or first in a chain treat it as if it was a new. If it is not the first or first in a chain then treat the filing as an amendment.
@@ -1958,7 +2011,7 @@ export def "operations-log get" [
   let full_url = (build-url $base "/operations-log/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Net receipts per candidate.  Filter with `contributor_state='US'` for national totals
@@ -1972,6 +2025,7 @@ export def "presidential-contributions-by-candidate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contributor-state: list # State of contributor
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -1988,7 +2042,7 @@ export def "presidential-contributions-by-candidate get" [
   let full_url = (build-url $base "/presidential/contributions/by_candidate/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Contribution receipts by size per candidate.  Filter by candidate_id, election_year and/or size
@@ -2002,6 +2056,7 @@ export def "presidential-contributions-by-size get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.   -P00000001    All candidates   -P00000002    Democrasts   -P00000003    Republicans
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -2019,7 +2074,7 @@ export def "presidential-contributions-by-size get" [
   let full_url = (build-url $base "/presidential/contributions/by_size/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Contribution receipts by state per candidate.  Filter by candidate_id and/or election_year
@@ -2033,6 +2088,7 @@ export def "presidential-contributions-by-state get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.   -P00000001    All candidates   -P00000002    Democrasts   -P00000003    Republicans
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -2049,7 +2105,7 @@ export def "presidential-contributions-by-state get" [
   let full_url = (build-url $base "/presidential/contributions/by_state/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Coverage end date per candidate.  Filter by candidate_id and/or election_year
@@ -2063,6 +2119,7 @@ export def "presidential-coverage-end-date get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.   -P00000001    All candidates   -P00000002    Democrasts   -P00000003    Republicans
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -2079,7 +2136,7 @@ export def "presidential-coverage-end-date get" [
   let full_url = (build-url $base "/presidential/coverage_end_date/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Financial summary per candidate.  Filter by candidate_id and/or election_year
@@ -2093,6 +2150,7 @@ export def "presidential-financial-summary get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.   -P00000001    All candidates   -P00000002    Democrasts   -P00000003    Republicans
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -2109,7 +2167,7 @@ export def "presidential-financial-summary get" [
   let full_url = (build-url $base "/presidential/financial_summary/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Use this endpoint to look up the RAD Analyst for a committee.  The mission of the Reports Analysis Division (RAD) is to ensure that campaigns and political committees file timely and accurate reports that fully disclose their financial activities.  RAD is responsible for reviewing statements and financial reports filed by political committees participating in federal elections, providing assistance and guidance to the committees to properly file their reports, and for taking appropriate action to ensure compliance with the Federal Election Campaign Act (FECA).
@@ -2123,6 +2181,7 @@ export def "rad-analyst get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --min-assignment-update-date: string # Filter results for assignment updates made after this date (format: date)
   --max-assignment-update-date: string # Filter results for assignment updates made before this date (format: date)
   --analyst-short-id: list # Short ID of RAD analyst
@@ -2146,7 +2205,7 @@ export def "rad-analyst get" [
   let full_url = (build-url $base "/rad-analyst/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  FEC election dates since 1995.
@@ -2160,6 +2219,7 @@ export def "reporting-dates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-update-date: string #  The maximum date this record was last updated.(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --max-due-date: string #  The maximum date the report is due.(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
@@ -2182,7 +2242,7 @@ export def "reporting-dates get" [
   let full_url = (build-url $base "/reporting-dates/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Each report represents the summary information from Form 3, Form 3X and Form 3P. These reports have key statistics that illuminate the financial status of a given committee. Things like cash on hand, debts owed by committee, total receipts, and total disbursements are especially helpful for understanding a committee's financial dealings.  By default, this endpoint includes both amended and final versions of each report. To restrict to only the final versions of each report, use `is_amended=false`; to retrieve only reports that have been amended, use `is_amended=true`.  Several different reporting structures exist, depending on the type of organization that submits financial information. To see an example of these reporting requirements, look at the summary and detailed summary pages of Form 3, Form 3X, and Form 3P.  DISCLAIMER: The field labels contained within this resource are subject to change.  We are attempting to succinctly label these fields while conveying clear meaning to ensure accessibility for all users.
@@ -2197,6 +2257,7 @@ export def "reports get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --min-debts-owed-amount: string #  Filter for all amounts greater than a value.
   --max-debts-owed-expenditures: string #  Filter for all amounts less than a value.
   --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
@@ -2240,7 +2301,7 @@ export def "reports get" [
   let full_url = (build-url $base $"/reports/($entity_type)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  This description is for both ​`/schedules​/schedule_a​/` and ​ `/schedules​/schedule_a​/{sub_id}​/`.  This endpoint provides itemized receipts. Schedule A records describe itemized receipts, including contributions from individuals. If you are interested in contributions from an individual, use the `/schedules/schedule_a/` endpoint. For a more complete description of all Schedule A records visit [About receipts data](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/about-receipts-data/). If you are interested in our "is_individual" methodology visit our [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology/).  ​The `/schedules​/schedule_a​/` endpoint is not paginated by page number. This endpoint uses keyset pagination to improve query performance and these indices are required to properly page through this large dataset. To request the next page, you should append the values found in the `last_indexes` object from pagination to the URL of your last request as additional parameters.  For example, when sorting by `contribution_receipt_date`, you might receive a page of results with the two scenarios of following pagination information:  case #1: ``` pagination: {     pages: 2152643,     per_page: 20,     count: 43052850,     last_indexes: {         last_index: "230880619",         last_contribution_receipt_date: "2014-01-01"     } } ``` <br/> case #2 (results which include contribution_receipt_date = NULL):  ``` pagination: {     pages: 2152644,     per_page: 20,     count: 43052850,     last_indexes: {         last_index: "230880639",         sort_null_only: True     } } ``` To fetch the next page of sorted results, append `last_index=230880619` and `last_contribution_receipt_date=2014-01-01` to the URL and when reaching `contribution_receipt_date=NULL`, append `last_index=230880639` and `sort_null_only=True`. We strongly advise paging through these results using sort indices. The default sort is acending by `contribution_receipt_date` (`deprecated`, will be descending). If you do not page using sort indices, some transactions may be unintentionally filtered out.  Calls to ​`/schedules​/schedule_a​/` may return many records. For large result sets, the record counts found in the pagination object are approximate; you will need to page through the records until no records are returned.  To avoid throwing the "out of range" exception on the last page, one recommandation is to use total count and `per_page` to control the traverse loop of results.  ​The `/schedules​/schedule_a​/{sub_id}​/` endpoint returns a single transaction, but it does include a pagination object class. Please ignore the information in that object class. 
@@ -2254,6 +2315,7 @@ export def "schedules-schedule-a list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-load-date: string # Maximum load date (format: date)
   --max-amount: string # Filter for all amounts less than a value.
   --max-image-number: string # Maxium image number of the page where the schedule item is reported
@@ -2293,7 +2355,7 @@ export def "schedules-schedule-a list" [
   let full_url = (build-url $base "/schedules/schedule_a/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  This endpoint provides itemized individual contributions received by a committee, aggregated by the contributor’s employer name. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
@@ -2307,6 +2369,7 @@ export def "schedules-schedule-a-by-employer get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --employer: list # Employer of contributor as reported on the committee's filing
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
@@ -2324,7 +2387,7 @@ export def "schedules-schedule-a-by-employer get" [
   let full_url = (build-url $base "/schedules/schedule_a/by_employer/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  This endpoint provides itemized individual contributions received by a committee, aggregated by the contributor’s occupation. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
@@ -2338,6 +2401,7 @@ export def "schedules-schedule-a-by-occupation get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --occupation: list # Occupation of contributor as reported on the committee's filing
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
@@ -2355,7 +2419,7 @@ export def "schedules-schedule-a-by-occupation get" [
   let full_url = (build-url $base "/schedules/schedule_a/by_occupation/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  This endpoint provides individual contributions received by a committee, aggregated by size:  ```  - $200 and under  - $200.01 - $499.99  - $500 - $999.99  - $1000 - $1999.99  - $2000 + ```  The $200.00 and under category includes contributions of $200 or less combined with unitemized individual contributions.
@@ -2369,6 +2433,7 @@ export def "schedules-schedule-a-by-size get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
@@ -2386,7 +2451,7 @@ export def "schedules-schedule-a-by-size get" [
   let full_url = (build-url $base "/schedules/schedule_a/by_size/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  This endpoint provides itemized individual contributions received by a committee, aggregated by size of contribution and candidate. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
@@ -2400,6 +2465,7 @@ export def "schedules-schedule-a-by-size-by-candidate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
@@ -2417,7 +2483,7 @@ export def "schedules-schedule-a-by-size-by-candidate get" [
   let full_url = (build-url $base "/schedules/schedule_a/by_size/by_candidate/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  This endpoint provides itemized individual contributions received by a committee, aggregated by the contributor’s state. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
@@ -2431,6 +2497,7 @@ export def "schedules-schedule-a-by-state get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hide-null: oneof<nothing, bool> # Exclude values with missing state (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
@@ -2449,7 +2516,7 @@ export def "schedules-schedule-a-by-state get" [
   let full_url = (build-url $base "/schedules/schedule_a/by_state/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  This endpoint provides itemized individual contributions received by a committee, aggregated by contributor’s state and candidate. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
@@ -2463,6 +2530,7 @@ export def "schedules-schedule-a-by-state-by-candidate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
@@ -2480,7 +2548,7 @@ export def "schedules-schedule-a-by-state-by-candidate get" [
   let full_url = (build-url $base "/schedules/schedule_a/by_state/by_candidate/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Itemized individual contributions aggregated by contributor’s state, candidate, committee type and cycle. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included. 
@@ -2494,6 +2562,7 @@ export def "schedules-schedule-a-by-state-by-candidate-totals get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
@@ -2511,7 +2580,7 @@ export def "schedules-schedule-a-by-state-by-candidate-totals get" [
   let full_url = (build-url $base "/schedules/schedule_a/by_state/by_candidate/totals/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  This endpoint provides itemized individual contributions received by a committee, aggregated by contributor’s state, committee type and cycle. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
@@ -2525,6 +2594,7 @@ export def "schedules-schedule-a-by-state-totals get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --committee-type: list # The one-letter type code of the organization:         - C communication cost         - D delegate         - E electioneering communication         - H House         - I independent expenditure filer (not a committee)         - N PAC - nonqualified         - O independent expenditure-only (super PACs)         - P presidential         - Q PAC - qualified         - S Senate         - U single candidate independent expenditure         - V PAC with non-contribution account, nonqualified         - W PAC with non-contribution account, qualified         - X party, nonqualified         - Y party, qualified         - Z national party non-federal account         - all All Committee Types         - all_candidates All Candidate Committee Types (H, S, P)         - all_pacs All PAC Committee Types (N, O, Q, V, W)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -2542,7 +2612,7 @@ export def "schedules-schedule-a-by-state-totals get" [
   let full_url = (build-url $base "/schedules/schedule_a/by_state/totals/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  This endpoint provides itemized individual contributions received by a committee, aggregated by the contributor’s ZIP code. If you are interested in our “is_individual” methodology, review the [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology). Unitemized individual contributions are not included.
@@ -2556,6 +2626,7 @@ export def "schedules-schedule-a-by-zip get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
   --zip: list # Zip code of contributor
@@ -2574,7 +2645,7 @@ export def "schedules-schedule-a-by-zip get" [
   let full_url = (build-url $base "/schedules/schedule_a/by_zip/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Efiling endpoints provide real-time campaign finance data received from electronic filers. Efiling endpoints only contain the most recent four months of data and don't contain the processed and coded data that you can find on other endpoints.
@@ -2588,6 +2659,7 @@ export def "schedules-schedule-a-efile get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-amount: string # Filter for all amounts less than a value.
   --contributor-occupation: list # Occupation of contributor, filers need to make an effort to gather this information
   --max-image-number: string # Maxium image number of the page where the schedule item is reported
@@ -2616,7 +2688,7 @@ export def "schedules-schedule-a-efile get" [
   let full_url = (build-url $base "/schedules/schedule_a/efile/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  This description is for both ​`/schedules​/schedule_a​/` and ​ `/schedules​/schedule_a​/{sub_id}​/`.  This endpoint provides itemized receipts. Schedule A records describe itemized receipts, including contributions from individuals. If you are interested in contributions from an individual, use the `/schedules/schedule_a/` endpoint. For a more complete description of all Schedule A records visit [About receipts data](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/about-receipts-data/). If you are interested in our "is_individual" methodology visit our [methodology page](https://www.fec.gov/campaign-finance-data/about-campaign-finance-data/methodology/).  ​The `/schedules​/schedule_a​/` endpoint is not paginated by page number. This endpoint uses keyset pagination to improve query performance and these indices are required to properly page through this large dataset. To request the next page, you should append the values found in the `last_indexes` object from pagination to the URL of your last request as additional parameters.  For example, when sorting by `contribution_receipt_date`, you might receive a page of results with the two scenarios of following pagination information:  case #1: ``` pagination: {     pages: 2152643,     per_page: 20,     count: 43052850,     last_indexes: {         last_index: "230880619",         last_contribution_receipt_date: "2014-01-01"     } } ``` <br/> case #2 (results which include contribution_receipt_date = NULL):  ``` pagination: {     pages: 2152644,     per_page: 20,     count: 43052850,     last_indexes: {         last_index: "230880639",         sort_null_only: True     } } ``` To fetch the next page of sorted results, append `last_index=230880619` and `last_contribution_receipt_date=2014-01-01` to the URL and when reaching `contribution_receipt_date=NULL`, append `last_index=230880639` and `sort_null_only=True`. We strongly advise paging through these results using sort indices. The default sort is acending by `contribution_receipt_date` (`deprecated`, will be descending). If you do not page using sort indices, some transactions may be unintentionally filtered out.  Calls to ​`/schedules​/schedule_a​/` may return many records. For large result sets, the record counts found in the pagination object are approximate; you will need to page through the records until no records are returned.  To avoid throwing the "out of range" exception on the last page, one recommandation is to use total count and `per_page` to control the traverse loop of results.  ​The `/schedules​/schedule_a​/{sub_id}​/` endpoint returns a single transaction, but it does include a pagination object class. Please ignore the information in that object class. 
@@ -2631,6 +2703,7 @@ export def "schedules-schedule-a get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-load-date: string # Maximum load date (format: date)
   --max-amount: string # Filter for all amounts less than a value.
   --max-image-number: string # Maxium image number of the page where the schedule item is reported
@@ -2670,7 +2743,7 @@ export def "schedules-schedule-a get" [
   let full_url = (build-url $base $"/schedules/schedule_a/($sub_id)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Schedule B filings describe itemized disbursements. This data explains how committees and other filers spend their money. These figures are reported as part of forms F3, F3X and F3P.  The data is divided in two-year periods, called `two_year_transaction_period`, which is derived from the `report_year` submitted of the corresponding form. If no value is supplied, the results will default to the most recent two-year period that is named after the ending, even-numbered year.  Due to the large quantity of Schedule B filings, this endpoint is not paginated by page number. Instead, you can request the next page of results by adding the values in the `last_indexes` object from `pagination` to the URL of your last request. For example, when sorting by `disbursement_date`, you might receive a page of results with the following pagination information:  ``` pagination: {     pages: 965191,     per_page: 20,     count: 19303814,     last_indexes: {         last_index: "230906248",         last_disbursement_date: "2014-07-04"     } } ```  To fetch the next page of sorted results, append `last_index=230906248` and `last_disbursement_date=2014-07-04` to the URL.  We strongly advise paging through these results by using the sort indices (defaults to sort by disbursement date, e.g. `last_disbursement_date`), otherwise some resources may be unintentionally filtered out. This resource uses keyset pagination to improve query performance and these indices are required to properly page through this large dataset.  Note: because the Schedule B data includes many records, counts for large result sets are approximate; you will want to page through the records until no records are returned.
@@ -2684,6 +2757,7 @@ export def "schedules-schedule-b list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --disbursement-description: list # Description of disbursement
   --max-amount: string # Filter for all amounts less than a value.
   --max-image-number: string # Maxium image number of the page where the schedule item is reported
@@ -2718,7 +2792,7 @@ export def "schedules-schedule-b list" [
   let full_url = (build-url $base "/schedules/schedule_b/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Schedule B disbursements aggregated by disbursement purpose category. To avoid double counting, memoed items are not included. Purpose is a combination of transaction codes, category codes and disbursement description. Inspect the `disbursement_purpose` sql function within the migrations for more details.
@@ -2732,6 +2806,7 @@ export def "schedules-schedule-b-by-purpose get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --purpose: list # Disbursement purpose category
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -2749,7 +2824,7 @@ export def "schedules-schedule-b-by-purpose get" [
   let full_url = (build-url $base "/schedules/schedule_b/by_purpose/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Schedule B disbursements aggregated by recipient name. To avoid double counting, memoed items are not included.
@@ -2763,6 +2838,7 @@ export def "schedules-schedule-b-by-recipient get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
@@ -2780,7 +2856,7 @@ export def "schedules-schedule-b-by-recipient get" [
   let full_url = (build-url $base "/schedules/schedule_b/by_recipient/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Schedule B disbursements aggregated by recipient committee ID, if applicable. To avoid double counting, memoed items are not included.
@@ -2794,6 +2870,7 @@ export def "schedules-schedule-b-by-recipient-id get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
@@ -2811,7 +2888,7 @@ export def "schedules-schedule-b-by-recipient-id get" [
   let full_url = (build-url $base "/schedules/schedule_b/by_recipient_id/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Efiling endpoints provide real-time campaign finance data received from electronic filers. Efiling endpoints only contain the most recent four months of data and don't contain the processed and coded data that you can find on other endpoints.
@@ -2825,6 +2902,7 @@ export def "schedules-schedule-b-efile get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --disbursement-description: list # Description of disbursement
   --max-amount: string # Filter for all amounts less than a value.
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -2848,7 +2926,7 @@ export def "schedules-schedule-b-efile get" [
   let full_url = (build-url $base "/schedules/schedule_b/efile/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Schedule B filings describe itemized disbursements. This data explains how committees and other filers spend their money. These figures are reported as part of forms F3, F3X and F3P.  The data is divided in two-year periods, called `two_year_transaction_period`, which is derived from the `report_year` submitted of the corresponding form. If no value is supplied, the results will default to the most recent two-year period that is named after the ending, even-numbered year.  Due to the large quantity of Schedule B filings, this endpoint is not paginated by page number. Instead, you can request the next page of results by adding the values in the `last_indexes` object from `pagination` to the URL of your last request. For example, when sorting by `disbursement_date`, you might receive a page of results with the following pagination information:  ``` pagination: {     pages: 965191,     per_page: 20,     count: 19303814,     last_indexes: {         last_index: "230906248",         last_disbursement_date: "2014-07-04"     } } ```  To fetch the next page of sorted results, append `last_index=230906248` and `last_disbursement_date=2014-07-04` to the URL.  We strongly advise paging through these results by using the sort indices (defaults to sort by disbursement date, e.g. `last_disbursement_date`), otherwise some resources may be unintentionally filtered out. This resource uses keyset pagination to improve query performance and these indices are required to properly page through this large dataset.  Note: because the Schedule B data includes many records, counts for large result sets are approximate; you will want to page through the records until no records are returned.
@@ -2863,6 +2941,7 @@ export def "schedules-schedule-b get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --disbursement-description: list # Description of disbursement
   --max-amount: string # Filter for all amounts less than a value.
   --max-image-number: string # Maxium image number of the page where the schedule item is reported
@@ -2897,7 +2976,7 @@ export def "schedules-schedule-b get" [
   let full_url = (build-url $base $"/schedules/schedule_b/($sub_id)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Schedule C shows all loans, endorsements and loan guarantees a committee receives or makes.  The committee continues to report the loan until it is repaid.
@@ -2911,6 +2990,7 @@ export def "schedules-schedule-c list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --min-incurred-date: string #  Minimum incurred date  (format: date)
   --candidate-name: list # Name of candidate running for office
   --max-amount: string #  Filter for all amounts less than a value.
@@ -2939,7 +3019,7 @@ export def "schedules-schedule-c list" [
   let full_url = (build-url $base "/schedules/schedule_c/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Schedule C shows all loans, endorsements and loan guarantees a committee receives or makes.  The committee continues to report the loan until it is repaid.
@@ -2954,6 +3034,7 @@ export def "schedules-schedule-c get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
@@ -2968,7 +3049,7 @@ export def "schedules-schedule-c get" [
   let full_url = (build-url $base $"/schedules/schedule_c/($sub_id)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Schedule D, it shows debts and obligations owed to or by the committee that are required to be disclosed.  
@@ -2982,6 +3063,7 @@ export def "schedules-schedule-d list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --creditor-debtor-name: list
   --max-image-number: string # Maxium image number of the page where the schedule item is reported
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
@@ -3013,7 +3095,7 @@ export def "schedules-schedule-d list" [
   let full_url = (build-url $base "/schedules/schedule_d/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Schedule D, it shows debts and obligations owed to or by the committee that are required to be disclosed.  
@@ -3028,6 +3110,7 @@ export def "schedules-schedule-d get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
@@ -3042,7 +3125,7 @@ export def "schedules-schedule-d get" [
   let full_url = (build-url $base $"/schedules/schedule_d/($sub_id)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Schedule E covers the line item expenditures for independent expenditures. For example, if a super PAC bought ads on TV to oppose a federal candidate, each ad purchase would be recorded here with the expenditure amount, name and id of the candidate, and whether the ad supported or opposed the candidate.  An independent expenditure is an expenditure for a communication "expressly advocating the election or defeat of a clearly identified candidate that is not made in cooperation, consultation, or concert with, or at the request or suggestion of, a candidate, a candidate’s authorized committee, or their agents, or a political party or its agents."  Aggregates by candidate do not include 24 and 48 hour reports. This ensures we don't double count expenditures and the totals are more accurate. You can still find the information from 24 and 48 hour reports in `/schedule/schedule_e/`.  Due to the large quantity of Schedule E filings, this endpoint is not paginated by page number. Instead, you can request the next page of results by adding the values in the `last_indexes` object from `pagination` to the URL of your last request. For example, when sorting by `expenditure_amount`, you might receive a page of results with the following pagination information:  ```  "pagination": {     "count": 152623,     "last_indexes": {       "last_index": "3023037",       "last_expenditure_amount": -17348.5     },     "per_page": 20,     "pages": 7632   } } ```  To fetch the next page of sorted results, append `last_index=3023037` and `last_expenditure_amount=` to the URL.  We strongly advise paging through these results by using the sort indices (defaults to sort by disbursement date, e.g. `last_disbursement_date`), otherwise some resources may be unintentionally filtered out.  This resource uses keyset pagination to improve query performance and these indices are required to properly page through this large dataset.  Note: because the Schedule E data includes many records, counts for large result sets are approximate; you will want to page through the records until no records are returned.
@@ -3056,6 +3139,7 @@ export def "schedules-schedule-e get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-dissemination-date: string # Selects all items distributed by this committee before this date (format: date)
   --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --payee-name: list #  Name of the entity that received the payment.
@@ -3099,7 +3183,7 @@ export def "schedules-schedule-e get" [
   let full_url = (build-url $base "/schedules/schedule_e/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Schedule E receipts aggregated by recipient candidate. To avoid double counting, memoed items are not included.
@@ -3113,6 +3197,7 @@ export def "schedules-schedule-e-by-candidate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --office: string@office-completer-1 # Federal office candidate runs for: H, S or P
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
@@ -3135,7 +3220,7 @@ export def "schedules-schedule-e-by-candidate get" [
   let full_url = (build-url $base "/schedules/schedule_e/by_candidate/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Efiling endpoints provide real-time campaign finance data received from electronic filers. Efiling endpoints only contain the most recent four months of data and don't contain the processed and coded data that you can find on other endpoints.
@@ -3149,6 +3234,7 @@ export def "schedules-schedule-e-efile get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --spender-name: list # The name of the committee. If a committee changes its name,     the most recent name will be shown. Committee names are not unique. Use committee_id     for looking up records.
   --min-expenditure-date: string # Selects all items expended by this committee after this date (format: date)
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
@@ -3185,7 +3271,7 @@ export def "schedules-schedule-e-efile get" [
   let full_url = (build-url $base "/schedules/schedule_e/efile/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Total independent expenditure on supported or opposed candidates by cycle or candidate election year.
@@ -3199,6 +3285,7 @@ export def "schedules-schedule-e-totals-by-candidate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -3216,7 +3303,7 @@ export def "schedules-schedule-e-totals-by-candidate get" [
   let full_url = (build-url $base "/schedules/schedule_e/totals/by_candidate/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Schedule F, it shows all special expenditures a national or state party committee makes in connection with the general election campaigns of federal candidates.  These coordinated party expenditures do not count against the contribution limits but are subject to other limits, these limits are detailed in Chapter 7 of the FEC Campaign Guide for Political Party Committees.
@@ -3230,6 +3317,7 @@ export def "schedules-schedule-f list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-amount: string # Filter for all amounts less than a value.
   --max-image-number: string # Maxium image number of the page where the schedule item is reported
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
@@ -3256,7 +3344,7 @@ export def "schedules-schedule-f list" [
   let full_url = (build-url $base "/schedules/schedule_f/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Schedule F, it shows all special expenditures a national or state party committee makes in connection with the general election campaigns of federal candidates.  These coordinated party expenditures do not count against the contribution limits but are subject to other limits, these limits are detailed in Chapter 7 of the FEC Campaign Guide for Political Party Committees.
@@ -3271,6 +3359,7 @@ export def "schedules-schedule-f get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -3281,7 +3370,7 @@ export def "schedules-schedule-f get" [
   let full_url = (build-url $base $"/schedules/schedule_f/($sub_id)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  State laws and procedures govern elections for state or local offices as well as how candidates appear on election ballots. Contact the appropriate state election office for more information.
@@ -3295,6 +3384,7 @@ export def "state-election-office get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
@@ -3310,7 +3400,7 @@ export def "state-election-office get" [
   let full_url = (build-url $base "/state-election-office/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  Provides cumulative receipt totals by entity type, over a two year cycle. Totals are adjusted to avoid double counting.  This is [the sql](https://github.com/fecgov/openFEC/blob/develop/data/migrations/V41__large_aggregates.sql) that creates these calculations.
@@ -3324,6 +3414,7 @@ export def "totals-by-entity get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cycle: int #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.  (format: int32)
   --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
@@ -3339,7 +3430,7 @@ export def "totals-by-entity get" [
   let full_url = (build-url $base "/totals/by_entity/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 #  This endpoint provides information about a committee's Form 3, Form 3X, or Form 3P financial reports, which are aggregated by two-year period. We refer to two-year periods as a `cycle`.  The cycle is named after the even-numbered year and includes the year before it. To obtain totals from 2013 and 2014, you would use 2014. In odd-numbered years, the current cycle is the next year — for example, in 2015, the current cycle is 2016.  For presidential and Senate candidates, multiple two-year cycles exist between elections. 
@@ -3354,6 +3445,7 @@ export def "totals get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --max-first-f1-date: string # Filter for committees whose first Form 1 was received on or before this date. (format: date)
   --min-receipts: string #  Filter for all amounts greater than a value.
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
@@ -3387,5 +3479,5 @@ export def "totals get" [
   let full_url = (build-url $base $"/totals/($entity_type)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

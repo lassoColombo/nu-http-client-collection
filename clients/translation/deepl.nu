@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -91,7 +92,7 @@ def formality-completer-1 [] { ["default" "formal" "informal" "less" "more"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "admin-analytics adminGetAnalytics" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -124,6 +125,7 @@ export def "admin-analytics adminGetAnalytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Start date for the usage report (ISO 8601 date format). (format: date, e.g. 2025-09-29)
   --end-date: string # End date for the usage report (ISO 8601 date format). (format: date, e.g. 2025-10-01)
   --group-by: string@group-by-completer # Optional parameter to group usage statistics. Possible values:  * `key` - Group by API key  * `key_and_day` - Group by API key and usage date (e.g. key_and_day)
@@ -134,7 +136,7 @@ export def "admin-analytics adminGetAnalytics" [
   let full_url = (build-url $base "/v2/admin/analytics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get custom tag usage statistics as an admin
@@ -149,6 +151,7 @@ export def "admin-analytics-custom-tags adminGetCustomTagAnalytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Start date for the usage report (ISO 8601 date format). (format: date, e.g. 2026-05-17)
   --end-date: string # End date for the usage report (ISO 8601 date format). (format: date, e.g. 2026-05-18)
   --aggregate-by: string@aggregate-by-completer # Optional parameter to control aggregation of usage statistics. Possible values:  * `period` - Aggregate usage over the entire date range (default)  * `day` - Group usage by individual day (default: period, e.g. day)
@@ -160,7 +163,7 @@ export def "admin-analytics-custom-tags adminGetCustomTagAnalytics" [
   let full_url = (build-url $base "/v2/admin/analytics/custom-tags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a developer key as an admin
@@ -175,6 +178,7 @@ export def "admin-developer-keys adminCreateDeveloperKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --label: string # API key label. The default value is `DeepL API Key`. (e.g. developer key prod)
 ]: any -> record<key_id: string, label: string, creation_time: string, deactivated_time: string, is_deactivated: bool, usage_limits: record<characters: float, speech_to_text_milliseconds: float>> {
   let input = $in
@@ -185,7 +189,7 @@ export def "admin-developer-keys adminCreateDeveloperKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all developer keys as an admin
@@ -200,13 +204,14 @@ export def "admin-developer-keys adminGetDeveloperKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key_id: string, label: string, creation_time: string, deactivated_time: string, is_deactivated: bool, usage_limits: record<characters: float, speech_to_text_milliseconds: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/admin/developer-keys")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deactivate a developer key as an admin
@@ -221,6 +226,7 @@ export def "admin-developer-keys-deactivate adminDeactivateDeveloperKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   key_id: string # API key ID. Consists of two valid GUIDs separated by a colon. (e.g. ca7d5694-96eb-4263-a9a4-7f7e4211529e:20c2abcf-4c3c-4cd6-8ae8-8bd2a7d4da38)
 ]: any -> record<key_id: string, label: string, creation_time: string, deactivated_time: string, is_deactivated: bool, usage_limits: record<characters: float, speech_to_text_milliseconds: float>> {
   let input = $in
@@ -231,7 +237,7 @@ export def "admin-developer-keys-deactivate adminDeactivateDeveloperKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Rename a developer key as an admin
@@ -246,6 +252,7 @@ export def "admin-developer-keys-label adminRenameDeveloperKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   key_id: string # API key ID. Consists of two valid GUIDs separated by a colon. (e.g. ca7d5694-96eb-4263-a9a4-7f7e4211529e:20c2abcf-4c3c-4cd6-8ae8-8bd2a7d4da38)
   label: string # API key label. (e.g. developer key prod)
 ]: any -> record<key_id: string, label: string, creation_time: string, deactivated_time: string, is_deactivated: bool, usage_limits: record<characters: float, speech_to_text_milliseconds: float>> {
@@ -257,7 +264,7 @@ export def "admin-developer-keys-label adminRenameDeveloperKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set developer key usage limits as an admin
@@ -272,6 +279,7 @@ export def "admin-developer-keys-limits adminSetDeveloperKeyUsageLimits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   key_id: string # API key ID. Consists of two valid GUIDs separated by a colon. (e.g. ca7d5694-96eb-4263-a9a4-7f7e4211529e:20c2abcf-4c3c-4cd6-8ae8-8bd2a7d4da38)
   --characters: float # Restricts the number of total characters (across text translation, document translation, and text improvement) that can be consumed by an API key in a one-month usage period.  Setting the limit to `0` means the API key will not be able to consume characters. Setting the limit to `null` disables the limit, effectively allowing unlimited usage.  (e.g. 5000)
   --speech-to-text-milliseconds: float # Restricts the number of milliseconds of speech-to-text that can be consumed by an API key in a one-month usage period. Setting the limit to `0` means the API key will not be able to consume speech-to-text milliseconds. Setting the limit to `null` disables the limit, effectively allowing unlimited usage.  (e.g. 3600000)
@@ -284,7 +292,7 @@ export def "admin-developer-keys-limits adminSetDeveloperKeyUsageLimits" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Request Translation
@@ -300,6 +308,7 @@ export def "translate translateText" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   text: list # Text to be translated. Only UTF-8-encoded plain text is supported. The parameter may be specified many times in a single request, within the request size limit (128KiB). Translations are returned in the same order as they are requested. Each text in the array is translated independently — texts do not share context with each other.
   --source-lang: string # Language of the text to be translated. If this parameter is omitted, the API will attempt to detect the language of the text and translate it.  For the full list of supported source languages, see [supported languages](https://developers.deepl.com/docs/getting-started/supported-languages) or query the [`GET /v3/languages` endpoint](https://developers.deepl.com/api-reference/languages/retrieve-supported-languages-by-resource). (e.g. EN)
   target_lang: string # The language into which the text should be translated.  For the full list of supported target languages, see [supported languages](https://developers.deepl.com/docs/getting-started/supported-languages) or query the [`GET /v3/languages` endpoint](https://developers.deepl.com/api-reference/languages/retrieve-supported-languages-by-resource). (e.g. DE)
@@ -330,7 +339,7 @@ export def "translate translateText" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Upload and Translate a Document
@@ -346,6 +355,7 @@ export def "document translateDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --source-lang: string # Language of the text to be translated. If this parameter is omitted, the API will attempt to detect the language of the text and translate it.  For the full list of supported source languages, see [supported languages](https://developers.deepl.com/docs/getting-started/supported-languages) or query the [`GET /v3/languages` endpoint](https://developers.deepl.com/api-reference/languages/retrieve-supported-languages-by-resource). (e.g. EN)
   target_lang: string # The language into which the text should be translated.  For the full list of supported target languages, see [supported languages](https://developers.deepl.com/docs/getting-started/supported-languages) or query the [`GET /v3/languages` endpoint](https://developers.deepl.com/api-reference/languages/retrieve-supported-languages-by-resource). (e.g. DE)
   file: string # The document file to be translated. The file name should be included in this part's content disposition. As an alternative, the filename parameter can be used. The following file types and extensions are supported:   * `docx` - Microsoft Word Document   * `pptx` - Microsoft PowerPoint Document   * `xlsx` - Microsoft Excel Document   * `pdf` - Portable Document Format   * `htm / html` - HTML Document   * `txt` - Plain Text Document   * `xlf / xliff` - XLIFF Document, version 2.1   * `srt` - SRT Document   * `jpeg` / `jpg` / `png` - Image (currently in beta) (format: binary)
@@ -366,7 +376,7 @@ export def "document translateDocument" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Check Document Status
@@ -382,6 +392,7 @@ export def "document post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   document_key: string # The document encryption key that was sent to the client when the document was uploaded to the API. (e.g. 0CB0054F1C132C1625B392EADDA41CB754A742822F6877173029A6C487E7F60A)
 ]: any -> record<document_id: string, status: string, seconds_remaining: int, billed_characters: int, error_message: string> {
   let input = $in
@@ -392,7 +403,7 @@ export def "document post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Download Translated Document
@@ -408,6 +419,7 @@ export def "document-result downloadDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   document_key: string # The document encryption key that was sent to the client when the document was uploaded to the API. (e.g. 0CB0054F1C132C1625B392EADDA41CB754A742822F6877173029A6C487E7F60A)
 ]: any -> any {
   let input = $in
@@ -418,7 +430,7 @@ export def "document-result downloadDocument" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Language Pairs Supported by Glossaries
@@ -435,13 +447,14 @@ export def "glossary-language-pairs listGlossaryLanguages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<supported_languages: table<source_lang: string, target_lang: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/glossary-language-pairs")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Glossary
@@ -457,6 +470,7 @@ export def "glossaries createMultilingualGlossary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Name to be associated with the glossary. (e.g. My Glossary)
   dictionaries: list # Dictionaries to populate the glossary with. — item shape: {source_lang?: "ar"|"bg"|"cs"|"da"|"de"|"el"|"en"|"es"|"et"|"fi"|"fr"|"he"|"hu"|"id"|"it"|"ja"|"ko"|"lt"|"lv"|"nb"|"nl"|"pl"|"pt"|"ro"|"ru"|"sk"|"sl"|"sv"|"th"|"tr"|"uk"|"vi"|"zh", target_lang?: "ar"|"bg"|"cs"|"da"|"de"|"el"|"en"|"es"|"et"|"fi"|"fr"|"he"|"hu"|"id"|"it"|"ja"|"ko"|"lt"|"lv"|"nb"|"nl"|"pl"|"pt"|"ro"|"ru"|"sk"|"sl"|"sv"|"th"|"tr"|"uk"|"vi"|"zh", entries?: string, entries_format?: "tsv"|"csv"}
 ]: any -> record<glossary_id: string, name: string, dictionaries: table<source_lang: string, target_lang: string, entries: string, entries_format: string>, creation_time: string> {
@@ -468,7 +482,7 @@ export def "glossaries createMultilingualGlossary" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all Glossaries
@@ -483,13 +497,14 @@ export def "glossaries listMultilingualGlossaries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<glossaries: table<glossary_id: string, name: string, dictionaries: list, creation_time: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/glossaries")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve Glossary Details
@@ -505,13 +520,14 @@ export def "glossaries get-by-glossary_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<glossary_id: string, name: string, dictionaries: table<source_lang: string, target_lang: string, entries: string, entries_format: string>, creation_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/glossaries/($glossary_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit glossary details
@@ -528,6 +544,7 @@ export def "glossaries patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # A unique ID assigned to a glossary. (e.g. def3a26b-3e84-45b3-84ae-0c0aaf3525f7)
   --dictionaries: list # Dictionaries to edit the glossary with. Currently only supports 0 or 1 dictionaries in the array. — item shape: {source_lang?: "ar"|"bg"|"cs"|"da"|"de"|"el"|"en"|"es"|"et"|"fi"|"fr"|"he"|"hu"|"id"|"it"|"ja"|"ko"|"lt"|"lv"|"nb"|"nl"|"pl"|"pt"|"ro"|"ru"|"sk"|"sl"|"sv"|"th"|"tr"|"uk"|"vi"|"zh", target_lang?: "ar"|"bg"|"cs"|"da"|"de"|"el"|"en"|"es"|"et"|"fi"|"fr"|"he"|"hu"|"id"|"it"|"ja"|"ko"|"lt"|"lv"|"nb"|"nl"|"pl"|"pt"|"ro"|"ru"|"sk"|"sl"|"sv"|"th"|"tr"|"uk"|"vi"|"zh", entries?: string, entries_format?: "tsv"|"csv"}
 ]: any -> record<glossary_id: string, name: string, dictionaries: table<source_lang: string, target_lang: string, entries: string, entries_format: string>, creation_time: string> {
@@ -539,7 +556,7 @@ export def "glossaries patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Glossary
@@ -555,13 +572,14 @@ export def "glossaries delete-by-glossary_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/glossaries/($glossary_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve Glossary Entries
@@ -577,6 +595,7 @@ export def "glossaries-entries get-by-glossary_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --source-lang: string@source-lang-completer # e.g. en
   --target-lang: string@target-lang-completer # e.g. de
 ]: nothing -> record<source_lang: string, target_lang: string, entries: string, entries_format: string> {
@@ -586,7 +605,7 @@ export def "glossaries-entries get-by-glossary_id" [
   let full_url = (build-url $base $"/v3/glossaries/($glossary_id)/entries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the dictionary associated with the given language pair with the given glossary ID.
@@ -602,6 +621,7 @@ export def "glossaries-dictionaries delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --source-lang: string@source-lang-completer # e.g. en
   --target-lang: string@target-lang-completer # e.g. de
 ]: nothing -> any {
@@ -611,7 +631,7 @@ export def "glossaries-dictionaries delete" [
   let full_url = (build-url $base $"/v3/glossaries/($glossary_id)/dictionaries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replaces or creates a dictionary in the glossary with the specified entries.
@@ -627,6 +647,7 @@ export def "glossaries-dictionaries replaceDictionary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --source-lang: string@source-lang-completer # The language in which the source texts in the glossary are specified. (e.g. en)
   --target-lang: string@target-lang-completer # The language in which the target texts in the glossary are specified. (e.g. de)
   --entries: string # The entries of the glossary. The entries have to be specified in the format provided by the `entries_format` parameter. (e.g. Hello	Guten Tag)
@@ -640,7 +661,7 @@ export def "glossaries-dictionaries replaceDictionary" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a Glossary
@@ -655,6 +676,7 @@ export def "glossaries createGlossary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Name to be associated with the glossary. (e.g. My Glossary)
   source_lang: string@source-lang-completer # The language in which the source texts in the glossary are specified. (e.g. en)
   target_lang: string@target-lang-completer # The language in which the target texts in the glossary are specified. (e.g. de)
@@ -669,7 +691,7 @@ export def "glossaries createGlossary" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all Glossaries
@@ -684,13 +706,14 @@ export def "glossaries listGlossaries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<glossaries: table<glossary_id: string, name: string, ready: bool, source_lang: string, target_lang: string, creation_time: string, entry_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/glossaries")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve Glossary Details
@@ -706,13 +729,14 @@ export def "glossaries get-by-glossary_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<glossary_id: string, name: string, ready: bool, source_lang: string, target_lang: string, creation_time: string, entry_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/glossaries/($glossary_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a Glossary
@@ -728,13 +752,14 @@ export def "glossaries delete-by-glossary_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/glossaries/($glossary_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve Glossary Entries
@@ -750,6 +775,7 @@ export def "glossaries-entries get-by-glossary_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string # The requested format of the returned glossary entries. Currently, supports only `text/tab-separated-values`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -759,7 +785,7 @@ export def "glossaries-entries get-by-glossary_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/tab-separated-values"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Improve text
@@ -774,6 +800,7 @@ export def "write-rephrase rephraseText" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   text: list # Text to be improved. Only UTF-8-encoded plain text is supported. Improvements are returned in the same order as they are requested.
   --target-lang: string@target-lang-completer-1 # The language for the text improvement. (e.g. de)
   --writing-style: string@writing-style-completer # Specify a style to rephrase your text in a way that fits your audience and goals. The `prefer_` prefix allows falling back to the default style if the language does not yet support styles.
@@ -787,7 +814,7 @@ export def "write-rephrase rephraseText" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Correct text
@@ -802,6 +829,7 @@ export def "write-correct correctText" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   text: list # Text to be corrected. Only UTF-8-encoded plain text is supported. Corrections are returned in the same order as they are requested.
   --target-lang: string@target-lang-completer-1 # The language for the text improvement. (e.g. de)
 ]: any -> record<improvements: table<detected_source_language: string, target_language: string, text: string>> {
@@ -813,7 +841,7 @@ export def "write-correct correctText" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check Usage and Limits
@@ -828,13 +856,14 @@ export def "usage get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<character_count: int, character_limit: int, products: table<product_type: string, billing_unit: string, api_key_unit_count: int, account_unit_count: int, api_key_character_count: int, character_count: int>, api_key_character_count: int, api_key_character_limit: int, speech_to_text_milliseconds_count: int, speech_to_text_milliseconds_limit: int, start_time: string, end_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/usage")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve Supported Languages
@@ -851,6 +880,7 @@ export def "languages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # Supported values are "source" or "target". If type parameter is not included, defaults to "source". (default: source)
 ]: nothing -> table<language: string, name: string, supports_formality: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -859,7 +889,7 @@ export def "languages get" [
   let full_url = (build-url $base "/v2/languages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve Language Resources
@@ -874,13 +904,14 @@ export def "languages-resources get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<name: string, features: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/languages/resources")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve Languages
@@ -895,6 +926,7 @@ export def "languages get-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --resource: string@resource-completer # The resource to retrieve languages for. Supported values: `translate_text`, `translate_document`, `glossary`, `voice`, `write`, `style_rules`. (e.g. translate_text)
   --include: list # Controls which languages and features are included in the response. By default, only stable languages and features are returned. Values can be combined with repeated parameters (e.g. `?include=beta&include=external`).  - `beta`: Include languages and features in beta, in addition to stable - `external`: Include features that rely on third-party service providers
 ]: nothing -> table<lang: string, name: string, usable_as_source: bool, usable_as_target: bool, status: string, features: record> {
@@ -904,7 +936,7 @@ export def "languages get-1" [
   let full_url = (build-url $base "/v3/languages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List translation memories
@@ -919,6 +951,7 @@ export def "translation-memories listTranslationMemories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The index of the first page to return. Use with `page_size` to get the next page of translation memories. (default: 0)
   --page-size: int # The maximum number of translation memories to return. (default: 10)
 ]: nothing -> record<translation_memories: table<translation_memory_id: string, name: string, source_language: string, target_languages: list, segment_count: int>, total_count: int> {
@@ -928,7 +961,7 @@ export def "translation-memories listTranslationMemories" [
   let full_url = (build-url $base "/v3/translation_memories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve style rule lists
@@ -943,6 +976,7 @@ export def "style-rules list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The index of the first page to return. Use with `page_size` to get the next page of rule lists (default: 0)
   --page-size: int # The maximum number of style rule lists to return. (default: 10)
   --detailed: oneof<nothing, bool> # Determines if the rule list's `configured_rules` and `custom_instructions` should be included in the response body. (default: false)
@@ -953,7 +987,7 @@ export def "style-rules list" [
   let full_url = (build-url $base "/v3/style_rules" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a style rule list
@@ -970,6 +1004,7 @@ export def "style-rules createStyleRuleList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Name associated with the style rule list.
   language: string@language-completer # The language that the style rule list is applied to.
   --configured-rules: record # The enabled rules for the style rule list including what option was selected for each rule. This schema combines rules from all supported languages. (e.g. {style_and_tone: {abbreviations: use_abbreviations_and_symbols, short_vs_long_words: use_short_words}, punctuation: {apostrophe: use_curly_apostrophes}}) — shape: {dates_and_times?: record, formatting?: record, numbers?: record, punctuation?: record, spelling_and_grammar?: record, style_and_tone?: record, vocabulary?: record}
@@ -983,7 +1018,7 @@ export def "style-rules createStyleRuleList" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a style rule list
@@ -999,13 +1034,14 @@ export def "style-rules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<style_id: string, name: string, creation_time: string, updated_time: string, language: string, version: int, configured_rules: record<dates_and_times: record<calendar_era: string, centuries: string, date_format: string, dates_in_numerical_form: string, decades: string, hours_minutes_seconds_separator: string, hours_minutes_separator: string, midnight_in_numerals: string, single_digit_days_and_months: string, single_digit_hours: string, time_format: string, writing_dates: string, years: string>, formatting: record<email_address_format: string, phone_number_country_code_format: string, phone_number_format: string, space_between_arabic_numerals_and_unit: string, space_between_chinese_and_english: string, space_between_chinese_characters_and_arabic_numerals: string>, numbers: record<approximate_numbers: string, currency_format: string, decimal_numbers_less_than_one: string, decimal_separator: string, dimensions_separator: string, equation_formula_reference: string, kanji_numbers: string, large_number_format: string, large_sums_of_money: string, large_sums_of_money_format: string, list_of_measurements_with_units: string, mathematical_expression_spacing: string, number_format: string, number_separator: string, numbers_of_5_digits_or_more: string, numbers_up_to_4_digits: string, percentage_format: string, reference_to_symbol: string, spelling_out_units: string, temperature_format: string, thousands_separator: string, units_of_measure_spacing: string, use_of_hiragana_and_kanji: string, writing_numbers: string, zero_format: string>, punctuation: record<abbreviations: string, acronyms: string, ampersand_abbreviation_spacing: string, ampersand_usage: string, apostrophe: string, bracket: string, chinese_mixed_with_english: string, colon: string, colon_between_hours_and_minutes_or_chapters_and_verses: string, colon_in_heading: string, colon_to_replace_versus_or_to: string, comma_after_conjunctive_adverbs: string, comma_after_i_e_and_e_g: string, comma_after_short_introductory_phrase: string, comma_and_semicolon: string, corner_bracket_and_periods: string, corner_brackets_and_periods: string, dash: string, ellipsis: string, em_dash: string, emphasis: string, exclamation_marks: string, explanatory_note_indicator: string, full_sentence_in_round_brackets: string, highlighting_specific_expressions: string, japanese_reference_materials: string, parentheses_for_supplementary_information: string, passage_of_time_and_movement_between_locations: string, periods_and_commas: string, periods_in_academic_degrees: string, periods_in_direct_quotes: string, periods_in_uppercase_initialisms_and_acronyms: string, plus_sign_usage: string, possessives_of_proper_names_ending_in_s_style: string, quotation_mark: string, quotation_mark_and_apostrophe: string, quotation_style: string, range_indicator: string, related_phrases_indicator: string, round_brackets: string, salutation: string, sentence_break_indicator: string, serial_comma: string, setting_off_non_quoted_phrases: string, slash: string, slash_usage: string, spacing_and_punctuation: string, text_in_round_brackets_referring_to_previous_sentence: string, text_in_round_brackets_supplementing_preceding_text: string, titles_of_books_and_newspapers: string, titles_of_creative_works_trade_names_laws_and_regulations: string, uppercase_acronyms: string>, spelling_and_grammar: record<abbreviating_french_word_numero: string, abbreviation_usage: string, accents_and_cedillas: string, accents_in_verbs_conjugated_like_french_word_c_der: string, accents_with_subject_verb_inversion: string, active_passive_voice: string, all_caps: string, complete_sentences: string, compound_nouns: string, conjunctions: string, contractions: string, established_loanwords: string, eszett: string, foreign_word_translation: string, french_verbs_ending_in_eler_and_eter: string, i_and_u_with_circumflex_accents: string, informal_address_pronouns: string, latin_abbreviations: string, passive_voice: string, past_participle_of_french_word_laisser_followed_by_infinitive: string, personal_titles: string, pluralizing_foreign_words: string, quotation_modification: string, spanish_word_solo: string, special_characters: string, spelled_out_numbers: string, umlauts: string, unestablished_loanwords: string>, style_and_tone: record<abbreviations: string, addressing_non_binary_people: string, addressing_the_reader: string, anglicisms: string, binary_representation_of_gender: string, complex_sentences: string, country_names: string, declarative_endings: string, default_first_person_pronoun: string, default_second_person_pronoun: string, directional_language: string, double_negatives: string, formality: string, gender_neutral_language_readability: string, gender_unspecified: string, gender_unspecified_or_mixed: string, idioms_colloquialisms_and_culture_specific_references: string, inflected_words_masculine_noun_agreement: string, instructions_style: string, mixing_styles: string, modal_verbs: string, personal_vs_impersonal_style: string, positive_vs_negative_language: string, proximity_agreement: string, reader_action_required: string, redundant_introductory_phrases: string, redundant_phrases: string, referring_to_non_binary_people: string, short_vs_long_words: string, simple_words_and_sentences: string, text_position_references: string, tone: string, verbal_vs_nominal_style: string>, vocabulary: record<abbreviations: string, loanwords: string>>, custom_instructions: table<id: string, label: string, prompt: string, source_language: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/style_rules/($style_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a style rule list's name
@@ -1021,6 +1057,7 @@ export def "style-rules updateStyleRuleList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name associated with the style rule list.
 ]: any -> record<style_id: string, name: string, creation_time: string, updated_time: string, language: string, version: int, configured_rules: record<dates_and_times: record<calendar_era: string, centuries: string, date_format: string, dates_in_numerical_form: string, decades: string, hours_minutes_seconds_separator: string, hours_minutes_separator: string, midnight_in_numerals: string, single_digit_days_and_months: string, single_digit_hours: string, time_format: string, writing_dates: string, years: string>, formatting: record<email_address_format: string, phone_number_country_code_format: string, phone_number_format: string, space_between_arabic_numerals_and_unit: string, space_between_chinese_and_english: string, space_between_chinese_characters_and_arabic_numerals: string>, numbers: record<approximate_numbers: string, currency_format: string, decimal_numbers_less_than_one: string, decimal_separator: string, dimensions_separator: string, equation_formula_reference: string, kanji_numbers: string, large_number_format: string, large_sums_of_money: string, large_sums_of_money_format: string, list_of_measurements_with_units: string, mathematical_expression_spacing: string, number_format: string, number_separator: string, numbers_of_5_digits_or_more: string, numbers_up_to_4_digits: string, percentage_format: string, reference_to_symbol: string, spelling_out_units: string, temperature_format: string, thousands_separator: string, units_of_measure_spacing: string, use_of_hiragana_and_kanji: string, writing_numbers: string, zero_format: string>, punctuation: record<abbreviations: string, acronyms: string, ampersand_abbreviation_spacing: string, ampersand_usage: string, apostrophe: string, bracket: string, chinese_mixed_with_english: string, colon: string, colon_between_hours_and_minutes_or_chapters_and_verses: string, colon_in_heading: string, colon_to_replace_versus_or_to: string, comma_after_conjunctive_adverbs: string, comma_after_i_e_and_e_g: string, comma_after_short_introductory_phrase: string, comma_and_semicolon: string, corner_bracket_and_periods: string, corner_brackets_and_periods: string, dash: string, ellipsis: string, em_dash: string, emphasis: string, exclamation_marks: string, explanatory_note_indicator: string, full_sentence_in_round_brackets: string, highlighting_specific_expressions: string, japanese_reference_materials: string, parentheses_for_supplementary_information: string, passage_of_time_and_movement_between_locations: string, periods_and_commas: string, periods_in_academic_degrees: string, periods_in_direct_quotes: string, periods_in_uppercase_initialisms_and_acronyms: string, plus_sign_usage: string, possessives_of_proper_names_ending_in_s_style: string, quotation_mark: string, quotation_mark_and_apostrophe: string, quotation_style: string, range_indicator: string, related_phrases_indicator: string, round_brackets: string, salutation: string, sentence_break_indicator: string, serial_comma: string, setting_off_non_quoted_phrases: string, slash: string, slash_usage: string, spacing_and_punctuation: string, text_in_round_brackets_referring_to_previous_sentence: string, text_in_round_brackets_supplementing_preceding_text: string, titles_of_books_and_newspapers: string, titles_of_creative_works_trade_names_laws_and_regulations: string, uppercase_acronyms: string>, spelling_and_grammar: record<abbreviating_french_word_numero: string, abbreviation_usage: string, accents_and_cedillas: string, accents_in_verbs_conjugated_like_french_word_c_der: string, accents_with_subject_verb_inversion: string, active_passive_voice: string, all_caps: string, complete_sentences: string, compound_nouns: string, conjunctions: string, contractions: string, established_loanwords: string, eszett: string, foreign_word_translation: string, french_verbs_ending_in_eler_and_eter: string, i_and_u_with_circumflex_accents: string, informal_address_pronouns: string, latin_abbreviations: string, passive_voice: string, past_participle_of_french_word_laisser_followed_by_infinitive: string, personal_titles: string, pluralizing_foreign_words: string, quotation_modification: string, spanish_word_solo: string, special_characters: string, spelled_out_numbers: string, umlauts: string, unestablished_loanwords: string>, style_and_tone: record<abbreviations: string, addressing_non_binary_people: string, addressing_the_reader: string, anglicisms: string, binary_representation_of_gender: string, complex_sentences: string, country_names: string, declarative_endings: string, default_first_person_pronoun: string, default_second_person_pronoun: string, directional_language: string, double_negatives: string, formality: string, gender_neutral_language_readability: string, gender_unspecified: string, gender_unspecified_or_mixed: string, idioms_colloquialisms_and_culture_specific_references: string, inflected_words_masculine_noun_agreement: string, instructions_style: string, mixing_styles: string, modal_verbs: string, personal_vs_impersonal_style: string, positive_vs_negative_language: string, proximity_agreement: string, reader_action_required: string, redundant_introductory_phrases: string, redundant_phrases: string, referring_to_non_binary_people: string, short_vs_long_words: string, simple_words_and_sentences: string, text_position_references: string, tone: string, verbal_vs_nominal_style: string>, vocabulary: record<abbreviations: string, loanwords: string>>, custom_instructions: table<id: string, label: string, prompt: string, source_language: string>> {
   let input = $in
@@ -1031,7 +1068,7 @@ export def "style-rules updateStyleRuleList" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a style rule list
@@ -1047,13 +1084,14 @@ export def "style-rules delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/style_rules/($style_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace configured rules for a style rule list
@@ -1076,6 +1114,7 @@ export def "style-rules-configured-rules updateStyleRuleConfiguredRules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dates-and-times: record # shape: {calendar_era?: "use_bc_and_ad"|"use_bce_and_ce", centuries?: "spell_out"|"use_arabic_numerals"|"use_numerals"|"use_roman_numerals", date_format?: "use_dd_period_mm_period_yy_with_leading_zeros_for_single_digit_days_and_months"|"use_dd_period_mm_period_yyyy"|"use_dd_period_mm_period_yyyy_with_leading_zeros_for_single_digit_days_and_months"|"use_dd_period_space_abbreviated_month_yyyy_with_abbreviations_jan_period_feb_period_mrz_period_apr_period_mai_jun_period_jul_period_aug_period_sep_period_okt_period_nov_period_dez_period_without_leading_zeros_for_single_digit_days"|"use_dd_period_space_abbreviated_month_yyyy_with_abbreviations_jan_period_febr_period_maerz_apr_period_mai_juni_juli_aug_period_sept_period_okt_period_nov_period_dez_period_without_leading_zeros_for_single_digit_days"|"use_dd_period_space_month_yyyy_without_leading_zeros_for_single_digit_days"|"use_dd_slash_mm_slash_yyyy"|"use_dd_slash_mm_slash_yyyy_with_leading_zeros_for_single_digit_days_and_months"|"use_dd_space_spelled_out_month_space_yyyy"|"use_dd_space_spelled_out_month_space_yyyy_and_use_spanish_word_septiembre_for_ninth_month"|"use_dd_space_spelled_out_month_space_yyyy_and_use_spanish_word_setiembre_for_ninth_month"|"use_dd_space_spelled_out_month_space_yyyy_without_leading_zeros_for_single_digit_days"|"use_historical_eras_and_write_numbers_in_chinese_followed_by_chinese_word_公元前_or_公元后_with_arabic_numerals_in_parentheses"|"use_mm_slash_dd_slash_yyyy_with_leading_zeros_for_single_digit_days_and_months"|"use_numerals_only_with_leading_zero_for_single_digits"|"use_numerals_only_without_leading_zero_for_single_digits"|"use_spelled_out_month_space_dd_comma_space_yyyy_and_use_spanish_word_septiembre_for_ninth_month"|"use_spelled_out_month_space_dd_comma_space_yyyy_without_leading_zeros_for_single_digit_days"|"use_traditional_calendar_system_with_chinese_numbers"|"use_yyyy_chinese_word_年_mm_chinese_word_月_dd_chinese_word_日_with_chinese_numbers"|"use_yyyy_chinese_word_年_mm_chinese_word_月_dd_chinese_word_日_without_leading_zero_for_single_digit_months_and_days"|"use_yyyy_hyphen_mm_hyphen_dd_with_leading_zero_for_single_digit_days_and_months"|"use_yyyy_hyphen_mm_hyphen_dd_with_leading_zeros_for_single_digit_days_and_months"|"use_yyyy_korean word_년_space_mm_korean word_월_space_dd_korean word_일_without_leading_zero_for_single_digit_days_and_months"|"use_yyyy_period_mm_period_dd"|"use_yyyy_period_space_mm_period_space_dd_period_space_without_leading_zero_for_single_digit_days_and_months"|"use_yyyy_slash_mm_slash_dd"|"use_yyyy_slash_mm_slash_dd_with_leading_zero_for_single_digit_days_and_months", dates_in_numerical_form?: "use_dd_hyphen_mm_hyphen_yyyy"|"use_dd_period_mm_period_yyyy"|"use_dd_slash_mm_slash_yyyy", decades?: "spell_out"|"use_apostrophe_yy"|"use_yy_for_20th_century_but_yyyy_for_other_centuries"|"use_yy_without_apostrophe"|"use_yyyy", hours_minutes_seconds_separator?: "use_colon"|"use_period", hours_minutes_separator?: "use_colon_without_spaces"|"use_letter_h_with_regular_space_on_either_side"|"use_letter_h_without_spaces", midnight_in_numerals?: "use_00_00"|"use_24_00", single_digit_days_and_months?: "do_not_use_leading_zero"|"use_leading_zero", single_digit_hours?: "do_not_use_leading_zero"|"use_leading_zero", time_format?: "spell_out_time_in_words"|"use_12_hour_clock_and_do_not_specify_morning_or_evening"|"use_12_hour_clock_and_lowercase_am_or_pm_with_periods"|"use_12_hour_clock_and_lowercase_am_or_pm_with_periods_except_use_noon_and_midnight_instead_of_12_am_and_12_pm"|"use_12_hour_clock_and_lowercase_am_or_pm_without_periods"|"use_12_hour_clock_and_lowercase_am_or_pm_without_periods_except_use_noon_and_midnight_instead_of_12_am_and_12_pm"|"use_12_hour_clock_and_specify_morning_or_evening"|"use_12_hour_clock_and_uppercase_am_or_pm_with_periods"|"use_12_hour_clock_and_uppercase_am_or_pm_with_periods_except_use_noon_and_midnight_instead_of_12_am_and_12_pm"|"use_12_hour_clock_and_uppercase_am_or_pm_without_periods"|"use_12_hour_clock_and_uppercase_am_or_pm_without_periods_except_use_noon_and_midnight_instead_of_12_am_and_12_pm"|"use_12_hour_clock_and_write_chinese_word_上午_or_下午_or_chinese_word_早上_or_晚上_followed_by_arabic_numerals"|"use_12_hour_clock_and_write_chinese_word_上午_or_下午_or_chinese_word_早上_or_晚上_followed_by_arabic_numerals_with_chinese_word_点_for_hours"|"use_12_hour_clock_and_write_chinese_word_上午_or_下午_or_chinese_word_早上_or_晚上_followed_by_arabic_numerals_with_chinese_words_时_and_分_for_hours_and_minutes"|"use_12_hour_clock_and_write_chinese_word_上午_or_下午_or_chinese_word_早上_or_晚上_followed_by_chinese_numbers_with_chinese_words_时_and_分_for_hours_and_minutes"|"use_12_hour_clock_with_arabic_numerals_and_colon"|"use_12_hour_clock_with_korean_words_시_and_분"|"use_12_hour_clock_without_leading_zero_or_minutes_for_full_hours_use_colon_as_separator_and_lowercase_am_or_pm_without_periods"|"use_12_hour_clock_without_leading_zero_or_minutes_for_full_hours_use_colon_as_separator_and_uppercase_am_or_pm_without_periods"|"use_12_hour_clock_without_leading_zero_use_period_as_separator_and_lowercase_am_or_pm_with_periods_and_spaces"|"use_24_hour_clock"|"use_24_hour_clock_with_arabic_numerals_and_colon"|"use_24_hour_clock_with_colon_as_separator"|"use_24_hour_clock_with_korean_words_시_and_분"|"use_24_hour_clock_with_period_as_separator"|"use_hh_colon_mm_german_word_uhr_with_leading_zeros_for_single_digit_hours"|"use_hh_colon_mm_german_word_uhr_without_leading_zeros_for_single_digit_hours"|"use_hh_period_mm_german_word_uhr_with_leading_zeros_for_single_digit_hours"|"use_hh_period_mm_german_word_uhr_without_leading_zeros_for_single_digit_hours"|"use_hh_period_mm_german_word_uhr_without_leading_zeros_for_single_digit_hours_and_for_full_hours_state_hour_only", writing_dates?: "use_dd_space_spelled_out_month_space_yyyy"|"use_numerals", years?: "use_apostrophe_yy"|"use_common_era"|"use_japanese_imperial_era"|"use_yyyy"}
   --formatting: record # shape: {email_address_format?: "place_domain_in_parentheses"|"replace_at_symbol_with_english_word_at_in_brackets_and_replace_periods_with_english_word_dot_in_brackets"|"replace_at_symbol_with_english_word_at_in_brackets_with_space_on_either_side"|"replace_at_symbol_with_english_word_at_in_parentheses_with_space_on_either_side"|"replace_at_symbol_with_english_word_at_with_space_on_either_side"|"use_standard_format", phone_number_country_code_format?: "use_00_before_country_code"|"use_plus_sign_before_country_code", phone_number_format?: "do_not_use_spaces"|"do_not_use_spaces_or_special_characters_between_digits_of_phone_number"|"keep_original_format"|"place_area_code_in_parentheses_followed_by_space"|"separate_area_code_and_phone_number_with_slash"|"separate_area_code_and_phone_number_with_space"|"separate_country_code_area_code_local_prefix_and_last_four_digits_with_hyphens"|"separate_country_code_area_code_local_prefix_and_last_four_digits_with_periods"|"separate_country_code_area_code_local_prefix_and_last_four_digits_with_spaces"|"use_north_american_numbering_plan_format"|"use_space_after_country_code", space_between_arabic_numerals_and_unit?: "do_not_use", space_between_chinese_and_english?: "do_not_use", space_between_chinese_characters_and_arabic_numerals?: "do_not_use"}
   --numbers: record # shape: {approximate_numbers?: "use_kanji_numbers", currency_format?: "spell_out"|"spell_out_currency_name_followed_by_amount_in_arabic_numerals_without_space"|"spell_out_currency_name_followed_by_amount_in_chinese"|"use_amount_followed_by_currency_symbol_without_space"|"use_amount_followed_by_space_then_currency_symbol"|"use_amount_followed_by_space_then_iso_code"|"use_amount_followed_by_space_then_spell_out_currency_name"|"use_amount_followed_by_space_then_spell_out_currency_name_in_lowercase"|"use_amount_followed_by_spelled_out_currency_name_in_japanese_without_space"|"use_amount_followed_by_spelled_out_currency_name_without_space"|"use_currency_symbol_but_spell_out_if_no_symbol_exists"|"use_currency_symbol_but_use_iso_code_if_no_symbol_exists"|"use_currency_symbol_followed_by_amount_in_arabic_numerals_without_space"|"use_currency_symbol_followed_by_amount_without_space"|"use_currency_symbol_followed_by_space_then_amount"|"use_currency_symbol_followed_by_space_then_amount_in_arabic_numerals"|"use_full_width_currency_symbol_followed_by_amount_without_space"|"use_half_width_currency_symbol_followed_by_amount_without_space"|"use_half_width_currency_symbol_followed_by_space_then_amount"|"use_iso_code"|"use_iso_code_followed_by_space_then_amount"|"use_iso_code_followed_by_space_then_amount_in_arabic_numerals", decimal_numbers_less_than_one?: "always_use_0_before_decimal_separator", decimal_separator?: "use_comma_and_do_not_use_thousands_separator"|"use_comma_as_decimal_separator"|"use_comma_do_not_use_thousands_separator_and_use_period_only_for_radio_stations"|"use_period_and_do_not_use_thousands_separator"|"use_period_as_decimal_separator", dimensions_separator?: "use_multiplication_sign_between_dimensions_with_space_on_either_side"|"use_multiplication_sign_between_dimensions_without_space_on_either_side"|"use_x_between_dimensions_with_space_on_either_side"|"use_x_between_dimensions_without_space_on_either_side", equation_formula_reference?: "always_use_arabic_numerals_to_number_equations_or_formulas_referenced_in_text", kanji_numbers?: "use_kanji_numbers_for_numbers_in_phrases_and_counting_method_based_on_native_japanese_readings", large_number_format?: "always_use_arabic_numerals"|"spell_out_large_numbers"|"use_abbreviations_for_large_numbers"|"use_chinese_characters_for_ten_thousands_and_hundred_millions"|"use_comma_to_separate_large_numbers_into_units_of_three_except_for_calendar_years"|"use_kanji_for_trillions_hundred_millions_and_ten_thousands"|"use_korean_words_만_억_조_with_space"|"use_korean_words_만_억_조_without_space", large_sums_of_money?: "spell_out_italian_words_milione_and_miliardo"|"use_italian_words_mio_and_mrd_instead_of_italian_words_milione_and_miliardo", large_sums_of_money_format?: "use_amount_followed_by_abbreviation_for_million_or_billion_without_space"|"use_amount_followed_by_space_then_abbreviation_for_million_or_billion"|"use_amount_followed_by_space_then_english_word_million_or_billion", list_of_measurements_with_units?: "repeat_unit_for_each_measurement_in_list", mathematical_expression_spacing?: "use_space_between_elements_of_mathematical_expression_or_equation", number_format?: "use_half_width_comma_to_separate_large_numbers_into_units_of_three_except_for_calendar_years_and_use_half_width_period_as_decimal_separator", number_separator?: "do_not_use_chinese_comma_to_separate_numbers_indicating_approximate_value"|"use_chinese_comma_to_separate_numbers_in_abbreviations", numbers_of_5_digits_or_more?: "use_comma_as_decimal_separator_and_period_as_thousands_separator"|"use_comma_as_decimal_separator_and_space_as_thousands_separator"|"use_comma_as_decimal_separator_period_as_thousands_separator_and_period_for_radio_stations"|"use_comma_as_decimal_separator_space_as_thousands_separator_and_period_for_radio_stations"|"use_period_as_decimal_separator_and_comma_as_thousands_separator"|"use_period_as_decimal_separator_and_space_as_thousands_separator", numbers_up_to_4_digits?: "use_comma_as_decimal_separator_and_period_as_thousands_separator"|"use_comma_as_decimal_separator_and_space_as_thousands_separator"|"use_comma_as_decimal_separator_period_as_thousands_separator_and_period_for_radio_stations"|"use_comma_as_decimal_separator_space_as_thousands_separator_and_period_for_radio_stations"|"use_period_as_decimal_separator_and_comma_as_thousands_separator"|"use_period_as_decimal_separator_and_space_as_thousands_separator", percentage_format?: "use_arabic_numerals_followed_by_percent_symbol_without_space"|"use_chinese_numbers_followed_by_chinese_word_百分之"|"use_numerals_followed_by_full_width_percent_symbol_without_space"|"use_numerals_followed_by_japanese_word_パーセント_without_space"|"use_numerals_followed_by_korean_word_퍼센트"|"use_numerals_followed_by_percent_symbol"|"use_numerals_followed_by_space_then_german_word_prozent"|"use_numerals_followed_by_space_then_half_width_percent_symbol"|"use_numerals_followed_by_space_then_italian_word_per_cento"|"use_numerals_followed_by_space_then_italian_word_percento"|"use_numerals_followed_by_space_then_korean_word_퍼센트"|"use_numerals_followed_by_space_then_percent_symbol"|"use_numerals_followed_by_space_then_spell_out_per_cent"|"use_numerals_followed_by_space_then_spell_out_percent"|"use_spanish_word_por_cien"|"use_spanish_word_por_ciento", reference_to_symbol?: "spell_out_symbol_name_followed_by_symbol_in_parentheses", spelling_out_units?: "abbreviate_units_of_measure_when_used_with_numeral_but_spell_out_when_used_without_numeral"|"always_abbreviate_units_of_measure"|"always_spell_out_units_of_measure"|"spell_out_units_in_korean"|"spell_out_units_of_measure_when_used_with_spelled_out_numbers_but_abbreviate_when_used_with_numeral"|"spell_out_units_of_measure_with_katakana_or_katakana_and_kanji"|"use_si_symbols"|"use_unit_symbols", temperature_format?: "spell_out_unit"|"spell_out_unit_followed_by_numerals_then_korean_word_도"|"use_arabic_numerals_followed_by_space_then_spell_out_unit"|"use_arabic_numerals_followed_by_unit_symbol_without_space"|"use_arabic_numerals_then_spell_out_unit"|"use_chinese_numbers_then_spell_out_unit"|"use_italian_word_grado_and_do_not_specify_temperature_scale"|"use_numerals_followed_by_japanese_word_度_without_space"|"use_numerals_followed_by_korean_word_도"|"use_numerals_followed_by_space_then_spell_out_unit"|"use_numerals_followed_by_space_then_unit_symbol"|"use_numerals_followed_by_unit_symbol_without_space"|"use_spanish_word_grado_and_do_not_specify_temperature_scale", thousands_separator?: "do_not_use"|"do_not_use_thousands_separator"|"use_comma"|"use_comma_to_separate_large_numbers_into_units_of_three"|"use_period"|"use_period_as_thousands_separator"|"use_space"|"use_space_as_thousands_separator"|"use_space_to_separate_large_numbers_into_units_of_three"|"use_straight_apostrophe_as_thousands_separator", units_of_measure_spacing?: "do_not_use_space_between_numeral_and_unit_of_measure"|"use_space_between_numeral_and_unit_of_measure", use_of_hiragana_and_kanji?: "use_hiragana_japanese_word_か所_or_か月_when_using_arabic_numerals_in_horizontal_writing_but_use_kanji_japanese_word_箇所_or_箇月_when_using_kanji_numbers", writing_numbers?: "always_use_kanji_numbers"|"use_arabic_numerals"|"use_full_width_arabic_numerals_and_only_use_kanji_numbers_where_it_would_otherwise_sound_unnatural"|"use_half_width_arabic_numerals_and_only_use_kanji_numbers_where_it_would_otherwise_sound_unnatural", zero_format?: "use_chinese_word_〇_for_numbering"|"use_chinese_word_零_for_measurement"}
@@ -1092,7 +1131,7 @@ export def "style-rules-configured-rules updateStyleRuleConfiguredRules" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a custom instruction
@@ -1108,6 +1147,7 @@ export def "style-rules-custom-instructions createCustomInstruction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   label: string # Label for the custom instruction
   prompt: string # Instruction text
   --source-language: string # Optional source language code
@@ -1120,7 +1160,7 @@ export def "style-rules-custom-instructions createCustomInstruction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a custom instruction
@@ -1137,13 +1177,14 @@ export def "style-rules-custom-instructions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, label: string, prompt: string, source_language: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/style_rules/($style_id)/custom_instructions/($instruction_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Replace a custom instruction
@@ -1160,6 +1201,7 @@ export def "style-rules-custom-instructions updateCustomInstruction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   label: string # Updated label for the custom instruction
   prompt: string # Updated instruction text
   --source-language: string # Optional source language code
@@ -1172,7 +1214,7 @@ export def "style-rules-custom-instructions updateCustomInstruction" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a custom instruction
@@ -1189,13 +1231,14 @@ export def "style-rules-custom-instructions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v3/style_rules/($style_id)/custom_instructions/($instruction_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Streaming URL
@@ -1210,6 +1253,7 @@ export def "voice-realtime post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --message-format: string@message-format-completer # Message encoding format for WebSocket communication. Determines how messages are serialized and transmitted. Using `json`,  messages are JSON-encoded and sent as TEXT WebSocket frames. All binary fields (such as audio data) are base64-encoded strings. Using `msgpack`, messages are MessagePack-encoded and sent as BINARY WebSocket frames. All binary fields (such as audio data) contain raw binary data.  For more details, see [Message Encoding](/api-reference/voice#message-encoding). (default: json, e.g. json)
   source_media_content_type: string@source-media-content-type-completer #  The audio format for streaming, which specifies container, codec, and encoding parameters. See the table below for supported formats. If `audio/auto` is specified, the server will auto-detect the container and codec for all supported combinations, except PCM. That requires explicit encoding parameters. All formats need to be single channel audio.    | Content Type                          | Container                                         | Codec                                     |  | :------------------------------------ | :------------------------------------------------ | :---------------------------------------- |  | `audio/auto`                          | Auto-detect: FLAC / Matroska / MPEG / Ogg / WebM  | Auto-detect AAC / FLAC / MP3 / OPUS       |  | `audio/flac`                          | FLAC (flac)                                       | FLAC                                      |  | `audio/mpeg`                          | MPEG (mp3/m4a)                                    | MP3                                       |  | `audio/ogg`                           | Ogg (ogg/oga)                                     | Auto-detect FLAC / OPUS                   |  | `audio/webm`                          | WebM (webm)                                       | OPUS                                      |  | `audio/x-matroska`                    | Matroska (mkv/mka)                                | Auto-detect: AAC / FLAC / MP3 / OPUS      |  | `audio/ogg;codecs=flac`               | Ogg (ogg/oga)                                     | FLAC                                      |  | `audio/ogg;codecs=opus`               | Ogg (ogg/oga)                                     | OPUS                                      |  | `audio/pcm;encoding=alaw;rate=8000`   | -                                                 | PCM A-Law 8000 Hz (G.711)                 |  | `audio/pcm;encoding=ulaw;rate=8000`   | -                                                 | PCM µ-Law 8000 Hz (G.711)                 |  | `audio/pcm;encoding=s16le;rate=8000`  | -                                                 | PCM signed 16-bit little-endian 8000 Hz   |  | `audio/pcm;encoding=s16le;rate=16000` | -                                                 | PCM signed 16-bit little-endian 16000 Hz  |  | `audio/pcm;encoding=s16le;rate=44100` | -                                                 | PCM signed 16-bit little-endian 44100 Hz  |  | `audio/pcm;encoding=s16le;rate=48000` | -                                                 | PCM signed 16-bit little-endian 48000 Hz  |  | `audio/webm;codecs=opus`              | WebM (webm)                                       | OPUS                                      |  | `audio/x-matroska;codecs=aac`         | Matroska (mkv/mka)                                | AAC                                       |  | `audio/x-matroska;codecs=flac`        | Matroska (mkv/mka)                                | FLAC                                      |  | `audio/x-matroska;codecs=mp3`         | Matroska (mkv/mka)                                | MP3                                       |  | `audio/x-matroska;codecs=opus`        | Matroska (mkv/mka)                                | OPUS                                      |    We recommend the following bitrates as good tradeoff between quality and bandwidth:  - AAC: 96 kbps  - FLAC: 256 kbps  (16000 Hz)  - MP3: 128 kbps  - OPUS: 32 kbps (recommendation for low bandwidth scenarios)  - PCM: 256 kbps (16000 Hz, default recommendation)   (e.g. audio/ogg;codecs=opus)
   --source-language: string@source-language-completer # The source language of the audio stream. It can be left empty or must be one of the supported Voice API source languages and comply with IETF BCP 47 language tags. Note: Some source transcription languages are provided through external service partners. See the [supported languages table](/api-reference/voice#show-supported-languages) for details.  (e.g. en)
@@ -1230,7 +1274,7 @@ export def "voice-realtime post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Request Reconnection
@@ -1245,6 +1289,7 @@ export def "voice-realtime requestReconnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # The latest ephemeral token obtained for the stream. (e.g. VGhpcyBpcyBhIGZha2UgdG9rZW4K)
 ]: nothing -> record<streaming_url: string, token: string, session_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1253,7 +1298,7 @@ export def "voice-realtime requestReconnection" [
   let full_url = (build-url $base "/v3/voice/realtime" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a voice translation job
@@ -1271,6 +1316,7 @@ export def "jobs-voice-translate createVoiceTranslateJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Additional fields to include in the response. - `signed_url`: Include pre-signed URLs (`signed_upload_url` on create, `signed_download_url` on status) that can be used without an authorization header.
   source_file: record # Metadata about the source audio file to be uploaded. — shape: {name: string, content_type: "audio/mpeg"|"audio/wav"|"audio/ogg"|"audio/flac"|"audio/mp4"|"audio/webm", content_length: int}
   --parameters: record # Processing parameters for the voice translation job. — shape: {source_language?: any}
@@ -1285,7 +1331,7 @@ export def "jobs-voice-translate createVoiceTranslateJob" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get voice translation job status
@@ -1301,6 +1347,7 @@ export def "jobs-voice-translate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Additional fields to include in the response. - `signed_url`: Include pre-signed URLs (`signed_upload_url` on create, `signed_download_url` on status) that can be used without an authorization header.
 ]: nothing -> record<job_id: string, product: string, operation: string, created_at: string, updated_at: string, usage: record<storage_used: int>, source_file: record<name: string, content_type: string, content_length: int>, parameters: record<source_language: record>, targets: table<language: string, type: string>, results: table<status: string, download_url: string, signature: string, signed_download_url: string, error: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1309,7 +1356,7 @@ export def "jobs-voice-translate get" [
   let full_url = (build-url $base $"/v1/jobs/voice/translate/($job_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Submit an evaluation job
@@ -1326,6 +1373,7 @@ export def "quality-evaluation submitQualityEvaluation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   metadata: record # Job-level metadata. — shape: {source_language: string, target_language: string}
   segments: list # The segment pairs to evaluate. Up to 500 segments per request. — item shape: {source: string, target: string}
 ]: any -> record<job_id: string, poll_url: string> {
@@ -1337,7 +1385,7 @@ export def "quality-evaluation submitQualityEvaluation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Poll for the evaluation result
@@ -1353,11 +1401,12 @@ export def "quality-evaluation pollQualityEvaluation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/quality-evaluation/($job_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

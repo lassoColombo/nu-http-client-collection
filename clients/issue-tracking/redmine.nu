@@ -47,10 +47,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -84,7 +85,7 @@ def scope-completer-1 [] { ["subprojects"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "issues-format get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -119,6 +120,7 @@ export def "issues-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int
   --limit: int
   --nometa: int@nometa-completer
@@ -183,7 +185,7 @@ export def "issues-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create issue
@@ -201,6 +203,7 @@ export def "issues-format createIssue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   issue: record # shape: {project_id: any, tracker_id?: int, status_id?: int, priority_id?: int, subject: string, description?: string, start_date?: string, due_date?: string, done_ratio?: int, category_id?: int, fixed_version_id?: int, assigned_to_id?: int, parent_issue_id?: int, custom_fields?: list, custom_field_values?: record, watcher_user_ids?: list, is_private?: bool, estimated_hours?: float, uploads?: list}
 ]: any -> record<issue: record<id: int, project: record<id: int, name: string>, tracker: record<id: int, name: string>, status: record<id: int, name: string, is_closed: bool>, priority: record<id: int, name: string>, author: record<id: int, name: string>, assigned_to: record<id: int, name: string>, category: record<id: int, name: string>, fixed_version: record<id: int, name: string>, parent: record<id: int>, subject: string, description: string, start_date: string, due_date: string, done_ratio: int, is_private: bool, estimated_hours: float, total_estimated_hours: float, spent_hours: float, total_spent_hours: float, custom_fields: list<record>, created_on: string, updated_on: string, closed_on: string, attachments: list<record>, relations: list<record>>> {
@@ -214,7 +217,7 @@ export def "issues-format createIssue" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Show issue
@@ -232,6 +235,7 @@ export def "issues get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Comma-separated list of associated data to include in the response. Values: `children` (child issues), `attachments` (file attachments), `relations` (issue relations), `changesets` (associated VCS changesets), `journals` (change history and notes), `watchers` (users watching the issue), `allowed_statuses` (status transitions available for the current user)
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<issue: record<id: int, project: record<id: int, name: string>, tracker: record<id: int, name: string>, status: record<id: int, name: string, is_closed: bool>, priority: record<id: int, name: string>, author: record<id: int, name: string>, assigned_to: record<id: int, name: string>, category: record<id: int, name: string>, fixed_version: record<id: int, name: string>, parent: record<id: int>, subject: string, description: string, start_date: string, due_date: string, done_ratio: int, is_private: bool, estimated_hours: float, total_estimated_hours: float, spent_hours: float, total_spent_hours: float, custom_fields: list<record>, created_on: string, updated_on: string, closed_on: string, changesets: list<record>, children: list<record>, attachments: list<record>, relations: list<record>, journals: list<record>, watchers: list<record>, allowed_statuses: list<record>>> {
@@ -243,7 +247,7 @@ export def "issues get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update issue
@@ -262,6 +266,7 @@ export def "issues updateIssue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   --issue: record # shape: {project_id?: any, tracker_id?: int, status_id?: int, priority_id?: int, subject?: string, description?: string, start_date?: string, due_date?: string, done_ratio?: int, category_id?: int, fixed_version_id?: int, assigned_to_id?: int, parent_issue_id?: int, custom_fields?: list, custom_field_values?: record, is_private?: bool, estimated_hours?: float, notes?: string, private_notes?: bool, deleted_attachment_ids?: list, uploads?: list}
 ]: any -> any {
@@ -275,7 +280,7 @@ export def "issues updateIssue" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete issue
@@ -293,6 +298,7 @@ export def "issues delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -302,7 +308,7 @@ export def "issues delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List issues by project
@@ -320,6 +326,7 @@ export def "projects-issues-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int
   --limit: int
   --nometa: int@nometa-completer
@@ -383,7 +390,7 @@ export def "projects-issues-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create issue under project
@@ -402,6 +409,7 @@ export def "projects-issues-format createIssueUnderProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   issue: record # shape: {tracker_id?: int, status_id?: int, priority_id?: int, subject: string, description?: string, start_date?: string, due_date?: string, done_ratio?: int, category_id?: int, fixed_version_id?: int, assigned_to_id?: int, parent_issue_id?: int, custom_fields?: list, custom_field_values?: record, watcher_user_ids?: list, is_private?: bool, estimated_hours?: float, uploads?: list}
 ]: any -> record<issue: record<id: int, project: record<id: int, name: string>, tracker: record<id: int, name: string>, status: record<id: int, name: string, is_closed: bool>, priority: record<id: int, name: string>, author: record<id: int, name: string>, assigned_to: record<id: int, name: string>, category: record<id: int, name: string>, fixed_version: record<id: int, name: string>, parent: record<id: int>, subject: string, description: string, start_date: string, due_date: string, done_ratio: int, is_private: bool, estimated_hours: float, total_estimated_hours: float, spent_hours: float, total_spent_hours: float, custom_fields: list<record>, created_on: string, updated_on: string, closed_on: string, attachments: list<record>, relations: list<record>>> {
@@ -415,7 +423,7 @@ export def "projects-issues-format createIssueUnderProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add watcher
@@ -433,6 +441,7 @@ export def "issues-watchers-format addWatcher" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   user_id: int
 ]: any -> any {
@@ -446,7 +455,7 @@ export def "issues-watchers-format addWatcher" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove watcher
@@ -465,6 +474,7 @@ export def "issues-watchers removeWatcher" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -474,7 +484,7 @@ export def "issues-watchers removeWatcher" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List projects
@@ -491,6 +501,7 @@ export def "projects-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int
   --limit: int
   --nometa: int@nometa-completer
@@ -514,7 +525,7 @@ export def "projects-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create project
@@ -532,6 +543,7 @@ export def "projects-format createProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   project: record # shape: {name: string, identifier: string, description?: string, homepage?: string, is_public?: bool, parent_id?: int, inherit_members?: bool, default_assigned_to_id?: int, default_version_id?: int, default_issue_query_id?: int, tracker_ids?: list, enabled_module_names?: list, issue_custom_field_ids?: list, custom_fields?: list, custom_field_values?: record}
 ]: any -> record<project: record<id: int, name: string, identifier: string, description: string, homepage: string, parent: record<id: int, name: string>, status: int, is_public: bool, inherit_members: bool, default_version: record<id: int, name: string>, default_assignee: record<id: int, name: string>, custom_fields: list<record>, trackers: list<record>, issue_categories: list<record>, time_entry_activities: list<record>, enabled_modules: list<record>, issue_custom_fields: list<record>, created_on: string, updated_on: string>> {
@@ -545,7 +557,7 @@ export def "projects-format createProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Show project
@@ -563,6 +575,7 @@ export def "projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Comma-separated list of associated data to include in the response. Values: `trackers` (available issue trackers), `issue_categories` (issue categories), `time_entry_activities` (time entry activity types), `enabled_modules` (enabled modules/features), `issue_custom_fields` (custom fields for issues)
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<project: record<id: int, name: string, identifier: string, description: string, homepage: string, parent: record<id: int, name: string>, status: int, is_public: bool, inherit_members: bool, default_version: record<id: int, name: string>, default_assignee: record<id: int, name: string>, custom_fields: list<record>, trackers: list<record>, issue_categories: list<record>, time_entry_activities: list<record>, enabled_modules: list<record>, issue_custom_fields: list<record>, created_on: string, updated_on: string>> {
@@ -574,7 +587,7 @@ export def "projects get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update project
@@ -593,6 +606,7 @@ export def "projects updateProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   --project: record # shape: {identifier?: string, name?: string, description?: string, homepage?: string, is_public?: bool, parent_id?: int, inherit_members?: bool, default_assigned_to_id?: int, default_version_id?: int, default_issue_query_id?: int, tracker_ids?: list, enabled_module_names?: list, issue_custom_field_ids?: list, custom_fields?: list, custom_field_values?: record}
 ]: any -> any {
@@ -606,7 +620,7 @@ export def "projects updateProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete project
@@ -624,6 +638,7 @@ export def "projects delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -633,7 +648,7 @@ export def "projects delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Archive project
@@ -651,6 +666,7 @@ export def "projects-archive-format archiveProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -660,7 +676,7 @@ export def "projects-archive-format archiveProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unarchive project
@@ -678,6 +694,7 @@ export def "projects-unarchive-format unarchiveProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -687,7 +704,7 @@ export def "projects-unarchive-format unarchiveProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List memberships
@@ -705,6 +722,7 @@ export def "projects-memberships-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int
   --limit: int
   --nometa: int@nometa-completer
@@ -719,7 +737,7 @@ export def "projects-memberships-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create membership
@@ -738,6 +756,7 @@ export def "projects-memberships-format createMembership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   membership: record # shape: {user_id: int, role_ids: list}
 ]: any -> record<membership: record<id: int, project: record<id: int, name: string>, user: record<id: int, name: string>, group: record<id: int, name: string>, roles: list<record>>> {
@@ -751,7 +770,7 @@ export def "projects-memberships-format createMembership" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Show membership
@@ -769,6 +788,7 @@ export def "memberships get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<membership: record<id: int, project: record<id: int, name: string>, user: record<id: int, name: string>, group: record<id: int, name: string>, roles: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -778,7 +798,7 @@ export def "memberships get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update membership
@@ -797,6 +817,7 @@ export def "memberships updateMembership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   --membership: record # shape: {role_ids: list}
 ]: any -> any {
@@ -810,7 +831,7 @@ export def "memberships updateMembership" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete membership
@@ -828,6 +849,7 @@ export def "memberships delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -837,7 +859,7 @@ export def "memberships delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Close project
@@ -854,6 +876,7 @@ export def "projects-close-format closeProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -863,7 +886,7 @@ export def "projects-close-format closeProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reopen project
@@ -880,6 +903,7 @@ export def "projects-reopen-format reopenProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -889,7 +913,7 @@ export def "projects-reopen-format reopenProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List users
@@ -906,6 +930,7 @@ export def "users-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int
   --limit: int
   --nometa: int@nometa-completer
@@ -933,7 +958,7 @@ export def "users-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create user
@@ -952,6 +977,7 @@ export def "users-format createUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   user: record # shape: {login: string, admin?: bool, password?: string, firstname: string, lastname: string, mail: string, language?: string, auth_source_id?: int, mail_notification?: "all"|"selected"|"only_my_events"|"only_assigned"|"only_owner"|"none", notified_project_ids?: list, must_change_passwd?: bool, generate_password?: bool, status?: int, custom_fields?: list, custom_field_values?: record}
   --send-information: oneof<nothing, bool> # Set to true to send an account information email to the user. Not stored; only triggers email delivery.
@@ -967,7 +993,7 @@ export def "users-format createUser" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Show user
@@ -985,6 +1011,7 @@ export def "users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Comma-separated list of associated data to include in the response. Values: `memberships` (project memberships with roles), `groups` (groups the user belongs to), `auth_source` (authentication source information)
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<user: record<id: int, login: string, admin: bool, firstname: string, lastname: string, mail: string, created_on: string, updated_on: string, last_login_on: string, passwd_changed_on: string, avatar_url: string, twofa_scheme: string, api_key: string, status: int, custom_fields: list<record>, auth_source: record<id: int, name: string>, groups: list<record>, memberships: list<record>>> {
@@ -996,7 +1023,7 @@ export def "users get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update user
@@ -1016,6 +1043,7 @@ export def "users updateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   --user: record # shape: {login?: string, admin?: bool, password?: string, firstname?: string, lastname?: string, mail?: string, language?: string, auth_source_id?: int, mail_notification?: "all"|"selected"|"only_my_events"|"only_assigned"|"only_owner"|"none", notified_project_ids?: list, must_change_passwd?: bool, generate_password?: bool, status?: int, custom_fields?: list, custom_field_values?: record, group_ids?: list}
   --send-information: oneof<nothing, bool> # Set to true to send an account information email to the user. Not stored; only triggers email delivery.
@@ -1031,7 +1059,7 @@ export def "users updateUser" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete user
@@ -1049,6 +1077,7 @@ export def "users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1058,7 +1087,7 @@ export def "users delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Show current user
@@ -1075,6 +1104,7 @@ export def "users-current-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Comma-separated list of associated data to include in the response. Values: `memberships` (project memberships with roles), `groups` (groups the user belongs to), `auth_source` (authentication source information)
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<user: record<id: int, login: string, admin: bool, firstname: string, lastname: string, mail: string, created_on: string, updated_on: string, last_login_on: string, passwd_changed_on: string, avatar_url: string, twofa_scheme: string, api_key: string, status: int, custom_fields: list<record>, auth_source: record<id: int, name: string>, groups: list<record>, memberships: list<record>>> {
@@ -1086,7 +1116,7 @@ export def "users-current-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List time entries
@@ -1103,6 +1133,7 @@ export def "time-entries-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int
   --limit: int
   --nometa: int@nometa-completer
@@ -1138,7 +1169,7 @@ export def "time-entries-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create time entry
@@ -1156,6 +1187,7 @@ export def "time-entries-format createTimeEntry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   time_entry: record # shape: {issue_id?: int, project_id?: int, spent_on?: string, hours: float, activity_id?: int, comments?: string, user_id?: int, custom_fields?: list, custom_field_values?: record}
 ]: any -> record<time_entry: record<id: int, project: record<id: int, name: string>, issue: record<id: int>, user: record<id: int, name: string>, activity: record<id: int, name: string>, hours: float, comments: string, spent_on: string, created_on: string, updated_on: string, custom_fields: list<record>>> {
@@ -1169,7 +1201,7 @@ export def "time-entries-format createTimeEntry" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Show time entry
@@ -1187,6 +1219,7 @@ export def "time-entries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<time_entry: record<id: int, project: record<id: int, name: string>, issue: record<id: int>, user: record<id: int, name: string>, activity: record<id: int, name: string>, hours: float, comments: string, spent_on: string, created_on: string, updated_on: string, custom_fields: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1196,7 +1229,7 @@ export def "time-entries get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update time entry
@@ -1215,6 +1248,7 @@ export def "time-entries updateTimeEntry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   --time-entry: record # shape: {issue_id?: int, project_id?: int, spent_on?: string, hours?: float, activity_id?: int, comments?: string, user_id?: int, custom_fields?: list, custom_field_values?: record}
 ]: any -> any {
@@ -1228,7 +1262,7 @@ export def "time-entries updateTimeEntry" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete time entry
@@ -1246,6 +1280,7 @@ export def "time-entries delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1255,7 +1290,7 @@ export def "time-entries delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List time entries by project
@@ -1273,6 +1308,7 @@ export def "projects-time-entries-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int
   --limit: int
   --nometa: int@nometa-completer
@@ -1307,7 +1343,7 @@ export def "projects-time-entries-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create time entry under project
@@ -1326,6 +1362,7 @@ export def "projects-time-entries-format createTimeEntryUnderProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   time_entry: record # shape: {issue_id?: int, spent_on?: string, hours: float, activity_id?: int, comments?: string, user_id?: int, custom_fields?: list, custom_field_values?: record}
 ]: any -> record<time_entry: record<id: int, project: record<id: int, name: string>, issue: record<id: int>, user: record<id: int, name: string>, activity: record<id: int, name: string>, hours: float, comments: string, spent_on: string, created_on: string, updated_on: string, custom_fields: list<record>>> {
@@ -1339,7 +1376,7 @@ export def "projects-time-entries-format createTimeEntryUnderProject" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create time entry under issue
@@ -1358,6 +1395,7 @@ export def "issues-time-entries-format createTimeEntryUnderIssue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   time_entry: record # shape: {project_id?: int, spent_on?: string, hours: float, activity_id?: int, comments?: string, user_id?: int, custom_fields?: list, custom_field_values?: record}
 ]: any -> record<time_entry: record<id: int, project: record<id: int, name: string>, issue: record<id: int>, user: record<id: int, name: string>, activity: record<id: int, name: string>, hours: float, comments: string, spent_on: string, created_on: string, updated_on: string, custom_fields: list<record>>> {
@@ -1371,7 +1409,7 @@ export def "issues-time-entries-format createTimeEntryUnderIssue" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List news
@@ -1388,6 +1426,7 @@ export def "news-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int
   --limit: int
   --nometa: int@nometa-completer
@@ -1402,7 +1441,7 @@ export def "news-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Show news
@@ -1419,6 +1458,7 @@ export def "news get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Comma-separated list of associated data to include in the response. Values: `attachments` (file attachments), `comments` (comments/replies on the news item)
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<news: record<id: int, project: record<id: int, name: string>, author: record<id: int, name: string>, title: string, summary: string, description: string, created_on: string, attachments: list<record>, comments: list<record>>> {
@@ -1430,7 +1470,7 @@ export def "news get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update news
@@ -1448,6 +1488,7 @@ export def "news updateNews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   --news: record # shape: {title?: string, summary?: string, description?: string, uploads?: list}
 ]: any -> any {
@@ -1461,7 +1502,7 @@ export def "news updateNews" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete news
@@ -1478,6 +1519,7 @@ export def "news delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1487,7 +1529,7 @@ export def "news delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List news by project
@@ -1505,6 +1547,7 @@ export def "projects-news-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int
   --limit: int
   --nometa: int@nometa-completer
@@ -1519,7 +1562,7 @@ export def "projects-news-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create news
@@ -1537,6 +1580,7 @@ export def "projects-news-format createNews" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   news: record # shape: {title: string, summary?: string, description: string, uploads?: list}
 ]: any -> any {
@@ -1550,7 +1594,7 @@ export def "projects-news-format createNews" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List issue relations
@@ -1568,6 +1612,7 @@ export def "issues-relations-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<relations: table<id: int, issue_id: int, issue_to_id: int, relation_type: string, delay: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1577,7 +1622,7 @@ export def "issues-relations-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create issue relation
@@ -1596,6 +1641,7 @@ export def "issues-relations-format createIssueRelation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   relation: record # shape: {issue_to_id: int, relation_type: "relates"|"duplicates"|"duplicated"|"blocks"|"blocked"|"precedes"|"follows"|"copied_to"|"copied_from", delay?: int}
 ]: any -> record<relation: record<id: int, issue_id: int, issue_to_id: int, relation_type: string, delay: int>> {
@@ -1609,7 +1655,7 @@ export def "issues-relations-format createIssueRelation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Show issue relation
@@ -1627,6 +1673,7 @@ export def "relations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<relation: record<id: int, issue_id: int, issue_to_id: int, relation_type: string, delay: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1636,7 +1683,7 @@ export def "relations get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete issue relation
@@ -1654,6 +1701,7 @@ export def "relations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1663,7 +1711,7 @@ export def "relations delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List versions by project
@@ -1681,6 +1729,7 @@ export def "projects-versions-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --nometa: int@nometa-completer
   --X-Redmine-Switch-User: string # e.g. jsmith
   --X-Redmine-Nometa: int@X-Redmine-Nometa-completer
@@ -1693,7 +1742,7 @@ export def "projects-versions-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create version
@@ -1712,6 +1761,7 @@ export def "projects-versions-format createVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   version: record # shape: {name: string, status?: "open"|"locked"|"closed", sharing?: "none"|"descendants"|"hierarchy"|"tree"|"system", due_date?: string, description?: string, wiki_page_title?: string, default_project_version?: bool, custom_fields?: list, custom_field_values?: record}
 ]: any -> record<version: record<id: int, project: record<id: int, name: string>, name: string, description: string, status: string, due_date: string, sharing: string, wiki_page_title: string, estimated_hours: float, spent_hours: float, custom_fields: list<record>, created_on: string, updated_on: string>> {
@@ -1725,7 +1775,7 @@ export def "projects-versions-format createVersion" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Show version
@@ -1743,6 +1793,7 @@ export def "versions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<version: record<id: int, project: record<id: int, name: string>, name: string, description: string, status: string, due_date: string, sharing: string, wiki_page_title: string, estimated_hours: float, spent_hours: float, custom_fields: list<record>, created_on: string, updated_on: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1752,7 +1803,7 @@ export def "versions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update version
@@ -1771,6 +1822,7 @@ export def "versions updateVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   --version: record # shape: {name?: string, status?: "open"|"locked"|"closed", sharing?: "none"|"descendants"|"hierarchy"|"tree"|"system", due_date?: string, description?: string, wiki_page_title?: string, default_project_version?: bool, custom_fields?: list, custom_field_values?: record}
 ]: any -> any {
@@ -1784,7 +1836,7 @@ export def "versions updateVersion" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete version
@@ -1802,6 +1854,7 @@ export def "versions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1811,7 +1864,7 @@ export def "versions delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List wiki pages
@@ -1829,6 +1882,7 @@ export def "projects-wiki-index-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<wiki_pages: table<title: string, parent: record, version: int, created_on: string, updated_on: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1838,7 +1892,7 @@ export def "projects-wiki-index-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Show wiki page
@@ -1857,6 +1911,7 @@ export def "projects-wiki list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Comma-separated list of associated data to include in the response. Values: `attachments` (file attachments)
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<wiki_page: record<title: string, parent: record<title: string>, text: string, version: int, author: record<id: int, name: string>, comments: string, project: record<id: int, name: string>, created_on: string, updated_on: string, attachments: list<record>>> {
@@ -1868,7 +1923,7 @@ export def "projects-wiki list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update wiki page
@@ -1888,6 +1943,7 @@ export def "projects-wiki updateWikiPage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   --wiki-page: record # shape: {text: string, comments?: string, version?: int, parent_title?: string, uploads?: list}
 ]: any -> record<wiki_page: record<title: string, parent: record<title: string>, text: string, version: int, author: record<id: int, name: string>, comments: string, project: record<id: int, name: string>, created_on: string, updated_on: string, attachments: list<record>>> {
@@ -1901,7 +1957,7 @@ export def "projects-wiki updateWikiPage" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete wiki page
@@ -1920,6 +1976,7 @@ export def "projects-wiki delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1929,7 +1986,7 @@ export def "projects-wiki delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Show wiki page by specific version
@@ -1949,6 +2006,7 @@ export def "projects-wiki get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Comma-separated list of associated data to include in the response. Values: `attachments` (file attachments)
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<wiki_page: record<title: string, parent: record<title: string>, text: string, version: int, author: record<id: int, name: string>, comments: string, project: record<id: int, name: string>, created_on: string, updated_on: string, attachments: list<record>>> {
@@ -1960,7 +2018,7 @@ export def "projects-wiki get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List queries
@@ -1977,6 +2035,7 @@ export def "queries-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int
   --limit: int
   --nometa: int@nometa-completer
@@ -1991,7 +2050,7 @@ export def "queries-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Show attachment
@@ -2009,6 +2068,7 @@ export def "attachments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<attachment: record<id: int, filename: string, filesize: int, content_type: string, description: string, content_url: string, thumbnail_url: string, author: record<id: int, name: string>, created_on: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2018,7 +2078,7 @@ export def "attachments get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update attachment
@@ -2037,6 +2097,7 @@ export def "attachments updateAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   --attachment: record # shape: {filename?: string, content_type?: string, description?: string}
 ]: any -> any {
@@ -2050,7 +2111,7 @@ export def "attachments updateAttachment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete attachment
@@ -2068,6 +2129,7 @@ export def "attachments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2077,7 +2139,7 @@ export def "attachments delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download attachment file
@@ -2094,6 +2156,7 @@ export def "attachments-download downloadAttachmentFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2103,7 +2166,7 @@ export def "attachments-download downloadAttachmentFile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download thumbnail
@@ -2119,6 +2182,7 @@ export def "attachments-thumbnail downloadThumbnail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --size: int # Desired thumbnail size in pixels (max 800). Rounded up to the nearest 50px increment. If not specified, the configured default thumbnail size is used.
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> any {
@@ -2130,7 +2194,7 @@ export def "attachments-thumbnail downloadThumbnail" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List issue statuses
@@ -2147,6 +2211,7 @@ export def "issue-statuses-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<issue_statuses: table<id: int, name: string, is_closed: bool, description: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2156,7 +2221,7 @@ export def "issue-statuses-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List trackers
@@ -2173,6 +2238,7 @@ export def "trackers-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<trackers: table<id: int, name: string, default_status: record, description: string, enabled_standard_fields: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2182,7 +2248,7 @@ export def "trackers-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List issue categories
@@ -2200,6 +2266,7 @@ export def "projects-issue-categories-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --nometa: int@nometa-completer
   --X-Redmine-Switch-User: string # e.g. jsmith
   --X-Redmine-Nometa: int@X-Redmine-Nometa-completer
@@ -2212,7 +2279,7 @@ export def "projects-issue-categories-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create issue category
@@ -2231,6 +2298,7 @@ export def "projects-issue-categories-format createIssueCategory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   issue_category: record # shape: {name: string, assigned_to_id?: int}
 ]: any -> record<issue_category: record<id: int, project: record<id: int, name: string>, name: string, assigned_to: record<id: int, name: string>>> {
@@ -2244,7 +2312,7 @@ export def "projects-issue-categories-format createIssueCategory" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List issue priorities
@@ -2261,6 +2329,7 @@ export def "enumerations-issue-priorities-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<issue_priorities: table<id: int, name: string, is_default: bool, active: bool, custom_fields: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2270,7 +2339,7 @@ export def "enumerations-issue-priorities-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List time entry activities
@@ -2287,6 +2356,7 @@ export def "enumerations-time-entry-activities-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<time_entry_activities: table<id: int, name: string, is_default: bool, active: bool, custom_fields: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2296,7 +2366,7 @@ export def "enumerations-time-entry-activities-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List document categories
@@ -2313,6 +2383,7 @@ export def "enumerations-document-categories-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<document_categories: table<id: int, name: string, is_default: bool, active: bool, custom_fields: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2322,7 +2393,7 @@ export def "enumerations-document-categories-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Show issue category
@@ -2340,6 +2411,7 @@ export def "issue-categories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<issue_category: record<id: int, project: record<id: int, name: string>, name: string, assigned_to: record<id: int, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2349,7 +2421,7 @@ export def "issue-categories get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update issue category
@@ -2368,6 +2440,7 @@ export def "issue-categories updateIssueCategory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   --issue-category: record # shape: {name?: string, assigned_to_id?: int}
 ]: any -> any {
@@ -2381,7 +2454,7 @@ export def "issue-categories updateIssueCategory" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete issue category
@@ -2399,6 +2472,7 @@ export def "issue-categories delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reassign-to-id: int # ID of another issue category to reassign issues to before deleting this category. If the category has associated issues and this parameter is not provided, the issues will have their category unset.
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> any {
@@ -2410,7 +2484,7 @@ export def "issue-categories delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List roles
@@ -2427,6 +2501,7 @@ export def "roles-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<roles: table<id: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2436,7 +2511,7 @@ export def "roles-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Show role
@@ -2454,6 +2529,7 @@ export def "roles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<role: record<id: int, name: string, assignable: bool, issues_visibility: string, time_entries_visibility: string, users_visibility: string, permissions: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2463,7 +2539,7 @@ export def "roles get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List groups
@@ -2480,6 +2556,7 @@ export def "groups-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --builtin: string@builtin-completer # Include built-in groups (e.g., "Anonymous", "Non member") in the response. Set to `1` to include built-in groups. Without this parameter, only user-created groups are returned.
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<groups: table<id: int, name: string, builtin: string, custom_fields: list>> {
@@ -2491,7 +2568,7 @@ export def "groups-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create group
@@ -2509,6 +2586,7 @@ export def "groups-format createGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   group: record # shape: {name?: string, user_ids?: list, twofa_required?: bool, custom_fields?: list, custom_field_values?: record}
 ]: any -> record<group: record<id: int, name: string, builtin: string, custom_fields: list<record>, users: list<record>, memberships: list<record>>> {
@@ -2522,7 +2600,7 @@ export def "groups-format createGroup" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Show group
@@ -2540,6 +2618,7 @@ export def "groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: list # Comma-separated list of associated data to include in the response. Values: `users` (list of users in the group), `memberships` (project memberships with roles)
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<group: record<id: int, name: string, builtin: string, custom_fields: list<record>, users: list<record>, memberships: list<record>>> {
@@ -2551,7 +2630,7 @@ export def "groups get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update group
@@ -2570,6 +2649,7 @@ export def "groups updateGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   --group: record # shape: {name?: string, user_ids?: list, twofa_required?: bool, custom_fields?: list, custom_field_values?: record}
 ]: any -> any {
@@ -2583,7 +2663,7 @@ export def "groups updateGroup" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete group
@@ -2601,6 +2681,7 @@ export def "groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2610,7 +2691,7 @@ export def "groups delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add user to group
@@ -2628,6 +2709,7 @@ export def "groups-users-format addUserToGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   user_id: int
 ]: any -> any {
@@ -2641,7 +2723,7 @@ export def "groups-users-format addUserToGroup" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove user from group
@@ -2660,6 +2742,7 @@ export def "groups-users removeUserFromGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2669,7 +2752,7 @@ export def "groups-users removeUserFromGroup" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List custom fields
@@ -2686,6 +2769,7 @@ export def "custom-fields-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<custom_fields: table<id: int, name: string, description: string, customized_type: string, field_format: string, regexp: string, min_length: int, max_length: int, is_required: bool, is_filter: bool, searchable: bool, multiple: bool, default_value: string, visible: bool, editable: bool, trackers: list, roles: list, possible_values: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2695,7 +2779,7 @@ export def "custom-fields-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search
@@ -2712,6 +2796,7 @@ export def "search-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int
   --offset: int
   --nometa: int@nometa-completer
@@ -2739,7 +2824,7 @@ export def "search-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search within project
@@ -2757,6 +2842,7 @@ export def "projects-search-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int
   --offset: int
   --nometa: int@nometa-completer
@@ -2783,7 +2869,7 @@ export def "projects-search-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List files
@@ -2801,6 +2887,7 @@ export def "projects-files-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<files: table<id: int, filename: string, filesize: int, content_type: string, description: string, content_url: string, thumbnail_url: string, author: record, created_on: string, version: record, digest: string, downloads: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2810,7 +2897,7 @@ export def "projects-files-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create file
@@ -2829,6 +2916,7 @@ export def "projects-files-format createFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   file: record # shape: {token: string, version_id?: int, filename?: string, description?: string, content_type?: string}
 ]: any -> any {
@@ -2842,7 +2930,7 @@ export def "projects-files-format createFile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Show my account
@@ -2859,6 +2947,7 @@ export def "my-account-format get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> record<user: record<id: int, login: string, admin: bool, firstname: string, lastname: string, mail: string, created_on: string, last_login_on: string, api_key: string, custom_fields: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2868,7 +2957,7 @@ export def "my-account-format get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update my account
@@ -2887,6 +2976,7 @@ export def "my-account-format updateMyAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   --user: record # shape: {login?: string, admin?: bool, firstname?: string, lastname?: string, mail?: string, language?: string, auth_source_id?: int, mail_notification?: "all"|"selected"|"only_my_events"|"only_assigned"|"only_owner"|"none", notified_project_ids?: list, must_change_passwd?: bool, generate_password?: bool, status?: int, custom_fields?: list, custom_field_values?: record, group_ids?: list}
   --pref: record # shape: {hide_mail?: bool, time_zone?: string, comments_sorting?: "asc"|"desc", warn_on_leaving_unsaved?: bool, no_self_notified?: bool, notify_about_high_priority_issues?: bool, textarea_font?: "monospace"|"proportional", recently_used_projects?: int, history_default_tab?: "notes"|"history"|"properties"|"time_entries"|"changesets"|"last_tab_visited", toolbar_language_options?: string, default_issue_query?: int, default_project_query?: int, auto_watch_on?: list}
@@ -2901,7 +2991,7 @@ export def "my-account-format updateMyAccount" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update journal
@@ -2919,6 +3009,7 @@ export def "journals updateJournal" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   --journal: record # shape: {notes?: string, private_notes?: bool}
 ]: any -> any {
@@ -2932,7 +3023,7 @@ export def "journals updateJournal" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Upload attachment file
@@ -2949,6 +3040,7 @@ export def "uploads-format uploadAttachmentFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filename: string # Filename for the uploaded file. If not provided, a random hexadecimal name is generated.
   --content-type: string # MIME type of the file (e.g., `application/pdf`, `image/png`). If not provided, auto-detected from the filename.
   --X-Redmine-Switch-User: string # e.g. jsmith
@@ -2964,7 +3056,7 @@ export def "uploads-format uploadAttachmentFile" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/octet-stream" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/octet-stream" $body
 }
 
 # Add related issue
@@ -2983,6 +3075,7 @@ export def "projects-repository-revisions-issues-format addRelatedIssue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
   issue_id: int
 ]: any -> any {
@@ -2996,7 +3089,7 @@ export def "projects-repository-revisions-issues-format addRelatedIssue" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove related issue
@@ -3016,6 +3109,7 @@ export def "projects-repository-revisions-issues removeRelatedIssue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Redmine-Switch-User: string # e.g. jsmith
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3025,5 +3119,5 @@ export def "projects-repository-revisions-issues removeRelatedIssue" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

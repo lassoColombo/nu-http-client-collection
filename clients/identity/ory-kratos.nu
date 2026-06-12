@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -79,7 +80,7 @@ def method-completer-3 [] { ["lookup_secret" "oidc" "passkey" "password" "profil
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "well-known-ory-webauthnjs get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -112,13 +113,14 @@ export def "well-known-ory-webauthnjs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/.well-known/ory/webauthn.js")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Messages
@@ -133,6 +135,7 @@ export def "admin-courier-messages listCourierMessages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Items per Page  This is the number of items per page to return. For details on pagination please head over to the [pagination documentation](https://www.ory.com/docs/ecosystem/api-design#pagination). (format: int64, default: 250)
   --page-token: string # Next Page Token  The next page token. For details on pagination please head over to the [pagination documentation](https://www.ory.com/docs/ecosystem/api-design#pagination).
   --status: string@status-completer # Status filters out messages based on status. If no value is provided, it doesn't take effect on filter.
@@ -144,7 +147,7 @@ export def "admin-courier-messages listCourierMessages" [
   let full_url = (build-url $base "/admin/courier/messages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Message
@@ -160,13 +163,14 @@ export def "admin-courier-messages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<body: string, channel: string, created_at: string, dispatches: table<created_at: string, error: record, id: string, message_id: string, status: string, updated_at: string>, id: string, recipient: string, send_count: int, status: string, subject: string, template_type: string, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/admin/courier/messages/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Identities
@@ -181,6 +185,7 @@ export def "admin-identities listIdentities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --per-page: int # Deprecated Items per Page  DEPRECATED: Please use `page_token` instead. This parameter will be removed in the future.  This is the number of items per page. (format: int64, default: 250)
   --page: int # Deprecated Pagination Page  DEPRECATED: Please use `page_token` instead. This parameter will be removed in the future.  This value is currently an integer, but it is not sequential. The value is not the page number, but a reference. The next page can be any number and some numbers might return an empty list.  For example, page 2 might not follow after page 1. And even if page 3 and 5 exist, but page 4 might not exist. The first page can be retrieved by omitting this parameter. Following page pointers will be returned in the `Link` header. (format: int64)
   --page-size: int # Page Size  This is the number of items per page to return. For details on pagination please head over to the [pagination documentation](https://www.ory.com/docs/ecosystem/api-design#pagination). (format: int64, default: 250)
@@ -198,7 +203,7 @@ export def "admin-identities listIdentities" [
   let full_url = (build-url $base "/admin/identities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create multiple identities
@@ -214,6 +219,7 @@ export def "admin-identities batchPatchIdentities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --identities: list # Identities holds the list of patches to apply  required — item shape: {create?: record, patch_id?: string}
 ]: any -> record<identities: table<action: string, error: any, identity: string, patch_id: string>> {
   let input = $in
@@ -224,7 +230,7 @@ export def "admin-identities batchPatchIdentities" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an Identity
@@ -242,6 +248,7 @@ export def "admin-identities createIdentity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --credentials: record # Create Identity and Import Credentials — shape: {lookup_secret?: record, oidc?: record, passkey?: record, password?: record, saml?: record, totp?: record, webauthn?: record}
   --external-id: string # ExternalID is an optional external ID of the identity. This is used to link the identity to an external system. If set, the external ID must be unique across all identities.
   --metadata-admin: any # Store metadata about the user which is only accessible through admin APIs such as `GET /admin/identities/<id>`.
@@ -262,7 +269,7 @@ export def "admin-identities createIdentity" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an Identity by its External ID
@@ -278,6 +285,7 @@ export def "admin-identities-by-external get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-credential: list # Include Credentials in Response  Include any credential, for example `password` or `oidc`, in the response. When set to `oidc`, This will return the initial OAuth 2.0 Access Token, OAuth 2.0 Refresh Token, and the OpenID Connect ID Token if available.
 ]: nothing -> record<created_at: string, credentials: record, external_id: string, id: string, metadata_admin: any, metadata_public: any, organization_id: string, recovery_addresses: table<break_glass_for_organization: string, created_at: string, id: string, updated_at: string, value: string, via: string>, region: string, schema_id: string, schema_url: string, state: string, state_changed_at: string, traits: any, updated_at: string, verifiable_addresses: table<created_at: string, id: string, status: string, updated_at: string, value: string, verified: bool, verified_at: string, via: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -286,7 +294,7 @@ export def "admin-identities-by-external get" [
   let full_url = (build-url $base $"/admin/identities/by/external/($externalID)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an Identity
@@ -302,13 +310,14 @@ export def "admin-identities delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<error: record<code: int, debug: string, details: record, id: string, message: string, reason: string, request: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/admin/identities/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an Identity
@@ -324,6 +333,7 @@ export def "admin-identities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-credential: list # Include Credentials in Response  Include any credential, for example `password` or `oidc`, in the response. When set to `oidc`, This will return the initial OAuth 2.0 Access Token, OAuth 2.0 Refresh Token, and the OpenID Connect ID Token if available.
 ]: nothing -> record<created_at: string, credentials: record, external_id: string, id: string, metadata_admin: any, metadata_public: any, organization_id: string, recovery_addresses: table<break_glass_for_organization: string, created_at: string, id: string, updated_at: string, value: string, via: string>, region: string, schema_id: string, schema_url: string, state: string, state_changed_at: string, traits: any, updated_at: string, verifiable_addresses: table<created_at: string, id: string, status: string, updated_at: string, value: string, verified: bool, verified_at: string, via: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -332,7 +342,7 @@ export def "admin-identities get" [
   let full_url = (build-url $base $"/admin/identities/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Patch an Identity
@@ -348,6 +358,7 @@ export def "admin-identities patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<created_at: string, credentials: record, external_id: string, id: string, metadata_admin: any, metadata_public: any, organization_id: string, recovery_addresses: table<break_glass_for_organization: string, created_at: string, id: string, updated_at: string, value: string, via: string>, region: string, schema_id: string, schema_url: string, state: string, state_changed_at: string, traits: any, updated_at: string, verifiable_addresses: table<created_at: string, id: string, status: string, updated_at: string, value: string, verified: bool, verified_at: string, via: string>> {
   let input = $in
@@ -357,7 +368,7 @@ export def "admin-identities patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an Identity
@@ -374,6 +385,7 @@ export def "admin-identities updateIdentity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --credentials: record # Create Identity and Import Credentials — shape: {lookup_secret?: record, oidc?: record, passkey?: record, password?: record, saml?: record, totp?: record, webauthn?: record}
   --external-id: string # ExternalID is an optional external ID of the identity. This is used to link the identity to an external system. If set, the external ID must be unique across all identities.
   --metadata-admin: any # Store metadata about the user which is only accessible through admin APIs such as `GET /admin/identities/<id>`.
@@ -391,7 +403,7 @@ export def "admin-identities updateIdentity" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a credential for a specific identity
@@ -408,6 +420,7 @@ export def "admin-identities-credentials delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --identifier: string # Identifier is the identifier of the OIDC/SAML credential to delete. Find the identifier by calling the `GET /admin/identities/{id}?include_credential={oidc,saml}` endpoint.
 ]: nothing -> record<error: record<code: int, debug: string, details: record, id: string, message: string, reason: string, request: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -416,7 +429,7 @@ export def "admin-identities-credentials delete" [
   let full_url = (build-url $base $"/admin/identities/($id)/credentials/($type)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete & Invalidate an Identity's Sessions
@@ -432,13 +445,14 @@ export def "admin-identities-sessions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<error: record<code: int, debug: string, details: record, id: string, message: string, reason: string, request: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/admin/identities/($id)/sessions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List an Identity's Sessions
@@ -454,6 +468,7 @@ export def "admin-identities-sessions listIdentitySessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --per-page: int # Deprecated Items per Page  DEPRECATED: Please use `page_token` instead. This parameter will be removed in the future.  This is the number of items per page. (format: int64, default: 250)
   --page: int # Deprecated Pagination Page  DEPRECATED: Please use `page_token` instead. This parameter will be removed in the future.  This value is currently an integer, but it is not sequential. The value is not the page number, but a reference. The next page can be any number and some numbers might return an empty list.  For example, page 2 might not follow after page 1. And even if page 3 and 5 exist, but page 4 might not exist. The first page can be retrieved by omitting this parameter. Following page pointers will be returned in the `Link` header. (format: int64)
   --page-size: int # Page Size  This is the number of items per page to return. For details on pagination please head over to the [pagination documentation](https://www.ory.com/docs/ecosystem/api-design#pagination). (format: int64, default: 250)
@@ -466,7 +481,7 @@ export def "admin-identities-sessions listIdentitySessions" [
   let full_url = (build-url $base $"/admin/identities/($id)/sessions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Recovery Code
@@ -481,6 +496,7 @@ export def "admin-recovery-code createRecoveryCodeForIdentity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expires-in: string # Code Expires In  The recovery code will expire after that amount of time has passed. Defaults to the configuration value of `selfservice.methods.code.config.lifespan`.
   --flow-type: string # The flow type can either be `api` or `browser`.
   identity_id: string # Identity to Recover  The identity's ID you wish to recover. (format: uuid)
@@ -493,7 +509,7 @@ export def "admin-recovery-code createRecoveryCodeForIdentity" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a Recovery Link
@@ -508,6 +524,7 @@ export def "admin-recovery-link createRecoveryLinkForIdentity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --return-to: string
   --expires-in: string # Link Expires In  The recovery link will expire after that amount of time has passed. Defaults to the configuration value of `selfservice.methods.code.config.lifespan`.
   identity_id: string # Identity to Recover  The identity's ID you wish to recover. (format: uuid)
@@ -521,7 +538,7 @@ export def "admin-recovery-link createRecoveryLinkForIdentity" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List All Sessions
@@ -536,6 +553,7 @@ export def "admin-sessions listSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Items per Page  This is the number of items per page to return. For details on pagination please head over to the [pagination documentation](https://www.ory.com/docs/ecosystem/api-design#pagination). (format: int64, default: 250)
   --page-token: string # Next Page Token  The next page token. For details on pagination please head over to the [pagination documentation](https://www.ory.com/docs/ecosystem/api-design#pagination).
   --active: oneof<nothing, bool> # Active is a boolean flag that filters out sessions based on the state. If no value is provided, all sessions are returned.
@@ -547,7 +565,7 @@ export def "admin-sessions listSessions" [
   let full_url = (build-url $base "/admin/sessions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Manage sessions in bulk
@@ -562,6 +580,7 @@ export def "admin-sessions manageSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   action: string@action-completer # Action to perform on the matching sessions. disable ManageSessionsActionDisable delete ManageSessionsActionDelete
   --identities: list # Identity IDs whose sessions should be disabled or deleted, or `["*"]` to operate on every session in the network. Mutually exclusive with `sessions`.
   --sessions: list # Session IDs to disable or delete. Mutually exclusive with `identities`. The wildcard `["*"]` is not accepted in this field — pass `identities: ["*"]` to scope the operation to every session in the network.
@@ -574,7 +593,7 @@ export def "admin-sessions manageSessions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deactivate a Session
@@ -590,13 +609,14 @@ export def "admin-sessions disableSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<error: record<code: int, debug: string, details: record, id: string, message: string, reason: string, request: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/admin/sessions/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Session
@@ -612,6 +632,7 @@ export def "admin-sessions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # ExpandOptions is a query parameter encoded list of all properties that must be expanded in the Session. Example - ?expand=Identity&expand=Devices If no value is provided, the expandable properties are skipped.
 ]: nothing -> record<active: bool, authenticated_at: string, authentication_methods: table<aal: string, completed_at: string, method: string, organization: string, provider: string, upstream_acr: string, upstream_amr: list>, authenticator_assurance_level: string, devices: table<id: string, ip_address: string, location: string, user_agent: string>, expires_at: string, id: string, identity: record<created_at: string, credentials: record, external_id: string, id: string, metadata_admin: any, metadata_public: any, organization_id: string, recovery_addresses: list<record>, region: string, schema_id: string, schema_url: string, state: string, state_changed_at: string, traits: any, updated_at: string, verifiable_addresses: list<record>>, issued_at: string, tokenized: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -620,7 +641,7 @@ export def "admin-sessions get" [
   let full_url = (build-url $base $"/admin/sessions/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Extend a Session
@@ -636,13 +657,14 @@ export def "admin-sessions-extend extendSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<active: bool, authenticated_at: string, authentication_methods: table<aal: string, completed_at: string, method: string, organization: string, provider: string, upstream_acr: string, upstream_amr: list>, authenticator_assurance_level: string, devices: table<id: string, ip_address: string, location: string, user_agent: string>, expires_at: string, id: string, identity: record<created_at: string, credentials: record, external_id: string, id: string, metadata_admin: any, metadata_public: any, organization_id: string, recovery_addresses: list<record>, region: string, schema_id: string, schema_url: string, state: string, state_changed_at: string, traits: any, updated_at: string, verifiable_addresses: list<record>>, issued_at: string, tokenized: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/admin/sessions/($id)/extend")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a test OIDC login flow
@@ -657,6 +679,7 @@ export def "admin-test-login-flows createTestLoginFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   provider_id: string # ID of the OIDC provider to test. Must match a provider configured on the project that serves this request.
 ]: any -> record<active: string, created_at: string, expires_at: string, id: string, identity_schema: string, issued_at: string, oauth2_login_challenge: string, oauth2_login_request: record<challenge: string, client: record<access_token_strategy: string, allowed_cors_origins: list, audience: list, authorization_code_grant_access_token_lifespan: string, authorization_code_grant_id_token_lifespan: string, authorization_code_grant_refresh_token_lifespan: string, backchannel_logout_session_required: bool, backchannel_logout_uri: string, client_credentials_grant_access_token_lifespan: string, client_id: string, client_name: string, client_secret: string, client_secret_expires_at: int, client_uri: string, contacts: list, created_at: string, frontchannel_logout_session_required: bool, frontchannel_logout_uri: string, grant_types: list, implicit_grant_access_token_lifespan: string, implicit_grant_id_token_lifespan: string, jwks: any, jwks_uri: string, jwt_bearer_grant_access_token_lifespan: string, logo_uri: string, metadata: any, owner: string, policy_uri: string, post_logout_redirect_uris: list, redirect_uris: list, refresh_token_grant_access_token_lifespan: string, refresh_token_grant_id_token_lifespan: string, refresh_token_grant_refresh_token_lifespan: string, registration_access_token: string, registration_client_uri: string, request_object_signing_alg: string, request_uris: list, response_types: list, scope: string, sector_identifier_uri: string, skip_consent: bool, skip_logout_consent: bool, subject_type: string, token_endpoint_auth_method: string, token_endpoint_auth_signing_alg: string, tos_uri: string, updated_at: string, userinfo_signed_response_alg: string>, oidc_context: record<acr_values: list, display: string, id_token_hint_claims: record, login_hint: string, ui_locales: list>, request_url: string, requested_access_token_audience: list<string>, requested_scope: list<string>, session_id: string, skip: bool, subject: string>, organization_id: string, refresh: bool, request_url: string, requested_aal: string, return_to: string, session_token_exchange_code: string, state: any, test_context: record<debug_payload: record<error: record, id_token_claims: record, jsonnet_input: record, jsonnet_mapper_url: string, jsonnet_output: record, jsonnet_stderr: string, schema_validation_errors: list, userinfo: record>, provider_id: string>, transient_payload: record, type: string, ui: record<action: string, messages: list<record>, method: string, nodes: list<record>>, updated_at: string> {
   let input = $in
@@ -667,7 +690,7 @@ export def "admin-test-login-flows createTestLoginFlow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check HTTP Server Status
@@ -682,6 +705,7 @@ export def "health-alive isAlive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -689,7 +713,7 @@ export def "health-alive isAlive" [
   let full_url = (build-url $base "/health/alive")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check HTTP Server and Database Status
@@ -704,6 +728,7 @@ export def "health-ready isReady" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -711,7 +736,7 @@ export def "health-ready isReady" [
   let full_url = (build-url $base "/health/ready")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all Identity Schemas
@@ -726,6 +751,7 @@ export def "schemas listIdentitySchemas" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --per-page: int # Deprecated Items per Page  DEPRECATED: Please use `page_token` instead. This parameter will be removed in the future.  This is the number of items per page. (format: int64, default: 250)
   --page: int # Deprecated Pagination Page  DEPRECATED: Please use `page_token` instead. This parameter will be removed in the future.  This value is currently an integer, but it is not sequential. The value is not the page number, but a reference. The next page can be any number and some numbers might return an empty list.  For example, page 2 might not follow after page 1. And even if page 3 and 5 exist, but page 4 might not exist. The first page can be retrieved by omitting this parameter. Following page pointers will be returned in the `Link` header. (format: int64)
   --page-size: int # Page Size  This is the number of items per page to return. For details on pagination please head over to the [pagination documentation](https://www.ory.com/docs/ecosystem/api-design#pagination). (format: int64, default: 250)
@@ -737,7 +763,7 @@ export def "schemas listIdentitySchemas" [
   let full_url = (build-url $base "/schemas" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Identity JSON Schema
@@ -753,13 +779,14 @@ export def "schemas get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/schemas/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get User-Flow Errors
@@ -774,6 +801,7 @@ export def "self-service-errors get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Error is the error's ID
 ]: nothing -> record<created_at: string, error: record, id: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -782,7 +810,7 @@ export def "self-service-errors get" [
   let full_url = (build-url $base "/self-service/errors" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get FedCM Parameters
@@ -797,13 +825,14 @@ export def "self-service-fed-cm-parameters createFedcmFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<csrf_token: string, providers: table<client_id: string, config_url: string, domain_hint: string, fields: list, login_hint: string, nonce: string, parameters: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/self-service/fed-cm/parameters")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Submit a FedCM token
@@ -818,6 +847,7 @@ export def "self-service-fed-cm-token updateFedcmFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   csrf_token: string # CSRFToken is the anti-CSRF token.
   --nonce: string # Nonce is the nonce that was used in the `navigator.credentials.get` call. If specified, it must match the `nonce` claim in the token.
   --body-token: string # Token contains the result of `navigator.credentials.get`.
@@ -831,7 +861,7 @@ export def "self-service-fed-cm-token updateFedcmFlow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Submit a Login Flow
@@ -847,6 +877,7 @@ export def "self-service-login updateLoginFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --flow: string # The Login Flow ID  The value for this parameter comes from `flow` URL Query parameter sent to your application (e.g. `/login?flow=abcde`).
   --X-Session-Token: string # The Session Token of the Identity performing the settings flow.
   --Cookie: string # HTTP Cookies  When using the SDK in a browser app, on the server side you must include the HTTP Cookie Header sent by the client to your server here. This ensures that CSRF and session cookies are respected.
@@ -880,7 +911,7 @@ export def "self-service-login updateLoginFlow" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Login Flow for Native Apps
@@ -895,6 +926,7 @@ export def "self-service-login createNativeLoginFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --refresh: oneof<nothing, bool> # Refresh a login session  If set to true, this will refresh an existing login session by asking the user to sign in again. This will reset the authenticated_at time of the session.
   --aal: string # Request a Specific AuthenticationMethod Assurance Level  Use this parameter to upgrade an existing session's authenticator assurance level (AAL). This allows you to ask for multi-factor authentication. When an identity sign in using e.g. username+password, the AAL is 1. If you wish to "upgrade" the session's security by asking the user to perform TOTP / WebAuth/ ... you would set this to "aal2".
   --return-session-token-exchange-code: oneof<nothing, bool> # EnableSessionTokenExchangeCode requests the login flow to include a code that can be used to retrieve the session token after the login flow has been completed.
@@ -912,7 +944,7 @@ export def "self-service-login createNativeLoginFlow" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Login Flow for Browsers
@@ -927,6 +959,7 @@ export def "self-service-login-browser createBrowserLoginFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --refresh: oneof<nothing, bool> # Refresh a login session  If set to true, this will refresh an existing login session by asking the user to sign in again. This will reset the authenticated_at time of the session.
   --aal: string # Request a Specific AuthenticationMethod Assurance Level  Use this parameter to upgrade an existing session's authenticator assurance level (AAL). This allows you to ask for multi-factor authentication. When an identity sign in using e.g. username+password, the AAL is 1. If you wish to "upgrade" the session's security by asking the user to perform TOTP / WebAuth/ ... you would set this to "aal2".
   --return-to: string # The URL to return the browser to after the flow was completed.
@@ -944,7 +977,7 @@ export def "self-service-login-browser createBrowserLoginFlow" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Login Flow
@@ -959,6 +992,7 @@ export def "self-service-login-flows get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The Login Flow ID  The value for this parameter comes from `flow` URL Query parameter sent to your application (e.g. `/login?flow=abcde`).
   --Cookie: string # HTTP Cookies  When using the SDK in a browser app, on the server side you must include the HTTP Cookie Header sent by the client to your server here. This ensures that CSRF and session cookies are respected.
 ]: nothing -> record<active: string, created_at: string, expires_at: string, id: string, identity_schema: string, issued_at: string, oauth2_login_challenge: string, oauth2_login_request: record<challenge: string, client: record<access_token_strategy: string, allowed_cors_origins: list, audience: list, authorization_code_grant_access_token_lifespan: string, authorization_code_grant_id_token_lifespan: string, authorization_code_grant_refresh_token_lifespan: string, backchannel_logout_session_required: bool, backchannel_logout_uri: string, client_credentials_grant_access_token_lifespan: string, client_id: string, client_name: string, client_secret: string, client_secret_expires_at: int, client_uri: string, contacts: list, created_at: string, frontchannel_logout_session_required: bool, frontchannel_logout_uri: string, grant_types: list, implicit_grant_access_token_lifespan: string, implicit_grant_id_token_lifespan: string, jwks: any, jwks_uri: string, jwt_bearer_grant_access_token_lifespan: string, logo_uri: string, metadata: any, owner: string, policy_uri: string, post_logout_redirect_uris: list, redirect_uris: list, refresh_token_grant_access_token_lifespan: string, refresh_token_grant_id_token_lifespan: string, refresh_token_grant_refresh_token_lifespan: string, registration_access_token: string, registration_client_uri: string, request_object_signing_alg: string, request_uris: list, response_types: list, scope: string, sector_identifier_uri: string, skip_consent: bool, skip_logout_consent: bool, subject_type: string, token_endpoint_auth_method: string, token_endpoint_auth_signing_alg: string, tos_uri: string, updated_at: string, userinfo_signed_response_alg: string>, oidc_context: record<acr_values: list, display: string, id_token_hint_claims: record, login_hint: string, ui_locales: list>, request_url: string, requested_access_token_audience: list<string>, requested_scope: list<string>, session_id: string, skip: bool, subject: string>, organization_id: string, refresh: bool, request_url: string, requested_aal: string, return_to: string, session_token_exchange_code: string, state: any, test_context: record<debug_payload: record<error: record, id_token_claims: record, jsonnet_input: record, jsonnet_mapper_url: string, jsonnet_output: record, jsonnet_stderr: string, schema_validation_errors: list, userinfo: record>, provider_id: string>, transient_payload: record, type: string, ui: record<action: string, messages: list<record>, method: string, nodes: list<record>>, updated_at: string> {
@@ -970,7 +1004,7 @@ export def "self-service-login-flows get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a test OIDC login flow
@@ -985,6 +1019,7 @@ export def "self-service-login-test delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # ID of the test login flow to delete.
   --Cookie: string # HTTP Cookies. A captured test flow requires the ory_kratos_test_flow cookie set by the OIDC callback; a flow still in the initial choose-method state does not.
 ]: nothing -> record<error: record<code: int, debug: string, details: record, id: string, message: string, reason: string, request: string, status: string>> {
@@ -996,7 +1031,7 @@ export def "self-service-login-test delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Logout Flow
@@ -1011,6 +1046,7 @@ export def "self-service-logout updateLogoutFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # A Valid Logout Token  If you do not have a logout token because you only have a session cookie, call `/self-service/logout/browser` to generate a URL for this endpoint.
   --return-to: string # The URL to return to after the logout was completed.
   --Cookie: string # HTTP Cookies  When using the SDK in a browser app, on the server side you must include the HTTP Cookie Header sent by the client to your server here. This ensures that CSRF and session cookies are respected.
@@ -1023,7 +1059,7 @@ export def "self-service-logout updateLogoutFlow" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Perform Logout for Native Apps
@@ -1038,6 +1074,7 @@ export def "self-service-logout performNativeLogout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   session_token: string # The Session Token  Invalidate this session token.
 ]: any -> record<error: record<code: int, debug: string, details: record, id: string, message: string, reason: string, request: string, status: string>> {
   let input = $in
@@ -1048,7 +1085,7 @@ export def "self-service-logout performNativeLogout" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a Logout URL for Browsers
@@ -1063,6 +1100,7 @@ export def "self-service-logout-browser createBrowserLogoutFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --return-to: string # Return to URL  The URL to which the browser should be redirected to after the logout has been performed.
   --cookie: string # HTTP Cookies  If you call this endpoint from a backend, please include the original Cookie header in the request.
 ]: nothing -> record<logout_token: string, logout_url: string> {
@@ -1074,7 +1112,7 @@ export def "self-service-logout-browser createBrowserLogoutFlow" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Recovery Flow
@@ -1090,6 +1128,7 @@ export def "self-service-recovery updateRecoveryFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --flow: string # The Recovery Flow ID  The value for this parameter comes from `flow` URL Query parameter sent to your application (e.g. `/recovery?flow=abcde`).
   --qp-token: string # Recovery Token  The recovery token which completes the recovery request. If the token is invalid (e.g. expired) an error will be shown to the end-user.  This parameter is usually set in a link and not used by any direct API call.
   --Cookie: string # HTTP Cookies  When using the SDK in a browser app, on the server side you must include the HTTP Cookie Header sent by the client to your server here. This ensures that CSRF and session cookies are respected.
@@ -1114,7 +1153,7 @@ export def "self-service-recovery updateRecoveryFlow" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Recovery Flow for Native Apps
@@ -1129,13 +1168,14 @@ export def "self-service-recovery createNativeRecoveryFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<active: string, continue_with: list<record>, expires_at: string, id: string, issued_at: string, request_url: string, return_to: string, state: any, transient_payload: record, type: string, ui: record<action: string, messages: list<record>, method: string, nodes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/self-service/recovery/api")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Recovery Flow for Browsers
@@ -1150,6 +1190,7 @@ export def "self-service-recovery-browser createBrowserRecoveryFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --return-to: string # The URL to return the browser to after the flow was completed.
   --skip-settings: string # Skip redirection to the settings UI after the recovery flow was completed. Instead, the user will be redirected to the URL specified in `return_to` query parameter or the default return URL if `return_to` is not set.
 ]: nothing -> record<active: string, continue_with: list<record>, expires_at: string, id: string, issued_at: string, request_url: string, return_to: string, state: any, transient_payload: record, type: string, ui: record<action: string, messages: list<record>, method: string, nodes: list<record>>> {
@@ -1159,7 +1200,7 @@ export def "self-service-recovery-browser createBrowserRecoveryFlow" [
   let full_url = (build-url $base "/self-service/recovery/browser" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Recovery Flow
@@ -1174,6 +1215,7 @@ export def "self-service-recovery-flows get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The Flow ID  The value for this parameter comes from `request` URL Query parameter sent to your application (e.g. `/recovery?flow=abcde`).
   --Cookie: string # HTTP Cookies  When using the SDK in a browser app, on the server side you must include the HTTP Cookie Header sent by the client to your server here. This ensures that CSRF and session cookies are respected.
 ]: nothing -> record<active: string, continue_with: list<record>, expires_at: string, id: string, issued_at: string, request_url: string, return_to: string, state: any, transient_payload: record, type: string, ui: record<action: string, messages: list<record>, method: string, nodes: list<record>>> {
@@ -1185,7 +1227,7 @@ export def "self-service-recovery-flows get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Registration Flow
@@ -1201,6 +1243,7 @@ export def "self-service-registration updateRegistrationFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --flow: string # The Registration Flow ID  The value for this parameter comes from `flow` URL Query parameter sent to your application (e.g. `/registration?flow=abcde`).
   --Cookie: string # HTTP Cookies  When using the SDK in a browser app, on the server side you must include the HTTP Cookie Header sent by the client to your server here. This ensures that CSRF and session cookies are respected.
   --csrf-token: string # The CSRF Token
@@ -1230,7 +1273,7 @@ export def "self-service-registration updateRegistrationFlow" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Registration Flow for Native Apps
@@ -1245,6 +1288,7 @@ export def "self-service-registration createNativeRegistrationFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --return-session-token-exchange-code: oneof<nothing, bool> # EnableSessionTokenExchangeCode requests the login flow to include a code that can be used to retrieve the session token after the login flow has been completed.
   --return-to: string # The URL to return the browser to after the flow was completed.
   --organization: string # An optional organization ID that should be used to register this user. This parameter is only effective in the Ory Network.
@@ -1256,7 +1300,7 @@ export def "self-service-registration createNativeRegistrationFlow" [
   let full_url = (build-url $base "/self-service/registration/api" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Registration Flow for Browsers
@@ -1271,6 +1315,7 @@ export def "self-service-registration-browser createBrowserRegistrationFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --return-to: string # The URL to return the browser to after the flow was completed.
   --login-challenge: string # Ory OAuth 2.0 Login Challenge.  If set will cooperate with Ory OAuth2 and OpenID to act as an OAuth2 server / OpenID Provider.  The value for this parameter comes from `login_challenge` URL Query parameter sent to your application (e.g. `/registration?login_challenge=abcde`).  This feature is compatible with Ory Hydra when not running on the Ory Network.
   --after-verification-return-to: string # The URL to return the browser to after the verification flow was completed.  After the registration flow is completed, the user will be sent a verification email. Upon completing the verification flow, this URL will be used to override the default `selfservice.flows.verification.after.default_redirect_to` value.
@@ -1283,7 +1328,7 @@ export def "self-service-registration-browser createBrowserRegistrationFlow" [
   let full_url = (build-url $base "/self-service/registration/browser" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Registration Flow
@@ -1298,6 +1343,7 @@ export def "self-service-registration-flows get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The Registration Flow ID  The value for this parameter comes from `flow` URL Query parameter sent to your application (e.g. `/registration?flow=abcde`).
   --Cookie: string # HTTP Cookies  When using the SDK in a browser app, on the server side you must include the HTTP Cookie Header sent by the client to your server here. This ensures that CSRF and session cookies are respected.
 ]: nothing -> record<active: string, expires_at: string, id: string, identity_schema: string, issued_at: string, oauth2_login_challenge: string, oauth2_login_request: record<challenge: string, client: record<access_token_strategy: string, allowed_cors_origins: list, audience: list, authorization_code_grant_access_token_lifespan: string, authorization_code_grant_id_token_lifespan: string, authorization_code_grant_refresh_token_lifespan: string, backchannel_logout_session_required: bool, backchannel_logout_uri: string, client_credentials_grant_access_token_lifespan: string, client_id: string, client_name: string, client_secret: string, client_secret_expires_at: int, client_uri: string, contacts: list, created_at: string, frontchannel_logout_session_required: bool, frontchannel_logout_uri: string, grant_types: list, implicit_grant_access_token_lifespan: string, implicit_grant_id_token_lifespan: string, jwks: any, jwks_uri: string, jwt_bearer_grant_access_token_lifespan: string, logo_uri: string, metadata: any, owner: string, policy_uri: string, post_logout_redirect_uris: list, redirect_uris: list, refresh_token_grant_access_token_lifespan: string, refresh_token_grant_id_token_lifespan: string, refresh_token_grant_refresh_token_lifespan: string, registration_access_token: string, registration_client_uri: string, request_object_signing_alg: string, request_uris: list, response_types: list, scope: string, sector_identifier_uri: string, skip_consent: bool, skip_logout_consent: bool, subject_type: string, token_endpoint_auth_method: string, token_endpoint_auth_signing_alg: string, tos_uri: string, updated_at: string, userinfo_signed_response_alg: string>, oidc_context: record<acr_values: list, display: string, id_token_hint_claims: record, login_hint: string, ui_locales: list>, request_url: string, requested_access_token_audience: list<string>, requested_scope: list<string>, session_id: string, skip: bool, subject: string>, organization_id: string, request_url: string, return_to: string, session_token_exchange_code: string, state: any, transient_payload: record, type: string, ui: record<action: string, messages: list<record>, method: string, nodes: list<record>>> {
@@ -1309,7 +1355,7 @@ export def "self-service-registration-flows get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Complete Settings Flow
@@ -1325,6 +1371,7 @@ export def "self-service-settings updateSettingsFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --flow: string # The Settings Flow ID  The value for this parameter comes from `flow` URL Query parameter sent to your application (e.g. `/settings?flow=abcde`).
   --X-Session-Token: string # The Session Token of the Identity performing the settings flow.
   --Cookie: string # HTTP Cookies  When using the SDK in a browser app, on the server side you must include the HTTP Cookie Header sent by the client to your server here. This ensures that CSRF and session cookies are respected.
@@ -1360,7 +1407,7 @@ export def "self-service-settings updateSettingsFlow" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Settings Flow for Native Apps
@@ -1375,6 +1422,7 @@ export def "self-service-settings createNativeSettingsFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --organization: string # An optional organization ID that scopes the settings flow to providers of that organization. This parameter is only effective in the Ory Network.
   --X-Session-Token: string # The Session Token of the Identity performing the settings flow.
 ]: nothing -> record<active: string, continue_with: list<record>, expires_at: string, id: string, identity: record<created_at: string, credentials: record, external_id: string, id: string, metadata_admin: any, metadata_public: any, organization_id: string, recovery_addresses: list<record>, region: string, schema_id: string, schema_url: string, state: string, state_changed_at: string, traits: any, updated_at: string, verifiable_addresses: list<record>>, issued_at: string, organization_id: string, request_url: string, return_to: string, state: any, transient_payload: record, type: string, ui: record<action: string, messages: list<record>, method: string, nodes: list<record>>> {
@@ -1386,7 +1434,7 @@ export def "self-service-settings createNativeSettingsFlow" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Settings Flow for Browsers
@@ -1401,6 +1449,7 @@ export def "self-service-settings-browser createBrowserSettingsFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --return-to: string # The URL to return the browser to after the flow was completed.
   --organization: string # An optional organization ID that scopes the settings flow to providers of that organization. This parameter is only effective in the Ory Network.
   --Cookie: string # HTTP Cookies  When using the SDK in a browser app, on the server side you must include the HTTP Cookie Header sent by the client to your server here. This ensures that CSRF and session cookies are respected.
@@ -1413,7 +1462,7 @@ export def "self-service-settings-browser createBrowserSettingsFlow" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Settings Flow
@@ -1428,6 +1477,7 @@ export def "self-service-settings-flows get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # ID is the Settings Flow ID  The value for this parameter comes from `flow` URL Query parameter sent to your application (e.g. `/settings?flow=abcde`).
   --X-Session-Token: string # The Session Token  When using the SDK in an app without a browser, please include the session token here.
   --Cookie: string # HTTP Cookies  When using the SDK in a browser app, on the server side you must include the HTTP Cookie Header sent by the client to your server here. This ensures that CSRF and session cookies are respected.
@@ -1440,7 +1490,7 @@ export def "self-service-settings-flows get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Complete Verification Flow
@@ -1456,6 +1506,7 @@ export def "self-service-verification updateVerificationFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --flow: string # The Verification Flow ID  The value for this parameter comes from `flow` URL Query parameter sent to your application (e.g. `/verification?flow=abcde`).
   --qp-token: string # Verification Token  The verification token which completes the verification request. If the token is invalid (e.g. expired) an error will be shown to the end-user.  This parameter is usually set in a link and not used by any direct API call.
   --Cookie: string # HTTP Cookies  When using the SDK in a browser app, on the server side you must include the HTTP Cookie Header sent by the client to your server here. This ensures that CSRF and session cookies are respected.
@@ -1476,7 +1527,7 @@ export def "self-service-verification updateVerificationFlow" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Verification Flow for Native Apps
@@ -1491,6 +1542,7 @@ export def "self-service-verification createNativeVerificationFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --return-to: string # A URL contained in the return_to key of the verification flow. This piece of data has no effect on the actual logic of the flow and is purely informational.
 ]: nothing -> record<active: string, expires_at: string, id: string, issued_at: string, request_url: string, return_to: string, state: any, transient_payload: record, type: string, ui: record<action: string, messages: list<record>, method: string, nodes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1499,7 +1551,7 @@ export def "self-service-verification createNativeVerificationFlow" [
   let full_url = (build-url $base "/self-service/verification/api" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Verification Flow for Browser Clients
@@ -1514,6 +1566,7 @@ export def "self-service-verification-browser createBrowserVerificationFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --return-to: string # The URL to return the browser to after the flow was completed.
 ]: nothing -> record<active: string, expires_at: string, id: string, issued_at: string, request_url: string, return_to: string, state: any, transient_payload: record, type: string, ui: record<action: string, messages: list<record>, method: string, nodes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1522,7 +1575,7 @@ export def "self-service-verification-browser createBrowserVerificationFlow" [
   let full_url = (build-url $base "/self-service/verification/browser" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Verification Flow
@@ -1537,6 +1590,7 @@ export def "self-service-verification-flows get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The Flow ID  The value for this parameter comes from `request` URL Query parameter sent to your application (e.g. `/verification?flow=abcde`).
   --cookie: string # HTTP Cookies  When using the SDK on the server side you must include the HTTP Cookie Header originally sent to your HTTP handler here.
 ]: nothing -> record<active: string, expires_at: string, id: string, issued_at: string, request_url: string, return_to: string, state: any, transient_payload: record, type: string, ui: record<action: string, messages: list<record>, method: string, nodes: list<record>>> {
@@ -1548,7 +1602,7 @@ export def "self-service-verification-flows get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disable my other sessions
@@ -1563,6 +1617,7 @@ export def "sessions disableMyOtherSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Session-Token: string # Set the Session Token when calling from non-browser clients. A session token has a format of `MP2YWEMeM8MxjkGKpH4dqOQ4Q4DlSPaj`.
   --Cookie: string # Set the Cookie Header. This is especially useful when calling this endpoint from a server-side application. In that scenario you must include the HTTP Cookie Header which originally was included in the request to your server. An example of a session in the HTTP Cookie Header is: `ory_kratos_session=a19iOVAbdzdgl70Rq1QZmrKmcjDtdsviCTZx7m9a9yHIUS8Wa9T7hvqyGTsLHi6Qifn2WUfpAKx9DWp0SJGleIn9vh2YF4A16id93kXFTgIgmwIOvbVAScyrx7yVl6bPZnCx27ec4WQDtaTewC1CpgudeDV2jQQnSaCP6ny3xa8qLH-QUgYqdQuoA_LF1phxgRCUfIrCLQOkolX5nv3ze_f==`.  It is ok if more than one cookie are included here as all other cookies will be ignored.
 ]: nothing -> record<count: int> {
@@ -1573,7 +1628,7 @@ export def "sessions disableMyOtherSessions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get My Active Sessions
@@ -1588,6 +1643,7 @@ export def "sessions listMySessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --per-page: int # Deprecated Items per Page  DEPRECATED: Please use `page_token` instead. This parameter will be removed in the future.  This is the number of items per page. (format: int64, default: 250)
   --page: int # Deprecated Pagination Page  DEPRECATED: Please use `page_token` instead. This parameter will be removed in the future.  This value is currently an integer, but it is not sequential. The value is not the page number, but a reference. The next page can be any number and some numbers might return an empty list.  For example, page 2 might not follow after page 1. And even if page 3 and 5 exist, but page 4 might not exist. The first page can be retrieved by omitting this parameter. Following page pointers will be returned in the `Link` header. (format: int64)
   --page-size: int # Page Size  This is the number of items per page to return. For details on pagination please head over to the [pagination documentation](https://www.ory.com/docs/ecosystem/api-design#pagination). (format: int64, default: 250)
@@ -1603,7 +1659,7 @@ export def "sessions listMySessions" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Exchange Session Token
@@ -1618,6 +1674,7 @@ export def "sessions-token-exchange exchangeSessionToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --init-code: string # The part of the code return when initializing the flow.
   --return-to-code: string # The part of the code returned by the return_to URL.
 ]: nothing -> record<continue_with: list<record>, session: record<active: bool, authenticated_at: string, authentication_methods: list<record>, authenticator_assurance_level: string, devices: list<record>, expires_at: string, id: string, identity: record<created_at: string, credentials: record, external_id: string, id: string, metadata_admin: any, metadata_public: any, organization_id: string, recovery_addresses: list, region: string, schema_id: string, schema_url: string, state: string, state_changed_at: string, traits: any, updated_at: string, verifiable_addresses: list>, issued_at: string, tokenized: string>, session_token: string> {
@@ -1627,7 +1684,7 @@ export def "sessions-token-exchange exchangeSessionToken" [
   let full_url = (build-url $base "/sessions/token-exchange" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check Who the Current HTTP Session Belongs To
@@ -1642,6 +1699,7 @@ export def "sessions-whoami toSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tokenize-as: string # Returns the session additionally as a token (such as a JWT)  The value of this parameter has to be a valid, configured Ory Session token template. For more information head over to [the documentation](http://ory.sh/docs/identities/session-to-jwt-cors).
   --X-Session-Token: string # Set the Session Token when calling from non-browser clients. A session token has a format of `MP2YWEMeM8MxjkGKpH4dqOQ4Q4DlSPaj`. (e.g. MP2YWEMeM8MxjkGKpH4dqOQ4Q4DlSPaj)
   --Cookie: string # Set the Cookie Header. This is especially useful when calling this endpoint from a server-side application. In that scenario you must include the HTTP Cookie Header which originally was included in the request to your server. An example of a session in the HTTP Cookie Header is: `ory_kratos_session=a19iOVAbdzdgl70Rq1QZmrKmcjDtdsviCTZx7m9a9yHIUS8Wa9T7hvqyGTsLHi6Qifn2WUfpAKx9DWp0SJGleIn9vh2YF4A16id93kXFTgIgmwIOvbVAScyrx7yVl6bPZnCx27ec4WQDtaTewC1CpgudeDV2jQQnSaCP6ny3xa8qLH-QUgYqdQuoA_LF1phxgRCUfIrCLQOkolX5nv3ze_f==`.  It is ok if more than one cookie are included here as all other cookies will be ignored. (e.g. ory_session=a19iOVAbdzdgl70Rq1QZmrKmcjDtdsviCTZx7m9a9yHIUS8Wa9T7hvqyGTsLHi6Qifn2WUfpAKx9DWp0SJGleIn9vh2YF4A16id93kXFTgIgmwIOvbVAScyrx7yVl6bPZnCx27ec4WQDtaTewC1CpgudeDV2jQQnSaCP6ny3xa8qLH-QUgYqdQuoA_LF1phxgRCUfIrCLQOkolX5nv3ze_f==)
@@ -1654,7 +1712,7 @@ export def "sessions-whoami toSession" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disable one of my sessions
@@ -1670,6 +1728,7 @@ export def "sessions disableMySession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Session-Token: string # Set the Session Token when calling from non-browser clients. A session token has a format of `MP2YWEMeM8MxjkGKpH4dqOQ4Q4DlSPaj`.
   --Cookie: string # Set the Cookie Header. This is especially useful when calling this endpoint from a server-side application. In that scenario you must include the HTTP Cookie Header which originally was included in the request to your server. An example of a session in the HTTP Cookie Header is: `ory_kratos_session=a19iOVAbdzdgl70Rq1QZmrKmcjDtdsviCTZx7m9a9yHIUS8Wa9T7hvqyGTsLHi6Qifn2WUfpAKx9DWp0SJGleIn9vh2YF4A16id93kXFTgIgmwIOvbVAScyrx7yVl6bPZnCx27ec4WQDtaTewC1CpgudeDV2jQQnSaCP6ny3xa8qLH-QUgYqdQuoA_LF1phxgRCUfIrCLQOkolX5nv3ze_f==`.  It is ok if more than one cookie are included here as all other cookies will be ignored.
 ]: nothing -> record<error: record<code: int, debug: string, details: record, id: string, message: string, reason: string, request: string, status: string>> {
@@ -1680,7 +1739,7 @@ export def "sessions disableMySession" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return Running Software Version.
@@ -1695,11 +1754,12 @@ export def "version get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/version")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

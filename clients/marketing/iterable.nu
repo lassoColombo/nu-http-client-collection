@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -78,7 +79,7 @@ def authType-completer [] { ["Basic" "NoAuth" "OAuth2"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-jwts-invalidate Invalidate-JWT" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -111,6 +112,7 @@ export def "auth-jwts-invalidate Invalidate-JWT" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # An email address that identifies a user profile in Iterable. Provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   --issuedBefore: int # Timestamp to invalidate JWTs before as epoch time in milliseconds. Defaults to the current time. (format: int32)
   --userId: string # A user ID that identifies a user profile in Iterable. Provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
@@ -123,7 +125,7 @@ export def "auth-jwts-invalidate Invalidate-JWT" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List campaign metadata
@@ -138,6 +140,7 @@ export def "campaigns campaigns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number (starting at 1). (format: int32, e.g. 1)
   --pageSize: int # Number of results to return per page (defaults to 20, maximum of 1000). (format: int32, e.g. 25)
   --qp-sort: string # Field to sort campaigns by, with optional direction prefix. Use - for descending, + or no prefix for ascending. Campaigns can be sorted by id, name, createdAt, updatedAt, or startAt. Examples: -createdAt, +name, id (default: id, e.g. id)
@@ -149,7 +152,7 @@ export def "campaigns campaigns" [
   let full_url = (build-url $base "/api/campaigns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Abort a campaign
@@ -164,6 +167,7 @@ export def "campaigns-abort abort-campaign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   campaignId: float
 ]: any -> record<code: string, msg: string, params: record> {
   let input = $in
@@ -174,7 +178,7 @@ export def "campaigns-abort abort-campaign" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Activate a triggered campaign
@@ -189,6 +193,7 @@ export def "campaigns-activate-triggered activate-triggered-campaign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   campaignId: float
 ]: any -> record<code: string, msg: string, params: record> {
   let input = $in
@@ -199,7 +204,7 @@ export def "campaigns-activate-triggered activate-triggered-campaign" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Archive campaigns
@@ -214,6 +219,7 @@ export def "campaigns-archive archive-campaigns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   campaignIds: list # Campaign IDs to archive
 ]: any -> any {
   let input = $in
@@ -224,7 +230,7 @@ export def "campaigns-archive archive-campaigns" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel a scheduled or recurring campaign
@@ -239,6 +245,7 @@ export def "campaigns-cancel cancel-campaign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   campaignId: float
 ]: any -> record<code: string, msg: string, params: record> {
   let input = $in
@@ -249,7 +256,7 @@ export def "campaigns-cancel cancel-campaign" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a campaign
@@ -264,6 +271,7 @@ export def "campaigns-create create-campaign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaignDataFields: record # A JSON object containing campaign-level data fields that are available as merge parameters (for example, <code>{{field}}</code>) during message rendering. These fields are available in templates, data feed URLs, and all other contexts where merge parameters are supported. Campaign-level fields are overridden by user and event data fields of the same name.
   --dataFields: record # A JSON object containing data to be statically rendered into the base template at creation time using double square brackets (for example, <code>[[field]]</code>). These values replace the placeholders in the base template and are baked into the campaign template, and cannot be changed later. Supported by email campaigns only.
   --defaultTimeZone: string # For a scheduled blast campaign, when <code>sendMode</code> is <code>RecipientTimeZone</code>, <code>defaultTimeZone</code> specifies the time zone to use when sending to recipients without a known time zone. IANA format (for example, <code>America/Los_Angeles</code>). For more details, see our <a href="https://support.iterable.com/hc/articles/204780579#post-api-campaigns-create">API Overview</a>.
@@ -285,7 +293,7 @@ export def "campaigns-create create-campaign" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deactivate a triggered campaign
@@ -300,6 +308,7 @@ export def "campaigns-deactivate-triggered Deactivate-triggered-campaign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   campaignId: float
 ]: any -> record<code: string, msg: string, params: record> {
   let input = $in
@@ -310,7 +319,7 @@ export def "campaigns-deactivate-triggered Deactivate-triggered-campaign" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get metrics for campaigns
@@ -325,6 +334,7 @@ export def "campaigns-metrics metrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaignId: list # Campaign(s) to export
   --startDateTime: string # Export starting from (>=).  Accepted formats include YYYY-MM-DD and other ISO 8601 formats. (format: date-time, default: 2018-06-25, allows empty value)
   --endDateTime: string # Export ending at (<).  Accepted formats include YYYY-MM-DD and other ISO 8601 formats. (format: date-time, default: 2018-07-25, allows empty value)
@@ -335,7 +345,7 @@ export def "campaigns-metrics metrics" [
   let full_url = (build-url $base "/api/campaigns/metrics" $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get child campaigns of a recurring campaign
@@ -351,6 +361,7 @@ export def "campaigns-recurring-child-campaigns child-campaigns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number (starting at 1). (format: int32, e.g. 1)
   --pageSize: int # Number of results to return per page (defaults to 20, maximum of 1000). (format: int32, e.g. 25)
   --qp-sort: string # Field to sort campaigns by, with optional direction prefix. Use - for descending, + or no prefix for ascending. Campaigns can be sorted by id, name, createdAt, updatedAt, or startAt. Examples: -createdAt, +name, id (default: id, e.g. id)
@@ -362,7 +373,7 @@ export def "campaigns-recurring-child-campaigns child-campaigns" [
   let full_url = (build-url $base $"/api/campaigns/recurring/($id)/childCampaigns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Trigger a campaign
@@ -377,6 +388,7 @@ export def "campaigns-trigger trigger-campaign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowRepeatMarketingSends: oneof<nothing, bool> # Allow repeat marketing sends? Defaults to true.
   campaignId: int # format: int64
   --dataFields: record # Fields to merge into handlebars context
@@ -391,7 +403,7 @@ export def "campaigns-trigger trigger-campaign" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Schedule existing campaign to be sent
@@ -408,6 +420,7 @@ export def "campaigns-schedule schedule-campaign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recipientTimeZone: record # shape: {defaultTimeZone: string, startTimeZone: string}
   sendAt: string # When to send up to 7 days in the future. ISO-8601 date time format (e.g. 2007-12-03T10:15:30.00Z)
 ]: any -> record<code: string, msg: string, params: record> {
@@ -419,7 +432,7 @@ export def "campaigns-schedule schedule-campaign" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send existing campaign now
@@ -435,13 +448,14 @@ export def "campaigns-send send-campaign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: string, msg: string, params: record> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/campaigns/($campaignId)/send")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a campaign
@@ -457,13 +471,14 @@ export def "campaigns get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<campaignState: string, createdAt: int, createdByUserId: string, endedAt: int, id: float, labelIds: list<int>, labels: list<string>, listIds: list<int>, messageMedium: string, name: string, recurringCampaignId: float, sendSize: float, startAt: int, suppressionListIds: list<int>, templateId: float, type: string, updatedAt: int, updatedByUserId: string, workflowId: float> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/campaigns/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get catalog names
@@ -478,6 +493,7 @@ export def "catalogs listCatalogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number to list (starting at 1). (format: int32, e.g. 1)
   --pageSize: int # Number of results to display per page (defaults to 10). (format: int32, e.g. 10)
 ]: nothing -> record<catalogNames: table<name: string>, nextPageUrl: string, previousPageUrl: string, totalCatalogsCount: int> {
@@ -487,7 +503,7 @@ export def "catalogs listCatalogs" [
   let full_url = (build-url $base "/api/catalogs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a catalog
@@ -503,13 +519,14 @@ export def "catalogs delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: string, msg: string, params: record> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/catalogs/($catalogName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a catalog
@@ -525,13 +542,14 @@ export def "catalogs createCatalog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: string, msg: string, params: record> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/catalogs/($catalogName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get field mappings for a catalog
@@ -547,13 +565,14 @@ export def "catalogs-field-mappings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<definedMappings: record, undefinedFields: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/catalogs/($catalogName)/fieldMappings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set a catalog's field mappings (data types)
@@ -570,6 +589,7 @@ export def "catalogs-field-mappings updateFieldTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   mappingsUpdates: list # mappingsUpdates — item shape: {children?: list, fieldName: string, fieldType: string}
 ]: any -> any {
   let input = $in
@@ -580,7 +600,7 @@ export def "catalogs-field-mappings updateFieldTypes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk delete catalog items
@@ -596,6 +616,7 @@ export def "catalogs-items bulkDeleteCatalogItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   itemIds: list
 ]: any -> record<code: string, msg: string, params: record> {
   let input = $in
@@ -606,7 +627,7 @@ export def "catalogs-items bulkDeleteCatalogItems" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the catalog items for a catalog
@@ -622,6 +643,7 @@ export def "catalogs-items listCatalogItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number to list (starting at 1). (format: int32, e.g. 1)
   --pageSize: int # Number of results to display per page (defaults to 10). (format: int32, e.g. 10)
   --orderBy: string # Field by which results should be ordered. To also use the sortAscending parameter, this field must have a defined type. (e.g. myField)
@@ -633,7 +655,7 @@ export def "catalogs-items listCatalogItems" [
   let full_url = (build-url $base $"/api/catalogs/($catalogName)/items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk create catalog items
@@ -649,6 +671,7 @@ export def "catalogs-items bulkUpdateCatalogItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   documents: record # Json map of id to values. Max number of pairs in list is 1000. Max size of each json value is is 30kb.
   --replaceUploadedFieldsOnly: oneof<nothing, bool> # Whether to replace only the upload fields within each document, not each entire document
 ]: any -> record<code: string, msg: string, params: record> {
@@ -660,7 +683,7 @@ export def "catalogs-items bulkUpdateCatalogItems" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a catalog item
@@ -677,13 +700,14 @@ export def "catalogs-items delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: string, msg: string, params: record> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/catalogs/($catalogName)/items/($itemId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a specific catalog item
@@ -700,13 +724,14 @@ export def "catalogs-items get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<catalogName: string, itemId: string, lastModified: string, size: int, value: record<underlying: record>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/catalogs/($catalogName)/items/($itemId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update a catalog item
@@ -723,6 +748,7 @@ export def "catalogs-items partialUpdateCatalogItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   update: record # JSON representation of the catalog item fields to update.  Max size is is 30kb.
 ]: any -> record<code: string, msg: string, params: record> {
   let input = $in
@@ -733,7 +759,7 @@ export def "catalogs-items partialUpdateCatalogItem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create or replace a catalog item
@@ -750,6 +776,7 @@ export def "catalogs-items indexCatalogItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   value: record # JSON representation of the catalog item. Max size is is 30kb.
 ]: any -> record<code: string, msg: string, params: record> {
   let input = $in
@@ -760,7 +787,7 @@ export def "catalogs-items indexCatalogItem" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get channels
@@ -775,13 +802,14 @@ export def "channels channels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<channels: table<channelType: string, id: int, messageMedium: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/channels")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Track a purchase
@@ -798,6 +826,7 @@ export def "commerce-track-purchase trackPurchase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaignId: int # format: int32
   --createdAt: int # Time event happened. Set to the time event was received if unspecified. Expects a Unix timestamp. (format: int64)
   --dataFields: record # Additional fields to be tracked.
@@ -815,7 +844,7 @@ export def "commerce-track-purchase trackPurchase" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a user's shopping cart items
@@ -832,6 +861,7 @@ export def "commerce-update-cart updateCart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   items: list # item shape: {categories?: list, dataFields?: record, description?: string, id: string, imageUrl?: string, name: string, price: float, quantity: int, sku?: string, url?: string}
   user: record # shape: {createNewFields?: bool, dataFields?: record, email?: string, mergeNestedObjects?: bool, preferUserId?: bool, userId?: string}
 ]: any -> record<code: string, msg: string, params: record> {
@@ -843,7 +873,7 @@ export def "commerce-update-cart updateCart" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel an email to a user
@@ -858,6 +888,7 @@ export def "email-cancel cancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaignId: float # The ID of the campaign associated with the scheduled message you'd like to cancel. If you provide a <code>campaignId</code>, you must also provide an <code>email</code> or <code>userId</code>, depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   --email: string # An email address that identifies a user profile in Iterable. If you provide a <code>campaignId</code>, you must also provide an <code>email</code> or a <code>userId</code>, depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   --scheduledMessageId: float
@@ -871,7 +902,7 @@ export def "email-cancel cancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send an email to an email address
@@ -886,6 +917,7 @@ export def "email-target target" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowRepeatMarketingSends: oneof<nothing, bool> # Allow repeat marketing sends? Defaults to true.
   campaignId: int # Campaign ID (format: int64)
   --dataFields: record # Fields to merge into email template
@@ -902,7 +934,7 @@ export def "email-target target" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # View a previously sent email
@@ -917,6 +949,7 @@ export def "email-view-in-browser viewInBrowser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # user's email
   --userId: string # user's userId
   --messageId: string # id of sent message
@@ -927,7 +960,7 @@ export def "email-view-in-browser viewInBrowser" [
   let full_url = (build-url $base "/api/email/viewInBrowser" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Track an embedded message click
@@ -943,6 +976,7 @@ export def "embedded-messaging-events-click embedded-track-click" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --buttonIdentifier: string # ID of the button that was clicked (button IDs are defined in Iterable, as part of the template / campaign).
   --createdAt: int # The time of the click's occurrence (Unix timestamp). If unspecified, gets set to the time Iterable received the event. (format: int64)
   --deviceInfo: record # shape: {appPackageName: string, deviceId: string, platform: "iOS"|"Android"|"Web"}
@@ -959,7 +993,7 @@ export def "embedded-messaging-events-click embedded-track-click" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Track an embedded message received event
@@ -975,6 +1009,7 @@ export def "embedded-messaging-events-received embedded-track-received" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdAt: int # The time of the event's occurrence (Unix timestamp). If unspecified, gets set to the time Iterable received the event. (format: int64)
   --deviceInfo: record # shape: {appPackageName: string, deviceId: string, platform: "iOS"|"Android"|"Web"}
   --email: string # An email address that identifies a user profile in Iterable. Provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
@@ -989,7 +1024,7 @@ export def "embedded-messaging-events-received embedded-track-received" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Track an embedded message session and related impressions
@@ -1007,6 +1042,7 @@ export def "embedded-messaging-events-session embedded-track-impression" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdAt: int # The time of the event's occurrence (Unix timestamp). If unspecified, gets set to the time Iterable received the event. (format: int64)
   --deviceInfo: record # shape: {appPackageName: string, deviceId: string, platform: "iOS"|"Android"|"Web"}
   --email: string # An email address that identifies a user profile in Iterable. Provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
@@ -1022,7 +1058,7 @@ export def "embedded-messaging-events-session embedded-track-impression" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a user's embedded messages
@@ -1037,6 +1073,7 @@ export def "embedded-messaging-messages messages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # User identifier. Provide an email or a userId, but not both.
   --userId: string # User identifier. Provide a userId or an email, but not both.
   --platform: string # The platform of the app for which to retrieve embedded messages: iOS, Android, or Web (case-sensitive).
@@ -1051,7 +1088,7 @@ export def "embedded-messaging-messages messages" [
   let full_url = (build-url $base "/api/embedded-messaging/messages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user events by userId
@@ -1067,6 +1104,7 @@ export def "events-by-user-id User-events-by-userId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of events to retrieve.  (Max is 200) (format: int32, default: 30)
 ]: nothing -> record<events: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -1075,7 +1113,7 @@ export def "events-by-user-id User-events-by-userId" [
   let full_url = (build-url $base $"/api/events/byUserId/($userId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Consume or delete an in-app message
@@ -1092,6 +1130,7 @@ export def "events-in-app-consume inAppConsume" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdAt: int # Time event happened. Set to the time event was received if unspecified. Expects a Unix timestamp. (format: int64)
   --deleteAction: string # How the message was deleted (for example, <code>inbox-swipe</code>, <code>delete-action</code>, or a custom value).
   --deviceInfo: record # shape: {appPackageName: string, deviceId: string, platform: "iOS"|"Android"|"Web"}
@@ -1108,7 +1147,7 @@ export def "events-in-app-consume inAppConsume" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Track an event
@@ -1123,6 +1162,7 @@ export def "events-track track" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaignId: int # Campaign tied to conversion (format: int64)
   --createNewFields: oneof<nothing, bool> # Whether new fields should be ingested and added to the schema. Defaults to project's setting to allow or drop unrecognized fields. (e.g. false)
   --createdAt: int # Time event happened. Set to the time event was received if unspecified. Expects a unix timestamp. (format: int64)
@@ -1141,7 +1181,7 @@ export def "events-track track" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk track events
@@ -1157,6 +1197,7 @@ export def "events-track-bulk trackBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   events: list # item shape: {campaignId?: int, createNewFields?: bool, createdAt?: int, dataFields?: record, email?: string, eventName: string, id?: string, templateId?: int, userId?: string}
 ]: any -> record<createdFields: list<string>, disallowedEventNames: list<string>, failCount: int, failedUpdates: record<forgottenEmails: list<string>, forgottenUserIds: list<string>, invalidEmails: list<string>, invalidUserIds: list<string>, notFoundEmails: list<string>, notFoundUserIds: list<string>>, filteredOutFields: list<string>, invalidEmails: list<string>, invalidUserIds: list<string>, successCount: int> {
   let input = $in
@@ -1167,7 +1208,7 @@ export def "events-track-bulk trackBulk" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Track an in-app message click
@@ -1184,6 +1225,7 @@ export def "events-track-in-app-click trackInAppClick" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clickedUrl: string # The URL of the clicked link/button
   --createdAt: int # Time event happened. Set to the time event was received if unspecified. Expects a Unix timestamp. (format: int64)
   --deviceInfo: record # shape: {appPackageName: string, deviceId: string, platform: "iOS"|"Android"|"Web"}
@@ -1200,7 +1242,7 @@ export def "events-track-in-app-click trackInAppClick" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Track the closing of an in-app message
@@ -1217,6 +1259,7 @@ export def "events-track-in-app-close trackInAppClose" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clickedUrl: string # url used to close the in-app
   --closeAction: string # The type of action that initiated the close (for example, <code>link</code>, <code>back</code>, or a custom value).
   --createdAt: int # Time event happened. Set to the time event was received if unspecified. Expects a Unix timestamp. (format: int64)
@@ -1235,7 +1278,7 @@ export def "events-track-in-app-close trackInAppClose" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Track the delivery of an in-app message
@@ -1252,6 +1295,7 @@ export def "events-track-in-app-delivery trackInAppDelivery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdAt: int # Time event happened. Set to the time event was received if unspecified. Expects a Unix timestamp. (format: int64)
   --deviceInfo: record # shape: {appPackageName: string, deviceId: string, platform: "iOS"|"Android"|"Web"}
   --email: string # An email address that identifies a user profile in Iterable. Provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
@@ -1267,7 +1311,7 @@ export def "events-track-in-app-delivery trackInAppDelivery" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Track an in-app message open
@@ -1284,6 +1328,7 @@ export def "events-track-in-app-open trackInAppOpen" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createdAt: int # Time event happened. Set to the time event was received if unspecified. Expects a Unix timestamp. (format: int64)
   --deviceInfo: record # shape: {appPackageName: string, deviceId: string, platform: "iOS"|"Android"|"Web"}
   --email: string # An email address that identifies a user profile in Iterable. Provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
@@ -1299,7 +1344,7 @@ export def "events-track-in-app-open trackInAppOpen" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Track a mobile push open
@@ -1314,6 +1359,7 @@ export def "events-track-push-open trackPushOpen" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   campaignId: int # Campaign tied to open (format: int64)
   --createdAt: int # Timestamp of the open event. If unspecified, set to the time event was received  Expects a unix timestamp. (format: int64)
   --dataFields: record # Additional data associated with event
@@ -1330,7 +1376,7 @@ export def "events-track-push-open trackPushOpen" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Track a web push click
@@ -1345,6 +1391,7 @@ export def "events-track-web-push-click trackWebPushClick" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaignId: int # format: int64
   --createdAt: int # Time event happened. Set to the time event was received if unspecified. Expects a Unix timestamp. (format: int64)
   --email: string # An email address that identifies a user profile in Iterable. Provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
@@ -1360,7 +1407,7 @@ export def "events-track-web-push-click trackWebPushClick" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get user events
@@ -1376,6 +1423,7 @@ export def "events User-events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of events to retrieve.  (Max is 200) (format: int32, default: 30)
 ]: nothing -> record<events: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -1384,7 +1432,7 @@ export def "events User-events" [
   let full_url = (build-url $base $"/api/events/($email)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get metrics for experiments
@@ -1399,6 +1447,7 @@ export def "experiments-metrics metrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --experimentId: list # Experiment to export. Specify multiple experimentId query parameters to export multiple experiments.
   --campaignId: list # Campaign whose experiments you want to export. Specify multiple campaignId query parameters to export multiple campaigns.
   --startDateTime: string # export starting from (>=) (format: date-time, default: 2018-06-25)
@@ -1410,7 +1459,7 @@ export def "experiments-metrics metrics" [
   let full_url = (build-url $base "/api/experiments/metrics" $qp)
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List experiments
@@ -1425,6 +1474,7 @@ export def "experiments list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaignId: int # Filter by campaign ID (format: int64)
   --state: string@state-completer # Filter by experiment state. Valid values: draft, ready, running, finished, winner_found
   --startDateTime: string # Filter by start date (>=) (format: date-time)
@@ -1438,7 +1488,7 @@ export def "experiments list" [
   let full_url = (build-url $base "/api/experiments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get experiment
@@ -1454,13 +1504,14 @@ export def "experiments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<allocationMode: string, channelType: string, constraints: record<suppressionListIds: list<int>, targetSegment: string>, creationDate: string, experimentType: string, finishDate: string, id: int, meta: record<campaignId: int, conversionMetrics: list<string>, name: string, orgId: int, projectId: int>, sizing: record<holdoutPercentage: float, perVariantPercentage: float, testGroupPercentage: float, winnerGroupPercentage: float, testDurationMinutes: int, sendsPerVariant: int>, startDate: string, status: string, variants: table<currentPercentage: float, id: int, isControl: bool, isWinner: bool, name: string, value: record>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/experiments/($experimentId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get experiment variants
@@ -1476,13 +1527,14 @@ export def "experiments-variants variants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<experimentId: int, variants: table<content: record, currentPercentage: float, name: string, value: record, variantId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/experiments/($experimentId)/variants")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Export data to CSV
@@ -1497,6 +1549,7 @@ export def "export-datacsv exportDataCsv" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dataTypeName: string@dataTypeName-completer # Data type name.
   --range: string@range-completer # date range, uses UTC time (default: Today)
   --delimiter: string # CSV file delimiter (default: ,)
@@ -1512,7 +1565,7 @@ export def "export-datacsv exportDataCsv" [
   let full_url = (build-url $base "/api/export/data.csv" $qp)
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Export data to JSON
@@ -1527,6 +1580,7 @@ export def "export-datajson exportDataJson" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dataTypeName: string@dataTypeName-completer # Data type name.
   --range: string@range-completer # date range, uses UTC time (default: Today)
   --startDateTime: string # Export starting from (>=) (yyyy-MM-dd HH:mm:ss [ZZ])
@@ -1541,7 +1595,7 @@ export def "export-datajson exportDataJson" [
   let full_url = (build-url $base "/api/export/data.json" $qp)
   let accept_val = "application/x-json-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get export jobs
@@ -1556,6 +1610,7 @@ export def "export-jobs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --jobState: string # Filter results to only include jobs in the specified state
 ]: nothing -> record<jobs: table<bytesExported: int, dataTypeName: record, endTime: string, id: int, jobState: record, scheduledStartTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -1564,7 +1619,7 @@ export def "export-jobs get" [
   let full_url = (build-url $base "/api/export/jobs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start export
@@ -1579,6 +1634,7 @@ export def "export-start startExport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaignId: int # Only export data from this campaign (format: int64)
   dataTypeName: string@dataTypeName-completer # Data type name.
   --delimiter: string # CSV file delimiter (e.g. ,)
@@ -1596,7 +1652,7 @@ export def "export-start startExport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Export user events
@@ -1611,6 +1667,7 @@ export def "export-user-events exportUserEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Export by user's email
   --userId: string # Export by user's ID
   --includeCustomEvents: oneof<nothing, bool> # Include Custom Events (default: false)
@@ -1621,7 +1678,7 @@ export def "export-user-events exportUserEvents" [
   let full_url = (build-url $base "/api/export/userEvents" $qp)
   let accept_val = "application/x-json-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel export
@@ -1637,13 +1694,14 @@ export def "export cancelExport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/export/($jobId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get export files
@@ -1659,6 +1717,7 @@ export def "export-files get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startAfter: string # Skip file names up to and including this value. Use for paginating over the files in the export. (default: None, e.g. file-1679086247925.csv)
 ]: nothing -> record<exportTruncated: bool, files: table<file: string, url: string>, jobId: int, jobState: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -1667,7 +1726,7 @@ export def "export-files get" [
   let full_url = (build-url $base $"/api/export/($jobId)/files" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel a scheduled in-app message
@@ -1682,6 +1741,7 @@ export def "in-app-cancel cancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaignId: float # The ID of the campaign associated with the scheduled message you'd like to cancel. If you provide a <code>campaignId</code>, you must also provide an <code>email</code> or <code>userId</code>, depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   --email: string # An email address that identifies a user profile in Iterable. If you provide a <code>campaignId</code>, you must also provide an <code>email</code> or a <code>userId</code>, depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   --scheduledMessageId: float
@@ -1695,7 +1755,7 @@ export def "in-app-cancel cancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a user's in-app messages
@@ -1710,6 +1770,7 @@ export def "in-app-get-messages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # The email address of the user for which to fetch in-app messages. Specify either an email or a userId.
   --userId: string # The userId of the user for which to fetch in-app messages. Specify either an email or a userId.
   --count: int # The number of in-app messages to fetch. (format: int32)
@@ -1723,7 +1784,7 @@ export def "in-app-get-messages get" [
   let full_url = (build-url $base "/api/inApp/getMessages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user's most relevant in-app message
@@ -1738,6 +1799,7 @@ export def "in-app-get-priority-message get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # The email address of the user for which to fetch in-app messages. Specify either an email or a userId.
   --userId: string # The userId of the user for which to fetch in-app messages. Specify either an email or a userId.
   --platform: string@platform-completer # The platform of the app for which to retrieve selective in-app messages: iOS, Android, Web, or OTT (case-sensitive). (default: None)
@@ -1750,7 +1812,7 @@ export def "in-app-get-priority-message get" [
   let full_url = (build-url $base "/api/inApp/getPriorityMessage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send an in-app notification to a user
@@ -1765,6 +1827,7 @@ export def "in-app-target target" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowRepeatMarketingSends: oneof<nothing, bool> # Allow repeat marketing sends? Defaults to true.
   campaignId: int # Campaign ID (format: int64)
   --dataFields: record # Fields to merge into email template
@@ -1780,7 +1843,7 @@ export def "in-app-target target" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a user's web in-app messages
@@ -1795,6 +1858,7 @@ export def "in-app-web-get-messages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # The email address of the user for which to fetch in-app messages. Specify either an email or a userId.
   --userId: string # The userId of the user for which to fetch in-app messages. Specify either an email or a userId.
   --count: int # The number of web in-app messages to fetch. (format: int32)
@@ -1807,7 +1871,7 @@ export def "in-app-web-get-messages get" [
   let full_url = (build-url $base "/api/inApp/web/getMessages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get journeys (workflows)
@@ -1822,6 +1886,7 @@ export def "journeys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number (starting at 1). (format: int32, e.g. 1)
   --pageSize: int # Number of results to return per page (defaults to 10, maximum of 50). (format: int32, e.g. 25)
   --qp-sort: string # Sort field with optional direction prefix. Use - for descending, + or no prefix for ascending. Examples: -createdAt, +name, id (default: id, e.g. id)
@@ -1833,7 +1898,7 @@ export def "journeys get" [
   let full_url = (build-url $base "/api/journeys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get lists
@@ -1848,13 +1913,14 @@ export def "lists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<lists: table<createdAt: int, description: string, id: int, isGlobalSuppressionEnabled: bool, listType: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/lists")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a static list
@@ -1869,6 +1935,7 @@ export def "lists create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string
   name: string
 ]: any -> record<listId: int> {
@@ -1880,7 +1947,7 @@ export def "lists create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get users in a list
@@ -1895,6 +1962,7 @@ export def "lists-get-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --listId: int # list id (format: int64)
   --preferUserId: oneof<nothing, bool> # If true, will return the userId instead of email if both exists in a user profile for a hybrid project. (default: false)
 ]: nothing -> string {
@@ -1904,7 +1972,7 @@ export def "lists-get-users get" [
   let full_url = (build-url $base "/api/lists/getUsers" $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Preview users in a list
@@ -1919,6 +1987,7 @@ export def "lists-preview-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --listId: int # list id (format: int64)
   --preferUserId: oneof<nothing, bool> # If true, will return the userId instead of email if both exists in a user profile for a hybrid project. (default: false)
   --size: int # Number of users the response will return, up to 5000. Defaults to 1000. (format: int32)
@@ -1929,7 +1998,7 @@ export def "lists-preview-users get" [
   let full_url = (build-url $base "/api/lists/previewUsers" $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add subscribers to list
@@ -1945,6 +2014,7 @@ export def "lists-subscribe subscribe" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   listId: int # format: int64
   subscribers: list # item shape: {dataFields?: record, email?: string, mergeNestedObjects?: bool, preferUserId?: bool, userId?: string}
   --updateExistingUsersOnly: oneof<nothing, bool> # Whether to skip operation when the request includes a <code>userId</code> or <code>email</code> that doesn't yet exist in the Iterable project. When <code>true</code>, Iterable ignores requests with unknown userIds and email addresses. When <code>false</code>, Iterable creates new users. Defaults to <code>false</code>. Only respected in API calls for <a href="https://support.iterable.com/hc/articles/29156459027348">userID-based and hybrid projects</a>. (e.g. false)
@@ -1957,7 +2027,7 @@ export def "lists-subscribe subscribe" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove users from a list
@@ -1973,6 +2043,7 @@ export def "lists-unsubscribe unsubscribe" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaignId: int # attribute unsubscribe to a campaign (format: int64)
   --channelUnsubscribe: oneof<nothing, bool> # Unsubscribe email from list's associated channel - essentially a global unsubscribe. (default: false)
   listId: int # format: int64
@@ -1986,7 +2057,7 @@ export def "lists-unsubscribe unsubscribe" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a list
@@ -2002,13 +2073,14 @@ export def "lists delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: string, msg: string, params: record> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/lists/($listId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get count of users in list
@@ -2024,13 +2096,14 @@ export def "lists-size get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/lists/($listId)/size")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List message types
@@ -2045,13 +2118,14 @@ export def "message-types messageTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<messageTypes: table<channelId: int, createdAt: int, frequencyCap: record, id: int, name: string, rateLimitPerMinute: int, subscriptionPolicy: string, updatedAt: int>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/messageTypes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List available tables
@@ -2066,13 +2140,14 @@ export def "metadata list-tables" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<results: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/metadata")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a table
@@ -2088,13 +2163,14 @@ export def "metadata delete-by-table" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: string, msg: string, params: record> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/metadata/($table)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List keys in a table
@@ -2110,6 +2186,7 @@ export def "metadata list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --nextMarker: string # next result set id; returned by previous search if more hits exist (default: None)
 ]: nothing -> record<nextMarker: string, results: table<key: string, lastModified: int, size: int, table: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -2118,7 +2195,7 @@ export def "metadata list" [
   let full_url = (build-url $base $"/api/metadata/($table)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a single metadata key/value
@@ -2135,13 +2212,14 @@ export def "metadata delete-by-table-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: string, msg: string, params: record> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/metadata/($table)/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the metadata value of a single key
@@ -2158,13 +2236,14 @@ export def "metadata get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, lastModified: int, size: int, table: string, value: record> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/metadata/($table)/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or replace metadata
@@ -2181,6 +2260,7 @@ export def "metadata put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   value: record # The JSON metadata value.  Max size is is 30kb.
 ]: any -> record<code: string, msg: string, params: record> {
   let input = $in
@@ -2191,7 +2271,7 @@ export def "metadata put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel a push notification to a user
@@ -2206,6 +2286,7 @@ export def "push-cancel cancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaignId: float # The ID of the campaign associated with the scheduled message you'd like to cancel. If you provide a <code>campaignId</code>, you must also provide an <code>email</code> or <code>userId</code>, depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   --email: string # An email address that identifies a user profile in Iterable. If you provide a <code>campaignId</code>, you must also provide an <code>email</code> or a <code>userId</code>, depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   --scheduledMessageId: float
@@ -2219,7 +2300,7 @@ export def "push-cancel cancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send push notification to user
@@ -2234,6 +2315,7 @@ export def "push-target target" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowRepeatMarketingSends: oneof<nothing, bool> # Allow repeat marketing sends? Defaults to true.
   campaignId: int # Campaign ID (format: int64)
   --dataFields: record # JSON object containing fields to merge into template
@@ -2250,7 +2332,7 @@ export def "push-target target" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel an SMS to a user
@@ -2265,6 +2347,7 @@ export def "sms-cancel cancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaignId: float # The ID of the campaign associated with the scheduled message you'd like to cancel. If you provide a <code>campaignId</code>, you must also provide an <code>email</code> or <code>userId</code>, depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   --email: string # An email address that identifies a user profile in Iterable. If you provide a <code>campaignId</code>, you must also provide an <code>email</code> or a <code>userId</code>, depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   --scheduledMessageId: float
@@ -2278,7 +2361,7 @@ export def "sms-cancel cancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send SMS notification to user
@@ -2293,6 +2376,7 @@ export def "sms-target target" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowRepeatMarketingSends: oneof<nothing, bool> # Allow repeat marketing sends? Defaults to true.
   campaignId: int # Campaign ID (format: int64)
   --dataFields: record # Fields to merge into template
@@ -2308,7 +2392,7 @@ export def "sms-target target" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all snippets
@@ -2323,13 +2407,14 @@ export def "snippets list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<snippets: table<content: string, createdAt: string, createdBy: string, description: string, id: record, name: string, projectId: int, updatedAt: string, updatedBy: string, variables: list>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/snippets")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a snippet
@@ -2344,6 +2429,7 @@ export def "snippets createSnippet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   content: string # Content of the snippet. Handlebars must be valid. Disallowed content: script tags with JS sources or non-JSON content, inline JS event handlers (e.g., <code>onload=&quot;...&quot;</code>), and <code>javascript:</code> in <code>href</code> or <code>src</code> attributes (anchors and iframes).
   --createdByUserId: string # User ID (email) of the creator. If not provided, defaults to the project creator.
   --description: string # Description of the snippet.
@@ -2358,7 +2444,7 @@ export def "snippets createSnippet" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a snippet
@@ -2374,13 +2460,14 @@ export def "snippets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<snippetId: int> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/snippets/($identifier)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get snippet by ID or name
@@ -2396,13 +2483,14 @@ export def "snippets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<snippet: record<content: string, createdAt: string, createdBy: string, description: string, id: record, name: string, projectId: int, updatedAt: string, updatedBy: string, variables: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/snippets/($identifier)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update a snippet
@@ -2418,6 +2506,7 @@ export def "snippets updateSnippet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   content: string # Content of the snippet. Handlebars must be valid. Disallowed content: script tags with JS sources or non-JSON content, inline JS event handlers (e.g., <code>onload=&quot;...&quot;</code>), and <code>javascript:</code> in <code>href</code> or <code>src</code> attributes (anchors and iframes).
   --createdByUserId: string # User ID (email) of the updater. If not provided, defaults to the project creator.
   --description: string # Description of the snippet.
@@ -2431,7 +2520,7 @@ export def "snippets updateSnippet" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Trigger a double opt-in subscription flow
@@ -2446,6 +2535,7 @@ export def "subscriptions-subscribe-to-double-opt-in subscribeSingleUserToDouble
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --brandName: string # To provide context, every double opt-in confirmation message includes a brand name. The value to use for this brand name is determined by (in priority order): the <code>brandName</code> included in the request body (if specified), the default brand name associated with the specified message types (if those message types all have the same default brand name), or a comma-separated, de-duplicated list of default brand names associated with the specified message types (if those message types have different default brand names).
   --email: string # An email address that identifies a user profile in Iterable. Provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   messageTypeIds: list # List of SMS, double opt-in message type IDs to which the user should be subscribed.
@@ -2460,7 +2550,7 @@ export def "subscriptions-subscribe-to-double-opt-in subscribeSingleUserToDouble
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk subscription action on a list of users
@@ -2477,6 +2567,7 @@ export def "subscriptions Bulk-subscription-action" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: string # subscribe or unsubscribe (default: subscribe)
   --users: list # Users to subscribe/unsubscribe, identified by <code>email</code>.
   --usersByUserId: list # Users to subscribe/unsubscribe, identified by <code>userId</code>.
@@ -2490,7 +2581,7 @@ export def "subscriptions Bulk-subscription-action" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unsubscribe a single user by userId
@@ -2508,13 +2599,14 @@ export def "subscriptions-by-user-id unsubscribeSingleUserByUserId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: string, msg: string, params: record> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/subscriptions/($subscriptionGroup)/($subscriptionGroupId)/byUserId/($userId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Subscribe a single user by their userId
@@ -2532,13 +2624,14 @@ export def "subscriptions-by-user-id subscribeSingleUserByUserId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: string, msg: string, params: record> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/subscriptions/($subscriptionGroup)/($subscriptionGroupId)/byUserId/($userId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unsubscribe a single user
@@ -2556,13 +2649,14 @@ export def "subscriptions-user unsubscribeSingleUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: string, msg: string, params: record> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/subscriptions/($subscriptionGroup)/($subscriptionGroupId)/user/($userEmail)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Subscribe a single user
@@ -2580,13 +2674,14 @@ export def "subscriptions-user subscribeSingleUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: string, msg: string, params: record> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/subscriptions/($subscriptionGroup)/($subscriptionGroupId)/user/($userEmail)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project templates
@@ -2601,6 +2696,7 @@ export def "templates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --templateType: string@templateType-completer # Only retrieve templates associated with this template type (default: None)
   --messageMedium: string@messageMedium-completer # Only retrieve templates associated with this message medium (default: None)
   --startDateTime: string # Get templates created at or after this date time (yyyy-MM-dd HH:mm:ss [ZZ]) (format: date-time)
@@ -2615,7 +2711,7 @@ export def "templates get" [
   let full_url = (build-url $base "/api/templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk delete templates
@@ -2630,6 +2726,7 @@ export def "templates-bulk-delete bulk-delete-templates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   ids: list # IDs of templates to be deleted.
 ]: any -> any {
   let input = $in
@@ -2640,7 +2737,7 @@ export def "templates-bulk-delete bulk-delete-templates" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an email template by templateId
@@ -2655,6 +2752,7 @@ export def "templates-email-get get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --templateId: int # Template ID (format: int64)
   --locale: string # Locale of content to get
 ]: nothing -> record<bccEmails: list<string>, cacheDataFeed: record, campaignDataFields: record, ccEmails: list<string>, clientTemplateId: string, creatorUserId: string, dataFeedId: float, dataFeedIds: list<float>, fromEmail: string, fromName: string, googleAnalyticsCampaignName: string, html: string, isDefaultLocale: bool, linkParams: table<key: string, value: string>, locale: string, mergeDataFeedContext: record, messageTypeId: float, metadata: record<campaignId: int, clientTemplateId: string, createdAt: string, creatorUserId: string, messageTypeId: int, name: string, templateId: int, updatedAt: string>, name: string, plainText: string, preheaderText: string, replyToEmail: string, subject: string, templateId: int> {
@@ -2664,7 +2762,7 @@ export def "templates-email-get get" [
   let full_url = (build-url $base "/api/templates/email/get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Preview email template with custom data
@@ -2679,6 +2777,7 @@ export def "templates-email-preview previewEmailTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --templateId: int # Template ID (format: int64)
   --locale: string # Locale of content to get (default: None)
   --dataFeed: record # Data feed content for template rendering. Provide key-value pairs for any data feed fields that your template references. Note: Data feed fields are accessible as <code>[[fieldName]]</code> when template's <code>mergeDataFeedContext=false</code>, or as <code>{{fieldName}}</code> when <code>mergeDataFeedContext=true</code>. The <code>mergeDataFeedContext</code> setting is configured when creating/updating templates. If <code>fetchDataFeeds</code> is true, this will be merged with (or overridden by) the fetched data feed data.
@@ -2694,7 +2793,7 @@ export def "templates-email-preview previewEmailTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send a proof of an email template
@@ -2709,6 +2808,7 @@ export def "templates-email-proof emailProof" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dataFields: record # Fields to merge into template for proof
   --locale: string # Locale for the proof message. If provided, must be a valid locale for the project. If not provided, falls back to the user's locale, then to the project's default locale.
   --recipientEmail: string # An email address that identifies a user profile in Iterable. Provide a <code>recipientEmail</code> or a <code>recipientUserId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
@@ -2723,7 +2823,7 @@ export def "templates-email-proof emailProof" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update email template
@@ -2740,6 +2840,7 @@ export def "templates-email-update updateEmailTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bccEmails: list # BCC emails
   --cacheDataFeed: record # Cache data feed lookups for 1 hour
   --campaignDataFields: record # Campaign-level data fields available as {{field}} merge parameters during message rendering. These fields are overridden by user and event data fields of the same name.
@@ -2773,7 +2874,7 @@ export def "templates-email-update updateEmailTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create email template
@@ -2789,6 +2890,7 @@ export def "templates-email-upsert upsertEmailTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --bccEmails: list # BCC emails
   --cacheDataFeed: record # Cache data feed lookups for 1 hour
   --campaignDataFields: record # Campaign-level data fields available as {{field}} merge parameters during message rendering. These fields are overridden by user and event data fields of the same name.
@@ -2820,7 +2922,7 @@ export def "templates-email-upsert upsertEmailTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an embedded message template
@@ -2835,6 +2937,7 @@ export def "templates-embedded-get get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --templateId: int # Template ID (format: int64)
   --locale: string # Locale of content to get
 ]: nothing -> record<body: string, campaignDataFields: record, campaignId: int, clientTemplateId: string, elements: record<buttons: list<record>, defaultAction: record<data: string, type: string>, mediaUrl: string, mediaUrlCaption: string, text: list<record>>, isDefaultLocale: bool, locale: string, messageTypeId: int, name: string, payload: record, placementId: record, templateId: int, title: string> {
@@ -2844,7 +2947,7 @@ export def "templates-embedded-get get" [
   let full_url = (build-url $base "/api/templates/embedded/get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update embedded message template
@@ -2860,6 +2963,7 @@ export def "templates-embedded-update updateEmbeddedTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-body: string # Body text of the embedded message
   --campaignDataFields: record # Campaign-level data fields available as {{field}} merge parameters during message rendering. These fields are overridden by user and event data fields of the same name.
   --campaignId: int # Campaign ID (format: int32)
@@ -2882,7 +2986,7 @@ export def "templates-embedded-update updateEmbeddedTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an embedded message template
@@ -2899,6 +3003,7 @@ export def "templates-embedded-upsert upsertEmbeddedTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-body: string # Body text of the embedded message
   --campaignDataFields: record # Campaign-level data fields available as {{field}} merge parameters during message rendering. These fields are overridden by user and event data fields of the same name.
   clientTemplateId: string # ID used by the client to identify a template. If multiple templates exist with the ID, all will be updated
@@ -2920,7 +3025,7 @@ export def "templates-embedded-upsert upsertEmbeddedTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an email template by clientTemplateId
@@ -2935,6 +3040,7 @@ export def "templates-get-by-client-template-id get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --clientTemplateId: string # Client Template Id
 ]: nothing -> record<templates: table<campaignId: int, locales: list, templateId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -2943,7 +3049,7 @@ export def "templates-get-by-client-template-id get" [
   let full_url = (build-url $base "/api/templates/getByClientTemplateId" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an in-app template
@@ -2958,6 +3064,7 @@ export def "templates-inapp-get get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --templateId: int # Template ID (format: int64)
   --locale: string # Locale of content to get
 ]: nothing -> record<campaignDataFields: record, campaignId: int, clientTemplateId: string, expirationDateTime: string, expirationDuration: string, html: string, inAppDisplaySettings: record<bgColor: record<alpha: float, hex: string>, bottom: record, left: record, right: record, shouldAnimate: bool, top: record>, inboxMetadata: record<icon: string, subtitle: string, title: string>, isDefaultLocale: bool, locale: string, messageTypeId: int, name: string, payload: record, templateId: int, webInAppDisplaySettings: record<position: record>> {
@@ -2967,7 +3074,7 @@ export def "templates-inapp-get get" [
   let full_url = (build-url $base "/api/templates/inapp/get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Preview in-app template with custom data
@@ -2982,6 +3089,7 @@ export def "templates-inapp-preview previewInAppTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --templateId: int # Template ID (format: int64)
   --locale: string # Locale of content to get (default: None)
   --dataFeed: record # Data feed content for template rendering. Provide key-value pairs for any data feed fields that your template references. Note: Data feed fields are accessible as <code>[[fieldName]]</code> when template's <code>mergeDataFeedContext=false</code>, or as <code>{{fieldName}}</code> when <code>mergeDataFeedContext=true</code>. The <code>mergeDataFeedContext</code> setting is configured when creating/updating templates. If <code>fetchDataFeeds</code> is true, this will be merged with (or overridden by) the fetched data feed data.
@@ -2997,7 +3105,7 @@ export def "templates-inapp-preview previewInAppTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send a proof of an in-app template
@@ -3012,6 +3120,7 @@ export def "templates-inapp-proof inappProof" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dataFields: record # Fields to merge into template for proof
   --locale: string # Locale for the proof message. If provided, must be a valid locale for the project. If not provided, falls back to the user's locale, then to the project's default locale.
   --recipientEmail: string # An email address that identifies a user profile in Iterable. Provide a <code>recipientEmail</code> or a <code>recipientUserId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
@@ -3026,7 +3135,7 @@ export def "templates-inapp-proof inappProof" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update in-app template
@@ -3044,6 +3153,7 @@ export def "templates-inapp-update updateInAppTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaignDataFields: record # Campaign-level data fields available as {{field}} merge parameters during message rendering. These fields are overridden by user and event data fields of the same name.
   --campaignId: int # Campaign ID (format: int32)
   --clientTemplateId: string # Client template ID. Used as a secondary key to reference the template
@@ -3068,7 +3178,7 @@ export def "templates-inapp-update updateInAppTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an in-app template
@@ -3087,6 +3197,7 @@ export def "templates-inapp-upsert upsertInAppTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaignDataFields: record # Campaign-level data fields available as {{field}} merge parameters during message rendering. These fields are overridden by user and event data fields of the same name.
   clientTemplateId: string # ID used by the client to identify a template. If multiple templates exist with the ID, all will be updated
   --creatorUserId: string # Specify a specific creator user id (email). The email must be an existing member of the project. Defaults to the organization creator.
@@ -3110,7 +3221,7 @@ export def "templates-inapp-upsert upsertInAppTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a push template
@@ -3125,6 +3236,7 @@ export def "templates-push-get get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --templateId: int # Template ID (format: int64)
   --locale: string # Locale of content to get
 ]: nothing -> record<badge: string, buttons: table<action: record, actionIcon: record, buttonType: string, identifier: string, inputPlaceholder: string, inputTitle: string, openApp: bool, requiresUnlock: bool, title: string>, cacheDataFeed: bool, campaignDataFields: record, campaignId: record, clientTemplateId: string, createdAt: string, dataFeedIds: list<float>, deeplink: record<android: string, ios: string>, interruptionLevel: string, isDefaultLocale: bool, isSilentPush: bool, locale: string, mergeDataFeedContext: bool, message: string, messageTypeId: int, name: string, payload: record, relevanceScore: float, richMedia: record<android: string, ios: string>, sound: string, templateId: int, title: string, updatedAt: string, wake: bool> {
@@ -3134,7 +3246,7 @@ export def "templates-push-get get" [
   let full_url = (build-url $base "/api/templates/push/get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send a proof of a push template
@@ -3149,6 +3261,7 @@ export def "templates-push-proof pushProof" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dataFields: record # Fields to merge into template for proof
   --locale: string # Locale for the proof message. If provided, must be a valid locale for the project. If not provided, falls back to the user's locale, then to the project's default locale.
   --recipientEmail: string # An email address that identifies a user profile in Iterable. Provide a <code>recipientEmail</code> or a <code>recipientUserId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
@@ -3163,7 +3276,7 @@ export def "templates-push-proof pushProof" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update push template
@@ -3181,6 +3294,7 @@ export def "templates-push-update updatePushTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --badge: string # Badge to set for push notification
   --buttons: list # Array of buttons that appear to respond to the push. Max of 3. — item shape: {action?: record, actionIcon?: record, buttonType?: "default"|"destructive"|"textInput", identifier: string, inputPlaceholder?: string, inputTitle?: string, openApp: bool, requiresUnlock?: bool, title: string}
   --cacheDataFeed: oneof<nothing, bool> # Cache data feed lookups for 1 hour
@@ -3215,7 +3329,7 @@ export def "templates-push-update updatePushTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a push template
@@ -3234,6 +3348,7 @@ export def "templates-push-upsert upsertPushTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --badge: string # Badge to set for push notification
   --buttons: list # Array of buttons that appear to respond to the push. Max of 3. — item shape: {action?: record, actionIcon?: record, buttonType?: "default"|"destructive"|"textInput", identifier: string, inputPlaceholder?: string, inputTitle?: string, openApp: bool, requiresUnlock?: bool, title: string}
   --cacheDataFeed: oneof<nothing, bool> # Cache data feed lookups for 1 hour
@@ -3265,7 +3380,7 @@ export def "templates-push-upsert upsertPushTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an SMS template
@@ -3280,6 +3395,7 @@ export def "templates-sms-get get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --templateId: int # Template ID (format: int64)
   --locale: string # Locale of content to get
 ]: nothing -> record<campaignDataFields: record, campaignId: record, clientTemplateId: string, createdAt: string, googleAnalyticsCampaignName: string, imageUrl: string, isDefaultLocale: bool, linkParams: table<key: string, value: string>, locale: string, message: string, messageTypeId: int, name: string, templateId: int, trackingDomain: string, updatedAt: string> {
@@ -3289,7 +3405,7 @@ export def "templates-sms-get get" [
   let full_url = (build-url $base "/api/templates/sms/get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send a proof of an SMS template
@@ -3304,6 +3420,7 @@ export def "templates-sms-proof smsProof" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dataFields: record # Fields to merge into template for proof
   --locale: string # Locale for the proof message. If provided, must be a valid locale for the project. If not provided, falls back to the user's locale, then to the project's default locale.
   --recipientEmail: string # An email address that identifies a user profile in Iterable. Provide a <code>recipientEmail</code> or a <code>recipientUserId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
@@ -3318,7 +3435,7 @@ export def "templates-sms-proof smsProof" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update SMS template
@@ -3334,6 +3451,7 @@ export def "templates-sms-update updateSMSTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaignDataFields: record # Campaign-level data fields available as {{field}} merge parameters during message rendering. These fields are overridden by user and event data fields of the same name.
   --campaignId: record # Campaign ID
   --clientTemplateId: string # Client template ID. Used as a secondary key to reference the template
@@ -3358,7 +3476,7 @@ export def "templates-sms-update updateSMSTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an SMS template
@@ -3374,6 +3492,7 @@ export def "templates-sms-upsert upsertSMSTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaignDataFields: record # Campaign-level data fields available as {{field}} merge parameters during message rendering. These fields are overridden by user and event data fields of the same name.
   clientTemplateId: string # ID used by the client to identify a template. If multiple templates exist with the ID, all will be updated
   --creatorUserId: string # Specify a specific creator user id (email). The email must be an existing member of the project. Defaults to the organization creator.
@@ -3394,7 +3513,7 @@ export def "templates-sms-upsert upsertSMSTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk update user data
@@ -3410,6 +3529,7 @@ export def "users-bulk-update bulkUpdateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createNewFields: oneof<nothing, bool> # Whether new fields should be ingested and added to the schema. Defaults to project's setting to allow or drop unrecognized fields. Added fields will be included in the response's <code>createdFields</code>. Dropped fields will be included in <code>filteredOutFields</code> and not added to user profiles. (e.g. false)
   users: list # item shape: {dataFields?: record, email?: string, mergeNestedObjects?: bool, preferUserId?: bool, userId?: string}
 ]: any -> record<createdFields: list<string>, failCount: int, failedUpdates: record<conflictEmails: list<string>, conflictUserIds: list<string>, forgottenEmails: list<string>, forgottenUserIds: list<string>, invalidDataEmails: list<string>, invalidDataUserIds: list<string>, invalidEmails: list<string>, invalidUserIds: list<string>, notFoundEmails: list<string>, notFoundUserIds: list<string>>, filteredOutFields: list<string>, invalidEmails: list<string>, invalidUserIds: list<string>, successCount: int> {
@@ -3421,7 +3541,7 @@ export def "users-bulk-update bulkUpdateUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk update user subscriptions
@@ -3437,6 +3557,7 @@ export def "users-bulk-update-subscriptions bulkUpdateSubscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   updateSubscriptionsRequests: list # List of UpdateSubscriptionsRequests to process — item shape: {campaignId?: int, email?: string, emailListIds?: list, subscribedMessageTypeIds?: list, templateId?: int, unsubscribedChannelIds?: list, unsubscribedMessageTypeIds?: list, userId?: string, validateChannelAlignment?: bool}
 ]: any -> record<failCount: int, invalidEmails: list<string>, invalidUserIds: list<string>, successCount: int, validEmailFailures: list<string>, validUserIdFailures: list<string>> {
   let input = $in
@@ -3447,7 +3568,7 @@ export def "users-bulk-update-subscriptions bulkUpdateSubscriptions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a user by userId (query parameter)
@@ -3462,6 +3583,7 @@ export def "users-by-user-id list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string
 ]: nothing -> record<user: record<dataFields: record, email: string, userId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -3470,7 +3592,7 @@ export def "users-by-user-id list" [
   let full_url = (build-url $base "/api/users/byUserId" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete user by userId
@@ -3486,13 +3608,14 @@ export def "users-by-user-id delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: string, msg: string, params: record> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/users/byUserId/($userId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user by userId (path parameter)
@@ -3508,13 +3631,14 @@ export def "users-by-user-id get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<user: record<dataFields: record, email: string, userId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/users/byUserId/($userId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disable pushes to a mobile device
@@ -3529,6 +3653,7 @@ export def "users-disable-device disableDevice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Specific email this device belongs to disable. Will disable device under all users with this device by default.
   --body-token: string # The device token
   --userId: string # Specific userId this device belongs to disable. Will disable device under all users with this device by default.
@@ -3541,7 +3666,7 @@ export def "users-disable-device disableDevice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Forget a user in compliance with GDPR
@@ -3556,6 +3681,7 @@ export def "users-forget forget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # An email address that identifies a user profile in Iterable. Provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   --userId: string # A user ID that identifies a user profile in Iterable. Provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
 ]: any -> record<code: string, msg: string, params: record> {
@@ -3567,7 +3693,7 @@ export def "users-forget forget" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get hashed forgotten users in compliance with GDPR
@@ -3582,13 +3708,14 @@ export def "users-forgotten exportProjectForgottenUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<hashedEmails: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/users/forgotten")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get hashed forgotten userIds in compliance with GDPR
@@ -3603,13 +3730,14 @@ export def "users-forgotten-user-ids exportProjectForgottenUserIds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<hashedUserIds: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/users/forgottenUserIds")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user by email (query parameter)
@@ -3624,6 +3752,7 @@ export def "users-get-by-email get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string
 ]: nothing -> record<user: record<dataFields: record, email: string, userId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -3632,7 +3761,7 @@ export def "users-get-by-email get" [
   let full_url = (build-url $base "/api/users/getByEmail" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all user fields
@@ -3647,13 +3776,14 @@ export def "users-get-fields get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fields: record> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/users/getFields")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get messages sent to a user
@@ -3668,6 +3798,7 @@ export def "users-get-sent-messages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # user's email, either email or userId must be specified
   --userId: string # user's userId, either email or userId must be specified
   --limit: int # max number of messages to return (default: 10, max limit: 1000) (format: int32, default: 10)
@@ -3683,7 +3814,7 @@ export def "users-get-sent-messages get" [
   let full_url = (build-url $base "/api/users/getSentMessages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Merge users
@@ -3699,6 +3830,7 @@ export def "users-merge mergeUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --arrayMerge: list # An array of objects, each of which specifies an array field whose contents should be merged during the user merge operation. The objects in this <code>arrayMerge</code> array should only reference custom arrays, not Iterable-managed arrays such as <code>devices</code>. — item shape: {dedupeBy?: string, field?: string}
   --destinationEmail: string # An email address that identifies a user profile in Iterable. Provide a <code>destinationEmail</code> or a <code>destinationUserId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   --destinationUserId: string # A user ID that identifies a user profile in Iterable. Provide a <code>destinationEmail</code> or a <code>destinationUserId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
@@ -3713,7 +3845,7 @@ export def "users-merge mergeUsers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Register a browser token for web push
@@ -3728,6 +3860,7 @@ export def "users-register-browser-token registerBrowserToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   browserToken: string # This is provided by Firebase Messaging javascript API.
   --email: string # An email address that identifies a user profile in Iterable. Provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   --userId: string # A user ID that identifies a user profile in Iterable. Provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
@@ -3740,7 +3873,7 @@ export def "users-register-browser-token registerBrowserToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Register a device token for push
@@ -3756,6 +3889,7 @@ export def "users-register-device-token registerDeviceToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   device: record # shape: {applicationName: string, dataFields?: record, platform: "APNS"|"APNS_SANDBOX"|"GCM", token: string}
   --email: string # An email address that identifies a user profile in Iterable. Provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   --preferUserId: oneof<nothing, bool> # Whether or not a new user should be created if the request includes a <code>userId</code> that doesn't yet exist in the Iterable project. Defaults to <code>false</code>. Only respected in API calls for <a href="https://support.iterable.com/hc/articles/29156459027348">email-based projects</a>. (e.g. false)
@@ -3769,7 +3903,7 @@ export def "users-register-device-token registerDeviceToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unforget a user in compliance with GDPR
@@ -3784,6 +3918,7 @@ export def "users-unforget unforget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # An email address that identifies a user profile in Iterable. Provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   --userId: string # A user ID that identifies a user profile in Iterable. Provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
 ]: any -> record<code: string, msg: string, params: record> {
@@ -3795,7 +3930,7 @@ export def "users-unforget unforget" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update user data
@@ -3810,6 +3945,7 @@ export def "users-update updateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --createNewFields: oneof<nothing, bool> # Whether new fields should be ingested and added to the schema. Defaults to project's setting to allow or drop unrecognized fields. (e.g. false)
   --dataFields: record # Data to store on the user profile identified by <code>userId</code> or <code>email</code>.
   --email: string # An email address that identifies a user profile in Iterable. Provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
@@ -3825,7 +3961,7 @@ export def "users-update updateUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update user email
@@ -3840,6 +3976,7 @@ export def "users-update-email updateEmail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --currentEmail: string # An email address that identifies a user profile in Iterable. Provide a <code>currentEmail</code> or a <code>currentUserId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   --currentUserId: string # A user ID that identifies a user profile in Iterable. Provide a <code>currentEmail</code> or a <code>currentUserId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   newEmail: string # The new email address to assign to the specified user.
@@ -3852,7 +3989,7 @@ export def "users-update-email updateEmail" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update user subscriptions
@@ -3867,6 +4004,7 @@ export def "users-update-subscriptions updateSubscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaignId: int # Campaign to attribute unsubscribes (format: int64)
   --email: string # An email address that identifies a user profile in Iterable. For each user in your request, provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   --emailListIds: list # Lists that a user is subscribed to
@@ -3885,7 +4023,7 @@ export def "users-update-subscriptions updateSubscriptions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a user by email
@@ -3901,13 +4039,14 @@ export def "users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: string, msg: string, params: record> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/users/($email)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user by email (path parameter)
@@ -3923,13 +4062,14 @@ export def "users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<user: record<dataFields: record, email: string, userId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/users/($email)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Begin SMS Verification
@@ -3944,6 +4084,7 @@ export def "verify-sms-begin beginSmsVerification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   phoneNumber: string
   verificationProfileId: int # format: int64
 ]: any -> record<code: string, msg: string, params: record> {
@@ -3955,7 +4096,7 @@ export def "verify-sms-begin beginSmsVerification" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check SMS Verification Code
@@ -3970,6 +4111,7 @@ export def "verify-sms-check checkSmsVerification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   code: string
   phoneNumber: string
   verificationProfileId: int # format: int64
@@ -3982,7 +4124,7 @@ export def "verify-sms-check checkSmsVerification" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel a web push notification to a user
@@ -3997,6 +4139,7 @@ export def "web-push-cancel cancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaignId: float # The ID of the campaign associated with the scheduled message you'd like to cancel. If you provide a <code>campaignId</code>, you must also provide an <code>email</code> or <code>userId</code>, depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   --email: string # An email address that identifies a user profile in Iterable. If you provide a <code>campaignId</code>, you must also provide an <code>email</code> or a <code>userId</code>, depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   --scheduledMessageId: float
@@ -4010,7 +4153,7 @@ export def "web-push-cancel cancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send web push notification to user
@@ -4025,6 +4168,7 @@ export def "web-push-target target" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowRepeatMarketingSends: oneof<nothing, bool> # Allow repeat marketing sends? Defaults to true.
   campaignId: int # format: int64
   --dataFields: record # Fields to merge into template
@@ -4040,7 +4184,7 @@ export def "web-push-target target" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get webhooks
@@ -4055,13 +4199,14 @@ export def "webhooks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<webhooks: table<authType: string, blastSendEnabled: bool, channelIds: list, enabled: bool, endpoint: string, id: int, messageTypeIds: list, triggeredSendEnabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/webhooks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update webhook
@@ -4077,6 +4222,7 @@ export def "webhooks updateWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --authToken: string # Auth token
   --authType: string@authType-completer # The type of authentication Iterable uses when calling this webhook
   --blastSendEnabled: oneof<nothing, bool> # Whether or not Iterable calls this webhook for blast campaigns
@@ -4094,7 +4240,7 @@ export def "webhooks updateWebhook" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Cancel a scheduled WhatsApp message
@@ -4109,6 +4255,7 @@ export def "whats-app-cancel cancel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --campaignId: float # The ID of the campaign associated with the scheduled message you'd like to cancel. If you provide a <code>campaignId</code>, you must also provide an <code>email</code> or <code>userId</code>, depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   --email: string # An email address that identifies a user profile in Iterable. If you provide a <code>campaignId</code>, you must also provide an <code>email</code> or a <code>userId</code>, depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   --scheduledMessageId: float
@@ -4122,7 +4269,7 @@ export def "whats-app-cancel cancel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send a WhatsApp message to a user
@@ -4137,6 +4284,7 @@ export def "whats-app-target target" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowRepeatMarketingSends: oneof<nothing, bool> # Allow repeat marketing sends? Defaults to true.
   campaignId: int # Campaign ID (format: int64)
   --dataFields: record # Data fields that can be referenced in the template or campaign content
@@ -4152,7 +4300,7 @@ export def "whats-app-target target" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Trigger a journey (workflow)
@@ -4167,6 +4315,7 @@ export def "workflows-trigger-workflow triggerWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dataFields: record # Additional data associated triggering event
   --email: string # An email address that identifies a user profile in Iterable. Provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
   --listId: int # (Optional) Trigger the journey for all users in a list (standard or dynamic) (format: int32)
@@ -4181,5 +4330,5 @@ export def "workflows-trigger-workflow triggerWorkflow" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -71,7 +72,7 @@ def status-completer [] { ["Active" "Paused"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "baskets get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -105,13 +106,14 @@ export def "baskets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ident: string, expire: string, price: float, priceDetails: record<fullPrice: float, subTotal: float, discounts: list<record>, total: float, tax: float, balance: float, sales: list<record>, giftcards: list<record>, recurring: bool, username: string, roundUp: float>, isPaymentMethodUpdate: bool, returnUrl: string, complete: bool, tax: float, username: string, email_immutable: bool, discounts: list<record>, coupons: list<record>, giftcards: list<record>, address: record<name: string, first_name: string, last_name: string, address: string, email: string, state_id: string, country: string, postal_code: string>, rows: table<id: int, basket: int, package: int, override: int, quantity: int, server: int, price: float, gift_username_id: int, options: record, recurring: bool, recurring_period: string, recurring_next_payment_date: string, meta: record, custom: record, image_url: string, recurring_price: float>, fingerprint: string, creator_code: string, roundup: bool, cancel_url: string, complete_url: string, complete_auto_redirect: bool, recurring_items: list<record>, payment: record<transaction_id: string, status: record<id: int, description: string>, payment_sequence: string, created_at: string, price: record<amount: float, currency: string>, price_paid: record<amount: float, currency: string>, payment_method: record<name: any, refundable: bool>, revenue_share: list<record>, decline_reason: string, fees: record<tax: record, gateway: record>, customer: record<first_name: string, last_name: string, email: string, ip: string, username: string, marketing_consent: bool, country: string, postal_code: string>, products: list<record>, coupons: list<record>, gift_cards: list<record>, recurring_payment_reference: string, custom: record>, custom: record, links: record<payment: string, checkout: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/baskets/($ident)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a basket's details, including expiry date.
@@ -127,6 +129,7 @@ export def "baskets updateBasket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # nullable
   --name: string # nullable
   --state-id: string # nullable
@@ -145,7 +148,7 @@ export def "baskets updateBasket" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add a package to the basket
@@ -163,6 +166,7 @@ export def "baskets-packages addPackage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --package: record # shape: {name?: string, price?: float, type?: "single"|"subscription", qty?: int, expiry_period?: "day"|"month"|"year", expiry_length?: int, custom?: record}
   --qty: int # The quantity of `package` in this basket. This is not the total quantity of overall items in the basket. (e.g. 2)
   --type: string@type-completer # The type of payment, either `single` for one-time payments or `subscription`. (e.g. single)
@@ -176,7 +180,7 @@ export def "baskets-packages addPackage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a row from the basket
@@ -193,13 +197,14 @@ export def "baskets-packages removeRowFromBasket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/baskets/($ident)/packages/($rows.id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a sale to the basket
@@ -215,6 +220,7 @@ export def "baskets-sales addSaleToBasket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the sale (displayed to the customer) (e.g. Test Sale)
   --discount-type: string@discount-type-completer # The type of discount, either `percentage` for deducting a percentage of each item, or `amount` to deduct a fixed amount from each item. (e.g. amount)
   --amount: float # The amount or percentage to deduct (e.g. 4.99)
@@ -227,7 +233,7 @@ export def "baskets-sales addSaleToBasket" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a checkout request
@@ -245,6 +251,7 @@ export def "checkout checkout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   basket: record # An object containing the customer's information, relevant links, and any custom tracking data. (e.g. {first_name: Neil, last_name: McNeil, email: example@tebex.io, return_url: https://tebex.io, complete_url: https://tebex.io, custom: {foo: bar, trackingId: 127, list: [1, 2, 3]}}) — shape: {first_name?: string, last_name?: string, email?: string, return_url?: string, complete_url?: string, custom?: record}
   items: list # An array of `Packages` in the basket. — item shape: {package?: record}
   --sale: record # shape: {name?: string, discount_type?: "percentage"|"amount", amount?: float}
@@ -257,7 +264,7 @@ export def "checkout checkout" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetch a payment by its transaction ID
@@ -273,13 +280,14 @@ export def "payments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<transaction_id: string, status: record<id: int, description: string>, payment_sequence: string, created_at: string, price: record<amount: float, currency: string>, price_paid: record<amount: float, currency: string>, payment_method: record<name: any, refundable: bool>, revenue_share: table<wallet_ref: string, amount: float, gateway_fee_percent: float>, decline_reason: string, fees: record<tax: record<amount: float, currency: string>, gateway: record<amount: float, currency: string>>, customer: record<first_name: string, last_name: string, email: string, ip: string, username: string, marketing_consent: bool, country: string, postal_code: string>, products: table<id: string, name: string, quantity: int, base_price: record, paid_price: record, variables: list, expires_at: string, custom: record, username: string>, coupons: list<record>, gift_cards: list<record>, recurring_payment_reference: string, custom: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/payments/($txnId)?type=txn_id")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Refund a payment by its transaction ID
@@ -295,13 +303,14 @@ export def "payments-refund-typetxn-id refundPaymentById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<transaction_id: string, status: record<id: int, description: string>, payment_sequence: string, created_at: string, price: record<amount: float, currency: string>, price_paid: record<amount: float, currency: string>, payment_method: record<name: any, refundable: bool>, revenue_share: table<wallet_ref: string, amount: float, gateway_fee_percent: float>, decline_reason: string, fees: record<tax: record<amount: float, currency: string>, gateway: record<amount: float, currency: string>>, customer: record<first_name: string, last_name: string, email: string, ip: string, username: string, marketing_consent: bool, country: string, postal_code: string>, products: table<id: string, name: string, quantity: int, base_price: record, paid_price: record, variables: list, expires_at: string, custom: record, username: string>, coupons: list<record>, gift_cards: list<record>, recurring_payment_reference: string, custom: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/payments/($txnId)/refund?type=txn_id")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel a recurring payment
@@ -317,13 +326,14 @@ export def "recurring-payments cancelRecurringPayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, created_at: string, updated_at: string, paused_at: string, paused_until: string, next_payment_date: string, reference: string, account_id: int, interval: string, cancelled_at: string, cancellation_requested_at: string, status: record<id: int, class: string, description: string, active: int>, amount: record<amount: float, tax: float, period: string>, cancel_reason: string, links: record<initial_payment: string, payment_history: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/recurring-payments/($reference)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a recurring payment (subscription) by its reference
@@ -339,13 +349,14 @@ export def "recurring-payments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, created_at: string, updated_at: string, paused_at: string, paused_until: string, next_payment_date: string, reference: string, account_id: int, interval: string, cancelled_at: string, cancellation_requested_at: string, status: record<id: int, class: string, description: string, active: int>, amount: record<amount: float, tax: float, period: string>, cancel_reason: string, links: record<initial_payment: string, payment_history: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/recurring-payments/($reference)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a subscription with a new product / amount to pay - replacing the existing product
@@ -362,6 +373,7 @@ export def "recurring-payments updateSubscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --items: list # An array containing the items to be added to the recurring payment. **Only 1 item is supported at this time.** — item shape: {type?: "single"|"subscription", qty?: float, revenue_share?: list, package?: record}
 ]: any -> record<id: int, created_at: string, updated_at: string, paused_at: string, paused_until: string, next_payment_date: string, reference: string, account_id: int, interval: string, cancelled_at: string, cancellation_requested_at: string, status: record<id: int, class: string, description: string, active: int>, amount: record<amount: float, tax: float, period: string>, cancel_reason: string, links: record<initial_payment: string, payment_history: list<string>>> {
   let input = $in
@@ -372,7 +384,7 @@ export def "recurring-payments updateSubscription" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Pause or reactivate a recurring payment
@@ -388,6 +400,7 @@ export def "recurring-payments-status updateRecurringPayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   status: string@status-completer # Your desired state of the recurring payment. Provide `Paused` with `paused_until` to pause a recurring payment. Otherwise, provide `Active` to resume a recurring payment. (e.g. Paused)
   --paused-until: string # To pause a payment, provide a ISO8601 formatted date on which the payment should be reactivated. (e.g. 2025-01-27T16:43:53.000000Z)
 ]: any -> record<id: int, created_at: string, updated_at: string, paused_at: string, paused_until: string, next_payment_date: string, reference: string, account_id: int, interval: string, cancelled_at: string, cancellation_requested_at: string, status: record<id: int, class: string, description: string, active: int>, amount: record<amount: float, tax: float, period: string>, cancel_reason: string, links: record<initial_payment: string, payment_history: list<string>>> {
@@ -399,7 +412,7 @@ export def "recurring-payments-status updateRecurringPayment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a basket that can be used to pay for items
@@ -414,6 +427,7 @@ export def "baskets createBasket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --return-url: string # The URL a customer can return to without completing checkout (e.g. https://example.tebex.io/)
   --complete-url: string # URL the customer can return to after completing payment (e.g. https://example.tebex.io/complete)
   --custom: record # Any custom data to be passed through the request. This will be returned in a post-completion webhook. (e.g. {foo: bar})
@@ -433,5 +447,5 @@ export def "baskets createBasket" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

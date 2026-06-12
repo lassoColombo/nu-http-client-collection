@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -102,7 +103,7 @@ def status-completer-4 [] { ["IDENTIFIED" "INVESTIGATING" "MONITORING" "RESOLVED
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -135,6 +136,7 @@ export def "accounts list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> table<id: string, name: string, runtimeId: string, plan: string, planDisplayName: string, addons: record<communicate: record, resolve: record>, settings: record, alertSettings: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -144,7 +146,7 @@ export def "accounts list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch current account details
@@ -159,6 +161,7 @@ export def "accounts-me get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<id: string, name: string, runtimeId: string, plan: string, planDisplayName: string, addons: record<communicate: record<tier: string, tierDisplayName: string>, resolve: record<tier: string, tierDisplayName: string>>, settings: record, alertSettings: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -168,7 +171,7 @@ export def "accounts-me get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch current account entitlements
@@ -183,6 +186,7 @@ export def "accounts-me-entitlements get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<plan: string, planDisplayName: string, addons: record<communicate: record<tier: string, tierDisplayName: string>, resolve: record<tier: string, tierDisplayName: string>>, locations: record<all: list<record>, maxPerCheck: int>, entitlements: table<key: string, name: string, description: string, type: string, enabled: bool, quantity: int, requiredPlan: string, requiredPlanDisplayName: string, requiredAddon: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -192,7 +196,7 @@ export def "accounts-me-entitlements get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List current account members and pending invites
@@ -207,6 +211,7 @@ export def "accounts-me-members get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Case-insensitive partial match against member name, member email, and invite email. Empty searches are ignored.
   --type: string@type-completer # Filter by account member list item type.
   --role: string@role-completer # Filter by account role. Valid filters may produce no results for invites.
@@ -223,7 +228,7 @@ export def "accounts-me-members get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove a current account member
@@ -239,6 +244,7 @@ export def "accounts-me-members delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -248,7 +254,7 @@ export def "accounts-me-members delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a current account member role
@@ -264,6 +270,7 @@ export def "accounts-me-members patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   role: string@role-completer-1 # New account member role. OWNER is not supported.
 ]: any -> record<type: string, accountId: string, userId: string, name: string, email: string, role: string, status: string, createdAt: string, updatedAt: string, isSupportMembership: bool, ssoEnabled: bool, mfaEnabled: bool> {
@@ -277,7 +284,7 @@ export def "accounts-me-members patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetch a given account details
@@ -293,6 +300,7 @@ export def "accounts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<id: string, name: string, runtimeId: string, plan: string, planDisplayName: string, addons: record<communicate: record<tier: string, tierDisplayName: string>, resolve: record<tier: string, tierDisplayName: string>>, settings: record, alertSettings: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -302,7 +310,7 @@ export def "accounts get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch account entitlements
@@ -318,6 +326,7 @@ export def "accounts-entitlements get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<plan: string, planDisplayName: string, addons: record<communicate: record<tier: string, tierDisplayName: string>, resolve: record<tier: string, tierDisplayName: string>>, locations: record<all: list<record>, maxPerCheck: int>, entitlements: table<key: string, name: string, description: string, type: string, enabled: bool, quantity: int, requiredPlan: string, requiredPlanDisplayName: string, requiredAddon: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -327,7 +336,7 @@ export def "accounts-entitlements get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List account members and pending invites
@@ -343,6 +352,7 @@ export def "accounts-members get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # Case-insensitive partial match against member name, member email, and invite email. Empty searches are ignored.
   --type: string@type-completer # Filter by account member list item type.
   --role: string@role-completer # Filter by account role. Valid filters may produce no results for invites.
@@ -359,7 +369,7 @@ export def "accounts-members get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove an account member
@@ -376,6 +386,7 @@ export def "accounts-members delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -385,7 +396,7 @@ export def "accounts-members delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an account member role
@@ -402,6 +413,7 @@ export def "accounts-members patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   role: string@role-completer-1 # New account member role. OWNER is not supported.
 ]: any -> record<type: string, accountId: string, userId: string, name: string, email: string, role: string, status: string, createdAt: string, updatedAt: string, isSupportMembership: bool, ssoEnabled: bool, mfaEnabled: bool> {
@@ -415,7 +427,7 @@ export def "accounts-members patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all alert channels
@@ -430,6 +442,7 @@ export def "alert-channels list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit the number of results (default: 10)
   --page: float # Page number (default: 1)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
@@ -442,7 +455,7 @@ export def "alert-channels list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an alert channel
@@ -458,6 +471,7 @@ export def "alert-channels post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --subscriptions: list # All checks subscribed to this channel. (e.g. []) — item shape: {id?: float, checkId?: string, groupId?: float, activated: bool}
   type: string@type-completer-1 # e.g. SMS
@@ -479,7 +493,7 @@ export def "alert-channels post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an alert channel
@@ -495,6 +509,7 @@ export def "alert-channels delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -504,7 +519,7 @@ export def "alert-channels delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve an alert channel
@@ -520,6 +535,7 @@ export def "alert-channels get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<id: float, type: string, config: record, subscriptions: table<id: float, checkId: string, groupId: float, activated: bool>, sendRecovery: bool, sendFailure: bool, sendDegraded: bool, sslExpiry: bool, sslExpiryThreshold: int, autoSubscribe: bool, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -529,7 +545,7 @@ export def "alert-channels get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an alert channel
@@ -546,6 +562,7 @@ export def "alert-channels put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --subscriptions: list # All checks subscribed to this channel. (e.g. []) — item shape: {id?: float, checkId?: string, groupId?: float, activated: bool}
   type: string@type-completer-1 # e.g. SMS
@@ -567,7 +584,7 @@ export def "alert-channels put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update the subscriptions of an alert channel
@@ -583,6 +600,7 @@ export def "alert-channels-subscriptions put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --checkId: string # You can either pass a checkId or a groupId, but not both. (nullable, e.g. 0bbfc00c-44df-46a7-a4d9-ba38deca8bfd)
   --groupId: float # You can either pass a checkId or a groupId, but not both. (nullable)
@@ -598,7 +616,7 @@ export def "alert-channels-subscriptions put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists all alert notifications
@@ -613,6 +631,7 @@ export def "alert-notifications get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit the number of results (default: 10)
   --page: float # Page number (default: 1)
   --qp-from: string # Select records up from this UNIX timestamp (>= date). Defaults to now - 6 hours. (format: date)
@@ -629,7 +648,7 @@ export def "alert-notifications get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # API checks
@@ -645,6 +664,7 @@ export def "analytics-api-checks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Custom start time of reporting window in unix timestamp format. Setting a custom "from" timestamp overrides the use of any "quickRange". (format: date)
   --qp-to: string # Custom end time of reporting window in unix timestamp format. Setting a custom "to" timestamp overrides the use of any "quickRange". (format: date)
   --quickRange: string@quickRange-completer # Preset reporting windows are used for quickly generating report on commonly used windows. Can be overridden by using a custom "to" and "from" timestamp. (default: last24Hours)
@@ -664,7 +684,7 @@ export def "analytics-api-checks get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Browser checks
@@ -680,6 +700,7 @@ export def "analytics-browser-checks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Custom start time of reporting window in unix timestamp format. Setting a custom "from" timestamp overrides the use of any "quickRange". (format: date)
   --qp-to: string # Custom end time of reporting window in unix timestamp format. Setting a custom "to" timestamp overrides the use of any "quickRange". (format: date)
   --quickRange: string@quickRange-completer # Preset reporting windows are used for quickly generating report on commonly used windows. Can be overridden by using a custom "to" and "from" timestamp. (default: last24Hours)
@@ -699,7 +720,7 @@ export def "analytics-browser-checks get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get analytics summary for multiple checks
@@ -714,6 +735,7 @@ export def "analytics-checks post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --quickRange: string@quickRange-completer-1 # Time range for analytics. (default: last24Hours)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   checkIds: list # Array of check IDs to fetch analytics for.
@@ -729,7 +751,7 @@ export def "analytics-checks post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DNS monitors
@@ -745,6 +767,7 @@ export def "analytics-dns get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Custom start time of reporting window in unix timestamp format. Setting a custom "from" timestamp overrides the use of any "quickRange". (format: date)
   --qp-to: string # Custom end time of reporting window in unix timestamp format. Setting a custom "to" timestamp overrides the use of any "quickRange". (format: date)
   --quickRange: string@quickRange-completer # Preset reporting windows are used for quickly generating report on commonly used windows. Can be overridden by using a custom "to" and "from" timestamp. (default: last24Hours)
@@ -764,7 +787,7 @@ export def "analytics-dns get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Heartbeat checks
@@ -780,6 +803,7 @@ export def "analytics-heartbeat-checks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Custom start time of reporting window in unix timestamp format. Setting a custom "from" timestamp overrides the use of any "quickRange". (format: date)
   --qp-to: string # Custom end time of reporting window in unix timestamp format. Setting a custom "to" timestamp overrides the use of any "quickRange". (format: date)
   --quickRange: string@quickRange-completer # Preset reporting windows are used for quickly generating report on commonly used windows. Can be overridden by using a custom "to" and "from" timestamp. (default: last24Hours)
@@ -797,7 +821,7 @@ export def "analytics-heartbeat-checks get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # ICMP monitors
@@ -813,6 +837,7 @@ export def "analytics-icmp get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Custom start time of reporting window in unix timestamp format. Setting a custom "from" timestamp overrides the use of any "quickRange". (format: date)
   --qp-to: string # Custom end time of reporting window in unix timestamp format. Setting a custom "to" timestamp overrides the use of any "quickRange". (format: date)
   --quickRange: string@quickRange-completer # Preset reporting windows are used for quickly generating report on commonly used windows. Can be overridden by using a custom "to" and "from" timestamp. (default: last24Hours)
@@ -832,7 +857,7 @@ export def "analytics-icmp get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all available reporting metrics.
@@ -847,6 +872,7 @@ export def "analytics-metrics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --checkType: string@checkType-completer
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> list<string> {
@@ -858,7 +884,7 @@ export def "analytics-metrics get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Multistep checks
@@ -874,6 +900,7 @@ export def "analytics-multistep-checks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Custom start time of reporting window in unix timestamp format. Setting a custom "from" timestamp overrides the use of any "quickRange". (format: date)
   --qp-to: string # Custom end time of reporting window in unix timestamp format. Setting a custom "to" timestamp overrides the use of any "quickRange". (format: date)
   --quickRange: string@quickRange-completer # Preset reporting windows are used for quickly generating report on commonly used windows. Can be overridden by using a custom "to" and "from" timestamp. (default: last24Hours)
@@ -893,7 +920,7 @@ export def "analytics-multistep-checks get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Playwright checks
@@ -909,6 +936,7 @@ export def "analytics-playwright-checks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Custom start time of reporting window in unix timestamp format. Setting a custom "from" timestamp overrides the use of any "quickRange". (format: date)
   --qp-to: string # Custom end time of reporting window in unix timestamp format. Setting a custom "to" timestamp overrides the use of any "quickRange". (format: date)
   --quickRange: string@quickRange-completer # Preset reporting windows are used for quickly generating report on commonly used windows. Can be overridden by using a custom "to" and "from" timestamp. (default: last24Hours)
@@ -928,7 +956,7 @@ export def "analytics-playwright-checks get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # TCP checks
@@ -944,6 +972,7 @@ export def "analytics-tcp-checks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Custom start time of reporting window in unix timestamp format. Setting a custom "from" timestamp overrides the use of any "quickRange". (format: date)
   --qp-to: string # Custom end time of reporting window in unix timestamp format. Setting a custom "to" timestamp overrides the use of any "quickRange". (format: date)
   --quickRange: string@quickRange-completer # Preset reporting windows are used for quickly generating report on commonly used windows. Can be overridden by using a custom "to" and "from" timestamp. (default: last24Hours)
@@ -963,7 +992,7 @@ export def "analytics-tcp-checks get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # URL Monitors
@@ -979,6 +1008,7 @@ export def "analytics-url-monitors get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Custom start time of reporting window in unix timestamp format. Setting a custom "from" timestamp overrides the use of any "quickRange". (format: date)
   --qp-to: string # Custom end time of reporting window in unix timestamp format. Setting a custom "to" timestamp overrides the use of any "quickRange". (format: date)
   --quickRange: string@quickRange-completer # Preset reporting windows are used for quickly generating report on commonly used windows. Can be overridden by using a custom "to" and "from" timestamp. (default: last24Hours)
@@ -998,7 +1028,7 @@ export def "analytics-url-monitors get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get check status badge. You can enable the badges feature in <a href="https://app.checklyhq.com/settings/account/general">account settings</a>
@@ -1014,6 +1044,7 @@ export def "badges-checks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --style: string@style-completer # default: flat
   --theme: string@theme-completer # default: default
   --responseTime: oneof<nothing, bool> # default: false
@@ -1024,7 +1055,7 @@ export def "badges-checks get" [
   let full_url = (build-url $base $"/v1/badges/checks/($checkId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get group status badge. You can enable the badges feature in <a href="https://app.checklyhq.com/settings/account/general">account settings</a>
@@ -1040,6 +1071,7 @@ export def "badges-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --style: string@style-completer # default: flat
   --theme: string@theme-completer # default: default
   --responseTime: oneof<nothing, bool> # default: false
@@ -1050,7 +1082,7 @@ export def "badges-groups get" [
   let full_url = (build-url $base $"/v1/badges/groups/($groupId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all alerts for your account
@@ -1065,6 +1097,7 @@ export def "check-alerts list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit the number of results (default: 10)
   --page: float # Page number (default: 1)
   --qp-from: string # Select records up from this UNIX timestamp (>= date). Defaults to now - 6 hours. (format: date)
@@ -1079,7 +1112,7 @@ export def "check-alerts list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List alerts for a specific check
@@ -1095,6 +1128,7 @@ export def "check-alerts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit the number of results (default: 10)
   --page: float # Page number (default: 1)
   --qp-from: string # Select records up from this UNIX timestamp (>= date). Defaults to now - 6 hours. (format: date)
@@ -1109,7 +1143,7 @@ export def "check-alerts get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all check groups
@@ -1124,6 +1158,7 @@ export def "check-groups list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit the number of results (default: 10)
   --page: float # Page number (default: 1)
   --tag: list # Filters check groups by tags. Returns check groups that have at least one of the specified tags.
@@ -1138,7 +1173,7 @@ export def "check-groups list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a check group
@@ -1159,6 +1194,7 @@ export def "check-groups post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check group. (e.g. Check group)
@@ -1194,7 +1230,7 @@ export def "check-groups post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve one check in a specific group with group settings applied
@@ -1211,6 +1247,7 @@ export def "check-groups-checks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<id: string, checkType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1220,7 +1257,7 @@ export def "check-groups-checks get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a check group.
@@ -1236,6 +1273,7 @@ export def "check-groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1245,7 +1283,7 @@ export def "check-groups delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a check group
@@ -1261,6 +1299,7 @@ export def "check-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<id: float, name: string, activated: bool, muted: bool, tags: list<string>, locations: list<string>, concurrency: float, apiCheckDefaults: record<url: string, headers: list<record>, queryParameters: list<record>, assertions: list<record>, basicAuth: record<username: string, password: string>>, browserCheckDefaults: string, environmentVariables: table<key: string, value: string, locked: bool, secret: bool>, doubleCheck: bool, useGlobalAlertSettings: bool, alertSettings: record<escalationType: string, reminders: record<amount: float, interval: float>, sslCertificates: record<enabled: bool, alertThreshold: int>, runBasedEscalation: record<failedRunThreshold: float>, timeBasedEscalation: record<minutesFailingThreshold: float>, parallelRunFailureThreshold: record<enabled: bool, percentage: float>>, alertChannelSubscriptions: table<alertChannelId: float, activated: bool>, setupSnippetId: float, tearDownSnippetId: float, localSetupScript: string, localTearDownScript: string, runtimeId: string, privateLocations: list<string>, retryStrategy: any, created_at: string, updated_at: string, runParallel: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1270,7 +1309,7 @@ export def "check-groups get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a check group
@@ -1292,6 +1331,7 @@ export def "check-groups put-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --name: string # The name of the check group. (e.g. Check group)
@@ -1327,7 +1367,7 @@ export def "check-groups put-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve all checks in a specific group with group settings applied
@@ -1343,6 +1383,7 @@ export def "check-groups-checks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit the number of results (default: 10)
   --page: float # Page number (default: 1)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
@@ -1355,7 +1396,7 @@ export def "check-groups-checks list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all check results
@@ -1373,6 +1414,7 @@ export def "check-results get-by-checkId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit the number of results (default: 10)
   --page: float # Page number (default: 1)
   --qp-from: string # Select records up from this UNIX timestamp (>= date). Defaults to now - 6 hours. (format: date)
@@ -1391,7 +1433,7 @@ export def "check-results get-by-checkId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a check result
@@ -1408,6 +1450,7 @@ export def "check-results get-by-checkId-checkResultId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<id: string, name: string, checkId: string, hasFailures: bool, hasErrors: bool, isDegraded: bool, isCancelled: bool, overMaxResponseTime: bool, runLocation: string, startedAt: string, stoppedAt: string, created_at: string, responseTime: float, apiCheckResult: record<assertions: list<string>, request: record<method: string, url: string, data: string, headers: record, params: record>, response: record<status: float, statusText: string, body: string, headers: record, timings: record, timingPhases: record>, requestError: string, jobLog: record, jobAssets: list<string>, pcapDataUrl: string>, browserCheckResult: record<type: string, traceSummary: record, pages: list<string>, playwrightTestVideos: list<string>, errors: list<string>, endTime: float, startTime: float, runtimeVersion: string, jobLog: list<string>, jobAssets: list<string>, playwrightTestTraces: list<string>, playwrightTestJsonReportFile: string>, multiStepCheckResult: record<errors: list<string>, endTime: float, startTime: float, runtimeVersion: string, jobLog: list<string>, jobAssets: list<string>, playwrightTestTraces: list<string>, playwrightTestJsonReportFile: string>, agenticCheckResult: record<summary: string, prompt: string, assertions: list<record>, suggestions: list<record>, steps: list<record>, errors: list<record>, artifactManifest: record>, playwrightCheckResult: record<errors: list<record>, playwrightTraceFiles: list<record>, jobLog: list<string>, jobAssets: list<string>, playwrightTestVideos: list<string>, playwrightTestTraces: list<string>, playwrightTestJsonReportFile: string>, checkRunId: float, attempts: float, resultType: string, sequenceId: string, traceId: string, errorGroupIds: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1417,7 +1460,7 @@ export def "check-results get-by-checkId-checkResultId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a normalized asset manifest for a check result
@@ -1434,6 +1477,7 @@ export def "check-results-assets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: list # Filter assets by normalized asset type. Repeat the query parameter to include multiple types.
   --name: string # Glob pattern matched case-insensitively against the asset name and archive entry path. Empty patterns are ignored.
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
@@ -1446,7 +1490,7 @@ export def "check-results-assets get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Trigger a new check session
@@ -1464,6 +1508,7 @@ export def "check-sessions-trigger post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --target: record # shape: {matchTags?: list, checkId?: list}
   --refreshCache: oneof<nothing, bool> # If true, the runner will skip existing caches and install dependencies from scratch. This applies only to Playwright Check Suites. (default: false)
 ]: any -> record<sessions: table<checkSessionId: string, checkSessionLink: string, checkId: string, checkType: string, name: string, status: string, startedAt: string, stoppedAt: string, timeElapsed: float, runLocations: list, runSource: string>> {
@@ -1475,7 +1520,7 @@ export def "check-sessions-trigger post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a check session
@@ -1493,13 +1538,14 @@ export def "check-sessions get-by-checkSessionId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<checkSessionId: string, checkSessionLink: string, checkId: string, checkType: string, name: string, status: string, startedAt: string, stoppedAt: string, timeElapsed: float, runLocations: list<string>, runSource: string, results: table<checkResultId: string, checkResultLink: string, checkId: string, checkType: string, name: string, runLocation: string, resultType: string, hasErrors: bool, hasFailures: bool, isDegraded: bool, aborted: bool, isCancelled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/check-sessions/($checkSessionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel a check session
@@ -1515,6 +1561,7 @@ export def "check-sessions-cancel post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --sequenceId: list # Subset of sequence IDs to cancel. Omit to cancel all in-progress sequences.
 ]: any -> any {
@@ -1528,7 +1575,7 @@ export def "check-sessions-cancel post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Await the completion of a check session
@@ -1546,6 +1593,7 @@ export def "check-sessions-completion get-by-checkSessionId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxWaitSeconds: float # The maximum time to wait for completion, in seconds. (e.g. 30)
 ]: nothing -> record<checkSessionId: string, checkSessionLink: string, checkId: string, checkType: string, name: string, status: string, startedAt: string, stoppedAt: string, timeElapsed: float, runLocations: list<string>, runSource: string, results: table<checkResultId: string, checkResultLink: string, checkId: string, checkType: string, name: string, runLocation: string, resultType: string, hasErrors: bool, hasFailures: bool, isDegraded: bool, aborted: bool, isCancelled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1554,7 +1602,7 @@ export def "check-sessions-completion get-by-checkSessionId" [
   let full_url = (build-url $base $"/v1/check-sessions/($checkSessionId)/completion" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all check statuses
@@ -1569,6 +1617,7 @@ export def "check-statuses list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> table<name: string, checkId: string, hasFailures: bool, hasErrors: bool, isDegraded: bool, longestRun: float, shortestRun: float, lastRunLocation: string, lastCheckRunId: string, sslDaysRemaining: float, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1578,7 +1627,7 @@ export def "check-statuses list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve check status details
@@ -1594,6 +1643,7 @@ export def "check-statuses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<name: string, checkId: string, hasFailures: bool, hasErrors: bool, isDegraded: bool, longestRun: float, shortestRun: float, lastRunLocation: string, lastCheckRunId: string, sslDaysRemaining: float, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1603,7 +1653,7 @@ export def "check-statuses get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all checks
@@ -1618,6 +1668,7 @@ export def "checks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit the number of results (default: 10)
   --page: float # Page number (default: 1)
   --apiCheckUrlFilterPattern: string # Filters the results by a string contained in the URL of an API check, for instance a domain like "www.myapp.com". Only returns API checks.
@@ -1636,7 +1687,7 @@ export def "checks list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a check
@@ -1659,6 +1710,7 @@ export def "checks post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check. (e.g. Check)
@@ -1707,7 +1759,7 @@ export def "checks post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an API check
@@ -1727,6 +1779,7 @@ export def "checks post-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check. (e.g. Check)
@@ -1768,7 +1821,7 @@ export def "checks post-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an API check
@@ -1789,6 +1842,7 @@ export def "checks put-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --name: string # The name of the check. (e.g. Check)
@@ -1830,7 +1884,7 @@ export def "checks put-by-id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a browser check
@@ -1851,6 +1905,7 @@ export def "checks-browser post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check. (e.g. Check)
@@ -1889,7 +1944,7 @@ export def "checks-browser post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a browser check
@@ -1911,6 +1966,7 @@ export def "checks-browser put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --name: string # The name of the check. (e.g. Check)
@@ -1949,7 +2005,7 @@ export def "checks-browser put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an DNS monitor
@@ -1970,6 +2026,7 @@ export def "checks-dns post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check. (e.g. Check)
@@ -2016,7 +2073,7 @@ export def "checks-dns post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an DNS Monitor
@@ -2038,6 +2095,7 @@ export def "checks-dns put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --body-id: string # e.g. 9d6df684-0bc3-4a38-a094-4e97627dd93e
@@ -2080,7 +2138,7 @@ export def "checks-dns put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a heartbeat check
@@ -2100,6 +2158,7 @@ export def "checks-heartbeat post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check. (e.g. Check)
@@ -2144,7 +2203,7 @@ export def "checks-heartbeat post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a heartbeat check
@@ -2165,6 +2224,7 @@ export def "checks-heartbeat put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --name: string # The name of the check. (e.g. Check)
@@ -2209,7 +2269,7 @@ export def "checks-heartbeat put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get heartbeat availability
@@ -2225,8 +2285,9 @@ export def "checks-heartbeats-availability get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --startTime: string # format: date, default: 2026-06-11T09:39:53.706Z
-  --endTime: string # format: date, default: 2026-06-12T09:39:53.707Z
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --startTime: string # format: date, default: 2026-06-11T21:01:13.411Z
+  --endTime: string # format: date, default: 2026-06-12T21:01:13.411Z
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<successRatio: record<previousPeriod: float, currentPeriod: float>, totalEntitiesCurrentPeriod: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2237,7 +2298,7 @@ export def "checks-heartbeats-availability get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of events for a heartbeat
@@ -2253,8 +2314,9 @@ export def "checks-heartbeats-events list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --startTime: string # format: date, default: 2026-06-11T09:39:53.709Z
-  --endTime: string # format: date, default: 2026-06-12T09:39:53.710Z
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --startTime: string # format: date, default: 2026-06-11T21:01:13.415Z
+  --endTime: string # format: date, default: 2026-06-12T21:01:13.415Z
   --limit: float # default: 10
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> table<events: list<record>, stats: record<last24Hours: record, last7Days: record>> {
@@ -2266,7 +2328,7 @@ export def "checks-heartbeats-events list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a specific Heartbeat event
@@ -2283,6 +2345,7 @@ export def "checks-heartbeats-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<event: record<id: string, state: string, timestamp: string, source: string, userAgent: string>, stats: record<last24Hours: record<successRatio: record, totalEntitiesCurrentPeriod: float>, last7Days: record<successRatio: record, totalEntitiesCurrentPeriod: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2292,7 +2355,7 @@ export def "checks-heartbeats-events get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an ICMP monitor
@@ -2313,6 +2376,7 @@ export def "checks-icmp post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check. (e.g. Check)
@@ -2361,7 +2425,7 @@ export def "checks-icmp post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an ICMP Monitor
@@ -2383,6 +2447,7 @@ export def "checks-icmp put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --name: string # The name of the check. (e.g. Check)
@@ -2431,7 +2496,7 @@ export def "checks-icmp put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a multi-step check
@@ -2452,6 +2517,7 @@ export def "checks-multistep post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check. (e.g. Check)
@@ -2490,7 +2556,7 @@ export def "checks-multistep post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a multi-step check
@@ -2512,6 +2578,7 @@ export def "checks-multistep put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --name: string # The name of the check. (e.g. Check)
@@ -2550,7 +2617,7 @@ export def "checks-multistep put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a TCP check
@@ -2570,6 +2637,7 @@ export def "checks-tcp post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check. (e.g. Check)
@@ -2607,7 +2675,7 @@ export def "checks-tcp post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an TCP check
@@ -2628,6 +2696,7 @@ export def "checks-tcp put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --name: string # The name of the check. (e.g. Check)
@@ -2665,7 +2734,7 @@ export def "checks-tcp put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a URL monitor
@@ -2685,6 +2754,7 @@ export def "checks-url post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check. (e.g. Check)
@@ -2722,7 +2792,7 @@ export def "checks-url post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an URL Monitor
@@ -2743,6 +2813,7 @@ export def "checks-url put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --name: string # The name of the check. (e.g. Check)
@@ -2780,7 +2851,7 @@ export def "checks-url put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a check
@@ -2796,6 +2867,7 @@ export def "checks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2805,7 +2877,7 @@ export def "checks delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a check
@@ -2821,6 +2893,7 @@ export def "checks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeDependencies: oneof<nothing, bool> # Include check dependencies in the response
   --applyGroupSettings: oneof<nothing, bool> # Checks that belong to a group are returned with group settings applied. (default: false)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
@@ -2833,7 +2906,7 @@ export def "checks get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a check
@@ -2857,6 +2930,7 @@ export def "checks put-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --name: string # The name of the check. (e.g. Check)
@@ -2905,7 +2979,7 @@ export def "checks put-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists all client certificates.
@@ -2920,6 +2994,7 @@ export def "client-certificates list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> table<host: string, cert: string, ca: string, id: string, created_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2929,7 +3004,7 @@ export def "client-certificates list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new client certificate.
@@ -2944,6 +3019,7 @@ export def "client-certificates post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   host: string # The host domain for the certificate without https://. You can use wildcards to match domains, e.g. "*.acme.com" (e.g. www.acme.com)
   cert: string # The client certificate in PEM format as a string. This string should retain any line breaks, e.g. it should start similar to this "-----BEGIN CERTIFICATE-----\nMIIEnTCCAoWgAwIBAgIJAL+WugL...
@@ -2961,7 +3037,7 @@ export def "client-certificates post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a client certificate.
@@ -2977,6 +3053,7 @@ export def "client-certificates delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2986,7 +3063,7 @@ export def "client-certificates delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Shows one client certificate.
@@ -3002,6 +3079,7 @@ export def "client-certificates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<host: string, cert: string, ca: string, id: string, created_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3011,7 +3089,7 @@ export def "client-certificates get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all dashboards
@@ -3026,6 +3104,7 @@ export def "dashboards list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit the number of results (default: 10)
   --page: float # Page number (default: 1)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
@@ -3038,7 +3117,7 @@ export def "dashboards list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a dashboard
@@ -3054,6 +3133,7 @@ export def "dashboards post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --customUrl: string # A subdomain name under "checklyhq.com". Needs to be unique across all users. (e.g. status)
   --customDomain: string # A custom user domain, e.g. "status.example.com". See the docs on updating your DNS and SSL usage. (nullable, e.g. https://status.mycompany.com/)
@@ -3091,7 +3171,7 @@ export def "dashboards post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a dashboard
@@ -3107,6 +3187,7 @@ export def "dashboards delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3116,7 +3197,7 @@ export def "dashboards delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a dashboard
@@ -3132,6 +3213,7 @@ export def "dashboards get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-2
 ]: nothing -> record<customDomain: string, customUrl: string, logo: string, favicon: string, link: string, description: string, width: string, refreshRate: float, paginate: bool, paginationRate: float, checksPerPage: float, useTagsAndOperator: bool, hideTags: bool, enableIncidents: bool, expandChecks: bool, tags: list<string>, showHeader: bool, showCheckRunLinks: bool, showGroupNames: bool, customCSS: string, isPrivate: bool, showP95: bool, showP99: bool, keys: table<id: string, rawKey: string, maskedKey: string, created_at: string, updated_at: string>, id: float, dashboardId: string, created_at: string, header: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3140,7 +3222,7 @@ export def "dashboards get" [
   let full_url = (build-url $base $"/v1/dashboards/($dashboardId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a dashboard
@@ -3157,6 +3239,7 @@ export def "dashboards put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --customDomain: string # A custom user domain, e.g. "status.example.com". See the docs on updating your DNS and SSL usage. (nullable, e.g. https://status.mycompany.com/)
   --customUrl: string # A subdomain name under "checklyhq.com". Needs to be unique across all users. (e.g. status)
@@ -3194,7 +3277,7 @@ export def "dashboards put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all error groups in your account.
@@ -3209,6 +3292,7 @@ export def "error-groups list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit the number of results (default: 10)
   --page: float # Page number (default: 1)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
@@ -3221,7 +3305,7 @@ export def "error-groups list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all error groups for a specific check.
@@ -3237,6 +3321,7 @@ export def "error-groups-checks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit the number of results (default: 10)
   --page: float # Page number (default: 1)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
@@ -3249,7 +3334,7 @@ export def "error-groups-checks get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve one error group.
@@ -3265,6 +3350,7 @@ export def "error-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<id: string, checkId: string, errorHash: string, rawErrorMessage: string, cleanedErrorMessage: string, firstSeen: string, lastSeen: string, archivedUntilNextEvent: bool, rootCauseAnalyses: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3274,7 +3360,7 @@ export def "error-groups get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an error group. Mainly used for archiving error groups.
@@ -3290,6 +3376,7 @@ export def "error-groups patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --archiveForEver: oneof<nothing, bool>
   --archivedUntilNextEvent: oneof<nothing, bool>
@@ -3304,7 +3391,7 @@ export def "error-groups patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an incident
@@ -3320,6 +3407,7 @@ export def "incidents post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # A name used to describe the incident. (e.g. Service outage)
   impact: string@impact-completer # Used to indicate the impact or severity. (default: MINOR, e.g. MINOR)
@@ -3338,7 +3426,7 @@ export def "incidents post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an incident
@@ -3354,6 +3442,7 @@ export def "incidents delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3363,7 +3452,7 @@ export def "incidents delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve an incident
@@ -3379,6 +3468,7 @@ export def "incidents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeAllIncidentUpdates: oneof<nothing, bool> # You use it to include all the incident updates. (default: false, e.g. true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<name: string, impact: string, startedAt: string, stoppedAt: string, dashboardId: float, id: string, created_at: string, updated_at: string, incidentUpdates: table<status: string, description: string, id: string, created_at: string, updated_at: string>> {
@@ -3390,7 +3480,7 @@ export def "incidents get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an incident
@@ -3406,6 +3496,7 @@ export def "incidents put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --probe: oneof<nothing, bool>
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # A name used to describe the incident. (e.g. Service outage)
@@ -3424,7 +3515,7 @@ export def "incidents put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create an incident update
@@ -3440,6 +3531,7 @@ export def "incidents-updates post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   status: string@status-completer-2 # The incident update status. Must be one of INVESTIGATING,IDENTIFIED,MONITORING,RESOLVED,MAINTENANCE (e.g. INVESTIGATING)
   description: string # A description about the status update. (e.g. We found the issue and we are working on it.)
@@ -3454,7 +3546,7 @@ export def "incidents-updates post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an incident update
@@ -3471,6 +3563,7 @@ export def "incidents-updates delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3480,7 +3573,7 @@ export def "incidents-updates delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an incident update
@@ -3497,6 +3590,7 @@ export def "incidents-updates put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   description: string # A description about the status update. (e.g. We found the issue and we are working on it.)
 ]: any -> record<status: string, description: string, id: string, created_at: string, updated_at: string> {
@@ -3510,7 +3604,7 @@ export def "incidents-updates put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists all supported locations
@@ -3525,6 +3619,7 @@ export def "locations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> table<region: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3534,7 +3629,7 @@ export def "locations get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all maintenance windows
@@ -3549,6 +3644,7 @@ export def "maintenance-windows list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit the number of results (default: 10)
   --page: float # Page number (default: 1)
   --startsAt: string # Filter for items which startsAt field matches the constraint
@@ -3563,7 +3659,7 @@ export def "maintenance-windows list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a maintenance window
@@ -3579,6 +3675,7 @@ export def "maintenance-windows post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The maintenance window name. (e.g. Maintenance Window)
   --tags: list # The names of the checks and groups maintenance window should apply to. (e.g. [production])
@@ -3603,7 +3700,7 @@ export def "maintenance-windows post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a maintenance window
@@ -3619,6 +3716,7 @@ export def "maintenance-windows delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3628,7 +3726,7 @@ export def "maintenance-windows delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a maintenance window
@@ -3644,6 +3742,7 @@ export def "maintenance-windows get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<id: float, name: string, tags: list<string>, startsAt: string, endsAt: string, repeatInterval: float, repeatUnit: string, repeatEndsAt: string, description: string, statusPageVisibility: record<enabled: bool, severity: string, affectAllServices: bool, suppressAutoIncidents: bool, notifyOnStart: bool, notifyOnEnd: bool, reminderMinutesBefore: list<int>, autoStart: bool, autoEnd: bool, statusPageIds: list<string>, serviceIds: list<string>>, pauseAllChecks: bool, silenceAlertsTags: list<string>, silenceAllAlerts: bool, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3653,7 +3752,7 @@ export def "maintenance-windows get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a maintenance window
@@ -3670,6 +3769,7 @@ export def "maintenance-windows put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --name: string # The maintenance window name. (e.g. Maintenance Window)
   --tags: list # The names of the checks and groups maintenance window should apply to. (e.g. [production])
@@ -3694,7 +3794,7 @@ export def "maintenance-windows put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List maintenances for a maintenance window
@@ -3710,6 +3810,7 @@ export def "maintenance-windows-maintenances list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # default: 1
   --limit: int # default: 10
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
@@ -3722,7 +3823,7 @@ export def "maintenance-windows-maintenances list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a maintenance
@@ -3739,6 +3840,7 @@ export def "maintenance-windows-maintenances delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3748,7 +3850,7 @@ export def "maintenance-windows-maintenances delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a maintenance
@@ -3765,6 +3867,7 @@ export def "maintenance-windows-maintenances get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<id: string, maintenanceWindowId: float, startsAt: string, endsAt: string, status: string, created_at: string, updated_at: string, updates: table<id: string, maintenanceWindowId: float, maintenanceId: string, status: string, description: string, notifySubscribers: bool, created_at: string, previousStatus: string, previousStartsAt: string, previousEndsAt: string, dateAdjustments: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3774,7 +3877,7 @@ export def "maintenance-windows-maintenances get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update maintenance dates
@@ -3791,6 +3894,7 @@ export def "maintenance-windows-maintenances patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --startsAt: string # format: date
   --endsAt: string # format: date
@@ -3805,7 +3909,7 @@ export def "maintenance-windows-maintenances patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a maintenance window status update
@@ -3822,6 +3926,7 @@ export def "maintenance-windows-maintenances-updates post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   status: string@status-completer-3 # The lifecycle status of this update.
   description: string # A description of the update.
@@ -3837,7 +3942,7 @@ export def "maintenance-windows-maintenances-updates post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a maintenance window status update
@@ -3855,6 +3960,7 @@ export def "maintenance-windows-maintenances-updates delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3864,7 +3970,7 @@ export def "maintenance-windows-maintenances-updates delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a maintenance window status update
@@ -3882,6 +3988,7 @@ export def "maintenance-windows-maintenances-updates put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --status: string@status-completer-3 # The lifecycle status of this update. Optional. When omitted, the stored status is preserved.
   description: string # A description of the update.
@@ -3896,7 +4003,7 @@ export def "maintenance-windows-maintenances-updates put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all private locations
@@ -3911,6 +4018,7 @@ export def "private-locations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --versions: oneof<nothing, bool> # default: false
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> table<id: string, name: string, slugName: string, icon: string, created_at: string, updated_at: string, keys: list<record>, proxyUrl: string, lastSeen: string, agentCount: float, minAgentVersion: string, runningAgents: list<record>> {
@@ -3922,7 +4030,7 @@ export def "private-locations list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a private location
@@ -3937,6 +4045,7 @@ export def "private-locations post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name assigned to the private location. (e.g. New Private Location)
   slugName: string # Valid slug name. (e.g. new-private-location)
@@ -3953,7 +4062,7 @@ export def "private-locations post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a private location
@@ -3969,6 +4078,7 @@ export def "private-locations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3978,7 +4088,7 @@ export def "private-locations delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a private location
@@ -3994,6 +4104,7 @@ export def "private-locations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<id: string, name: string, slugName: string, icon: string, created_at: string, updated_at: string, keys: table<id: string, rawKey: string, maskedKey: string, created_at: string, updated_at: string>, proxyUrl: string, lastSeen: string, agentCount: float, minAgentVersion: string, runningAgents: table<version: string, isOutdated: bool, count: float, agents: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4003,7 +4114,7 @@ export def "private-locations get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a private location
@@ -4019,6 +4130,7 @@ export def "private-locations put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name assigned to the private location. (e.g. New Private Location)
   --icon: string # e.g. location
@@ -4034,7 +4146,7 @@ export def "private-locations put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate a new API Key for a private location
@@ -4050,6 +4162,7 @@ export def "private-locations-keys post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<id: string, rawKey: string, maskedKey: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4059,7 +4172,7 @@ export def "private-locations-keys post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove an existing API key for a private location
@@ -4076,6 +4189,7 @@ export def "private-locations-keys delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4085,7 +4199,7 @@ export def "private-locations-keys delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get private location health metrics from a window of time.
@@ -4101,6 +4215,7 @@ export def "private-locations-metrics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Select metrics beginning with this UNIX timestamp. Must be less than 15 days ago. (format: date)
   --qp-to: string # Select metrics up to this UNIX timestamp. (format: date)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
@@ -4113,7 +4228,7 @@ export def "private-locations-metrics get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generates a report with aggregate statistics for checks and check groups.
@@ -4128,6 +4243,7 @@ export def "reporting get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # Custom start time of reporting window in unix timestamp format. Setting a custom "from" timestamp overrides the use of any "quickRange". (format: date)
   --qp-to: string # Custom end time of reporting window in unix timestamp format. Setting a custom "to" timestamp overrides the use of any "quickRange". (format: date)
   --quickRange: string@quickRange-completer-2 # Preset reporting windows are used for quickly generating report on commonly used windows. Can be overridden by using a custom "to" and "from" timestamp. (default: last24Hrs)
@@ -4143,7 +4259,7 @@ export def "reporting get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate a Root Cause Analysis for a check error group
@@ -4159,6 +4275,7 @@ export def "root-cause-analyses-error-groups post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --userContext: string # Optional user defined context to provide extra details useful for the user impact and root cause analysis. (nullable, default: )
 ]: any -> record<id: string, status: string> {
@@ -4172,7 +4289,7 @@ export def "root-cause-analyses-error-groups post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate a Root Cause Analysis for a test session error group
@@ -4188,6 +4305,7 @@ export def "root-cause-analyses-test-session-error-groups post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --userContext: string # Optional user defined context to provide extra details useful for the user impact and root cause analysis. (nullable, default: )
 ]: any -> record<id: string, status: string> {
@@ -4201,7 +4319,7 @@ export def "root-cause-analyses-test-session-error-groups post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a Root Cause Analysis
@@ -4217,6 +4335,7 @@ export def "root-cause-analyses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<id: string, checkType: string, provider: string, model: string, checkId: string, errorGroupId: string, durationMs: float, analysis: record<classification: string, userImpact: string, rootCause: string, codeFix: string, evidence: list<record>, referenceLinks: list<record>>, status: string, created_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4226,7 +4345,7 @@ export def "root-cause-analyses get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all supported runtimes
@@ -4241,6 +4360,7 @@ export def "runtimes list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> table<name: string, multiStepSupport: bool, nodeJsVersion: string, stage: string, runtimeEndOfLife: string, description: string, dependencies: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4250,7 +4370,7 @@ export def "runtimes list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Shows details for one specific runtime
@@ -4266,6 +4386,7 @@ export def "runtimes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<name: string, multiStepSupport: bool, nodeJsVersion: string, stage: string, runtimeEndOfLife: string, description: string, dependencies: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4275,7 +4396,7 @@ export def "runtimes get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all snippets
@@ -4290,6 +4411,7 @@ export def "snippets list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit the number of results (default: 10)
   --page: float # Page number (default: 1)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
@@ -4302,7 +4424,7 @@ export def "snippets list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a snippet
@@ -4317,6 +4439,7 @@ export def "snippets post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The snippet name. (e.g. Snippet)
   script: string # Your Node.js code that interacts with the API check lifecycle, or functions as a partial for browser checks. (e.g. request.url = request.url + '/extra')
@@ -4331,7 +4454,7 @@ export def "snippets post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a snippet
@@ -4347,6 +4470,7 @@ export def "snippets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4356,7 +4480,7 @@ export def "snippets delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a snippet
@@ -4372,6 +4496,7 @@ export def "snippets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<id: float, name: string, script: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4381,7 +4506,7 @@ export def "snippets get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a snippet
@@ -4397,6 +4522,7 @@ export def "snippets put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The snippet name. (e.g. Snippet)
   script: string # Your Node.js code that interacts with the API check lifecycle, or functions as a partial for browser checks. (e.g. request.url = request.url + '/extra')
@@ -4411,7 +4537,7 @@ export def "snippets put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists all source IPs for check runs
@@ -4426,6 +4552,7 @@ export def "static-ips get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4435,7 +4562,7 @@ export def "static-ips get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all source IPs for check runs
@@ -4450,6 +4577,7 @@ export def "static-ips-by-region get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4459,7 +4587,7 @@ export def "static-ips-by-region get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all source IPs for check runs as txt file
@@ -4474,6 +4602,7 @@ export def "static-ipstxt get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4483,7 +4612,7 @@ export def "static-ipstxt get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all source IPv6s for check runs
@@ -4498,6 +4627,7 @@ export def "static-ipv6s get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4507,7 +4637,7 @@ export def "static-ipv6s get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all source IPv6s for check runs
@@ -4522,6 +4652,7 @@ export def "static-ipv6s-by-region get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4531,7 +4662,7 @@ export def "static-ipv6s-by-region get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all source IPv6s for check runs as a txt file
@@ -4546,6 +4677,7 @@ export def "static-ipv6stxt get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4555,7 +4687,7 @@ export def "static-ipv6stxt get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve all status pages.
@@ -4570,6 +4702,7 @@ export def "status-pages list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 20
   --nextId: string
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
@@ -4582,7 +4715,7 @@ export def "status-pages list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new status page.
@@ -4599,6 +4732,7 @@ export def "status-pages post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string
   --description: string # nullable
@@ -4621,7 +4755,7 @@ export def "status-pages post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve the latest incidents with pagination.
@@ -4636,6 +4770,7 @@ export def "status-pages-incidents list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 20
   --nextId: string
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
@@ -4648,7 +4783,7 @@ export def "status-pages-incidents list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new incident.
@@ -4665,6 +4800,7 @@ export def "status-pages-incidents post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --id: string
   --created-at: string # format: date
@@ -4686,7 +4822,7 @@ export def "status-pages-incidents post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an incident.
@@ -4702,6 +4838,7 @@ export def "status-pages-incidents delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4711,7 +4848,7 @@ export def "status-pages-incidents delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve an incident by id.
@@ -4727,6 +4864,7 @@ export def "status-pages-incidents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<name: string, severity: string, id: string, services: table<name: string, id: string, accountId: string, created_at: string, updated_at: string>, incidentUpdates: table<description: string, status: string, publicIncidentUpdateDate: string, notifySubscribers: bool, id: string, created_at: string>, lastUpdateStatus: string, duration: int, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4736,7 +4874,7 @@ export def "status-pages-incidents get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing incident.
@@ -4753,6 +4891,7 @@ export def "status-pages-incidents put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --id: string
   --created-at: string # format: date
@@ -4773,7 +4912,7 @@ export def "status-pages-incidents put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve the 100 latest incident updates of a specific incident.
@@ -4789,6 +4928,7 @@ export def "status-pages-incidents-incident-updates list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> table<id: string, description: string, status: string, publicIncidentUpdateDate: string, created_at: string, notifySubscribers: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4798,7 +4938,7 @@ export def "status-pages-incidents-incident-updates list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a new incident update to a specific incident.
@@ -4814,11 +4954,12 @@ export def "status-pages-incidents-incident-updates post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --id: string
   description: string
   --status: string@status-completer-4
-  --publicIncidentUpdateDate: string # format: date-time, default: 2026-06-12T09:39:54.993Z
+  --publicIncidentUpdateDate: string # format: date-time, default: 2026-06-12T21:01:15.059Z
   --created-at: string # format: date
   --notifySubscribers: oneof<nothing, bool> # default: false
 ]: any -> record<id: string, description: string, status: string, publicIncidentUpdateDate: string, created_at: string, notifySubscribers: bool> {
@@ -4832,7 +4973,7 @@ export def "status-pages-incidents-incident-updates post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an incident update.
@@ -4849,6 +4990,7 @@ export def "status-pages-incidents-incident-updates delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4858,7 +5000,7 @@ export def "status-pages-incidents-incident-updates delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve an incident update by id.
@@ -4875,6 +5017,7 @@ export def "status-pages-incidents-incident-updates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<id: string, description: string, status: string, publicIncidentUpdateDate: string, created_at: string, notifySubscribers: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4884,7 +5027,7 @@ export def "status-pages-incidents-incident-updates get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing incident update.
@@ -4901,11 +5044,12 @@ export def "status-pages-incidents-incident-updates put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --id: string
   description: string
   --status: string@status-completer-4
-  --publicIncidentUpdateDate: string # format: date-time, default: 2026-06-12T09:39:54.993Z
+  --publicIncidentUpdateDate: string # format: date-time, default: 2026-06-12T21:01:15.059Z
   --created-at: string # format: date
   --notifySubscribers: oneof<nothing, bool> # default: false
 ]: any -> record<id: string, description: string, status: string, publicIncidentUpdateDate: string, created_at: string, notifySubscribers: bool> {
@@ -4919,7 +5063,7 @@ export def "status-pages-incidents-incident-updates put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all services
@@ -4934,6 +5078,7 @@ export def "status-pages-services list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 20
   --nextId: string
   --paginated: oneof<nothing, bool> # default: true
@@ -4947,7 +5092,7 @@ export def "status-pages-services list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a service
@@ -4962,6 +5107,7 @@ export def "status-pages-services post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string
 ]: any -> record<name: string, id: string, accountId: string, created_at: string, updated_at: string> {
@@ -4975,7 +5121,7 @@ export def "status-pages-services post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a service
@@ -4991,6 +5137,7 @@ export def "status-pages-services delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5000,7 +5147,7 @@ export def "status-pages-services delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a single service
@@ -5016,6 +5163,7 @@ export def "status-pages-services get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<name: string, id: string, accountId: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5025,7 +5173,7 @@ export def "status-pages-services get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a service
@@ -5041,6 +5189,7 @@ export def "status-pages-services put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string
 ]: any -> record<name: string, id: string, accountId: string, created_at: string, updated_at: string> {
@@ -5054,7 +5203,7 @@ export def "status-pages-services put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a status page.
@@ -5070,6 +5219,7 @@ export def "status-pages delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5079,7 +5229,7 @@ export def "status-pages delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a single status page by id.
@@ -5095,6 +5245,7 @@ export def "status-pages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<name: string, description: string, url: string, customDomain: string, themeColors: record<light: record<bodyBackgroundColor: string, headerBackgroundColor: string, headerFontColor: string, titleFontColor: string, bodyFontColor: string, bodyFontColorMuted: string, navigationFontColor: string, linkFontColor: string, cardBackgroundColor: string, borderColor: string, primaryButtonBackgroundColor: string, primaryButtonFontColor: string>, dark: record<bodyBackgroundColor: string, headerBackgroundColor: string, headerFontColor: string, titleFontColor: string, bodyFontColor: string, bodyFontColorMuted: string, navigationFontColor: string, linkFontColor: string, cardBackgroundColor: string, borderColor: string, primaryButtonBackgroundColor: string, primaryButtonFontColor: string>>, logo: string, redirectTo: string, favicon: string, defaultTheme: string, cards: table<id: string, name: string, services: list, created_at: string, updated_at: string>, id: string, whiteLabel: bool, isPrivate: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5104,7 +5255,7 @@ export def "status-pages get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing status page.
@@ -5122,6 +5273,7 @@ export def "status-pages put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string
   --description: string # nullable
@@ -5144,7 +5296,7 @@ export def "status-pages put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all subscriptions for a specific status page
@@ -5160,6 +5312,7 @@ export def "status-pages-subscriptions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> table<id: string, type: string, address: string, status: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5169,7 +5322,7 @@ export def "status-pages-subscriptions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk create subscriptions for a specific status page
@@ -5186,6 +5339,7 @@ export def "status-pages-subscriptions-bulk post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   subscriptions: list # The list of subscriptions to create (max 100). — item shape: {type: "EMAIL", config: string}
 ]: any -> record<created: float, skipped: float, status: string> {
@@ -5199,7 +5353,7 @@ export def "status-pages-subscriptions-bulk post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a subscription belonging to a specific status page
@@ -5216,6 +5370,7 @@ export def "status-pages-subscriptions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5225,7 +5380,7 @@ export def "status-pages-subscriptions delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all test session error groups in your account.
@@ -5240,6 +5395,7 @@ export def "test-session-error-groups list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit the number of results. (default: 10)
   --page: float # Page number. (default: 1)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
@@ -5252,7 +5408,7 @@ export def "test-session-error-groups list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all test session error groups for a specific project.
@@ -5268,6 +5424,7 @@ export def "test-session-error-groups-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> table<id: string, projectId: string, environments: list<string>, errorHash: string, rawErrorMessage: string, cleanedErrorMessage: string, firstSeen: string, lastSeen: string, archivedUntilNextEvent: bool, pwtMetadata: list<record>, rootCauseAnalyses: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5277,7 +5434,7 @@ export def "test-session-error-groups-projects get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve one test session error group.
@@ -5293,6 +5450,7 @@ export def "test-session-error-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<id: string, projectId: string, environments: list<string>, errorHash: string, rawErrorMessage: string, cleanedErrorMessage: string, firstSeen: string, lastSeen: string, archivedUntilNextEvent: bool, pwtMetadata: table<projectName: string, specId: string, testFile: string, testTitle: string, suitePath: list>, rootCauseAnalyses: table<id: string, created_at: string, analysis: any, provider: string, model: string, durationMs: float, userContext: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5302,7 +5460,7 @@ export def "test-session-error-groups get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a test session error group. Mainly used for archiving test session error groups.
@@ -5318,6 +5476,7 @@ export def "test-session-error-groups patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --archiveForEver: oneof<nothing, bool>
   --archivedUntilNextEvent: oneof<nothing, bool>
@@ -5332,7 +5491,7 @@ export def "test-session-error-groups patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List test sessions
@@ -5347,6 +5506,7 @@ export def "test-sessions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: float # Only include test sessions created at or after this Unix timestamp.
   --qp-to: float # Only include test sessions created before this Unix timestamp.
   --limit: int # Maximum number of test sessions to return. (nullable, default: 20)
@@ -5368,7 +5528,7 @@ export def "test-sessions list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Trigger a new test session
@@ -5385,6 +5545,7 @@ export def "test-sessions-trigger post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the test session.
   runLocation: string # A public region code or private location slug name.
@@ -5404,7 +5565,7 @@ export def "test-sessions-trigger post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a test session
@@ -5420,6 +5581,7 @@ export def "test-sessions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<testSessionId: string, testSessionLink: string, name: string, status: string, errorGroupIds: list<string>, startedAt: string, stoppedAt: string, timeElapsed: float, metadata: record<environment: string, repoUrl: string, commitId: string, commitOwner: string, commitMessage: string, branchName: string>, results: table<testSessionResultId: string, testSessionResultLink: string, checkId: string, checkType: string, name: string, runLocation: string, errorGroupIds: list, resultType: string, status: string, hasErrors: bool, hasFailures: bool, isDegraded: bool, aborted: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5429,7 +5591,7 @@ export def "test-sessions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel a test session
@@ -5445,6 +5607,7 @@ export def "test-sessions-cancel post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --sequenceId: list # Subset of sequence IDs to cancel. Omit to cancel all in-progress sequences.
 ]: any -> any {
@@ -5458,7 +5621,7 @@ export def "test-sessions-cancel post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Await the completion of a test session
@@ -5474,6 +5637,7 @@ export def "test-sessions-completion get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxWaitSeconds: float # Maximum time to wait for completion before returning a retryable timeout response.
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<testSessionId: string, testSessionLink: string, name: string, status: string, errorGroupIds: list<string>, startedAt: string, stoppedAt: string, timeElapsed: float, metadata: record<environment: string, repoUrl: string, commitId: string, commitOwner: string, commitMessage: string, branchName: string>, results: table<testSessionResultId: string, testSessionResultLink: string, checkId: string, checkType: string, name: string, runLocation: string, errorGroupIds: list, resultType: string, status: string, hasErrors: bool, hasFailures: bool, isDegraded: bool, aborted: bool>> {
@@ -5485,7 +5649,7 @@ export def "test-sessions-completion get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a test session result
@@ -5502,6 +5666,7 @@ export def "test-sessions-results get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<testSessionResultId: string, testSessionResultLink: string, checkId: string, checkType: string, name: string, runLocation: string, errorGroupIds: list<string>, resultType: string, status: string, hasErrors: bool, hasFailures: bool, isDegraded: bool, aborted: bool, id: string, privateLocationId: string, filePath: string, isCancelled: bool, overMaxResponseTime: bool, responseTime: float, attempts: int, sequenceId: string, scheduleError: string, traceId: string, startedAt: string, stoppedAt: string, created_at: string, updated_at: string, apiCheckResult: record<assertions: list<record>, request: record, response: record, requestError: string, jobLog: any, jobAssets: list<string>, pcapDataUrl: string>, browserCheckResult: record<type: string, traceSummary: record, pages: list<record>, errors: list<any>, endTime: float, startTime: float, runtimeVersion: string, jobLog: any, jobAssets: list<string>, pcapDataUrl: string, playwrightTestVideos: list<string>, playwrightTestTraces: list<string>, playwrightTestJsonReportFile: string>, multiStepCheckResult: record<errors: list<any>, endTime: float, startTime: float, runtimeVersion: string, jobLog: any, jobAssets: list<string>, pcapDataUrl: string, playwrightTestVideos: list<string>, playwrightTestTraces: list<string>, playwrightTestJsonReportFile: string>, playwrightCheckResult: record<errors: list<any>, playwrightTraceFiles: list<record>, jobLog: any, jobAssets: list<string>, pcapDataUrl: string, playwrightTestVideos: list<string>, playwrightTestTraces: list<string>, playwrightTestJsonReportFile: string>, agenticCheckResult: record<summary: string, prompt: string, assertions: list<record>, suggestions: list<record>, steps: list<record>, errors: list<any>, artifactManifest: record, jobLog: any, jobAssets: list<string>, pcapDataUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5511,7 +5676,7 @@ export def "test-sessions-results get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a normalized asset manifest for a test-session result
@@ -5528,6 +5693,7 @@ export def "test-sessions-results-assets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: list # Filter assets by normalized asset type. Repeat the query parameter to include multiple types.
   --name: string # Glob pattern matched case-insensitively against the asset name and archive entry path. Empty patterns are ignored.
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
@@ -5540,7 +5706,7 @@ export def "test-sessions-results-assets get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the check group trigger
@@ -5558,6 +5724,7 @@ export def "triggers-check-groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5567,7 +5734,7 @@ export def "triggers-check-groups delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the check group trigger
@@ -5585,6 +5752,7 @@ export def "triggers-check-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<id: float, token: string, created_at: string, called_at: string, updated_at: string, groupId: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5594,7 +5762,7 @@ export def "triggers-check-groups get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create the check group trigger
@@ -5612,6 +5780,7 @@ export def "triggers-check-groups post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<id: float, token: string, created_at: string, called_at: string, updated_at: string, groupId: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5621,7 +5790,7 @@ export def "triggers-check-groups post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the check trigger
@@ -5639,6 +5808,7 @@ export def "triggers-checks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5648,7 +5818,7 @@ export def "triggers-checks delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the check trigger
@@ -5666,6 +5836,7 @@ export def "triggers-checks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<id: float, token: string, created_at: string, called_at: string, updated_at: string, checkId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5675,7 +5846,7 @@ export def "triggers-checks get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create the check trigger
@@ -5693,6 +5864,7 @@ export def "triggers-checks post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<id: float, token: string, created_at: string, called_at: string, updated_at: string, checkId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5702,7 +5874,7 @@ export def "triggers-checks post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all environment variables
@@ -5717,6 +5889,7 @@ export def "variables list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit the number of results (default: 10)
   --page: float # Page number (default: 1)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
@@ -5729,7 +5902,7 @@ export def "variables list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an environment variable
@@ -5744,6 +5917,7 @@ export def "variables post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   key: string # The key of the environment variable (this value cannot be changed). (e.g. API_KEY)
   value: string
@@ -5760,7 +5934,7 @@ export def "variables post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an environment variable
@@ -5776,6 +5950,7 @@ export def "variables delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5785,7 +5960,7 @@ export def "variables delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve an environment variable
@@ -5801,6 +5976,7 @@ export def "variables get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<key: string, value: string, locked: bool, secret: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5810,7 +5986,7 @@ export def "variables get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an environment variable
@@ -5826,6 +6002,7 @@ export def "variables put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --body-key: string # The key of the environment variable (this value cannot be changed). (e.g. API_KEY)
   value: string # The value of the environment variable. (e.g. bAxD7biGCZL6K60Q)
@@ -5842,7 +6019,7 @@ export def "variables put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a check group (V2)
@@ -5861,6 +6038,7 @@ export def "check-groups post-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check group. (e.g. Check group)
@@ -5896,7 +6074,7 @@ export def "check-groups post-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a check group (V2)
@@ -5916,6 +6094,7 @@ export def "check-groups put-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check group. (e.g. Check group)
@@ -5951,7 +6130,7 @@ export def "check-groups put-by-id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists all check results
@@ -5967,6 +6146,7 @@ export def "check-results get-by-checkId-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit the number of results to fetch (default 10) (default: 10)
   --nextId: string # Cursor parameter to fetch the next page of results. The "nextId" parameter is returned in the response of the previous request. If a response includes a "nextId" parameter set to "null", there are no more results to fetch.
   --qp-from: string # Select records up from this UNIX timestamp (>= date). (format: date)
@@ -5985,7 +6165,7 @@ export def "check-results get-by-checkId-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Trigger a new check session
@@ -6001,6 +6181,7 @@ export def "check-sessions-trigger post-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --target: record # Optional filters selecting which checks to trigger. — shape: {matchTags?: list, checkId?: list}
   --refreshCache: oneof<nothing, bool> # Refresh the selected checks cache before triggering the sessions. (default: false)
@@ -6015,7 +6196,7 @@ export def "check-sessions-trigger post-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a check session
@@ -6031,6 +6212,7 @@ export def "check-sessions get-by-checkSessionId-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<checkSessionId: string, checkSessionLink: string, checkId: string, checkType: string, name: string, status: string, startedAt: string, stoppedAt: string, timeElapsed: float, runLocations: list<string>, runSource: string, results: table<checkResultId: string, checkResultLink: string, checkId: string, checkType: string, name: string, runLocation: string, resultType: string, hasErrors: bool, hasFailures: bool, isDegraded: bool, aborted: bool, isCancelled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6040,7 +6222,7 @@ export def "check-sessions get-by-checkSessionId-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Await the completion of a check session
@@ -6056,6 +6238,7 @@ export def "check-sessions-completion get-by-checkSessionId-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxWaitSeconds: int # Maximum time to wait for completion before returning a retryable timeout response.
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<checkSessionId: string, checkSessionLink: string, checkId: string, checkType: string, name: string, status: string, startedAt: string, stoppedAt: string, timeElapsed: float, runLocations: list<string>, runSource: string, results: table<checkResultId: string, checkResultLink: string, checkId: string, checkType: string, name: string, runLocation: string, resultType: string, hasErrors: bool, hasFailures: bool, isDegraded: bool, aborted: bool, isCancelled: bool>> {
@@ -6067,5 +6250,5 @@ export def "check-sessions-completion get-by-checkSessionId-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

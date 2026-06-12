@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -74,7 +75,7 @@ def unique-by-completer [] { ["receiver" "sender"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "users Get-User" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -108,6 +109,7 @@ export def "users Get-User" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
@@ -118,7 +120,7 @@ export def "users Get-User" [
   let full_url = (build-url $base $"/users/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a User ID from an associated wallet address
@@ -133,6 +135,7 @@ export def "users-id Get-User-ID-from-Wallet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --associated-wallet: string # Wallet address (e.g. 0x087F08462BbD30fC1775bBA3E58821F4CaD47b6b)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
@@ -144,7 +147,7 @@ export def "users-id Get-User-ID-from-Wallet" [
   let full_url = (build-url $base "/users/id" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for users that match the given query
@@ -159,6 +162,7 @@ export def "users-search Search-Users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # The search query (e.g. Brownies)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
@@ -170,7 +174,7 @@ export def "users-search Search-Users" [
   let full_url = (build-url $base "/users/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Verify if the given jwt ID token was signed by the subject (user) in the payload
@@ -185,6 +189,7 @@ export def "users-verify-token Verify-ID-Token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # JWT to verify (e.g. eyJ0eXAiOiJKV1QiLCJhbGciOiJrZWNjYWsyNTYifQ.eyJ1c2VySWQiOjE0MTYxMTUsImVtYWlsIjoiaXNhYWN0ZXN0NDUxQGdtYWlsLmNvbSIsIm5hbWUiOiJ0ZXN0aW5nMTIiLCJoYW5kbGUiOiJ0ZXN0dGVzdDQ1MSIsInZlcmlmaWVkIjpmYWxzZSwic3ViIjoxNDE2MTE1LCJpYXQiOjE2NTY1MTgzMzN9.MHhkZmYyYWY5ZThmNDAxZDUyZDlhNjUxNGRiOTg0ZjM5YjFhOTZkYmNmZmViZjMzZjNkNmEzMTk4OTVlZWE2MTZjNjg0NWIwOGEyOGQ4MTA4OTEyMTc4ZDU0ODRhZGU4M2I1Yzg4ZTUwM2Y3OGYzMDYzZjYxMmQxZDQwYTYwMGZmZDFi)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
@@ -196,7 +201,7 @@ export def "users-verify-token Verify-ID-Token" [
   let full_url = (build-url $base "/users/verify_token" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the User's ERC and SPL connected wallets
@@ -212,6 +217,7 @@ export def "users-connected-wallets Get-Users-Connected-Wallets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
@@ -222,7 +228,7 @@ export def "users-connected-wallets Get-Users-Connected-Wallets" [
   let full_url = (build-url $base $"/users/($id)/connected_wallets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a user's favorite tracks
@@ -238,6 +244,7 @@ export def "users-favorites Get-Users-Favorite-Tracks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
@@ -248,7 +255,7 @@ export def "users-favorites Get-Users-Favorite-Tracks" [
   let full_url = (build-url $base $"/users/($id)/favorites" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the given user's reposts
@@ -264,6 +271,7 @@ export def "users-reposts Get-Users-Reposts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The number of items to skip. Useful for pagination (page number * limit)
   --limit: int # The number of items to fetch
   --user-id: string # The user ID of the user making the request
@@ -277,7 +285,7 @@ export def "users-reposts Get-Users-Reposts" [
   let full_url = (build-url $base $"/users/($id)/reposts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # All users that follow the provided user
@@ -293,6 +301,7 @@ export def "users-followers Get-Followers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The number of items to skip. Useful for pagination (page number * limit)
   --limit: int # The number of items to fetch
   --user-id: string # The user ID of the user making the request
@@ -306,7 +315,7 @@ export def "users-followers Get-Followers" [
   let full_url = (build-url $base $"/users/($id)/followers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # All users that the provided user follows
@@ -322,6 +331,7 @@ export def "users-following Get-Following" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The number of items to skip. Useful for pagination (page number * limit)
   --limit: int # The number of items to fetch
   --user-id: string # The user ID of the user making the request
@@ -335,7 +345,7 @@ export def "users-following Get-Following" [
   let full_url = (build-url $base $"/users/($id)/following" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the supporters of the given user
@@ -351,6 +361,7 @@ export def "users-supporters Get-Supporters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The number of items to skip. Useful for pagination (page number * limit)
   --limit: int # The number of items to fetch
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
@@ -363,7 +374,7 @@ export def "users-supporters Get-Supporters" [
   let full_url = (build-url $base $"/users/($id)/supporters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the users that the given user supports
@@ -379,6 +390,7 @@ export def "users-supporting Get-Supportings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The number of items to skip. Useful for pagination (page number * limit)
   --limit: int # The number of items to fetch
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
@@ -391,7 +403,7 @@ export def "users-supporting Get-Supportings" [
   let full_url = (build-url $base $"/users/($id)/supporting" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the tracks created by a user using their user ID
@@ -407,6 +419,7 @@ export def "users-tracks Get-Users-Tracks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The number of items to skip. Useful for pagination (page number * limit)
   --limit: int # The number of items to fetch
   --user-id: string # The user ID of the user making the request
@@ -425,7 +438,7 @@ export def "users-tracks Get-Users-Tracks" [
   let full_url = (build-url $base $"/users/($id)/tracks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of users that might be of interest to followers of this user.
@@ -441,6 +454,7 @@ export def "users-related Get-Related-Users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The number of items to skip. Useful for pagination (page number * limit)
   --limit: int # The number of items to fetch
   --user-id: string # The user ID of the user making the request
@@ -454,7 +468,7 @@ export def "users-related Get-Related-Users" [
   let full_url = (build-url $base $"/users/($id)/related" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # All users that subscribe to the provided user
@@ -470,6 +484,7 @@ export def "users-subscribers Get-Subscribers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The number of items to skip. Useful for pagination (page number * limit)
   --limit: int # The number of items to fetch
   --user-id: string # The user ID of the user making the request
@@ -483,7 +498,7 @@ export def "users-subscribers Get-Subscribers" [
   let full_url = (build-url $base $"/users/($id)/subscribers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch most used tags in a user's tracks
@@ -499,6 +514,7 @@ export def "users-tags Get-Users-Most-Used-Track-Tags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of items to fetch
   --user-id: string # The user ID of the user making the request
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
@@ -511,7 +527,7 @@ export def "users-tags Get-Users-Most-Used-Track-Tags" [
   let full_url = (build-url $base $"/users/($id)/tags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a single user by their handle
@@ -527,6 +543,7 @@ export def "users-handle Get-User-by-Handle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # The user ID of the user making the request
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
@@ -538,7 +555,7 @@ export def "users-handle Get-User-by-Handle" [
   let full_url = (build-url $base $"/users/handle/($handle)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the AI generated tracks attributed to a user using the user's handle
@@ -554,6 +571,7 @@ export def "users-handle-tracks-ai-attributed Get-AI-Tracks-by-Handle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The number of items to skip. Useful for pagination (page number * limit)
   --limit: int # The number of items to fetch
   --user-id: string # The user ID of the user making the request
@@ -572,7 +590,7 @@ export def "users-handle-tracks-ai-attributed Get-AI-Tracks-by-Handle" [
   let full_url = (build-url $base $"/users/handle/($handle)/tracks/ai_attributed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a playlist by ID
@@ -588,6 +606,7 @@ export def "playlists Get-Playlist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
@@ -598,7 +617,7 @@ export def "playlists Get-Playlist" [
   let full_url = (build-url $base $"/playlists/($playlist_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for a playlist
@@ -613,6 +632,7 @@ export def "playlists-search Search-Playlists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # The search query (e.g. Hot & New)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
@@ -624,7 +644,7 @@ export def "playlists-search Search-Playlists" [
   let full_url = (build-url $base "/playlists/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets trending playlists for a time period
@@ -639,6 +659,7 @@ export def "playlists-trending Get-Trending-Playlists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --time: string@time-completer # Calculate trending over a specified time range
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
@@ -650,7 +671,7 @@ export def "playlists-trending Get-Trending-Playlists" [
   let full_url = (build-url $base "/playlists/trending" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch tracks within a playlist.
@@ -666,6 +687,7 @@ export def "playlists-tracks Get-Playlist-Tracks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
@@ -676,7 +698,7 @@ export def "playlists-tracks Get-Playlist-Tracks" [
   let full_url = (build-url $base $"/playlists/($playlist_id)/tracks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a track by ID
@@ -692,6 +714,7 @@ export def "tracks Get-Track" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
@@ -702,7 +725,7 @@ export def "tracks Get-Track" [
   let full_url = (build-url $base $"/tracks/($track_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of tracks using their IDs or permalinks
@@ -717,6 +740,7 @@ export def "tracks Get-Bulk-Tracks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --permalink: list # The permalink of the track(s) (e.g. /TeamBandL/paauer-|-baauer-b2b-party-favor-|-bl-block-party-la-live-set-725)
   --id: list # The ID of the track(s)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
@@ -729,7 +753,7 @@ export def "tracks Get-Bulk-Tracks" [
   let full_url = (build-url $base "/tracks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for a track or tracks
@@ -744,6 +768,7 @@ export def "tracks-search Search-Tracks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # The search query (e.g. baauer b2b)
   --only-downloadable: string # Return only downloadable tracks (default: false)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
@@ -756,7 +781,7 @@ export def "tracks-search Search-Tracks" [
   let full_url = (build-url $base "/tracks/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the top 100 trending (most popular) tracks on Audius
@@ -771,6 +796,7 @@ export def "tracks-trending Get-Trending-Tracks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --genre: string # Filter trending to a specified genre
   --time: string@time-completer # Calculate trending over a specified time range
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
@@ -783,7 +809,7 @@ export def "tracks-trending Get-Trending-Tracks" [
   let full_url = (build-url $base "/tracks/trending" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the top 100 trending underground tracks on Audius
@@ -798,6 +824,7 @@ export def "tracks-trending-underground Get-Underground-Trending-Tracks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The number of items to skip. Useful for pagination (page number * limit)
   --limit: int # The number of items to fetch
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
@@ -810,7 +837,7 @@ export def "tracks-trending-underground Get-Underground-Trending-Tracks" [
   let full_url = (build-url $base "/tracks/trending/underground" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the streamable MP3 file of a track
@@ -826,6 +853,7 @@ export def "tracks-stream Stream-Track" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-signature: string # Optional - signature from the requesting user's wallet.         This is needed to authenticate the user and verify access in case the track is premium.
   --user-data: string # Optional - data which was used to generate the optional signature argument.
   --premium-content-signature: string # Optional - premium content signature for this track which was previously generated by a registered DN.         This is so that track access won't have to be check; instead, we check that the user which generated the         user signature and the user for whom the DN signed are the same.
@@ -840,7 +868,7 @@ export def "tracks-stream Stream-Track" [
   let full_url = (build-url $base $"/tracks/($track_id)/stream" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the most recent tips on the network
@@ -855,6 +883,7 @@ export def "tips Get-Tips" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The number of items to skip. Useful for pagination (page number * limit)
   --limit: int # The number of items to fetch
   --user-id: string # The user ID of the user making the request
@@ -872,7 +901,7 @@ export def "tips Get-Tips" [
   let full_url = (build-url $base "/tips" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resolves and redirects a provided Audius app URL to the API resource URL it represents
@@ -887,6 +916,7 @@ export def "resolve Resolve" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-url: string # URL to resolve. Either fully formed URL (https://audius.co) or just the absolute path (e.g. https://audius.co/camouflybeats/hypermantra-86216)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
   --app-name: string # Your app name (e.g. EXAMPLEAPP)
@@ -898,5 +928,5 @@ export def "resolve Resolve" [
   let full_url = (build-url $base "/resolve" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

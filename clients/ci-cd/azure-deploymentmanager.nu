@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-deployment-manager-operations List" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -100,6 +101,7 @@ export def "providers-microsoft-deployment-manager-operations List" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<value: record<display: record<description: string, operation: string, provider: string, resource: string>, name: string, origin: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -108,7 +110,7 @@ export def "providers-microsoft-deployment-manager-operations List" [
   let full_url = (build-url $base "/providers/Microsoft.DeploymentManager/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists the artifact sources in a resource group.
@@ -125,6 +127,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> table<properties: record<artifactRoot: string, authentication: record, sourceType: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -133,7 +136,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/artifactSources" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes an artifact source.
@@ -151,6 +154,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -159,7 +163,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/artifactSources/($artifactSourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an artifact source.
@@ -177,6 +181,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<properties: record<artifactRoot: string, authentication: record<type: string>, sourceType: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -185,7 +190,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/artifactSources/($artifactSourceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates an artifact source.
@@ -203,6 +208,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   --properties: any # The properties that define the artifact source.
   location: string # The geo-location where the resource lives
@@ -217,7 +223,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists the rollouts in a resource group.
@@ -234,6 +240,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> table<identity: record<identityIds: list, type: string>, properties: record<artifactSourceId: string, buildVersion: string, stepGroups: list, targetServiceTopologyId: string, operationInfo: record, services: list, status: string, totalRetryAttempts: int>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -242,7 +249,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/rollouts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a rollout resource.
@@ -260,6 +267,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -268,7 +276,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/rollouts/($rolloutName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets detailed information of a rollout.
@@ -286,6 +294,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   --retryAttempt: int # Rollout retry attempt ordinal to get the result of. If not specified, result of the latest attempt will be returned.
 ]: nothing -> record<identity: record<identityIds: list<string>, type: string>, properties: record<artifactSourceId: string, buildVersion: string, stepGroups: list<record>, targetServiceTopologyId: string, operationInfo: record<endTime: string, error: record, retryAttempt: int, skipSucceededOnRetry: bool, startTime: string>, services: list<record>, status: string, totalRetryAttempts: int>, location: string, tags: record> {
@@ -295,7 +304,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/rollouts/($rolloutName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates a rollout.
@@ -315,6 +324,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   identity: record # Identity for the resource. — shape: {identityIds: list, type: string}
   properties: any # The properties for defining a rollout. — shape: {artifactSourceId?: string, buildVersion: string, stepGroups: list, targetServiceTopologyId: string}
@@ -330,7 +340,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Stops a running rollout.
@@ -348,6 +358,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<identity: record<identityIds: list<string>, type: string>, properties: record<artifactSourceId: string, buildVersion: string, stepGroups: list<record>, targetServiceTopologyId: string, operationInfo: record<endTime: string, error: record, retryAttempt: int, skipSucceededOnRetry: bool, startTime: string>, services: list<record>, status: string, totalRetryAttempts: int>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -356,7 +367,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/rollouts/($rolloutName)/cancel" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Restarts a failed rollout and optionally skips all succeeded steps.
@@ -374,6 +385,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --skipSucceeded: oneof<nothing, bool> # If true, will skip all succeeded steps so far in the rollout. If false, will execute the entire rollout again regardless of the current state of individual resources. Defaults to false if not specified.
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<identity: record<identityIds: list<string>, type: string>, properties: record<artifactSourceId: string, buildVersion: string, stepGroups: list<record>, targetServiceTopologyId: string, operationInfo: record<endTime: string, error: record, retryAttempt: int, skipSucceededOnRetry: bool, startTime: string>, services: list<record>, status: string, totalRetryAttempts: int>, location: string, tags: record> {
@@ -383,7 +395,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/rollouts/($rolloutName)/restart" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists the service topologies in the resource group.
@@ -400,6 +412,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> table<properties: record<artifactSourceId: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -408,7 +421,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/serviceTopologies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the service topology.
@@ -426,6 +439,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -434,7 +448,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/serviceTopologies/($serviceTopologyName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the service topology.
@@ -452,6 +466,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<properties: record<artifactSourceId: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -460,7 +475,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/serviceTopologies/($serviceTopologyName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates a service topology.
@@ -478,6 +493,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   properties: any # The properties that define the service topology.
   location: string # The geo-location where the resource lives
@@ -492,7 +508,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists the services in the service topology.
@@ -510,6 +526,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> table<properties: record<targetLocation: string, targetSubscriptionId: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -518,7 +535,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/serviceTopologies/($serviceTopologyName)/services" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the service.
@@ -537,6 +554,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -545,7 +563,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/serviceTopologies/($serviceTopologyName)/services/($serviceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the service.
@@ -564,6 +582,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<properties: record<targetLocation: string, targetSubscriptionId: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -572,7 +591,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/serviceTopologies/($serviceTopologyName)/services/($serviceName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates a service in the service topology.
@@ -591,6 +610,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   properties: any # The properties that define a service in a service topology.
   location: string # The geo-location where the resource lives
@@ -605,7 +625,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists the service units under a service in the service topology.
@@ -624,6 +644,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> table<properties: record<artifacts: record, deploymentMode: string, targetResourceGroup: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -632,7 +653,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/serviceTopologies/($serviceTopologyName)/services/($serviceName)/serviceUnits" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the service unit.
@@ -652,6 +673,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -660,7 +682,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/serviceTopologies/($serviceTopologyName)/services/($serviceName)/serviceUnits/($serviceUnitName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the service unit.
@@ -680,6 +702,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<properties: record<artifacts: record<parametersArtifactSourceRelativePath: string, parametersUri: string, templateArtifactSourceRelativePath: string, templateUri: string>, deploymentMode: string, targetResourceGroup: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -688,7 +711,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/serviceTopologies/($serviceTopologyName)/services/($serviceName)/serviceUnits/($serviceUnitName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates a service unit under the service in the service topology.
@@ -708,6 +731,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   properties: any # The properties that define the service unit.
   location: string # The geo-location where the resource lives
@@ -722,7 +746,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Lists the steps in a resource group.
@@ -739,6 +763,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> table<properties: record<stepType: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -747,7 +772,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/steps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the step.
@@ -765,6 +790,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -773,7 +799,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/steps/($stepName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the step.
@@ -791,6 +817,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<properties: record<stepType: string>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -799,7 +826,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DeploymentManager/steps/($stepName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates a rollout step with the given step properties.
@@ -818,6 +845,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
   properties: record # The properties of a step resource. — shape: {stepType: "Wait"|"HealthCheck"}
   location: string # The geo-location where the resource lives
@@ -832,5 +860,5 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

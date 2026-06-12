@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -75,7 +76,7 @@ def workflow-completer [] { ["bootstrap" "general" "reauthentication"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "well-known-jwksjson retrieveJsonWebKeySetWithId" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -108,13 +109,14 @@ export def "well-known-jwksjson retrieveJsonWebKeySetWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<keys: table<alg: string, crv: string, d: string, dp: string, dq: string, e: string, kid: string, kty: string, n: string, other: record, p: string, q: string, qi: string, use: string, x: string, x5c: list, x5t: string, x5t_S256: string, y: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/.well-known/jwks.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns the well known OpenID Configuration JSON document
@@ -129,13 +131,14 @@ export def "well-known-openid-configuration retrieveOpenIdConfigurationWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<authorization_endpoint: string, backchannel_logout_supported: bool, claims_supported: list<string>, device_authorization_endpoint: string, dpop_signing_alg_values_supported: list<string>, end_session_endpoint: string, frontchannel_logout_supported: bool, grant_types_supported: list<string>, id_token_signing_alg_values_supported: list<string>, issuer: string, jwks_uri: string, response_modes_supported: list<string>, response_types_supported: list<string>, scopes_supported: list<string>, subject_types_supported: list<string>, token_endpoint: string, token_endpoint_auth_methods_supported: list<string>, userinfo_endpoint: string, userinfo_signing_alg_values_supported: list<string>, code_challenge_methods_supported: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/.well-known/openid-configuration")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates an API key. You can optionally specify a unique Id for the key, if not provided one will be generated. an API key can only be created with equal or lesser authority. An API key cannot create another API key unless it is granted  to that API key.  If an API key is locked to a tenant, it can only create API Keys for that same tenant.
@@ -151,6 +154,7 @@ export def "api-key createAPIKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --apiKey: record # domain POJO to represent AuthenticationKey — shape: {expirationInstant?: int, id?: string, insertInstant?: int, ipAccessControlListId?: string, key?: string, keyManager?: bool, lastUpdateInstant?: int, metaData?: record, name?: string, permissions?: record, retrievable?: bool, tenantId?: string}
   --sourceKeyId: string # format: uuid
 ]: any -> record<apiKey: record<expirationInstant: int, id: string, insertInstant: int, ipAccessControlListId: string, key: string, keyManager: bool, lastUpdateInstant: int, metaData: record<attributes: record>, name: string, permissions: record<endpoints: record>, retrievable: bool, tenantId: string>> {
@@ -162,7 +166,7 @@ export def "api-key createAPIKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates an API key. You can optionally specify a unique Id for the key, if not provided one will be generated. an API key can only be created with equal or lesser authority. An API key cannot create another API key unless it is granted  to that API key.  If an API key is locked to a tenant, it can only create API Keys for that same tenant.
@@ -179,6 +183,7 @@ export def "api-key createAPIKeyWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --apiKey: record # domain POJO to represent AuthenticationKey — shape: {expirationInstant?: int, id?: string, insertInstant?: int, ipAccessControlListId?: string, key?: string, keyManager?: bool, lastUpdateInstant?: int, metaData?: record, name?: string, permissions?: record, retrievable?: bool, tenantId?: string}
   --sourceKeyId: string # format: uuid
 ]: any -> record<apiKey: record<expirationInstant: int, id: string, insertInstant: int, ipAccessControlListId: string, key: string, keyManager: bool, lastUpdateInstant: int, metaData: record<attributes: record>, name: string, permissions: record<endpoints: record>, retrievable: bool, tenantId: string>> {
@@ -190,7 +195,7 @@ export def "api-key createAPIKeyWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the API key for the given Id.
@@ -206,13 +211,14 @@ export def "api-key delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/api-key/($keyId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates an API key with the given Id.
@@ -229,6 +235,7 @@ export def "api-key patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --apiKey: record # domain POJO to represent AuthenticationKey — shape: {expirationInstant?: int, id?: string, insertInstant?: int, ipAccessControlListId?: string, key?: string, keyManager?: bool, lastUpdateInstant?: int, metaData?: record, name?: string, permissions?: record, retrievable?: bool, tenantId?: string}
   --sourceKeyId: string # format: uuid
 ]: any -> record<apiKey: record<expirationInstant: int, id: string, insertInstant: int, ipAccessControlListId: string, key: string, keyManager: bool, lastUpdateInstant: int, metaData: record<attributes: record>, name: string, permissions: record<endpoints: record>, retrievable: bool, tenantId: string>> {
@@ -240,7 +247,7 @@ export def "api-key patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves an authentication API key for the given Id.
@@ -256,13 +263,14 @@ export def "api-key retrieveAPIKeyWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<apiKey: record<expirationInstant: int, id: string, insertInstant: int, ipAccessControlListId: string, key: string, keyManager: bool, lastUpdateInstant: int, metaData: record<attributes: record>, name: string, permissions: record<endpoints: record>, retrievable: bool, tenantId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/api-key/($keyId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates an API key with the given Id.
@@ -279,6 +287,7 @@ export def "api-key updateAPIKeyWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --apiKey: record # domain POJO to represent AuthenticationKey — shape: {expirationInstant?: int, id?: string, insertInstant?: int, ipAccessControlListId?: string, key?: string, keyManager?: bool, lastUpdateInstant?: int, metaData?: record, name?: string, permissions?: record, retrievable?: bool, tenantId?: string}
   --sourceKeyId: string # format: uuid
 ]: any -> record<apiKey: record<expirationInstant: int, id: string, insertInstant: int, ipAccessControlListId: string, key: string, keyManager: bool, lastUpdateInstant: int, metaData: record<attributes: record>, name: string, permissions: record<endpoints: record>, retrievable: bool, tenantId: string>> {
@@ -290,7 +299,7 @@ export def "api-key updateAPIKeyWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates an application. You can optionally specify an Id for the application, if not provided one will be generated.
@@ -308,6 +317,7 @@ export def "application createApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --application: record # shape: {accessControlConfiguration?: record, active?: bool, authenticationTokenConfiguration?: record, cleanSpeakConfiguration?: record, data?: record, emailConfiguration?: record, externalIdentifierConfiguration?: record, formConfiguration?: record, id?: string, insertInstant?: int, jwtConfiguration?: record, lambdaConfiguration?: record, lastUpdateInstant?: int, loginConfiguration?: record, multiFactorConfiguration?: record, name?: string, oauthConfiguration?: record, passwordlessConfiguration?: record, phoneConfiguration?: record, registrationConfiguration?: record, registrationDeletePolicy?: record, roles?: list, samlv2Configuration?: record, scopes?: list, state?: "Active"|"Inactive"|"PendingDelete", tenantId?: string, themeId?: string, universalConfiguration?: record, unverified?: record, verificationEmailTemplateId?: string, verificationStrategy?: "ClickableLink"|"FormField", verifyRegistration?: bool, webAuthnConfiguration?: record}
   --role: record # A role given to a user for a specific application. — shape: {description?: string, id?: string, insertInstant?: int, isDefault?: bool, isSuperRole?: bool, lastUpdateInstant?: int, name?: string}
@@ -324,7 +334,7 @@ export def "application createApplication" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves all the applications that are currently inactive. OR Retrieves the application for the given Id or all the applications if the Id is null.
@@ -339,6 +349,7 @@ export def "application retrieveApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --inactive: string
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<application: record<accessControlConfiguration: record<uiIPAccessControlListId: string>, active: bool, authenticationTokenConfiguration: record<enabled: bool>, cleanSpeakConfiguration: record<apiKey: string, applicationIds: list, url: string, usernameModeration: record, enabled: bool>, data: record, emailConfiguration: record<emailUpdateEmailTemplateId: string, emailVerificationEmailTemplateId: string, emailVerifiedEmailTemplateId: string, forgotPasswordEmailTemplateId: string, loginIdInUseOnCreateEmailTemplateId: string, loginIdInUseOnUpdateEmailTemplateId: string, loginNewDeviceEmailTemplateId: string, loginSuspiciousEmailTemplateId: string, passwordResetSuccessEmailTemplateId: string, passwordUpdateEmailTemplateId: string, passwordlessEmailTemplateId: string, setPasswordEmailTemplateId: string, twoFactorMethodAddEmailTemplateId: string, twoFactorMethodRemoveEmailTemplateId: string>, externalIdentifierConfiguration: record<twoFactorTrustIdTimeToLiveInSeconds: int>, formConfiguration: record<adminRegistrationFormId: string, selfServiceFormConfiguration: record, selfServiceFormId: string>, id: string, insertInstant: int, jwtConfiguration: record<accessTokenKeyId: string, idTokenKeyId: string, refreshTokenExpirationPolicy: string, refreshTokenOneTimeUseConfiguration: record, refreshTokenRevocationPolicy: record, refreshTokenSlidingWindowConfiguration: record, refreshTokenTimeToLiveInMinutes: int, refreshTokenUsagePolicy: string, timeToLiveInSeconds: int, enabled: bool>, lambdaConfiguration: record<accessTokenPopulateId: string, idTokenPopulateId: string, multiFactorRequirementId: string, samlv2PopulateId: string, selfServiceRegistrationValidationId: string, userinfoPopulateId: string>, lastUpdateInstant: int, loginConfiguration: record<allowTokenRefresh: bool, generateRefreshTokens: bool, requireAuthentication: bool>, multiFactorConfiguration: record<email: record, loginPolicy: string, sms: record, trustPolicy: string, voice: record>, name: string, oauthConfiguration: record<authorizedOriginURLs: list, authorizedRedirectURLs: list, authorizedResourceUris: list, authorizedURLValidationPolicy: string, clientAuthenticationPolicy: string, clientId: string, clientSecret: string, consentMode: string, debug: bool, deviceVerificationURL: string, enabledGrants: list, generateRefreshTokens: bool, logoutBehavior: string, logoutURL: string, proofKeyForCodeExchangePolicy: string, providedScopePolicy: record, relationship: string, requireClientAuthentication: bool, requireRegistration: bool, scopeHandlingPolicy: string, unknownScopePolicy: string>, passwordlessConfiguration: record<emailLoginStrategy: string, phoneLoginStrategy: string, enabled: bool>, phoneConfiguration: record<forgotPasswordTemplateId: string, identityUpdateTemplateId: string, loginIdInUseOnCreateTemplateId: string, loginIdInUseOnUpdateTemplateId: string, loginNewDeviceTemplateId: string, loginSuspiciousTemplateId: string, passwordResetSuccessTemplateId: string, passwordUpdateTemplateId: string, passwordlessTemplateId: string, setPasswordTemplateId: string, twoFactorMethodAddTemplateId: string, twoFactorMethodRemoveTemplateId: string, verificationCompleteTemplateId: string, verificationTemplateId: string>, registrationConfiguration: record<birthDate: record, completeRegistration: bool, confirmPassword: bool, firstName: record, formId: string, fullName: record, lastName: record, loginIdType: string, middleName: record, mobilePhone: record, preferredLanguages: record, type: string, enabled: bool>, registrationDeletePolicy: record<unverified: record>, roles: list<record>, samlv2Configuration: record<assertionEncryptionConfiguration: record, audience: string, authorizedRedirectURLs: list, debug: bool, defaultVerificationKeyId: string, initiatedLogin: record, issuer: string, keyId: string, loginHintConfiguration: record, logout: record, logoutURL: string, requireSignedRequests: bool, xmlSignatureC14nMethod: string, xmlSignatureLocation: string, callbackURL: string, enabled: bool>, scopes: list<record>, state: string, tenantId: string, themeId: string, universalConfiguration: record<universal: bool>, unverified: record<behavior: string>, verificationEmailTemplateId: string, verificationStrategy: string, verifyRegistration: bool, webAuthnConfiguration: record<bootstrapWorkflow: record, reauthenticationWorkflow: record, enabled: bool>>, applications: table<accessControlConfiguration: record, active: bool, authenticationTokenConfiguration: record, cleanSpeakConfiguration: record, data: record, emailConfiguration: record, externalIdentifierConfiguration: record, formConfiguration: record, id: string, insertInstant: int, jwtConfiguration: record, lambdaConfiguration: record, lastUpdateInstant: int, loginConfiguration: record, multiFactorConfiguration: record, name: string, oauthConfiguration: record, passwordlessConfiguration: record, phoneConfiguration: record, registrationConfiguration: record, registrationDeletePolicy: record, roles: list, samlv2Configuration: record, scopes: list, state: string, tenantId: string, themeId: string, universalConfiguration: record, unverified: record, verificationEmailTemplateId: string, verificationStrategy: string, verifyRegistration: bool, webAuthnConfiguration: record>, role: record<description: string, id: string, insertInstant: int, isDefault: bool, isSuperRole: bool, lastUpdateInstant: int, name: string>> {
@@ -350,7 +361,7 @@ export def "application retrieveApplication" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searches applications with the specified criteria and pagination.
@@ -366,6 +377,7 @@ export def "application-search searchApplicationsWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # Search criteria for Applications — shape: {name?: string, state?: "Active"|"Inactive"|"PendingDelete", tenantId?: string, universal?: bool, numberOfResults?: int, orderBy?: string, startRow?: int}
   --expand: list
 ]: any -> record<applications: table<accessControlConfiguration: record, active: bool, authenticationTokenConfiguration: record, cleanSpeakConfiguration: record, data: record, emailConfiguration: record, externalIdentifierConfiguration: record, formConfiguration: record, id: string, insertInstant: int, jwtConfiguration: record, lambdaConfiguration: record, lastUpdateInstant: int, loginConfiguration: record, multiFactorConfiguration: record, name: string, oauthConfiguration: record, passwordlessConfiguration: record, phoneConfiguration: record, registrationConfiguration: record, registrationDeletePolicy: record, roles: list, samlv2Configuration: record, scopes: list, state: string, tenantId: string, themeId: string, universalConfiguration: record, unverified: record, verificationEmailTemplateId: string, verificationStrategy: string, verifyRegistration: bool, webAuthnConfiguration: record>, total: int, expandable: list<string>> {
@@ -377,7 +389,7 @@ export def "application-search searchApplicationsWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates an application. You can optionally specify an Id for the application, if not provided one will be generated.
@@ -396,6 +408,7 @@ export def "application createApplicationWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --application: record # shape: {accessControlConfiguration?: record, active?: bool, authenticationTokenConfiguration?: record, cleanSpeakConfiguration?: record, data?: record, emailConfiguration?: record, externalIdentifierConfiguration?: record, formConfiguration?: record, id?: string, insertInstant?: int, jwtConfiguration?: record, lambdaConfiguration?: record, lastUpdateInstant?: int, loginConfiguration?: record, multiFactorConfiguration?: record, name?: string, oauthConfiguration?: record, passwordlessConfiguration?: record, phoneConfiguration?: record, registrationConfiguration?: record, registrationDeletePolicy?: record, roles?: list, samlv2Configuration?: record, scopes?: list, state?: "Active"|"Inactive"|"PendingDelete", tenantId?: string, themeId?: string, universalConfiguration?: record, unverified?: record, verificationEmailTemplateId?: string, verificationStrategy?: "ClickableLink"|"FormField", verifyRegistration?: bool, webAuthnConfiguration?: record}
   --role: record # A role given to a user for a specific application. — shape: {description?: string, id?: string, insertInstant?: int, isDefault?: bool, isSuperRole?: bool, lastUpdateInstant?: int, name?: string}
@@ -412,7 +425,7 @@ export def "application createApplicationWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Hard deletes an application. This is a dangerous operation and should not be used in most circumstances. This will delete the application, any registrations for that application, metrics and reports for the application, all the roles for the application, and any other data associated with the application. This operation could take a very long time, depending on the amount of data in your database. OR Deactivates the application with the given Id.
@@ -428,6 +441,7 @@ export def "application delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hardDelete: string
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
@@ -439,7 +453,7 @@ export def "application delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates, via PATCH, the application with the given Id.
@@ -458,6 +472,7 @@ export def "application patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --application: record # shape: {accessControlConfiguration?: record, active?: bool, authenticationTokenConfiguration?: record, cleanSpeakConfiguration?: record, data?: record, emailConfiguration?: record, externalIdentifierConfiguration?: record, formConfiguration?: record, id?: string, insertInstant?: int, jwtConfiguration?: record, lambdaConfiguration?: record, lastUpdateInstant?: int, loginConfiguration?: record, multiFactorConfiguration?: record, name?: string, oauthConfiguration?: record, passwordlessConfiguration?: record, phoneConfiguration?: record, registrationConfiguration?: record, registrationDeletePolicy?: record, roles?: list, samlv2Configuration?: record, scopes?: list, state?: "Active"|"Inactive"|"PendingDelete", tenantId?: string, themeId?: string, universalConfiguration?: record, unverified?: record, verificationEmailTemplateId?: string, verificationStrategy?: "ClickableLink"|"FormField", verifyRegistration?: bool, webAuthnConfiguration?: record}
   --role: record # A role given to a user for a specific application. — shape: {description?: string, id?: string, insertInstant?: int, isDefault?: bool, isSuperRole?: bool, lastUpdateInstant?: int, name?: string}
@@ -474,7 +489,7 @@ export def "application patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the application with the given Id. OR Reactivates the application with the given Id.
@@ -493,6 +508,7 @@ export def "application updateApplicationWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reactivate: string
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --application: record # shape: {accessControlConfiguration?: record, active?: bool, authenticationTokenConfiguration?: record, cleanSpeakConfiguration?: record, data?: record, emailConfiguration?: record, externalIdentifierConfiguration?: record, formConfiguration?: record, id?: string, insertInstant?: int, jwtConfiguration?: record, lambdaConfiguration?: record, lastUpdateInstant?: int, loginConfiguration?: record, multiFactorConfiguration?: record, name?: string, oauthConfiguration?: record, passwordlessConfiguration?: record, phoneConfiguration?: record, registrationConfiguration?: record, registrationDeletePolicy?: record, roles?: list, samlv2Configuration?: record, scopes?: list, state?: "Active"|"Inactive"|"PendingDelete", tenantId?: string, themeId?: string, universalConfiguration?: record, unverified?: record, verificationEmailTemplateId?: string, verificationStrategy?: "ClickableLink"|"FormField", verifyRegistration?: bool, webAuthnConfiguration?: record}
@@ -511,7 +527,7 @@ export def "application updateApplicationWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the application for the given Id or all the applications if the Id is null.
@@ -527,6 +543,7 @@ export def "application retrieveApplicationWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<application: record<accessControlConfiguration: record<uiIPAccessControlListId: string>, active: bool, authenticationTokenConfiguration: record<enabled: bool>, cleanSpeakConfiguration: record<apiKey: string, applicationIds: list, url: string, usernameModeration: record, enabled: bool>, data: record, emailConfiguration: record<emailUpdateEmailTemplateId: string, emailVerificationEmailTemplateId: string, emailVerifiedEmailTemplateId: string, forgotPasswordEmailTemplateId: string, loginIdInUseOnCreateEmailTemplateId: string, loginIdInUseOnUpdateEmailTemplateId: string, loginNewDeviceEmailTemplateId: string, loginSuspiciousEmailTemplateId: string, passwordResetSuccessEmailTemplateId: string, passwordUpdateEmailTemplateId: string, passwordlessEmailTemplateId: string, setPasswordEmailTemplateId: string, twoFactorMethodAddEmailTemplateId: string, twoFactorMethodRemoveEmailTemplateId: string>, externalIdentifierConfiguration: record<twoFactorTrustIdTimeToLiveInSeconds: int>, formConfiguration: record<adminRegistrationFormId: string, selfServiceFormConfiguration: record, selfServiceFormId: string>, id: string, insertInstant: int, jwtConfiguration: record<accessTokenKeyId: string, idTokenKeyId: string, refreshTokenExpirationPolicy: string, refreshTokenOneTimeUseConfiguration: record, refreshTokenRevocationPolicy: record, refreshTokenSlidingWindowConfiguration: record, refreshTokenTimeToLiveInMinutes: int, refreshTokenUsagePolicy: string, timeToLiveInSeconds: int, enabled: bool>, lambdaConfiguration: record<accessTokenPopulateId: string, idTokenPopulateId: string, multiFactorRequirementId: string, samlv2PopulateId: string, selfServiceRegistrationValidationId: string, userinfoPopulateId: string>, lastUpdateInstant: int, loginConfiguration: record<allowTokenRefresh: bool, generateRefreshTokens: bool, requireAuthentication: bool>, multiFactorConfiguration: record<email: record, loginPolicy: string, sms: record, trustPolicy: string, voice: record>, name: string, oauthConfiguration: record<authorizedOriginURLs: list, authorizedRedirectURLs: list, authorizedResourceUris: list, authorizedURLValidationPolicy: string, clientAuthenticationPolicy: string, clientId: string, clientSecret: string, consentMode: string, debug: bool, deviceVerificationURL: string, enabledGrants: list, generateRefreshTokens: bool, logoutBehavior: string, logoutURL: string, proofKeyForCodeExchangePolicy: string, providedScopePolicy: record, relationship: string, requireClientAuthentication: bool, requireRegistration: bool, scopeHandlingPolicy: string, unknownScopePolicy: string>, passwordlessConfiguration: record<emailLoginStrategy: string, phoneLoginStrategy: string, enabled: bool>, phoneConfiguration: record<forgotPasswordTemplateId: string, identityUpdateTemplateId: string, loginIdInUseOnCreateTemplateId: string, loginIdInUseOnUpdateTemplateId: string, loginNewDeviceTemplateId: string, loginSuspiciousTemplateId: string, passwordResetSuccessTemplateId: string, passwordUpdateTemplateId: string, passwordlessTemplateId: string, setPasswordTemplateId: string, twoFactorMethodAddTemplateId: string, twoFactorMethodRemoveTemplateId: string, verificationCompleteTemplateId: string, verificationTemplateId: string>, registrationConfiguration: record<birthDate: record, completeRegistration: bool, confirmPassword: bool, firstName: record, formId: string, fullName: record, lastName: record, loginIdType: string, middleName: record, mobilePhone: record, preferredLanguages: record, type: string, enabled: bool>, registrationDeletePolicy: record<unverified: record>, roles: list<record>, samlv2Configuration: record<assertionEncryptionConfiguration: record, audience: string, authorizedRedirectURLs: list, debug: bool, defaultVerificationKeyId: string, initiatedLogin: record, issuer: string, keyId: string, loginHintConfiguration: record, logout: record, logoutURL: string, requireSignedRequests: bool, xmlSignatureC14nMethod: string, xmlSignatureLocation: string, callbackURL: string, enabled: bool>, scopes: list<record>, state: string, tenantId: string, themeId: string, universalConfiguration: record<universal: bool>, unverified: record<behavior: string>, verificationEmailTemplateId: string, verificationStrategy: string, verifyRegistration: bool, webAuthnConfiguration: record<bootstrapWorkflow: record, reauthenticationWorkflow: record, enabled: bool>>, applications: table<accessControlConfiguration: record, active: bool, authenticationTokenConfiguration: record, cleanSpeakConfiguration: record, data: record, emailConfiguration: record, externalIdentifierConfiguration: record, formConfiguration: record, id: string, insertInstant: int, jwtConfiguration: record, lambdaConfiguration: record, lastUpdateInstant: int, loginConfiguration: record, multiFactorConfiguration: record, name: string, oauthConfiguration: record, passwordlessConfiguration: record, phoneConfiguration: record, registrationConfiguration: record, registrationDeletePolicy: record, roles: list, samlv2Configuration: record, scopes: list, state: string, tenantId: string, themeId: string, universalConfiguration: record, unverified: record, verificationEmailTemplateId: string, verificationStrategy: string, verifyRegistration: bool, webAuthnConfiguration: record>, role: record<description: string, id: string, insertInstant: int, isDefault: bool, isSuperRole: bool, lastUpdateInstant: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -536,7 +553,7 @@ export def "application retrieveApplicationWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the Oauth2 configuration for the application for the given Application Id.
@@ -552,6 +569,7 @@ export def "application-oauth-configuration retrieveOauthConfigurationWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<httpSessionMaxInactiveInterval: int, logoutURL: string, oauthConfiguration: record<authorizedOriginURLs: list<string>, authorizedRedirectURLs: list<string>, authorizedResourceUris: list<string>, authorizedURLValidationPolicy: string, clientAuthenticationPolicy: string, clientId: string, clientSecret: string, consentMode: string, debug: bool, deviceVerificationURL: string, enabledGrants: list<any>, generateRefreshTokens: bool, logoutBehavior: string, logoutURL: string, proofKeyForCodeExchangePolicy: string, providedScopePolicy: record<address: record, email: record, phone: record, profile: record>, relationship: string, requireClientAuthentication: bool, requireRegistration: bool, scopeHandlingPolicy: string, unknownScopePolicy: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -561,7 +579,7 @@ export def "application-oauth-configuration retrieveOauthConfigurationWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new role for an application. You must specify the Id of the application you are creating the role for. You can optionally specify an Id for the role inside the ApplicationRole object itself, if not provided one will be generated.
@@ -580,6 +598,7 @@ export def "application-role createApplicationRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --application: record # shape: {accessControlConfiguration?: record, active?: bool, authenticationTokenConfiguration?: record, cleanSpeakConfiguration?: record, data?: record, emailConfiguration?: record, externalIdentifierConfiguration?: record, formConfiguration?: record, id?: string, insertInstant?: int, jwtConfiguration?: record, lambdaConfiguration?: record, lastUpdateInstant?: int, loginConfiguration?: record, multiFactorConfiguration?: record, name?: string, oauthConfiguration?: record, passwordlessConfiguration?: record, phoneConfiguration?: record, registrationConfiguration?: record, registrationDeletePolicy?: record, roles?: list, samlv2Configuration?: record, scopes?: list, state?: "Active"|"Inactive"|"PendingDelete", tenantId?: string, themeId?: string, universalConfiguration?: record, unverified?: record, verificationEmailTemplateId?: string, verificationStrategy?: "ClickableLink"|"FormField", verifyRegistration?: bool, webAuthnConfiguration?: record}
   --role: record # A role given to a user for a specific application. — shape: {description?: string, id?: string, insertInstant?: int, isDefault?: bool, isSuperRole?: bool, lastUpdateInstant?: int, name?: string}
@@ -596,7 +615,7 @@ export def "application-role createApplicationRole" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a new role for an application. You must specify the Id of the application you are creating the role for. You can optionally specify an Id for the role inside the ApplicationRole object itself, if not provided one will be generated.
@@ -616,6 +635,7 @@ export def "application-role createApplicationRoleWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --application: record # shape: {accessControlConfiguration?: record, active?: bool, authenticationTokenConfiguration?: record, cleanSpeakConfiguration?: record, data?: record, emailConfiguration?: record, externalIdentifierConfiguration?: record, formConfiguration?: record, id?: string, insertInstant?: int, jwtConfiguration?: record, lambdaConfiguration?: record, lastUpdateInstant?: int, loginConfiguration?: record, multiFactorConfiguration?: record, name?: string, oauthConfiguration?: record, passwordlessConfiguration?: record, phoneConfiguration?: record, registrationConfiguration?: record, registrationDeletePolicy?: record, roles?: list, samlv2Configuration?: record, scopes?: list, state?: "Active"|"Inactive"|"PendingDelete", tenantId?: string, themeId?: string, universalConfiguration?: record, unverified?: record, verificationEmailTemplateId?: string, verificationStrategy?: "ClickableLink"|"FormField", verifyRegistration?: bool, webAuthnConfiguration?: record}
   --role: record # A role given to a user for a specific application. — shape: {description?: string, id?: string, insertInstant?: int, isDefault?: bool, isSuperRole?: bool, lastUpdateInstant?: int, name?: string}
@@ -632,7 +652,7 @@ export def "application-role createApplicationRoleWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Hard deletes an application role. This is a dangerous operation and should not be used in most circumstances. This permanently removes the given role from all users that had it.
@@ -649,6 +669,7 @@ export def "application-role delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -658,7 +679,7 @@ export def "application-role delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates, via PATCH, the application role with the given Id for the application.
@@ -678,6 +699,7 @@ export def "application-role patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --application: record # shape: {accessControlConfiguration?: record, active?: bool, authenticationTokenConfiguration?: record, cleanSpeakConfiguration?: record, data?: record, emailConfiguration?: record, externalIdentifierConfiguration?: record, formConfiguration?: record, id?: string, insertInstant?: int, jwtConfiguration?: record, lambdaConfiguration?: record, lastUpdateInstant?: int, loginConfiguration?: record, multiFactorConfiguration?: record, name?: string, oauthConfiguration?: record, passwordlessConfiguration?: record, phoneConfiguration?: record, registrationConfiguration?: record, registrationDeletePolicy?: record, roles?: list, samlv2Configuration?: record, scopes?: list, state?: "Active"|"Inactive"|"PendingDelete", tenantId?: string, themeId?: string, universalConfiguration?: record, unverified?: record, verificationEmailTemplateId?: string, verificationStrategy?: "ClickableLink"|"FormField", verifyRegistration?: bool, webAuthnConfiguration?: record}
   --role: record # A role given to a user for a specific application. — shape: {description?: string, id?: string, insertInstant?: int, isDefault?: bool, isSuperRole?: bool, lastUpdateInstant?: int, name?: string}
@@ -694,7 +716,7 @@ export def "application-role patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the application role with the given Id for the application.
@@ -714,6 +736,7 @@ export def "application-role updateApplicationRoleWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --application: record # shape: {accessControlConfiguration?: record, active?: bool, authenticationTokenConfiguration?: record, cleanSpeakConfiguration?: record, data?: record, emailConfiguration?: record, externalIdentifierConfiguration?: record, formConfiguration?: record, id?: string, insertInstant?: int, jwtConfiguration?: record, lambdaConfiguration?: record, lastUpdateInstant?: int, loginConfiguration?: record, multiFactorConfiguration?: record, name?: string, oauthConfiguration?: record, passwordlessConfiguration?: record, phoneConfiguration?: record, registrationConfiguration?: record, registrationDeletePolicy?: record, roles?: list, samlv2Configuration?: record, scopes?: list, state?: "Active"|"Inactive"|"PendingDelete", tenantId?: string, themeId?: string, universalConfiguration?: record, unverified?: record, verificationEmailTemplateId?: string, verificationStrategy?: "ClickableLink"|"FormField", verifyRegistration?: bool, webAuthnConfiguration?: record}
   --role: record # A role given to a user for a specific application. — shape: {description?: string, id?: string, insertInstant?: int, isDefault?: bool, isSuperRole?: bool, lastUpdateInstant?: int, name?: string}
@@ -730,7 +753,7 @@ export def "application-role updateApplicationRoleWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a new custom OAuth scope for an application. You must specify the Id of the application you are creating the scope for. You can optionally specify an Id for the OAuth scope on the URL, if not provided one will be generated.
@@ -747,6 +770,7 @@ export def "application-scope createOAuthScope" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --scope: record # A custom OAuth scope for a specific application. — shape: {applicationId?: string, data?: record, defaultConsentDetail?: string, defaultConsentMessage?: string, description?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, required?: bool}
 ]: any -> record<scope: record<applicationId: string, data: record, defaultConsentDetail: string, defaultConsentMessage: string, description: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, required: bool>> {
@@ -760,7 +784,7 @@ export def "application-scope createOAuthScope" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a new custom OAuth scope for an application. You must specify the Id of the application you are creating the scope for. You can optionally specify an Id for the OAuth scope on the URL, if not provided one will be generated.
@@ -778,6 +802,7 @@ export def "application-scope createOAuthScopeWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --scope: record # A custom OAuth scope for a specific application. — shape: {applicationId?: string, data?: record, defaultConsentDetail?: string, defaultConsentMessage?: string, description?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, required?: bool}
 ]: any -> record<scope: record<applicationId: string, data: record, defaultConsentDetail: string, defaultConsentMessage: string, description: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, required: bool>> {
@@ -791,7 +816,7 @@ export def "application-scope createOAuthScopeWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Hard deletes a custom OAuth scope. OAuth workflows that are still requesting the deleted OAuth scope may fail depending on the application's unknown scope policy.
@@ -808,6 +833,7 @@ export def "application-scope delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -817,7 +843,7 @@ export def "application-scope delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates, via PATCH, the custom OAuth scope with the given Id for the application.
@@ -835,6 +861,7 @@ export def "application-scope patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --scope: record # A custom OAuth scope for a specific application. — shape: {applicationId?: string, data?: record, defaultConsentDetail?: string, defaultConsentMessage?: string, description?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, required?: bool}
 ]: any -> record<scope: record<applicationId: string, data: record, defaultConsentDetail: string, defaultConsentMessage: string, description: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, required: bool>> {
@@ -848,7 +875,7 @@ export def "application-scope patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves a custom OAuth scope.
@@ -865,6 +892,7 @@ export def "application-scope retrieveOAuthScopeWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<scope: record<applicationId: string, data: record, defaultConsentDetail: string, defaultConsentMessage: string, description: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, required: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -874,7 +902,7 @@ export def "application-scope retrieveOAuthScopeWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the OAuth scope with the given Id for the application.
@@ -892,6 +920,7 @@ export def "application-scope updateOAuthScopeWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --scope: record # A custom OAuth scope for a specific application. — shape: {applicationId?: string, data?: record, defaultConsentDetail?: string, defaultConsentMessage?: string, description?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, required?: bool}
 ]: any -> record<scope: record<applicationId: string, data: record, defaultConsentDetail: string, defaultConsentMessage: string, description: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, required: bool>> {
@@ -905,7 +934,7 @@ export def "application-scope updateOAuthScopeWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a connector.  You can optionally specify an Id for the connector, if not provided one will be generated.
@@ -921,6 +950,7 @@ export def "connector createConnector" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --connector: record # Do not require a setter for 'type', it is defined by the concrete class and is not mutable — shape: {data?: record, debug?: bool, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, type?: "FusionAuth"|"Generic"|"LDAP"}
 ]: any -> record<connector: record<data: record, debug: bool, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>, connectors: table<data: record, debug: bool, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>> {
   let input = $in
@@ -931,7 +961,7 @@ export def "connector createConnector" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a connector.  You can optionally specify an Id for the connector, if not provided one will be generated.
@@ -948,6 +978,7 @@ export def "connector createConnectorWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --connector: record # Do not require a setter for 'type', it is defined by the concrete class and is not mutable — shape: {data?: record, debug?: bool, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, type?: "FusionAuth"|"Generic"|"LDAP"}
 ]: any -> record<connector: record<data: record, debug: bool, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>, connectors: table<data: record, debug: bool, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>> {
   let input = $in
@@ -958,7 +989,7 @@ export def "connector createConnectorWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the connector for the given Id.
@@ -974,13 +1005,14 @@ export def "connector delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/connector/($connectorId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates, via PATCH, the connector with the given Id.
@@ -997,6 +1029,7 @@ export def "connector patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --connector: record # Do not require a setter for 'type', it is defined by the concrete class and is not mutable — shape: {data?: record, debug?: bool, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, type?: "FusionAuth"|"Generic"|"LDAP"}
 ]: any -> record<connector: record<data: record, debug: bool, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>, connectors: table<data: record, debug: bool, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>> {
   let input = $in
@@ -1007,7 +1040,7 @@ export def "connector patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the connector with the given Id.
@@ -1023,13 +1056,14 @@ export def "connector retrieveConnectorWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<connector: record<data: record, debug: bool, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>, connectors: table<data: record, debug: bool, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/connector/($connectorId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the connector with the given Id.
@@ -1046,6 +1080,7 @@ export def "connector updateConnectorWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --connector: record # Do not require a setter for 'type', it is defined by the concrete class and is not mutable — shape: {data?: record, debug?: bool, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, type?: "FusionAuth"|"Generic"|"LDAP"}
 ]: any -> record<connector: record<data: record, debug: bool, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>, connectors: table<data: record, debug: bool, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>> {
   let input = $in
@@ -1056,7 +1091,7 @@ export def "connector updateConnectorWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a user consent type. You can optionally specify an Id for the consent type, if not provided one will be generated.
@@ -1072,6 +1107,7 @@ export def "consent createConsent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --consent: record # Models a consent. — shape: {data?: record, consentEmailTemplateId?: string, countryMinimumAgeForSelfConsent?: record, defaultMinimumAgeForSelfConsent?: int, emailPlus?: record, id?: string, insertInstant?: int, lastUpdateInstant?: int, multipleValuesAllowed?: bool, name?: string, values?: list}
 ]: any -> record<consent: record<data: record, consentEmailTemplateId: string, countryMinimumAgeForSelfConsent: record, defaultMinimumAgeForSelfConsent: int, emailPlus: record<emailTemplateId: string, maximumTimeToSendEmailInHours: int, minimumTimeToSendEmailInHours: int, enabled: bool>, id: string, insertInstant: int, lastUpdateInstant: int, multipleValuesAllowed: bool, name: string, values: list<string>>, consents: table<data: record, consentEmailTemplateId: string, countryMinimumAgeForSelfConsent: record, defaultMinimumAgeForSelfConsent: int, emailPlus: record, id: string, insertInstant: int, lastUpdateInstant: int, multipleValuesAllowed: bool, name: string, values: list>> {
@@ -1085,7 +1121,7 @@ export def "consent createConsent" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Searches consents with the specified criteria and pagination.
@@ -1101,6 +1137,7 @@ export def "consent-search searchConsentsWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # Search criteria for Consents — shape: {name?: string, numberOfResults?: int, orderBy?: string, startRow?: int}
 ]: any -> record<consents: table<data: record, consentEmailTemplateId: string, countryMinimumAgeForSelfConsent: record, defaultMinimumAgeForSelfConsent: int, emailPlus: record, id: string, insertInstant: int, lastUpdateInstant: int, multipleValuesAllowed: bool, name: string, values: list>, total: int> {
   let input = $in
@@ -1111,7 +1148,7 @@ export def "consent-search searchConsentsWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a user consent type. You can optionally specify an Id for the consent type, if not provided one will be generated.
@@ -1128,6 +1165,7 @@ export def "consent createConsentWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --consent: record # Models a consent. — shape: {data?: record, consentEmailTemplateId?: string, countryMinimumAgeForSelfConsent?: record, defaultMinimumAgeForSelfConsent?: int, emailPlus?: record, id?: string, insertInstant?: int, lastUpdateInstant?: int, multipleValuesAllowed?: bool, name?: string, values?: list}
 ]: any -> record<consent: record<data: record, consentEmailTemplateId: string, countryMinimumAgeForSelfConsent: record, defaultMinimumAgeForSelfConsent: int, emailPlus: record<emailTemplateId: string, maximumTimeToSendEmailInHours: int, minimumTimeToSendEmailInHours: int, enabled: bool>, id: string, insertInstant: int, lastUpdateInstant: int, multipleValuesAllowed: bool, name: string, values: list<string>>, consents: table<data: record, consentEmailTemplateId: string, countryMinimumAgeForSelfConsent: record, defaultMinimumAgeForSelfConsent: int, emailPlus: record, id: string, insertInstant: int, lastUpdateInstant: int, multipleValuesAllowed: bool, name: string, values: list>> {
@@ -1141,7 +1179,7 @@ export def "consent createConsentWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the consent for the given Id.
@@ -1157,6 +1195,7 @@ export def "consent delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1166,7 +1205,7 @@ export def "consent delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates, via PATCH, the consent with the given Id.
@@ -1183,6 +1222,7 @@ export def "consent patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --consent: record # Models a consent. — shape: {data?: record, consentEmailTemplateId?: string, countryMinimumAgeForSelfConsent?: record, defaultMinimumAgeForSelfConsent?: int, emailPlus?: record, id?: string, insertInstant?: int, lastUpdateInstant?: int, multipleValuesAllowed?: bool, name?: string, values?: list}
 ]: any -> record<consent: record<data: record, consentEmailTemplateId: string, countryMinimumAgeForSelfConsent: record, defaultMinimumAgeForSelfConsent: int, emailPlus: record<emailTemplateId: string, maximumTimeToSendEmailInHours: int, minimumTimeToSendEmailInHours: int, enabled: bool>, id: string, insertInstant: int, lastUpdateInstant: int, multipleValuesAllowed: bool, name: string, values: list<string>>, consents: table<data: record, consentEmailTemplateId: string, countryMinimumAgeForSelfConsent: record, defaultMinimumAgeForSelfConsent: int, emailPlus: record, id: string, insertInstant: int, lastUpdateInstant: int, multipleValuesAllowed: bool, name: string, values: list>> {
@@ -1196,7 +1236,7 @@ export def "consent patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the Consent for the given Id.
@@ -1212,6 +1252,7 @@ export def "consent retrieveConsentWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<consent: record<data: record, consentEmailTemplateId: string, countryMinimumAgeForSelfConsent: record, defaultMinimumAgeForSelfConsent: int, emailPlus: record<emailTemplateId: string, maximumTimeToSendEmailInHours: int, minimumTimeToSendEmailInHours: int, enabled: bool>, id: string, insertInstant: int, lastUpdateInstant: int, multipleValuesAllowed: bool, name: string, values: list<string>>, consents: table<data: record, consentEmailTemplateId: string, countryMinimumAgeForSelfConsent: record, defaultMinimumAgeForSelfConsent: int, emailPlus: record, id: string, insertInstant: int, lastUpdateInstant: int, multipleValuesAllowed: bool, name: string, values: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1221,7 +1262,7 @@ export def "consent retrieveConsentWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the consent with the given Id.
@@ -1238,6 +1279,7 @@ export def "consent updateConsentWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --consent: record # Models a consent. — shape: {data?: record, consentEmailTemplateId?: string, countryMinimumAgeForSelfConsent?: record, defaultMinimumAgeForSelfConsent?: int, emailPlus?: record, id?: string, insertInstant?: int, lastUpdateInstant?: int, multipleValuesAllowed?: bool, name?: string, values?: list}
 ]: any -> record<consent: record<data: record, consentEmailTemplateId: string, countryMinimumAgeForSelfConsent: record, defaultMinimumAgeForSelfConsent: int, emailPlus: record<emailTemplateId: string, maximumTimeToSendEmailInHours: int, minimumTimeToSendEmailInHours: int, enabled: bool>, id: string, insertInstant: int, lastUpdateInstant: int, multipleValuesAllowed: bool, name: string, values: list<string>>, consents: table<data: record, consentEmailTemplateId: string, countryMinimumAgeForSelfConsent: record, defaultMinimumAgeForSelfConsent: int, emailPlus: record, id: string, insertInstant: int, lastUpdateInstant: int, multipleValuesAllowed: bool, name: string, values: list>> {
@@ -1251,7 +1293,7 @@ export def "consent updateConsentWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send an email using an email template Id. You can optionally provide <code>requestData</code> to access key value pairs in the email template.
@@ -1268,6 +1310,7 @@ export def "email-send sendEmailWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationId: string # format: uuid
   --bccAddresses: list
   --ccAddresses: list
@@ -1284,7 +1327,7 @@ export def "email-send sendEmailWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates an email template. You can optionally specify an Id for the template, if not provided one will be generated.
@@ -1300,6 +1343,7 @@ export def "email-template createEmailTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --emailTemplate: record # Stores an email template used to send emails to users. — shape: {defaultFromName?: string, defaultHtmlTemplate?: string, defaultSubject?: string, defaultTextTemplate?: string, fromEmail?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, localizedFromNames?: record, localizedHtmlTemplates?: record, localizedSubjects?: record, localizedTextTemplates?: record, name?: string}
 ]: any -> record<emailTemplate: record<defaultFromName: string, defaultHtmlTemplate: string, defaultSubject: string, defaultTextTemplate: string, fromEmail: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedFromNames: record, localizedHtmlTemplates: record, localizedSubjects: record, localizedTextTemplates: record, name: string>, emailTemplates: table<defaultFromName: string, defaultHtmlTemplate: string, defaultSubject: string, defaultTextTemplate: string, fromEmail: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedFromNames: record, localizedHtmlTemplates: record, localizedSubjects: record, localizedTextTemplates: record, name: string>> {
@@ -1313,7 +1357,7 @@ export def "email-template createEmailTemplate" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the email template for the given Id. If you don't specify the Id, this will return all the email templates.
@@ -1328,6 +1372,7 @@ export def "email-template retrieveEmailTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<emailTemplate: record<defaultFromName: string, defaultHtmlTemplate: string, defaultSubject: string, defaultTextTemplate: string, fromEmail: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedFromNames: record, localizedHtmlTemplates: record, localizedSubjects: record, localizedTextTemplates: record, name: string>, emailTemplates: table<defaultFromName: string, defaultHtmlTemplate: string, defaultSubject: string, defaultTextTemplate: string, fromEmail: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedFromNames: record, localizedHtmlTemplates: record, localizedSubjects: record, localizedTextTemplates: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1337,7 +1382,7 @@ export def "email-template retrieveEmailTemplate" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a preview of the email template provided in the request. This allows you to preview an email template that hasn't been saved to the database yet. The entire email template does not need to be provided on the request. This will create the preview based on whatever is given.
@@ -1353,6 +1398,7 @@ export def "email-template-preview retrieveEmailTemplatePreviewWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --emailTemplate: record # Stores an email template used to send emails to users. — shape: {defaultFromName?: string, defaultHtmlTemplate?: string, defaultSubject?: string, defaultTextTemplate?: string, fromEmail?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, localizedFromNames?: record, localizedHtmlTemplates?: record, localizedSubjects?: record, localizedTextTemplates?: record, name?: string}
   --locale: string # A Locale object represents a specific geographical, political, or cultural region. (e.g. en_US)
 ]: any -> record<email: record<attachments: list<record>, bcc: list<record>, cc: list<record>, from: record<address: string, display: string>, html: string, replyTo: record<address: string, display: string>, subject: string, text: string, to: list<record>>, errors: record<fieldErrors: list<record>, generalErrors: list<record>>> {
@@ -1364,7 +1410,7 @@ export def "email-template-preview retrieveEmailTemplatePreviewWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Searches email templates with the specified criteria and pagination.
@@ -1380,6 +1426,7 @@ export def "email-template-search searchEmailTemplatesWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # Search criteria for Email templates — shape: {name?: string, numberOfResults?: int, orderBy?: string, startRow?: int}
 ]: any -> record<emailTemplates: table<defaultFromName: string, defaultHtmlTemplate: string, defaultSubject: string, defaultTextTemplate: string, fromEmail: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedFromNames: record, localizedHtmlTemplates: record, localizedSubjects: record, localizedTextTemplates: record, name: string>, total: int> {
   let input = $in
@@ -1390,7 +1437,7 @@ export def "email-template-search searchEmailTemplatesWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates an email template. You can optionally specify an Id for the template, if not provided one will be generated.
@@ -1407,6 +1454,7 @@ export def "email-template createEmailTemplateWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --emailTemplate: record # Stores an email template used to send emails to users. — shape: {defaultFromName?: string, defaultHtmlTemplate?: string, defaultSubject?: string, defaultTextTemplate?: string, fromEmail?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, localizedFromNames?: record, localizedHtmlTemplates?: record, localizedSubjects?: record, localizedTextTemplates?: record, name?: string}
 ]: any -> record<emailTemplate: record<defaultFromName: string, defaultHtmlTemplate: string, defaultSubject: string, defaultTextTemplate: string, fromEmail: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedFromNames: record, localizedHtmlTemplates: record, localizedSubjects: record, localizedTextTemplates: record, name: string>, emailTemplates: table<defaultFromName: string, defaultHtmlTemplate: string, defaultSubject: string, defaultTextTemplate: string, fromEmail: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedFromNames: record, localizedHtmlTemplates: record, localizedSubjects: record, localizedTextTemplates: record, name: string>> {
@@ -1420,7 +1468,7 @@ export def "email-template createEmailTemplateWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the email template for the given Id.
@@ -1436,6 +1484,7 @@ export def "email-template delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1445,7 +1494,7 @@ export def "email-template delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates, via PATCH, the email template with the given Id.
@@ -1462,6 +1511,7 @@ export def "email-template patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --emailTemplate: record # Stores an email template used to send emails to users. — shape: {defaultFromName?: string, defaultHtmlTemplate?: string, defaultSubject?: string, defaultTextTemplate?: string, fromEmail?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, localizedFromNames?: record, localizedHtmlTemplates?: record, localizedSubjects?: record, localizedTextTemplates?: record, name?: string}
 ]: any -> record<emailTemplate: record<defaultFromName: string, defaultHtmlTemplate: string, defaultSubject: string, defaultTextTemplate: string, fromEmail: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedFromNames: record, localizedHtmlTemplates: record, localizedSubjects: record, localizedTextTemplates: record, name: string>, emailTemplates: table<defaultFromName: string, defaultHtmlTemplate: string, defaultSubject: string, defaultTextTemplate: string, fromEmail: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedFromNames: record, localizedHtmlTemplates: record, localizedSubjects: record, localizedTextTemplates: record, name: string>> {
@@ -1475,7 +1525,7 @@ export def "email-template patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the email template for the given Id. If you don't specify the Id, this will return all the email templates.
@@ -1491,6 +1541,7 @@ export def "email-template retrieveEmailTemplateWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<emailTemplate: record<defaultFromName: string, defaultHtmlTemplate: string, defaultSubject: string, defaultTextTemplate: string, fromEmail: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedFromNames: record, localizedHtmlTemplates: record, localizedSubjects: record, localizedTextTemplates: record, name: string>, emailTemplates: table<defaultFromName: string, defaultHtmlTemplate: string, defaultSubject: string, defaultTextTemplate: string, fromEmail: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedFromNames: record, localizedHtmlTemplates: record, localizedSubjects: record, localizedTextTemplates: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1500,7 +1551,7 @@ export def "email-template retrieveEmailTemplateWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the email template with the given Id.
@@ -1517,6 +1568,7 @@ export def "email-template updateEmailTemplateWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --emailTemplate: record # Stores an email template used to send emails to users. — shape: {defaultFromName?: string, defaultHtmlTemplate?: string, defaultSubject?: string, defaultTextTemplate?: string, fromEmail?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, localizedFromNames?: record, localizedHtmlTemplates?: record, localizedSubjects?: record, localizedTextTemplates?: record, name?: string}
 ]: any -> record<emailTemplate: record<defaultFromName: string, defaultHtmlTemplate: string, defaultSubject: string, defaultTextTemplate: string, fromEmail: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedFromNames: record, localizedHtmlTemplates: record, localizedSubjects: record, localizedTextTemplates: record, name: string>, emailTemplates: table<defaultFromName: string, defaultHtmlTemplate: string, defaultSubject: string, defaultTextTemplate: string, fromEmail: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedFromNames: record, localizedHtmlTemplates: record, localizedSubjects: record, localizedTextTemplates: record, name: string>> {
@@ -1530,7 +1582,7 @@ export def "email-template updateEmailTemplateWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates an Entity. You can optionally specify an Id for the Entity. If not provided one will be generated.
@@ -1546,6 +1598,7 @@ export def "entity createEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --entity: record # Models an entity that a user can be granted permissions to. Or an entity that can be granted permissions to another entity. — shape: {data?: record, clientId?: string, clientSecret?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, parentId?: string, tenantId?: string, type?: record}
 ]: any -> record<entity: record<data: record, clientId: string, clientSecret: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, parentId: string, tenantId: string, type: record<data: record, id: string, insertInstant: int, jwtConfiguration: record, lastUpdateInstant: int, name: string, permissions: list>>> {
@@ -1559,7 +1612,7 @@ export def "entity createEntity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Searches Entity Grants with the specified criteria and pagination.
@@ -1575,6 +1628,7 @@ export def "entity-grant-search searchEntityGrantsWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # Search criteria for entity grants. — shape: {entityId?: string, name?: string, userId?: string, numberOfResults?: int, orderBy?: string, startRow?: int}
 ]: any -> record<grants: table<data: record, entity: record, id: string, insertInstant: int, lastUpdateInstant: int, permissions: list, recipientEntityId: string, userId: string>, total: int> {
   let input = $in
@@ -1585,7 +1639,7 @@ export def "entity-grant-search searchEntityGrantsWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Searches entities with the specified criteria and pagination.
@@ -1601,6 +1655,7 @@ export def "entity-search searchEntitiesWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # This class is the entity query. It provides a build pattern as well as public fields for use on forms and in actions. — shape: {accurateTotal?: bool, ids?: list, nextResults?: string, query?: string, queryString?: string, sortFields?: list}
 ]: any -> record<entities: table<data: record, clientId: string, clientSecret: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, parentId: string, tenantId: string, type: record>, nextResults: string, total: int> {
   let input = $in
@@ -1611,7 +1666,7 @@ export def "entity-search searchEntitiesWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the entities for the given Ids. If any Id is invalid, it is ignored.
@@ -1626,6 +1681,7 @@ export def "entity-search searchEntitiesByIdsWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: string # The entity ids to search for.
 ]: nothing -> record<entities: table<data: record, clientId: string, clientSecret: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, parentId: string, tenantId: string, type: record>, nextResults: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1634,7 +1690,7 @@ export def "entity-search searchEntitiesByIdsWithId" [
   let full_url = (build-url $base "/api/entity/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a Entity Type. You can optionally specify an Id for the Entity Type, if not provided one will be generated.
@@ -1651,6 +1707,7 @@ export def "entity-type createEntityType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --entityType: record # Models an entity type that has a specific set of permissions. These are global objects and can be used across tenants. — shape: {data?: record, id?: string, insertInstant?: int, jwtConfiguration?: record, lastUpdateInstant?: int, name?: string, permissions?: list}
   --permission: record # Models a specific entity type permission. This permission can be granted to users or other entities. — shape: {data?: record, description?: string, id?: string, insertInstant?: int, isDefault?: bool, lastUpdateInstant?: int, name?: string}
 ]: any -> record<entityType: record<data: record, id: string, insertInstant: int, jwtConfiguration: record<accessTokenKeyId: string, timeToLiveInSeconds: int, enabled: bool>, lastUpdateInstant: int, name: string, permissions: list<record>>, entityTypes: table<data: record, id: string, insertInstant: int, jwtConfiguration: record, lastUpdateInstant: int, name: string, permissions: list>, permission: record<data: record, description: string, id: string, insertInstant: int, isDefault: bool, lastUpdateInstant: int, name: string>> {
@@ -1662,7 +1719,7 @@ export def "entity-type createEntityType" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Searches the entity types with the specified criteria and pagination.
@@ -1678,6 +1735,7 @@ export def "entity-type-search searchEntityTypesWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # Search criteria for entity types. — shape: {name?: string, numberOfResults?: int, orderBy?: string, startRow?: int}
 ]: any -> record<entityTypes: table<data: record, id: string, insertInstant: int, jwtConfiguration: record, lastUpdateInstant: int, name: string, permissions: list>, total: int> {
   let input = $in
@@ -1688,7 +1746,7 @@ export def "entity-type-search searchEntityTypesWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a Entity Type. You can optionally specify an Id for the Entity Type, if not provided one will be generated.
@@ -1706,6 +1764,7 @@ export def "entity-type createEntityTypeWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --entityType: record # Models an entity type that has a specific set of permissions. These are global objects and can be used across tenants. — shape: {data?: record, id?: string, insertInstant?: int, jwtConfiguration?: record, lastUpdateInstant?: int, name?: string, permissions?: list}
   --permission: record # Models a specific entity type permission. This permission can be granted to users or other entities. — shape: {data?: record, description?: string, id?: string, insertInstant?: int, isDefault?: bool, lastUpdateInstant?: int, name?: string}
 ]: any -> record<entityType: record<data: record, id: string, insertInstant: int, jwtConfiguration: record<accessTokenKeyId: string, timeToLiveInSeconds: int, enabled: bool>, lastUpdateInstant: int, name: string, permissions: list<record>>, entityTypes: table<data: record, id: string, insertInstant: int, jwtConfiguration: record, lastUpdateInstant: int, name: string, permissions: list>, permission: record<data: record, description: string, id: string, insertInstant: int, isDefault: bool, lastUpdateInstant: int, name: string>> {
@@ -1717,7 +1776,7 @@ export def "entity-type createEntityTypeWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the Entity Type for the given Id.
@@ -1733,13 +1792,14 @@ export def "entity-type delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/entity/type/($entityTypeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates, via PATCH, the Entity Type with the given Id.
@@ -1757,6 +1817,7 @@ export def "entity-type patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --entityType: record # Models an entity type that has a specific set of permissions. These are global objects and can be used across tenants. — shape: {data?: record, id?: string, insertInstant?: int, jwtConfiguration?: record, lastUpdateInstant?: int, name?: string, permissions?: list}
   --permission: record # Models a specific entity type permission. This permission can be granted to users or other entities. — shape: {data?: record, description?: string, id?: string, insertInstant?: int, isDefault?: bool, lastUpdateInstant?: int, name?: string}
 ]: any -> record<entityType: record<data: record, id: string, insertInstant: int, jwtConfiguration: record<accessTokenKeyId: string, timeToLiveInSeconds: int, enabled: bool>, lastUpdateInstant: int, name: string, permissions: list<record>>, entityTypes: table<data: record, id: string, insertInstant: int, jwtConfiguration: record, lastUpdateInstant: int, name: string, permissions: list>, permission: record<data: record, description: string, id: string, insertInstant: int, isDefault: bool, lastUpdateInstant: int, name: string>> {
@@ -1768,7 +1829,7 @@ export def "entity-type patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the Entity Type for the given Id.
@@ -1784,13 +1845,14 @@ export def "entity-type retrieveEntityTypeWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<entityType: record<data: record, id: string, insertInstant: int, jwtConfiguration: record<accessTokenKeyId: string, timeToLiveInSeconds: int, enabled: bool>, lastUpdateInstant: int, name: string, permissions: list<record>>, entityTypes: table<data: record, id: string, insertInstant: int, jwtConfiguration: record, lastUpdateInstant: int, name: string, permissions: list>, permission: record<data: record, description: string, id: string, insertInstant: int, isDefault: bool, lastUpdateInstant: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/entity/type/($entityTypeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the Entity Type with the given Id.
@@ -1808,6 +1870,7 @@ export def "entity-type updateEntityTypeWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --entityType: record # Models an entity type that has a specific set of permissions. These are global objects and can be used across tenants. — shape: {data?: record, id?: string, insertInstant?: int, jwtConfiguration?: record, lastUpdateInstant?: int, name?: string, permissions?: list}
   --permission: record # Models a specific entity type permission. This permission can be granted to users or other entities. — shape: {data?: record, description?: string, id?: string, insertInstant?: int, isDefault?: bool, lastUpdateInstant?: int, name?: string}
 ]: any -> record<entityType: record<data: record, id: string, insertInstant: int, jwtConfiguration: record<accessTokenKeyId: string, timeToLiveInSeconds: int, enabled: bool>, lastUpdateInstant: int, name: string, permissions: list<record>>, entityTypes: table<data: record, id: string, insertInstant: int, jwtConfiguration: record, lastUpdateInstant: int, name: string, permissions: list>, permission: record<data: record, description: string, id: string, insertInstant: int, isDefault: bool, lastUpdateInstant: int, name: string>> {
@@ -1819,7 +1882,7 @@ export def "entity-type updateEntityTypeWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a new permission for an entity type. You must specify the Id of the entity type you are creating the permission for. You can optionally specify an Id for the permission inside the EntityTypePermission object itself, if not provided one will be generated.
@@ -1837,6 +1900,7 @@ export def "entity-type-permission createEntityTypePermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --entityType: record # Models an entity type that has a specific set of permissions. These are global objects and can be used across tenants. — shape: {data?: record, id?: string, insertInstant?: int, jwtConfiguration?: record, lastUpdateInstant?: int, name?: string, permissions?: list}
   --permission: record # Models a specific entity type permission. This permission can be granted to users or other entities. — shape: {data?: record, description?: string, id?: string, insertInstant?: int, isDefault?: bool, lastUpdateInstant?: int, name?: string}
 ]: any -> record<entityType: record<data: record, id: string, insertInstant: int, jwtConfiguration: record<accessTokenKeyId: string, timeToLiveInSeconds: int, enabled: bool>, lastUpdateInstant: int, name: string, permissions: list<record>>, entityTypes: table<data: record, id: string, insertInstant: int, jwtConfiguration: record, lastUpdateInstant: int, name: string, permissions: list>, permission: record<data: record, description: string, id: string, insertInstant: int, isDefault: bool, lastUpdateInstant: int, name: string>> {
@@ -1848,7 +1912,7 @@ export def "entity-type-permission createEntityTypePermission" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a new permission for an entity type. You must specify the Id of the entity type you are creating the permission for. You can optionally specify an Id for the permission inside the EntityTypePermission object itself, if not provided one will be generated.
@@ -1867,6 +1931,7 @@ export def "entity-type-permission createEntityTypePermissionWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --entityType: record # Models an entity type that has a specific set of permissions. These are global objects and can be used across tenants. — shape: {data?: record, id?: string, insertInstant?: int, jwtConfiguration?: record, lastUpdateInstant?: int, name?: string, permissions?: list}
   --permission: record # Models a specific entity type permission. This permission can be granted to users or other entities. — shape: {data?: record, description?: string, id?: string, insertInstant?: int, isDefault?: bool, lastUpdateInstant?: int, name?: string}
 ]: any -> record<entityType: record<data: record, id: string, insertInstant: int, jwtConfiguration: record<accessTokenKeyId: string, timeToLiveInSeconds: int, enabled: bool>, lastUpdateInstant: int, name: string, permissions: list<record>>, entityTypes: table<data: record, id: string, insertInstant: int, jwtConfiguration: record, lastUpdateInstant: int, name: string, permissions: list>, permission: record<data: record, description: string, id: string, insertInstant: int, isDefault: bool, lastUpdateInstant: int, name: string>> {
@@ -1878,7 +1943,7 @@ export def "entity-type-permission createEntityTypePermissionWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Hard deletes a permission. This is a dangerous operation and should not be used in most circumstances. This permanently removes the given permission from all grants that had it.
@@ -1895,13 +1960,14 @@ export def "entity-type-permission delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/entity/type/($entityTypeId)/permission/($permissionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Patches the permission with the given Id for the entity type.
@@ -1920,6 +1986,7 @@ export def "entity-type-permission patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --entityType: record # Models an entity type that has a specific set of permissions. These are global objects and can be used across tenants. — shape: {data?: record, id?: string, insertInstant?: int, jwtConfiguration?: record, lastUpdateInstant?: int, name?: string, permissions?: list}
   --permission: record # Models a specific entity type permission. This permission can be granted to users or other entities. — shape: {data?: record, description?: string, id?: string, insertInstant?: int, isDefault?: bool, lastUpdateInstant?: int, name?: string}
 ]: any -> record<entityType: record<data: record, id: string, insertInstant: int, jwtConfiguration: record<accessTokenKeyId: string, timeToLiveInSeconds: int, enabled: bool>, lastUpdateInstant: int, name: string, permissions: list<record>>, entityTypes: table<data: record, id: string, insertInstant: int, jwtConfiguration: record, lastUpdateInstant: int, name: string, permissions: list>, permission: record<data: record, description: string, id: string, insertInstant: int, isDefault: bool, lastUpdateInstant: int, name: string>> {
@@ -1931,7 +1998,7 @@ export def "entity-type-permission patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the permission with the given Id for the entity type.
@@ -1950,6 +2017,7 @@ export def "entity-type-permission updateEntityTypePermissionWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --entityType: record # Models an entity type that has a specific set of permissions. These are global objects and can be used across tenants. — shape: {data?: record, id?: string, insertInstant?: int, jwtConfiguration?: record, lastUpdateInstant?: int, name?: string, permissions?: list}
   --permission: record # Models a specific entity type permission. This permission can be granted to users or other entities. — shape: {data?: record, description?: string, id?: string, insertInstant?: int, isDefault?: bool, lastUpdateInstant?: int, name?: string}
 ]: any -> record<entityType: record<data: record, id: string, insertInstant: int, jwtConfiguration: record<accessTokenKeyId: string, timeToLiveInSeconds: int, enabled: bool>, lastUpdateInstant: int, name: string, permissions: list<record>>, entityTypes: table<data: record, id: string, insertInstant: int, jwtConfiguration: record, lastUpdateInstant: int, name: string, permissions: list>, permission: record<data: record, description: string, id: string, insertInstant: int, isDefault: bool, lastUpdateInstant: int, name: string>> {
@@ -1961,7 +2029,7 @@ export def "entity-type-permission updateEntityTypePermissionWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates an Entity. You can optionally specify an Id for the Entity. If not provided one will be generated.
@@ -1978,6 +2046,7 @@ export def "entity createEntityWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --entity: record # Models an entity that a user can be granted permissions to. Or an entity that can be granted permissions to another entity. — shape: {data?: record, clientId?: string, clientSecret?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, parentId?: string, tenantId?: string, type?: record}
 ]: any -> record<entity: record<data: record, clientId: string, clientSecret: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, parentId: string, tenantId: string, type: record<data: record, id: string, insertInstant: int, jwtConfiguration: record, lastUpdateInstant: int, name: string, permissions: list>>> {
@@ -1991,7 +2060,7 @@ export def "entity createEntityWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the Entity for the given Id.
@@ -2007,6 +2076,7 @@ export def "entity delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2016,7 +2086,7 @@ export def "entity delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates, via PATCH, the Entity with the given Id.
@@ -2033,6 +2103,7 @@ export def "entity patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --entity: record # Models an entity that a user can be granted permissions to. Or an entity that can be granted permissions to another entity. — shape: {data?: record, clientId?: string, clientSecret?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, parentId?: string, tenantId?: string, type?: record}
 ]: any -> record<entity: record<data: record, clientId: string, clientSecret: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, parentId: string, tenantId: string, type: record<data: record, id: string, insertInstant: int, jwtConfiguration: record, lastUpdateInstant: int, name: string, permissions: list>>> {
@@ -2046,7 +2117,7 @@ export def "entity patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the Entity for the given Id.
@@ -2062,6 +2133,7 @@ export def "entity retrieveEntityWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<entity: record<data: record, clientId: string, clientSecret: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, parentId: string, tenantId: string, type: record<data: record, id: string, insertInstant: int, jwtConfiguration: record, lastUpdateInstant: int, name: string, permissions: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2071,7 +2143,7 @@ export def "entity retrieveEntityWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the Entity with the given Id.
@@ -2088,6 +2160,7 @@ export def "entity updateEntityWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --entity: record # Models an entity that a user can be granted permissions to. Or an entity that can be granted permissions to another entity. — shape: {data?: record, clientId?: string, clientSecret?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, parentId?: string, tenantId?: string, type?: record}
 ]: any -> record<entity: record<data: record, clientId: string, clientSecret: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, parentId: string, tenantId: string, type: record<data: record, id: string, insertInstant: int, jwtConfiguration: record, lastUpdateInstant: int, name: string, permissions: list>>> {
@@ -2101,7 +2174,7 @@ export def "entity updateEntityWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes an Entity Grant for the given User or Entity.
@@ -2117,6 +2190,7 @@ export def "entity-grant delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recipientEntityId: string # The Id of the Entity that the Entity Grant is for.
   --userId: string # The Id of the User that the Entity Grant is for.
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
@@ -2129,7 +2203,7 @@ export def "entity-grant delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves an Entity Grant for the given Entity and User/Entity.
@@ -2145,6 +2219,7 @@ export def "entity-grant retrieveEntityGrantWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --recipientEntityId: string # The Id of the Entity that the Entity Grant is for.
   --userId: string # The Id of the User that the Entity Grant is for.
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
@@ -2157,7 +2232,7 @@ export def "entity-grant retrieveEntityGrantWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates or updates an Entity Grant. This is when a User/Entity is granted permissions to an Entity.
@@ -2174,6 +2249,7 @@ export def "entity-grant upsertEntityGrantWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --grant: record # A grant for an entity to a user or another entity. — shape: {data?: record, entity?: record, id?: string, insertInstant?: int, lastUpdateInstant?: int, permissions?: list, recipientEntityId?: string, userId?: string}
 ]: any -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
@@ -2187,7 +2263,7 @@ export def "entity-grant upsertEntityGrantWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a form.  You can optionally specify an Id for the form, if not provided one will be generated.
@@ -2203,6 +2279,7 @@ export def "form createForm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --form: record # shape: {data?: record, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, steps?: list, type?: "registration"|"adminRegistration"|"adminUser"|"selfServiceUser"}
 ]: any -> record<form: record<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, steps: list<record>, type: string>, forms: table<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, steps: list, type: string>> {
   let input = $in
@@ -2213,7 +2290,7 @@ export def "form createForm" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a form field.  You can optionally specify an Id for the form, if not provided one will be generated.
@@ -2230,6 +2307,7 @@ export def "form-field createFormField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --field: record # shape: {confirm?: bool, consentId?: string, control?: "checkbox"|"number"|"password"|"radio"|"select"|"textarea"|"text", data?: record, description?: string, id?: string, insertInstant?: int, key?: string, lastUpdateInstant?: int, name?: string, options?: list, required?: bool, type?: "bool"|"consent"|"date"|"email"|"number"|"phoneNumber"|"string", validator?: record}
   --body-fields: list # item shape: {confirm?: bool, consentId?: string, control?: "checkbox"|"number"|"password"|"radio"|"select"|"textarea"|"text", data?: record, description?: string, id?: string, insertInstant?: int, key?: string, lastUpdateInstant?: int, name?: string, options?: list, required?: bool, type?: "bool"|"consent"|"date"|"email"|"number"|"phoneNumber"|"string", validator?: record}
 ]: any -> record<field: record<confirm: bool, consentId: string, control: string, data: record, description: string, id: string, insertInstant: int, key: string, lastUpdateInstant: int, name: string, options: list<string>, required: bool, type: string, validator: record<expression: string, enabled: bool>>, fields: table<confirm: bool, consentId: string, control: string, data: record, description: string, id: string, insertInstant: int, key: string, lastUpdateInstant: int, name: string, options: list, required: bool, type: string, validator: record>> {
@@ -2241,7 +2319,7 @@ export def "form-field createFormField" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a form field.  You can optionally specify an Id for the form, if not provided one will be generated.
@@ -2259,6 +2337,7 @@ export def "form-field createFormFieldWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --field: record # shape: {confirm?: bool, consentId?: string, control?: "checkbox"|"number"|"password"|"radio"|"select"|"textarea"|"text", data?: record, description?: string, id?: string, insertInstant?: int, key?: string, lastUpdateInstant?: int, name?: string, options?: list, required?: bool, type?: "bool"|"consent"|"date"|"email"|"number"|"phoneNumber"|"string", validator?: record}
   --body-fields: list # item shape: {confirm?: bool, consentId?: string, control?: "checkbox"|"number"|"password"|"radio"|"select"|"textarea"|"text", data?: record, description?: string, id?: string, insertInstant?: int, key?: string, lastUpdateInstant?: int, name?: string, options?: list, required?: bool, type?: "bool"|"consent"|"date"|"email"|"number"|"phoneNumber"|"string", validator?: record}
 ]: any -> record<field: record<confirm: bool, consentId: string, control: string, data: record, description: string, id: string, insertInstant: int, key: string, lastUpdateInstant: int, name: string, options: list<string>, required: bool, type: string, validator: record<expression: string, enabled: bool>>, fields: table<confirm: bool, consentId: string, control: string, data: record, description: string, id: string, insertInstant: int, key: string, lastUpdateInstant: int, name: string, options: list, required: bool, type: string, validator: record>> {
@@ -2270,7 +2349,7 @@ export def "form-field createFormFieldWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the form field for the given Id.
@@ -2286,13 +2365,14 @@ export def "form-field delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/form/field/($fieldId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Patches the form field with the given Id.
@@ -2310,6 +2390,7 @@ export def "form-field patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --field: record # shape: {confirm?: bool, consentId?: string, control?: "checkbox"|"number"|"password"|"radio"|"select"|"textarea"|"text", data?: record, description?: string, id?: string, insertInstant?: int, key?: string, lastUpdateInstant?: int, name?: string, options?: list, required?: bool, type?: "bool"|"consent"|"date"|"email"|"number"|"phoneNumber"|"string", validator?: record}
   --body-fields: list # item shape: {confirm?: bool, consentId?: string, control?: "checkbox"|"number"|"password"|"radio"|"select"|"textarea"|"text", data?: record, description?: string, id?: string, insertInstant?: int, key?: string, lastUpdateInstant?: int, name?: string, options?: list, required?: bool, type?: "bool"|"consent"|"date"|"email"|"number"|"phoneNumber"|"string", validator?: record}
 ]: any -> record<field: record<confirm: bool, consentId: string, control: string, data: record, description: string, id: string, insertInstant: int, key: string, lastUpdateInstant: int, name: string, options: list<string>, required: bool, type: string, validator: record<expression: string, enabled: bool>>, fields: table<confirm: bool, consentId: string, control: string, data: record, description: string, id: string, insertInstant: int, key: string, lastUpdateInstant: int, name: string, options: list, required: bool, type: string, validator: record>> {
@@ -2321,7 +2402,7 @@ export def "form-field patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the form field with the given Id.
@@ -2337,13 +2418,14 @@ export def "form-field retrieveFormFieldWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<field: record<confirm: bool, consentId: string, control: string, data: record, description: string, id: string, insertInstant: int, key: string, lastUpdateInstant: int, name: string, options: list<string>, required: bool, type: string, validator: record<expression: string, enabled: bool>>, fields: table<confirm: bool, consentId: string, control: string, data: record, description: string, id: string, insertInstant: int, key: string, lastUpdateInstant: int, name: string, options: list, required: bool, type: string, validator: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/form/field/($fieldId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the form field with the given Id.
@@ -2361,6 +2443,7 @@ export def "form-field updateFormFieldWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --field: record # shape: {confirm?: bool, consentId?: string, control?: "checkbox"|"number"|"password"|"radio"|"select"|"textarea"|"text", data?: record, description?: string, id?: string, insertInstant?: int, key?: string, lastUpdateInstant?: int, name?: string, options?: list, required?: bool, type?: "bool"|"consent"|"date"|"email"|"number"|"phoneNumber"|"string", validator?: record}
   --body-fields: list # item shape: {confirm?: bool, consentId?: string, control?: "checkbox"|"number"|"password"|"radio"|"select"|"textarea"|"text", data?: record, description?: string, id?: string, insertInstant?: int, key?: string, lastUpdateInstant?: int, name?: string, options?: list, required?: bool, type?: "bool"|"consent"|"date"|"email"|"number"|"phoneNumber"|"string", validator?: record}
 ]: any -> record<field: record<confirm: bool, consentId: string, control: string, data: record, description: string, id: string, insertInstant: int, key: string, lastUpdateInstant: int, name: string, options: list<string>, required: bool, type: string, validator: record<expression: string, enabled: bool>>, fields: table<confirm: bool, consentId: string, control: string, data: record, description: string, id: string, insertInstant: int, key: string, lastUpdateInstant: int, name: string, options: list, required: bool, type: string, validator: record>> {
@@ -2372,7 +2455,7 @@ export def "form-field updateFormFieldWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a form.  You can optionally specify an Id for the form, if not provided one will be generated.
@@ -2389,6 +2472,7 @@ export def "form createFormWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --form: record # shape: {data?: record, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, steps?: list, type?: "registration"|"adminRegistration"|"adminUser"|"selfServiceUser"}
 ]: any -> record<form: record<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, steps: list<record>, type: string>, forms: table<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, steps: list, type: string>> {
   let input = $in
@@ -2399,7 +2483,7 @@ export def "form createFormWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the form for the given Id.
@@ -2415,13 +2499,14 @@ export def "form delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/form/($formId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Patches the form with the given Id.
@@ -2438,6 +2523,7 @@ export def "form patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --form: record # shape: {data?: record, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, steps?: list, type?: "registration"|"adminRegistration"|"adminUser"|"selfServiceUser"}
 ]: any -> record<form: record<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, steps: list<record>, type: string>, forms: table<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, steps: list, type: string>> {
   let input = $in
@@ -2448,7 +2534,7 @@ export def "form patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the form with the given Id.
@@ -2464,13 +2550,14 @@ export def "form retrieveFormWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<form: record<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, steps: list<record>, type: string>, forms: table<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, steps: list, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/form/($formId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the form with the given Id.
@@ -2487,6 +2574,7 @@ export def "form updateFormWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --form: record # shape: {data?: record, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, steps?: list, type?: "registration"|"adminRegistration"|"adminUser"|"selfServiceUser"}
 ]: any -> record<form: record<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, steps: list<record>, type: string>, forms: table<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, steps: list, type: string>> {
   let input = $in
@@ -2497,7 +2585,7 @@ export def "form updateFormWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a group. You can optionally specify an Id for the group, if not provided one will be generated.
@@ -2513,6 +2601,7 @@ export def "group createGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --group: record # shape: {data?: record, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, roles?: list, tenantId?: string}
   --roleIds: list
@@ -2527,7 +2616,7 @@ export def "group createGroup" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a member in a group.
@@ -2543,6 +2632,7 @@ export def "group-member createGroupMembersWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --members: list # item shape: {data?: record, groupId?: string, id?: string, insertInstant?: int, userId?: string}
 ]: any -> record<members: table<data: record, groupId: string, id: string, insertInstant: int, userId: string>> {
   let input = $in
@@ -2553,7 +2643,7 @@ export def "group-member createGroupMembersWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Removes users as members of a group.
@@ -2568,6 +2658,7 @@ export def "group-member delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --memberIds: list
   --members: list
 ]: any -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
@@ -2579,7 +2670,7 @@ export def "group-member delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a member in a group.
@@ -2595,6 +2686,7 @@ export def "group-member updateGroupMembersWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --members: list # item shape: {data?: record, groupId?: string, id?: string, insertInstant?: int, userId?: string}
 ]: any -> record<members: table<data: record, groupId: string, id: string, insertInstant: int, userId: string>> {
   let input = $in
@@ -2605,7 +2697,7 @@ export def "group-member updateGroupMembersWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Searches group members with the specified criteria and pagination.
@@ -2621,6 +2713,7 @@ export def "group-member-search searchGroupMembersWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # Search criteria for Group Members — shape: {groupId?: string, tenantId?: string, userId?: string, numberOfResults?: int, orderBy?: string, startRow?: int}
 ]: any -> record<members: table<data: record, groupId: string, id: string, insertInstant: int, userId: string>, total: int> {
   let input = $in
@@ -2631,7 +2724,7 @@ export def "group-member-search searchGroupMembersWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Searches groups with the specified criteria and pagination.
@@ -2647,6 +2740,7 @@ export def "group-search searchGroupsWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # Search criteria for Groups — shape: {name?: string, tenantId?: string, numberOfResults?: int, orderBy?: string, startRow?: int}
 ]: any -> record<groups: table<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, roles: list, tenantId: string>, total: int> {
   let input = $in
@@ -2657,7 +2751,7 @@ export def "group-search searchGroupsWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a group. You can optionally specify an Id for the group, if not provided one will be generated.
@@ -2674,6 +2768,7 @@ export def "group createGroupWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --group: record # shape: {data?: record, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, roles?: list, tenantId?: string}
   --roleIds: list
@@ -2688,7 +2783,7 @@ export def "group createGroupWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the group for the given Id.
@@ -2704,6 +2799,7 @@ export def "group delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2713,7 +2809,7 @@ export def "group delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates, via PATCH, the group with the given Id.
@@ -2730,6 +2826,7 @@ export def "group patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --group: record # shape: {data?: record, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, roles?: list, tenantId?: string}
   --roleIds: list
@@ -2744,7 +2841,7 @@ export def "group patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the group for the given Id.
@@ -2760,6 +2857,7 @@ export def "group retrieveGroupWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<group: record<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, roles: list<record>, tenantId: string>, groups: table<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, roles: list, tenantId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2769,7 +2867,7 @@ export def "group retrieveGroupWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the group with the given Id.
@@ -2786,6 +2884,7 @@ export def "group updateGroupWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --group: record # shape: {data?: record, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, roles?: list, tenantId?: string}
   --roleIds: list
@@ -2800,7 +2899,7 @@ export def "group updateGroupWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the FusionAuth system health. This API will return 200 if the system is healthy, and 500 if the system is un-healthy.
@@ -2815,13 +2914,14 @@ export def "health retrieveSystemHealthWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/health")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates an identity provider. You can optionally specify an Id for the identity provider, if not provided one will be generated.
@@ -2836,6 +2936,7 @@ export def "identity-provider createIdentityProvider" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --identityProvider: any
 ]: any -> record<identityProvider: any, identityProviders: list<any>> {
   let input = $in
@@ -2846,7 +2947,7 @@ export def "identity-provider createIdentityProvider" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves one or more identity provider for the given type. For types such as Google, Facebook, Twitter and LinkedIn, only a single  identity provider can exist. For types such as OpenID Connect and SAMLv2 more than one identity provider can be configured so this request  may return multiple identity providers.
@@ -2861,6 +2962,7 @@ export def "identity-provider retrieveIdentityProviderByTypeWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string # The type of the identity provider.
 ]: nothing -> record<identityProvider: any, identityProviders: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2869,7 +2971,7 @@ export def "identity-provider retrieveIdentityProviderByTypeWithId" [
   let full_url = (build-url $base "/api/identity-provider" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Link an external user from a 3rd party identity provider to a FusionAuth user.
@@ -2886,6 +2988,7 @@ export def "identity-provider-link createUserLinkWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --identityProviderLink: record # shape: {data?: record, displayName?: string, identityProviderId?: string, identityProviderName?: string, identityProviderType?: "Apple"|"EpicGames"|"ExternalJWT"|"Facebook"|"Google"|"HYPR"|"LinkedIn"|"Nintendo"|"OpenIDConnect"|"SAMLv2"|"SAMLv2IdPInitiated"|"SonyPSN"|"Steam"|"Twitch"|"Twitter"|"Xbox", identityProviderUserId?: string, insertInstant?: int, lastLoginInstant?: int, tenantId?: string, token?: string, userId?: string}
   --pendingIdPLinkId: string
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
@@ -2898,7 +3001,7 @@ export def "identity-provider-link createUserLinkWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove an existing link that has been made from a 3rd party identity provider to a FusionAuth user.
@@ -2913,6 +3016,7 @@ export def "identity-provider-link delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --identityProviderId: string # The unique Id of the identity provider.
   --identityProviderUserId: string # The unique Id of the user in the 3rd party identity provider to unlink.
   --userId: string # The unique Id of the FusionAuth user to unlink.
@@ -2923,7 +3027,7 @@ export def "identity-provider-link delete" [
   let full_url = (build-url $base "/api/identity-provider/link" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve all Identity Provider users (links) for the user. Specify the optional identityProviderId to retrieve links for a particular IdP. OR Retrieve a single Identity Provider user (link).
@@ -2938,6 +3042,7 @@ export def "identity-provider-link retrieveIdentityProviderLink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --identityProviderId: string # The unique Id of the identity provider. Specify this value to reduce the links returned to those for a particular IdP.
   --userId: string # The unique Id of the user.
   --identityProviderUserId: string # The unique Id of the user in the 3rd party identity provider.
@@ -2948,7 +3053,7 @@ export def "identity-provider-link retrieveIdentityProviderLink" [
   let full_url = (build-url $base "/api/identity-provider/link" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a pending identity provider link. This is useful to validate a pending link and retrieve meta-data about the identity provider link.
@@ -2964,6 +3069,7 @@ export def "identity-provider-link-pending retrievePendingLinkWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # The optional userId. When provided additional meta-data will be provided to identify how many links if any the user already has.
 ]: nothing -> record<identityProviderTenantConfiguration: record<data: record, limitUserLinkCount: record<maximumLinks: int, enabled: bool>>, linkCount: int, pendingIdPLink: record<displayName: string, email: string, identityProviderId: string, identityProviderLinks: list<record>, identityProviderName: string, identityProviderTenantConfiguration: record<data: record, limitUserLinkCount: record>, identityProviderType: string, identityProviderUserId: string, user: record<preferredLanguages: list, active: bool, birthDate: string, cleanSpeakId: string, data: record, email: string, expiry: int, firstName: string, fullName: string, imageUrl: string, insertInstant: int, lastName: string, legacyIdentifier: string, lastUpdateInstant: int, middleName: string, mobilePhone: string, parentEmail: string, phoneNumber: string, tenantId: string, timezone: string, twoFactor: record, memberships: list, registrations: list, identities: list, breachedPasswordLastCheckedInstant: int, breachedPasswordStatus: string, connectorId: string, encryptionScheme: string, factor: int, id: string, lastLoginInstant: int, password: string, passwordChangeReason: string, passwordChangeRequired: bool, passwordLastUpdateInstant: int, salt: string, uniqueUsername: string, username: string, usernameStatus: string, verified: bool, verifiedInstant: int>, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2972,7 +3078,7 @@ export def "identity-provider-link-pending retrievePendingLinkWithId" [
   let full_url = (build-url $base $"/api/identity-provider/link/pending/($pendingLinkId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Handles login via third-parties including Social login, external OAuth and OpenID Connect, and other login systems.
@@ -2988,6 +3094,7 @@ export def "identity-provider-login identityProviderLoginWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --connectionTestId: string
   --data: record
@@ -3010,7 +3117,7 @@ export def "identity-provider-login identityProviderLoginWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the identity provider for the given domain and tenantId. A 200 response code indicates the domain is managed by a registered identity provider. A 404 indicates the domain is not managed. OR Retrieves any global identity providers for the given domain. A 200 response code indicates the domain is managed by a registered identity provider. A 404 indicates the domain is not managed.
@@ -3025,6 +3132,7 @@ export def "identity-provider-lookup retrieveIdentityProviderLookup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --domain: string # The domain or email address to lookup.
   --tenantId: string # If provided, the API searches for an identity provider scoped to the corresponding tenant that manages the requested domain. If no result is found, the API then searches for global identity providers.
 ]: nothing -> record<identityProvider: record<applicationIds: list<string>, id: string, idpEndpoint: string, name: string, oauth2: record<authorization_endpoint: string, clientAuthenticationMethod: string, client_id: string, client_secret: string, emailClaim: string, emailVerifiedClaim: string, issuer: string, scope: string, token_endpoint: string, uniqueIdClaim: string, userinfo_endpoint: string, usernameClaim: string>, tenantId: string, type: string>> {
@@ -3034,7 +3142,7 @@ export def "identity-provider-lookup retrieveIdentityProviderLookup" [
   let full_url = (build-url $base "/api/identity-provider/lookup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searches identity providers with the specified criteria and pagination.
@@ -3050,6 +3158,7 @@ export def "identity-provider-search searchIdentityProvidersWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # Search criteria for Identity Providers. — shape: {applicationId?: string, name?: string, source?: string, tenantId?: string, type?: "Apple"|"EpicGames"|"ExternalJWT"|"Facebook"|"Google"|"HYPR"|"LinkedIn"|"Nintendo"|"OpenIDConnect"|"SAMLv2"|"SAMLv2IdPInitiated"|"SonyPSN"|"Steam"|"Twitch"|"Twitter"|"Xbox", numberOfResults?: int, orderBy?: string, startRow?: int}
 ]: any -> record<identityProviders: list<any>, total: int> {
   let input = $in
@@ -3060,7 +3169,7 @@ export def "identity-provider-search searchIdentityProvidersWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Begins a login request for a 3rd party login that requires user interaction such as HYPR.
@@ -3076,6 +3185,7 @@ export def "identity-provider-start startIdentityProviderLoginWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --connectionTestId: string
   --data: record
   --identityProviderId: string # format: uuid
@@ -3096,7 +3206,7 @@ export def "identity-provider-start startIdentityProviderLoginWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the results for an identity provider connection test.
@@ -3111,6 +3221,7 @@ export def "identity-provider-test retrieveIdentityProviderConnectionTestResults
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --connectionTestId: string # The connection test id to retrieve results for.
 ]: nothing -> record<connectionTestId: string, result: record<email: string, identityProviderId: string, identityProviderUserId: string, startInstant: int, steps: list<record>, success: bool, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3119,7 +3230,7 @@ export def "identity-provider-test retrieveIdentityProviderConnectionTestResults
   let full_url = (build-url $base "/api/identity-provider/test" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Begins an identity provider connection test.
@@ -3134,6 +3245,7 @@ export def "identity-provider-test startIdentityProviderConnectionTestWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --identityProviderId: string # format: uuid
   --tenantId: string # format: uuid
 ]: any -> record<connectionTestId: string, result: record<email: string, identityProviderId: string, identityProviderUserId: string, startInstant: int, steps: list<record>, success: bool, username: string>> {
@@ -3145,7 +3257,7 @@ export def "identity-provider-test startIdentityProviderConnectionTestWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates an identity provider. You can optionally specify an Id for the identity provider, if not provided one will be generated.
@@ -3161,6 +3273,7 @@ export def "identity-provider createIdentityProviderWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --identityProvider: any
 ]: any -> record<identityProvider: any, identityProviders: list<any>> {
   let input = $in
@@ -3171,7 +3284,7 @@ export def "identity-provider createIdentityProviderWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the identity provider for the given Id.
@@ -3187,13 +3300,14 @@ export def "identity-provider delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/identity-provider/($identityProviderId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates, via PATCH, the identity provider with the given Id.
@@ -3209,6 +3323,7 @@ export def "identity-provider patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --identityProvider: any
 ]: any -> record<identityProvider: any, identityProviders: list<any>> {
   let input = $in
@@ -3219,7 +3334,7 @@ export def "identity-provider patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the identity provider for the given Id or all the identity providers if the Id is null.
@@ -3235,13 +3350,14 @@ export def "identity-provider retrieveIdentityProviderWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<identityProvider: any, identityProviders: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/identity-provider/($identityProviderId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the identity provider with the given Id.
@@ -3257,6 +3373,7 @@ export def "identity-provider updateIdentityProviderWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --identityProvider: any
 ]: any -> record<identityProvider: any, identityProviders: list<any>> {
   let input = $in
@@ -3267,7 +3384,7 @@ export def "identity-provider updateIdentityProviderWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Administratively verify a user identity.
@@ -3283,6 +3400,7 @@ export def "identity-verify verifyIdentityWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --loginId: string
   --loginIdType: string
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
@@ -3295,7 +3413,7 @@ export def "identity-verify verifyIdentityWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Completes verification of an identity using verification codes from the Verify Start API.
@@ -3311,6 +3429,7 @@ export def "identity-verify-complete completeVerifyIdentityWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --oneTimeCode: string
   --verificationId: string
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
@@ -3323,7 +3442,7 @@ export def "identity-verify-complete completeVerifyIdentityWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send a verification code using the appropriate transport for the identity type being verified.
@@ -3338,6 +3457,7 @@ export def "identity-verify-send sendVerifyIdentityWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --verificationId: string
 ]: any -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let input = $in
@@ -3348,7 +3468,7 @@ export def "identity-verify-send sendVerifyIdentityWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Start a verification of an identity by generating a code. This code can be sent to the User using the Verify Send API Verification Code API or using a mechanism outside of FusionAuth. The verification is completed by using the Verify Complete API with this code.
@@ -3363,6 +3483,7 @@ export def "identity-verify-start startVerifyIdentityWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationId: string # format: uuid
   --existingUserStrategy: string@existingUserStrategy-completer # Represent the various statesexpectations of a user in the context of starting verification
   --loginId: string
@@ -3378,7 +3499,7 @@ export def "identity-verify-start startVerifyIdentityWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates, via PATCH, the available integrations.
@@ -3394,6 +3515,7 @@ export def "integration patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --integrations: record # Available Integrations — shape: {cleanspeak?: record, kafka?: record}
 ]: any -> record<integrations: record<cleanspeak: record<apiKey: string, applicationIds: list, url: string, usernameModeration: record, enabled: bool>, kafka: record<defaultTopic: string, producer: record, enabled: bool>>> {
   let input = $in
@@ -3404,7 +3526,7 @@ export def "integration patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the available integrations.
@@ -3420,6 +3542,7 @@ export def "integration updateIntegrationsWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --integrations: record # Available Integrations — shape: {cleanspeak?: record, kafka?: record}
 ]: any -> record<integrations: record<cleanspeak: record<apiKey: string, applicationIds: list, url: string, usernameModeration: record, enabled: bool>, kafka: record<defaultTopic: string, producer: record, enabled: bool>>> {
   let input = $in
@@ -3430,7 +3553,7 @@ export def "integration updateIntegrationsWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates an IP Access Control List. You can optionally specify an Id on this create request, if one is not provided one will be generated.
@@ -3446,6 +3569,7 @@ export def "ip-acl createIPAccessControlList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ipAccessControlList: record # shape: {data?: record, entries?: list, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string}
 ]: any -> record<ipAccessControlList: record<data: record, entries: list<record>, id: string, insertInstant: int, lastUpdateInstant: int, name: string>, ipAccessControlLists: table<data: record, entries: list, id: string, insertInstant: int, lastUpdateInstant: int, name: string>> {
   let input = $in
@@ -3456,7 +3580,7 @@ export def "ip-acl createIPAccessControlList" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Searches the IP Access Control Lists with the specified criteria and pagination.
@@ -3472,6 +3596,7 @@ export def "ip-acl-search searchIPAccessControlListsWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # shape: {name?: string, numberOfResults?: int, orderBy?: string, startRow?: int}
 ]: any -> record<ipAccessControlLists: table<data: record, entries: list, id: string, insertInstant: int, lastUpdateInstant: int, name: string>, total: int> {
   let input = $in
@@ -3482,7 +3607,7 @@ export def "ip-acl-search searchIPAccessControlListsWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates an IP Access Control List. You can optionally specify an Id on this create request, if one is not provided one will be generated.
@@ -3499,6 +3624,7 @@ export def "ip-acl createIPAccessControlListWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ipAccessControlList: record # shape: {data?: record, entries?: list, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string}
 ]: any -> record<ipAccessControlList: record<data: record, entries: list<record>, id: string, insertInstant: int, lastUpdateInstant: int, name: string>, ipAccessControlLists: table<data: record, entries: list, id: string, insertInstant: int, lastUpdateInstant: int, name: string>> {
   let input = $in
@@ -3509,7 +3635,7 @@ export def "ip-acl createIPAccessControlListWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update the IP Access Control List with the given Id.
@@ -3526,6 +3652,7 @@ export def "ip-acl patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ipAccessControlList: record # shape: {data?: record, entries?: list, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string}
 ]: any -> record<ipAccessControlList: record<data: record, entries: list<record>, id: string, insertInstant: int, lastUpdateInstant: int, name: string>, ipAccessControlLists: table<data: record, entries: list, id: string, insertInstant: int, lastUpdateInstant: int, name: string>> {
   let input = $in
@@ -3536,7 +3663,7 @@ export def "ip-acl patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the IP Access Control List with the given Id.
@@ -3553,6 +3680,7 @@ export def "ip-acl updateIPAccessControlListWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ipAccessControlList: record # shape: {data?: record, entries?: list, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string}
 ]: any -> record<ipAccessControlList: record<data: record, entries: list<record>, id: string, insertInstant: int, lastUpdateInstant: int, name: string>, ipAccessControlLists: table<data: record, entries: list, id: string, insertInstant: int, lastUpdateInstant: int, name: string>> {
   let input = $in
@@ -3563,7 +3691,7 @@ export def "ip-acl updateIPAccessControlListWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the IP Access Control List for the given Id.
@@ -3579,13 +3707,14 @@ export def "ip-acl delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/ip-acl/($ipAccessControlListId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the IP Access Control List with the given Id.
@@ -3601,13 +3730,14 @@ export def "ip-acl retrieveIPAccessControlListWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ipAccessControlList: record<data: record, entries: list<record>, id: string, insertInstant: int, lastUpdateInstant: int, name: string>, ipAccessControlLists: table<data: record, entries: list, id: string, insertInstant: int, lastUpdateInstant: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/ip-acl/($ipAccessControlListId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Issue a new access token (JWT) for the requested Application after ensuring the provided JWT is valid. A valid access token is properly signed and not expired. <p> This API may be used in an SSO configuration to issue new tokens for another application after the user has obtained a valid token from authentication.
@@ -3622,6 +3752,7 @@ export def "jwt-issue issueJWTWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationId: string # The Application Id for which you are requesting a new access token be issued.
   --refreshToken: string # An existing refresh token used to request a refresh token in addition to a JWT in the response. <p>The target application represented by the applicationId request parameter must have refresh tokens enabled in order to receive a refresh token in the response.</p>
 ]: nothing -> record<refreshToken: string, token: string> {
@@ -3631,7 +3762,7 @@ export def "jwt-issue issueJWTWithId" [
   let full_url = (build-url $base "/api/jwt/issue" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the Public Key configured for verifying the JSON Web Tokens (JWT) issued by the Login API by the Application Id. OR Retrieves the Public Key configured for verifying JSON Web Tokens (JWT) by the key Id (kid).
@@ -3646,6 +3777,7 @@ export def "jwt-public-key retrieveJwtPublicKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationId: string # The Id of the Application for which this key is used.
   --keyId: string # The Id of the public key (kid).
 ]: nothing -> record<publicKey: string, publicKeys: record> {
@@ -3655,7 +3787,7 @@ export def "jwt-public-key retrieveJwtPublicKey" [
   let full_url = (build-url $base "/api/jwt/public-key" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reconcile a User to FusionAuth using JWT issued from another Identity Provider.
@@ -3671,6 +3803,7 @@ export def "jwt-reconcile reconcileJWTWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --connectionTestId: string
   --data: record
   --identityProviderId: string # format: uuid
@@ -3690,7 +3823,7 @@ export def "jwt-reconcile reconcileJWTWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Exchange a refresh token for a new JWT.
@@ -3706,6 +3839,7 @@ export def "jwt-refresh exchangeRefreshTokenForJWTWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --refreshToken: string
   --timeToLiveInSeconds: int
   --body-token: string
@@ -3719,7 +3853,7 @@ export def "jwt-refresh exchangeRefreshTokenForJWTWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the refresh tokens that belong to the user with the given Id.
@@ -3734,6 +3868,7 @@ export def "jwt-refresh retrieveRefreshTokensWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # The Id of the user.
 ]: nothing -> record<refreshToken: record<applicationId: string, data: record, id: string, insertInstant: int, metaData: record<data: record, device: record, resources: list, scopes: list>, startInstant: int, tenantId: string, token: string, userId: string>, refreshTokens: table<applicationId: string, data: record, id: string, insertInstant: int, metaData: record, startInstant: int, tenantId: string, token: string, userId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3742,7 +3877,7 @@ export def "jwt-refresh retrieveRefreshTokensWithId" [
   let full_url = (build-url $base "/api/jwt/refresh" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revokes refresh tokens using the information in the JSON body. The handling for this method is the same as the revokeRefreshToken method and is based on the information you provide in the RefreshDeleteRequest object. See that method for additional information. OR Revoke all refresh tokens that belong to a user by user Id for a specific application by applicationId. OR Revoke all refresh tokens that belong to a user by user Id. OR Revoke all refresh tokens that belong to an application by applicationId. OR Revokes a single refresh token by using the actual refresh token value. This refresh token value is sensitive, so  be careful with this API request. OR Revokes refresh tokens.  Usage examples:   - Delete a single refresh token, pass in only the token.       revokeRefreshToken(token)    - Delete all refresh tokens for a user, pass in only the userId.       revokeRefreshToken(null, userId)    - Delete all refresh tokens for a user for a specific application, pass in both the userId and the applicationId.       revokeRefreshToken(null, userId, applicationId)    - Delete all refresh tokens for an application       revokeRefreshToken(null, null, applicationId)  Note: <code>null</code> may be handled differently depending upon the programming language.  See also: (method names may vary by language... but you'll figure it out)   - revokeRefreshTokenById  - revokeRefreshTokenByToken  - revokeRefreshTokensByUserId  - revokeRefreshTokensByApplicationId  - revokeRefreshTokensByUserIdForApplication
@@ -3758,6 +3893,7 @@ export def "jwt-refresh delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # The unique Id of the user that you want to delete all refresh tokens for.
   --applicationId: string # The unique Id of the application that you want to delete refresh tokens for.
   --qp-token: string # The refresh token to delete.
@@ -3775,7 +3911,7 @@ export def "jwt-refresh delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves a single refresh token by unique Id. This is not the same thing as the string value of the refresh token. If you have that, you already have what you need.
@@ -3791,13 +3927,14 @@ export def "jwt-refresh retrieveRefreshTokenByIdWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<refreshToken: record<applicationId: string, data: record, id: string, insertInstant: int, metaData: record<data: record, device: record, resources: list, scopes: list>, startInstant: int, tenantId: string, token: string, userId: string>, refreshTokens: table<applicationId: string, data: record, id: string, insertInstant: int, metaData: record, startInstant: int, tenantId: string, token: string, userId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/jwt/refresh/($tokenId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revokes a single refresh token by the unique Id. The unique Id is not sensitive as it cannot be used to obtain another JWT.
@@ -3813,13 +3950,14 @@ export def "jwt-refresh revokeRefreshTokenByIdWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/jwt/refresh/($tokenId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Validates the provided JWT (encoded JWT string) to ensure the token is valid. A valid access token is properly signed and not expired. <p> This API may be used to verify the JWT as well as decode the encoded JWT into human readable identity claims.
@@ -3834,13 +3972,14 @@ export def "jwt-validate validateJWTWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<jwt: record<aud: record, exp: int, iat: int, iss: string, nbf: int, otherClaims: record, sub: string, jti: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/jwt/validate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # It's a JWT vending machine!  Issue a new access token (JWT) with the provided claims in the request. This JWT is not scoped to a tenant or user, it is a free form  token that will contain what claims you provide. <p> The iat, exp and jti claims will be added by FusionAuth, all other claims must be provided by the caller.  If a TTL is not provided in the request, the TTL will be retrieved from the default Tenant or the Tenant specified on the request either  by way of the X-FusionAuth-TenantId request header, or a tenant scoped API key.
@@ -3855,6 +3994,7 @@ export def "jwt-vend vendJWTWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --claims: record
   --keyId: string # format: uuid
   --timeToLiveInSeconds: int
@@ -3867,7 +4007,7 @@ export def "jwt-vend vendJWTWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves all the keys.
@@ -3882,13 +4022,14 @@ export def "key retrieveKeysWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: record<algorithm: string, certificate: string, certificateInformation: record<issuer: string, md5Fingerprint: string, serialNumber: string, sha1Fingerprint: string, sha1Thumbprint: string, sha256Fingerprint: string, sha256Thumbprint: string, subject: string, validFrom: int, validTo: int>, expirationInstant: int, hasPrivateKey: bool, id: string, insertInstant: int, issuer: string, kid: string, lastUpdateInstant: int, length: int, name: string, privateKey: string, publicKey: string, secret: string, type: string>, keys: table<algorithm: string, certificate: string, certificateInformation: record, expirationInstant: int, hasPrivateKey: bool, id: string, insertInstant: int, issuer: string, kid: string, lastUpdateInstant: int, length: int, name: string, privateKey: string, publicKey: string, secret: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/key")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate a new RSA or EC key pair or an HMAC secret.
@@ -3904,6 +4045,7 @@ export def "key-generate generateKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: record # Domain for a public key, key pair or an HMAC secret. This is used by KeyMaster to manage keys for JWTs, SAML, etc. — shape: {algorithm?: "ES256"|"ES384"|"ES512"|"HS256"|"HS384"|"HS512"|"RS256"|"RS384"|"RS512"|"Ed25519"|"None", certificate?: string, certificateInformation?: record, expirationInstant?: int, hasPrivateKey?: bool, id?: string, insertInstant?: int, issuer?: string, kid?: string, lastUpdateInstant?: int, length?: int, name?: string, privateKey?: string, publicKey?: string, secret?: string, type?: "EC"|"RSA"|"HMAC"|"OKP"|"Secret"}
 ]: any -> record<key: record<algorithm: string, certificate: string, certificateInformation: record<issuer: string, md5Fingerprint: string, serialNumber: string, sha1Fingerprint: string, sha1Thumbprint: string, sha256Fingerprint: string, sha256Thumbprint: string, subject: string, validFrom: int, validTo: int>, expirationInstant: int, hasPrivateKey: bool, id: string, insertInstant: int, issuer: string, kid: string, lastUpdateInstant: int, length: int, name: string, privateKey: string, publicKey: string, secret: string, type: string>, keys: table<algorithm: string, certificate: string, certificateInformation: record, expirationInstant: int, hasPrivateKey: bool, id: string, insertInstant: int, issuer: string, kid: string, lastUpdateInstant: int, length: int, name: string, privateKey: string, publicKey: string, secret: string, type: string>> {
   let input = $in
@@ -3914,7 +4056,7 @@ export def "key-generate generateKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate a new RSA or EC key pair or an HMAC secret.
@@ -3931,6 +4073,7 @@ export def "key-generate generateKeyWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: record # Domain for a public key, key pair or an HMAC secret. This is used by KeyMaster to manage keys for JWTs, SAML, etc. — shape: {algorithm?: "ES256"|"ES384"|"ES512"|"HS256"|"HS384"|"HS512"|"RS256"|"RS384"|"RS512"|"Ed25519"|"None", certificate?: string, certificateInformation?: record, expirationInstant?: int, hasPrivateKey?: bool, id?: string, insertInstant?: int, issuer?: string, kid?: string, lastUpdateInstant?: int, length?: int, name?: string, privateKey?: string, publicKey?: string, secret?: string, type?: "EC"|"RSA"|"HMAC"|"OKP"|"Secret"}
 ]: any -> record<key: record<algorithm: string, certificate: string, certificateInformation: record<issuer: string, md5Fingerprint: string, serialNumber: string, sha1Fingerprint: string, sha1Thumbprint: string, sha256Fingerprint: string, sha256Thumbprint: string, subject: string, validFrom: int, validTo: int>, expirationInstant: int, hasPrivateKey: bool, id: string, insertInstant: int, issuer: string, kid: string, lastUpdateInstant: int, length: int, name: string, privateKey: string, publicKey: string, secret: string, type: string>, keys: table<algorithm: string, certificate: string, certificateInformation: record, expirationInstant: int, hasPrivateKey: bool, id: string, insertInstant: int, issuer: string, kid: string, lastUpdateInstant: int, length: int, name: string, privateKey: string, publicKey: string, secret: string, type: string>> {
   let input = $in
@@ -3941,7 +4084,7 @@ export def "key-generate generateKeyWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Import an existing RSA or EC key pair or an HMAC secret.
@@ -3957,6 +4100,7 @@ export def "key-import importKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: record # Domain for a public key, key pair or an HMAC secret. This is used by KeyMaster to manage keys for JWTs, SAML, etc. — shape: {algorithm?: "ES256"|"ES384"|"ES512"|"HS256"|"HS384"|"HS512"|"RS256"|"RS384"|"RS512"|"Ed25519"|"None", certificate?: string, certificateInformation?: record, expirationInstant?: int, hasPrivateKey?: bool, id?: string, insertInstant?: int, issuer?: string, kid?: string, lastUpdateInstant?: int, length?: int, name?: string, privateKey?: string, publicKey?: string, secret?: string, type?: "EC"|"RSA"|"HMAC"|"OKP"|"Secret"}
 ]: any -> record<key: record<algorithm: string, certificate: string, certificateInformation: record<issuer: string, md5Fingerprint: string, serialNumber: string, sha1Fingerprint: string, sha1Thumbprint: string, sha256Fingerprint: string, sha256Thumbprint: string, subject: string, validFrom: int, validTo: int>, expirationInstant: int, hasPrivateKey: bool, id: string, insertInstant: int, issuer: string, kid: string, lastUpdateInstant: int, length: int, name: string, privateKey: string, publicKey: string, secret: string, type: string>, keys: table<algorithm: string, certificate: string, certificateInformation: record, expirationInstant: int, hasPrivateKey: bool, id: string, insertInstant: int, issuer: string, kid: string, lastUpdateInstant: int, length: int, name: string, privateKey: string, publicKey: string, secret: string, type: string>> {
   let input = $in
@@ -3967,7 +4111,7 @@ export def "key-import importKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Import an existing RSA or EC key pair or an HMAC secret.
@@ -3984,6 +4128,7 @@ export def "key-import importKeyWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: record # Domain for a public key, key pair or an HMAC secret. This is used by KeyMaster to manage keys for JWTs, SAML, etc. — shape: {algorithm?: "ES256"|"ES384"|"ES512"|"HS256"|"HS384"|"HS512"|"RS256"|"RS384"|"RS512"|"Ed25519"|"None", certificate?: string, certificateInformation?: record, expirationInstant?: int, hasPrivateKey?: bool, id?: string, insertInstant?: int, issuer?: string, kid?: string, lastUpdateInstant?: int, length?: int, name?: string, privateKey?: string, publicKey?: string, secret?: string, type?: "EC"|"RSA"|"HMAC"|"OKP"|"Secret"}
 ]: any -> record<key: record<algorithm: string, certificate: string, certificateInformation: record<issuer: string, md5Fingerprint: string, serialNumber: string, sha1Fingerprint: string, sha1Thumbprint: string, sha256Fingerprint: string, sha256Thumbprint: string, subject: string, validFrom: int, validTo: int>, expirationInstant: int, hasPrivateKey: bool, id: string, insertInstant: int, issuer: string, kid: string, lastUpdateInstant: int, length: int, name: string, privateKey: string, publicKey: string, secret: string, type: string>, keys: table<algorithm: string, certificate: string, certificateInformation: record, expirationInstant: int, hasPrivateKey: bool, id: string, insertInstant: int, issuer: string, kid: string, lastUpdateInstant: int, length: int, name: string, privateKey: string, publicKey: string, secret: string, type: string>> {
   let input = $in
@@ -3994,7 +4139,7 @@ export def "key-import importKeyWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Searches keys with the specified criteria and pagination.
@@ -4010,6 +4155,7 @@ export def "key-search searchKeysWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # Search criteria for Keys — shape: {algorithm?: "ES256"|"ES384"|"ES512"|"HS256"|"HS384"|"HS512"|"RS256"|"RS384"|"RS512"|"Ed25519"|"None", name?: string, type?: "EC"|"RSA"|"HMAC"|"OKP"|"Secret", numberOfResults?: int, orderBy?: string, startRow?: int}
 ]: any -> record<keys: table<algorithm: string, certificate: string, certificateInformation: record, expirationInstant: int, hasPrivateKey: bool, id: string, insertInstant: int, issuer: string, kid: string, lastUpdateInstant: int, length: int, name: string, privateKey: string, publicKey: string, secret: string, type: string>, total: int> {
   let input = $in
@@ -4020,7 +4166,7 @@ export def "key-search searchKeysWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the key for the given Id.
@@ -4036,13 +4182,14 @@ export def "key delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/key/($keyId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the key for the given Id.
@@ -4058,13 +4205,14 @@ export def "key retrieveKeyWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: record<algorithm: string, certificate: string, certificateInformation: record<issuer: string, md5Fingerprint: string, serialNumber: string, sha1Fingerprint: string, sha1Thumbprint: string, sha256Fingerprint: string, sha256Thumbprint: string, subject: string, validFrom: int, validTo: int>, expirationInstant: int, hasPrivateKey: bool, id: string, insertInstant: int, issuer: string, kid: string, lastUpdateInstant: int, length: int, name: string, privateKey: string, publicKey: string, secret: string, type: string>, keys: table<algorithm: string, certificate: string, certificateInformation: record, expirationInstant: int, hasPrivateKey: bool, id: string, insertInstant: int, issuer: string, kid: string, lastUpdateInstant: int, length: int, name: string, privateKey: string, publicKey: string, secret: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/key/($keyId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the key with the given Id.
@@ -4081,6 +4229,7 @@ export def "key updateKeyWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: record # Domain for a public key, key pair or an HMAC secret. This is used by KeyMaster to manage keys for JWTs, SAML, etc. — shape: {algorithm?: "ES256"|"ES384"|"ES512"|"HS256"|"HS384"|"HS512"|"RS256"|"RS384"|"RS512"|"Ed25519"|"None", certificate?: string, certificateInformation?: record, expirationInstant?: int, hasPrivateKey?: bool, id?: string, insertInstant?: int, issuer?: string, kid?: string, lastUpdateInstant?: int, length?: int, name?: string, privateKey?: string, publicKey?: string, secret?: string, type?: "EC"|"RSA"|"HMAC"|"OKP"|"Secret"}
 ]: any -> record<key: record<algorithm: string, certificate: string, certificateInformation: record<issuer: string, md5Fingerprint: string, serialNumber: string, sha1Fingerprint: string, sha1Thumbprint: string, sha256Fingerprint: string, sha256Thumbprint: string, subject: string, validFrom: int, validTo: int>, expirationInstant: int, hasPrivateKey: bool, id: string, insertInstant: int, issuer: string, kid: string, lastUpdateInstant: int, length: int, name: string, privateKey: string, publicKey: string, secret: string, type: string>, keys: table<algorithm: string, certificate: string, certificateInformation: record, expirationInstant: int, hasPrivateKey: bool, id: string, insertInstant: int, issuer: string, kid: string, lastUpdateInstant: int, length: int, name: string, privateKey: string, publicKey: string, secret: string, type: string>> {
   let input = $in
@@ -4091,7 +4240,7 @@ export def "key updateKeyWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a Lambda. You can optionally specify an Id for the lambda, if not provided one will be generated.
@@ -4107,6 +4256,7 @@ export def "lambda createLambda" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --lambda: record # A JavaScript lambda function that is executed during certain events inside FusionAuth. — shape: {body?: string, debug?: bool, engineType?: "GraalJS"|"Nashorn", id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, type?: "JWTPopulate"|"OpenIDReconcile"|"SAMLv2Reconcile"|"SAMLv2Populate"|"AppleReconcile"|"ExternalJWTReconcile"|"FacebookReconcile"|"GoogleReconcile"|"HYPRReconcile"|"TwitterReconcile"|"LDAPConnectorReconcile"|"LinkedInReconcile"|"EpicGamesReconcile"|"NintendoReconcile"|"SonyPSNReconcile"|"SteamReconcile"|"TwitchReconcile"|"XboxReconcile"|"ClientCredentialsJWTPopulate"|"SCIMServerGroupRequestConverter"|"SCIMServerGroupResponseConverter"|"SCIMServerUserRequestConverter"|"SCIMServerUserResponseConverter"|"SelfServiceRegistrationValidation"|"UserInfoPopulate"|"LoginValidation"|"MFARequirement"}
 ]: any -> record<lambda: record<body: string, debug: bool, engineType: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>, lambdas: table<body: string, debug: bool, engineType: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>> {
   let input = $in
@@ -4117,7 +4267,7 @@ export def "lambda createLambda" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves all the lambdas for the provided type.
@@ -4132,6 +4282,7 @@ export def "lambda retrieveLambdasByTypeWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string # The type of the lambda to return.
 ]: nothing -> record<lambda: record<body: string, debug: bool, engineType: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>, lambdas: table<body: string, debug: bool, engineType: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4140,7 +4291,7 @@ export def "lambda retrieveLambdasByTypeWithId" [
   let full_url = (build-url $base "/api/lambda" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searches lambdas with the specified criteria and pagination.
@@ -4156,6 +4307,7 @@ export def "lambda-search searchLambdasWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # Search criteria for Lambdas — shape: {body?: string, name?: string, type?: "JWTPopulate"|"OpenIDReconcile"|"SAMLv2Reconcile"|"SAMLv2Populate"|"AppleReconcile"|"ExternalJWTReconcile"|"FacebookReconcile"|"GoogleReconcile"|"HYPRReconcile"|"TwitterReconcile"|"LDAPConnectorReconcile"|"LinkedInReconcile"|"EpicGamesReconcile"|"NintendoReconcile"|"SonyPSNReconcile"|"SteamReconcile"|"TwitchReconcile"|"XboxReconcile"|"ClientCredentialsJWTPopulate"|"SCIMServerGroupRequestConverter"|"SCIMServerGroupResponseConverter"|"SCIMServerUserRequestConverter"|"SCIMServerUserResponseConverter"|"SelfServiceRegistrationValidation"|"UserInfoPopulate"|"LoginValidation"|"MFARequirement", numberOfResults?: int, orderBy?: string, startRow?: int}
 ]: any -> record<lambdas: table<body: string, debug: bool, engineType: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>, total: int> {
   let input = $in
@@ -4166,7 +4318,7 @@ export def "lambda-search searchLambdasWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a Lambda. You can optionally specify an Id for the lambda, if not provided one will be generated.
@@ -4183,6 +4335,7 @@ export def "lambda createLambdaWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --lambda: record # A JavaScript lambda function that is executed during certain events inside FusionAuth. — shape: {body?: string, debug?: bool, engineType?: "GraalJS"|"Nashorn", id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, type?: "JWTPopulate"|"OpenIDReconcile"|"SAMLv2Reconcile"|"SAMLv2Populate"|"AppleReconcile"|"ExternalJWTReconcile"|"FacebookReconcile"|"GoogleReconcile"|"HYPRReconcile"|"TwitterReconcile"|"LDAPConnectorReconcile"|"LinkedInReconcile"|"EpicGamesReconcile"|"NintendoReconcile"|"SonyPSNReconcile"|"SteamReconcile"|"TwitchReconcile"|"XboxReconcile"|"ClientCredentialsJWTPopulate"|"SCIMServerGroupRequestConverter"|"SCIMServerGroupResponseConverter"|"SCIMServerUserRequestConverter"|"SCIMServerUserResponseConverter"|"SelfServiceRegistrationValidation"|"UserInfoPopulate"|"LoginValidation"|"MFARequirement"}
 ]: any -> record<lambda: record<body: string, debug: bool, engineType: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>, lambdas: table<body: string, debug: bool, engineType: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>> {
   let input = $in
@@ -4193,7 +4346,7 @@ export def "lambda createLambdaWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the lambda for the given Id.
@@ -4209,13 +4362,14 @@ export def "lambda delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/lambda/($lambdaId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates, via PATCH, the lambda with the given Id.
@@ -4232,6 +4386,7 @@ export def "lambda patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --lambda: record # A JavaScript lambda function that is executed during certain events inside FusionAuth. — shape: {body?: string, debug?: bool, engineType?: "GraalJS"|"Nashorn", id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, type?: "JWTPopulate"|"OpenIDReconcile"|"SAMLv2Reconcile"|"SAMLv2Populate"|"AppleReconcile"|"ExternalJWTReconcile"|"FacebookReconcile"|"GoogleReconcile"|"HYPRReconcile"|"TwitterReconcile"|"LDAPConnectorReconcile"|"LinkedInReconcile"|"EpicGamesReconcile"|"NintendoReconcile"|"SonyPSNReconcile"|"SteamReconcile"|"TwitchReconcile"|"XboxReconcile"|"ClientCredentialsJWTPopulate"|"SCIMServerGroupRequestConverter"|"SCIMServerGroupResponseConverter"|"SCIMServerUserRequestConverter"|"SCIMServerUserResponseConverter"|"SelfServiceRegistrationValidation"|"UserInfoPopulate"|"LoginValidation"|"MFARequirement"}
 ]: any -> record<lambda: record<body: string, debug: bool, engineType: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>, lambdas: table<body: string, debug: bool, engineType: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>> {
   let input = $in
@@ -4242,7 +4397,7 @@ export def "lambda patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the lambda for the given Id.
@@ -4258,13 +4413,14 @@ export def "lambda retrieveLambdaWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<lambda: record<body: string, debug: bool, engineType: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>, lambdas: table<body: string, debug: bool, engineType: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/lambda/($lambdaId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the lambda with the given Id.
@@ -4281,6 +4437,7 @@ export def "lambda updateLambdaWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --lambda: record # A JavaScript lambda function that is executed during certain events inside FusionAuth. — shape: {body?: string, debug?: bool, engineType?: "GraalJS"|"Nashorn", id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, type?: "JWTPopulate"|"OpenIDReconcile"|"SAMLv2Reconcile"|"SAMLv2Populate"|"AppleReconcile"|"ExternalJWTReconcile"|"FacebookReconcile"|"GoogleReconcile"|"HYPRReconcile"|"TwitterReconcile"|"LDAPConnectorReconcile"|"LinkedInReconcile"|"EpicGamesReconcile"|"NintendoReconcile"|"SonyPSNReconcile"|"SteamReconcile"|"TwitchReconcile"|"XboxReconcile"|"ClientCredentialsJWTPopulate"|"SCIMServerGroupRequestConverter"|"SCIMServerGroupResponseConverter"|"SCIMServerUserRequestConverter"|"SCIMServerUserResponseConverter"|"SelfServiceRegistrationValidation"|"UserInfoPopulate"|"LoginValidation"|"MFARequirement"}
 ]: any -> record<lambda: record<body: string, debug: bool, engineType: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>, lambdas: table<body: string, debug: bool, engineType: string, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>> {
   let input = $in
@@ -4291,7 +4448,7 @@ export def "lambda updateLambdaWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticates a user to FusionAuth.   This API optionally requires an API key. See <code>Application.loginConfiguration.requireAuthentication</code>.
@@ -4307,6 +4464,7 @@ export def "login loginWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --loginId: string
   --loginIdTypes: list
@@ -4329,7 +4487,7 @@ export def "login loginWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Sends a ping to FusionAuth indicating that the user was automatically logged into an application. When using FusionAuth's SSO or your own, you should call this if the user is already logged in centrally, but accesses an application where they no longer have a session. This helps correctly track login counts, times and helps with reporting.
@@ -4345,6 +4503,7 @@ export def "login loginPingWithRequestWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --userId: string # format: uuid
   --applicationId: string # format: uuid
@@ -4363,7 +4522,7 @@ export def "login loginPingWithRequestWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Sends a ping to FusionAuth indicating that the user was automatically logged into an application. When using FusionAuth's SSO or your own, you should call this if the user is already logged in centrally, but accesses an application where they no longer have a session. This helps correctly track login counts, times and helps with reporting.
@@ -4380,6 +4539,7 @@ export def "login loginPingWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --callerIPAddress: string # The IP address of the end-user that is logging in. If a null value is provided the IP address will be that of the client or last proxy that sent the request.
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<actions: table<actionId: string, actionerUserId: string, expiry: int, localizedName: string, localizedOption: string, localizedReason: string, name: string, option: string, reason: string, reasonCode: string>, changePasswordId: string, changePasswordReason: string, configurableMethods: list<string>, emailVerificationId: string, identityVerificationId: string, methods: table<authenticator: record, email: string, id: string, lastUsed: bool, method: string, mobilePhone: string, secret: string>, pendingIdPLinkId: string, refreshToken: string, refreshTokenId: string, registrationVerificationId: string, state: record, threatsDetected: list<any>, token: string, tokenExpirationInstant: int, trustToken: string, twoFactorId: string, twoFactorTrustId: string, user: record<preferredLanguages: list<string>, active: bool, birthDate: string, cleanSpeakId: string, data: record, email: string, expiry: int, firstName: string, fullName: string, imageUrl: string, insertInstant: int, lastName: string, legacyIdentifier: string, lastUpdateInstant: int, middleName: string, mobilePhone: string, parentEmail: string, phoneNumber: string, tenantId: string, timezone: string, twoFactor: record<methods: list, recoveryCodes: list>, memberships: list<record>, registrations: list<record>, identities: list<record>, breachedPasswordLastCheckedInstant: int, breachedPasswordStatus: string, connectorId: string, encryptionScheme: string, factor: int, id: string, lastLoginInstant: int, password: string, passwordChangeReason: string, passwordChangeRequired: bool, passwordLastUpdateInstant: int, salt: string, uniqueUsername: string, username: string, usernameStatus: string, verified: bool, verifiedInstant: int>> {
@@ -4391,7 +4551,7 @@ export def "login loginPingWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # The Logout API is intended to be used to remove the refresh token and access token cookies if they exist on the client and revoke the refresh token stored. This API takes the refresh token in the JSON body. OR The Logout API is intended to be used to remove the refresh token and access token cookies if they exist on the client and revoke the refresh token stored. This API does nothing if the request does not contain an access token or refresh token cookies.
@@ -4407,6 +4567,7 @@ export def "logout createLogout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --global: string # When this value is set to true all the refresh tokens issued to the owner of the provided token will be revoked.
   --refreshToken: string # The refresh_token as a request parameter instead of coming in via a cookie. If provided this takes precedence over the cookie.
   --global: oneof<nothing, bool>
@@ -4422,7 +4583,7 @@ export def "logout createLogout" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates an message template. You can optionally specify an Id for the template, if not provided one will be generated.
@@ -4438,6 +4599,7 @@ export def "message-template createMessageTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --messageTemplate: record # Stores an message template used to distribute messages; — shape: {data?: record, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, type?: "SMS"|"Voice"}
 ]: any -> record<messageTemplate: record<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>, messageTemplates: table<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>> {
   let input = $in
@@ -4448,7 +4610,7 @@ export def "message-template createMessageTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the message template for the given Id. If you don't specify the Id, this will return all the message templates.
@@ -4463,13 +4625,14 @@ export def "message-template retrieveMessageTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<messageTemplate: record<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>, messageTemplates: table<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/message/template")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a preview of the message template provided in the request, normalized to a given locale.
@@ -4485,6 +4648,7 @@ export def "message-template-preview retrieveMessageTemplatePreviewWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # A Locale object represents a specific geographical, political, or cultural region. (e.g. en_US)
   --messageTemplate: record # Stores an message template used to distribute messages; — shape: {data?: record, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, type?: "SMS"|"Voice"}
 ]: any -> record<errors: record<fieldErrors: list<record>, generalErrors: list<record>>, message: record<code: string, phoneNumber: string, textMessage: string, userId: string>, previewMessage: string> {
@@ -4496,7 +4660,7 @@ export def "message-template-preview retrieveMessageTemplatePreviewWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates an message template. You can optionally specify an Id for the template, if not provided one will be generated.
@@ -4513,6 +4677,7 @@ export def "message-template createMessageTemplateWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --messageTemplate: record # Stores an message template used to distribute messages; — shape: {data?: record, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, type?: "SMS"|"Voice"}
 ]: any -> record<messageTemplate: record<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>, messageTemplates: table<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>> {
   let input = $in
@@ -4523,7 +4688,7 @@ export def "message-template createMessageTemplateWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the message template for the given Id.
@@ -4539,13 +4704,14 @@ export def "message-template delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/message/template/($messageTemplateId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates, via PATCH, the message template with the given Id.
@@ -4562,6 +4728,7 @@ export def "message-template patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --messageTemplate: record # Stores an message template used to distribute messages; — shape: {data?: record, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, type?: "SMS"|"Voice"}
 ]: any -> record<messageTemplate: record<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>, messageTemplates: table<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>> {
   let input = $in
@@ -4572,7 +4739,7 @@ export def "message-template patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the message template for the given Id. If you don't specify the Id, this will return all the message templates.
@@ -4588,13 +4755,14 @@ export def "message-template retrieveMessageTemplateWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<messageTemplate: record<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>, messageTemplates: table<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/message/template/($messageTemplateId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the message template with the given Id.
@@ -4611,6 +4779,7 @@ export def "message-template updateMessageTemplateWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --messageTemplate: record # Stores an message template used to distribute messages; — shape: {data?: record, id?: string, insertInstant?: int, lastUpdateInstant?: int, name?: string, type?: "SMS"|"Voice"}
 ]: any -> record<messageTemplate: record<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>, messageTemplates: table<data: record, id: string, insertInstant: int, lastUpdateInstant: int, name: string, type: string>> {
   let input = $in
@@ -4621,7 +4790,7 @@ export def "message-template updateMessageTemplateWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a messenger.  You can optionally specify an Id for the messenger, if not provided one will be generated.
@@ -4637,6 +4806,7 @@ export def "messenger createMessenger" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --messenger: record # Do not require a setter for 'type', it is defined by the concrete class and is not mutable — shape: {data?: record, debug?: bool, id?: string, insertInstant?: int, lastUpdateInstant?: int, messageTypes?: list, name?: string, transport?: string, type?: "Generic"|"Kafka"|"Twilio"}
 ]: any -> record<messenger: record<data: record, debug: bool, id: string, insertInstant: int, lastUpdateInstant: int, messageTypes: list<any>, name: string, transport: string, type: string>, messengers: table<data: record, debug: bool, id: string, insertInstant: int, lastUpdateInstant: int, messageTypes: list, name: string, transport: string, type: string>> {
   let input = $in
@@ -4647,7 +4817,7 @@ export def "messenger createMessenger" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a messenger.  You can optionally specify an Id for the messenger, if not provided one will be generated.
@@ -4664,6 +4834,7 @@ export def "messenger createMessengerWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --messenger: record # Do not require a setter for 'type', it is defined by the concrete class and is not mutable — shape: {data?: record, debug?: bool, id?: string, insertInstant?: int, lastUpdateInstant?: int, messageTypes?: list, name?: string, transport?: string, type?: "Generic"|"Kafka"|"Twilio"}
 ]: any -> record<messenger: record<data: record, debug: bool, id: string, insertInstant: int, lastUpdateInstant: int, messageTypes: list<any>, name: string, transport: string, type: string>, messengers: table<data: record, debug: bool, id: string, insertInstant: int, lastUpdateInstant: int, messageTypes: list, name: string, transport: string, type: string>> {
   let input = $in
@@ -4674,7 +4845,7 @@ export def "messenger createMessengerWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the messenger for the given Id.
@@ -4690,13 +4861,14 @@ export def "messenger delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/messenger/($messengerId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates, via PATCH, the messenger with the given Id.
@@ -4713,6 +4885,7 @@ export def "messenger patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --messenger: record # Do not require a setter for 'type', it is defined by the concrete class and is not mutable — shape: {data?: record, debug?: bool, id?: string, insertInstant?: int, lastUpdateInstant?: int, messageTypes?: list, name?: string, transport?: string, type?: "Generic"|"Kafka"|"Twilio"}
 ]: any -> record<messenger: record<data: record, debug: bool, id: string, insertInstant: int, lastUpdateInstant: int, messageTypes: list<any>, name: string, transport: string, type: string>, messengers: table<data: record, debug: bool, id: string, insertInstant: int, lastUpdateInstant: int, messageTypes: list, name: string, transport: string, type: string>> {
   let input = $in
@@ -4723,7 +4896,7 @@ export def "messenger patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the messenger with the given Id.
@@ -4739,13 +4912,14 @@ export def "messenger retrieveMessengerWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<messenger: record<data: record, debug: bool, id: string, insertInstant: int, lastUpdateInstant: int, messageTypes: list<any>, name: string, transport: string, type: string>, messengers: table<data: record, debug: bool, id: string, insertInstant: int, lastUpdateInstant: int, messageTypes: list, name: string, transport: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/messenger/($messengerId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the messenger with the given Id.
@@ -4762,6 +4936,7 @@ export def "messenger updateMessengerWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --messenger: record # Do not require a setter for 'type', it is defined by the concrete class and is not mutable — shape: {data?: record, debug?: bool, id?: string, insertInstant?: int, lastUpdateInstant?: int, messageTypes?: list, name?: string, transport?: string, type?: "Generic"|"Kafka"|"Twilio"}
 ]: any -> record<messenger: record<data: record, debug: bool, id: string, insertInstant: int, lastUpdateInstant: int, messageTypes: list<any>, name: string, transport: string, type: string>, messengers: table<data: record, debug: bool, id: string, insertInstant: int, lastUpdateInstant: int, messageTypes: list, name: string, transport: string, type: string>> {
   let input = $in
@@ -4772,7 +4947,7 @@ export def "messenger updateMessengerWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Complete a login request using a passwordless code
@@ -4788,6 +4963,7 @@ export def "passwordless-login passwordlessLoginWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --code: string
   --oneTimeCode: string
   --twoFactorTrustId: string
@@ -4805,7 +4981,7 @@ export def "passwordless-login passwordlessLoginWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send a passwordless authentication code in an email to complete login.
@@ -4820,6 +4996,7 @@ export def "passwordless-send sendPasswordlessCodeWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationId: string # format: uuid
   --code: string
   --loginId: string
@@ -4833,7 +5010,7 @@ export def "passwordless-send sendPasswordlessCodeWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Start a passwordless login request by generating a passwordless code. This code can be sent to the User using the Send Passwordless Code API or using a mechanism outside of FusionAuth. The passwordless login is completed by using the Passwordless Login API with this code.
@@ -4848,6 +5025,7 @@ export def "passwordless-start startPasswordlessLoginWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationId: string # format: uuid
   --loginId: string
   --loginIdTypes: list
@@ -4862,7 +5040,7 @@ export def "passwordless-start startPasswordlessLoginWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Activates the FusionAuth Reactor using a license Id and optionally a license text (for air-gapped deployments)
@@ -4877,6 +5055,7 @@ export def "reactor activateReactorWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --license: string
   --licenseId: string
 ]: any -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
@@ -4888,7 +5067,7 @@ export def "reactor activateReactorWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the FusionAuth Reactor metrics.
@@ -4903,13 +5082,14 @@ export def "reactor-metrics retrieveReactorMetricsWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<metrics: record<breachedPasswordMetrics: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/reactor/metrics")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the daily active user report between the two instants. If you specify an application Id, it will only return the daily active counts for that application.
@@ -4924,6 +5104,7 @@ export def "report-daily-active-user retrieveDailyActiveReportWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationId: string # The application Id.
   --start: string # The start instant as UTC milliseconds since Epoch.
   --end: string # The end instant as UTC milliseconds since Epoch.
@@ -4934,7 +5115,7 @@ export def "report-daily-active-user retrieveDailyActiveReportWithId" [
   let full_url = (build-url $base "/api/report/daily-active-user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the login report between the two instants for a particular user by login Id, using specific loginIdTypes. If you specify an application id, it will only return the login counts for that application. OR Retrieves the login report between the two instants for a particular user by login Id. If you specify an application Id, it will only return the login counts for that application. OR Retrieves the login report between the two instants for a particular user by Id. If you specify an application Id, it will only return the login counts for that application. OR Retrieves the login report between the two instants. If you specify an application Id, it will only return the login counts for that application.
@@ -4949,6 +5130,7 @@ export def "report-login retrieveReportLogin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationId: string # The application id.
   --loginId: string # The userId id.
   --start: string # The start instant as UTC milliseconds since Epoch.
@@ -4962,7 +5144,7 @@ export def "report-login retrieveReportLogin" [
   let full_url = (build-url $base "/api/report/login" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the monthly active user report between the two instants. If you specify an application Id, it will only return the monthly active counts for that application.
@@ -4977,6 +5159,7 @@ export def "report-monthly-active-user retrieveMonthlyActiveReportWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationId: string # The application Id.
   --start: string # The start instant as UTC milliseconds since Epoch.
   --end: string # The end instant as UTC milliseconds since Epoch.
@@ -4987,7 +5170,7 @@ export def "report-monthly-active-user retrieveMonthlyActiveReportWithId" [
   let full_url = (build-url $base "/api/report/monthly-active-user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the registration report between the two instants. If you specify an application Id, it will only return the registration counts for that application.
@@ -5002,6 +5185,7 @@ export def "report-registration retrieveRegistrationReportWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationId: string # The application Id.
   --start: string # The start instant as UTC milliseconds since Epoch.
   --end: string # The end instant as UTC milliseconds since Epoch.
@@ -5012,7 +5196,7 @@ export def "report-registration retrieveRegistrationReportWithId" [
   let full_url = (build-url $base "/api/report/registration" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the totals report. This allows excluding applicationTotals from the report. An empty list will include the applicationTotals.
@@ -5027,6 +5211,7 @@ export def "report-totals retrieveTotalReportWithExcludesWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --excludes: list # List of fields to exclude in the response. Currently only allows applicationTotals.
 ]: nothing -> record<applicationTotals: record, globalRegistrations: int, totalGlobalRegistrations: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5035,7 +5220,7 @@ export def "report-totals retrieveTotalReportWithExcludesWithId" [
   let full_url = (build-url $base "/api/report/totals" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the FusionAuth system status using an API key. Using an API key will cause the response to include the product version, health checks and various runtime metrics. OR Retrieves the FusionAuth system status. This request is anonymous and does not require an API key. When an API key is not provided the response will contain a single value in the JSON response indicating the current health check.
@@ -5050,13 +5235,14 @@ export def "status retrieveStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates, via PATCH, the system configuration.
@@ -5072,6 +5258,7 @@ export def "system-configuration patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --systemConfiguration: record # shape: {auditLogConfiguration?: record, corsConfiguration?: record, data?: record, eventLogConfiguration?: record, insertInstant?: int, lastUpdateInstant?: int, loginRecordConfiguration?: record, reportTimezone?: string, trustedProxyConfiguration?: record, uiConfiguration?: record, usageDataConfiguration?: record, webhookEventLogConfiguration?: record}
 ]: any -> record<systemConfiguration: record<auditLogConfiguration: record<delete: record>, corsConfiguration: record<allowCredentials: bool, allowedHeaders: list, allowedMethods: list, allowedOrigins: list, debug: bool, exposedHeaders: list, preflightMaxAgeInSeconds: int, enabled: bool>, data: record, eventLogConfiguration: record<numberToRetain: int>, insertInstant: int, lastUpdateInstant: int, loginRecordConfiguration: record<delete: record>, reportTimezone: string, trustedProxyConfiguration: record<trustPolicy: string, trusted: list>, uiConfiguration: record<headerColor: string, logoURL: string, menuFontColor: string>, usageDataConfiguration: record<numberOfDaysToRetain: int, enabled: bool>, webhookEventLogConfiguration: record<delete: record, enabled: bool>>> {
   let input = $in
@@ -5082,7 +5269,7 @@ export def "system-configuration patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the system configuration.
@@ -5098,6 +5285,7 @@ export def "system-configuration updateSystemConfigurationWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --systemConfiguration: record # shape: {auditLogConfiguration?: record, corsConfiguration?: record, data?: record, eventLogConfiguration?: record, insertInstant?: int, lastUpdateInstant?: int, loginRecordConfiguration?: record, reportTimezone?: string, trustedProxyConfiguration?: record, uiConfiguration?: record, usageDataConfiguration?: record, webhookEventLogConfiguration?: record}
 ]: any -> record<systemConfiguration: record<auditLogConfiguration: record<delete: record>, corsConfiguration: record<allowCredentials: bool, allowedHeaders: list, allowedMethods: list, allowedOrigins: list, debug: bool, exposedHeaders: list, preflightMaxAgeInSeconds: int, enabled: bool>, data: record, eventLogConfiguration: record<numberToRetain: int>, insertInstant: int, lastUpdateInstant: int, loginRecordConfiguration: record<delete: record>, reportTimezone: string, trustedProxyConfiguration: record<trustPolicy: string, trusted: list>, uiConfiguration: record<headerColor: string, logoURL: string, menuFontColor: string>, usageDataConfiguration: record<numberOfDaysToRetain: int, enabled: bool>, webhookEventLogConfiguration: record<delete: record, enabled: bool>>> {
   let input = $in
@@ -5108,7 +5296,7 @@ export def "system-configuration updateSystemConfigurationWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates an audit log with the message and user name (usually an email). Audit logs should be written anytime you make changes to the FusionAuth database. When using the FusionAuth App web interface, any changes are automatically written to the audit log. However, if you are accessing the API, you must write the audit logs yourself.
@@ -5125,6 +5313,7 @@ export def "system-audit-log createAuditLogWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --auditLog: record # An audit log. — shape: {data?: record, id?: int, insertInstant?: int, insertUser?: string, message?: string, newValue?: record, oldValue?: record, reason?: string, tenantId?: string}
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
 ]: any -> record<auditLog: record<data: record, id: int, insertInstant: int, insertUser: string, message: string, newValue: record, oldValue: record, reason: string, tenantId: string>> {
@@ -5136,7 +5325,7 @@ export def "system-audit-log createAuditLogWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Searches the audit logs with the specified criteria and pagination.
@@ -5152,6 +5341,7 @@ export def "system-audit-log-search searchAuditLogsWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # shape: {end?: int, message?: string, newValue?: string, oldValue?: string, reason?: string, start?: int, tenantId?: string, user?: string, numberOfResults?: int, orderBy?: string, startRow?: int}
 ]: any -> record<auditLogs: table<data: record, id: int, insertInstant: int, insertUser: string, message: string, newValue: record, oldValue: record, reason: string, tenantId: string>, total: int> {
   let input = $in
@@ -5162,7 +5352,7 @@ export def "system-audit-log-search searchAuditLogsWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves a single audit log for the given Id.
@@ -5178,13 +5368,14 @@ export def "system-audit-log retrieveAuditLogWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auditLog: record<data: record, id: int, insertInstant: int, insertUser: string, message: string, newValue: record, oldValue: record, reason: string, tenantId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/system/audit-log/($auditLogId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searches the event logs with the specified criteria and pagination.
@@ -5200,6 +5391,7 @@ export def "system-event-log-search searchEventLogsWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # Search criteria for the event log. — shape: {end?: int, message?: string, start?: int, type?: "Information"|"Debug"|"Error", numberOfResults?: int, orderBy?: string, startRow?: int}
 ]: any -> record<eventLogs: table<id: int, insertInstant: int, message: string, type: string>, total: int> {
   let input = $in
@@ -5210,7 +5402,7 @@ export def "system-event-log-search searchEventLogsWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves a single event log for the given Id.
@@ -5226,13 +5418,14 @@ export def "system-event-log retrieveEventLogWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<eventLog: record<id: int, insertInstant: int, message: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/system/event-log/($eventLogId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searches the login records with the specified criteria and pagination.
@@ -5248,6 +5441,7 @@ export def "system-login-record-search searchLoginRecordsWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --retrieveTotal: oneof<nothing, bool>
   --search: record # shape: {applicationId?: string, end?: int, start?: int, userId?: string, numberOfResults?: int, orderBy?: string, startRow?: int}
 ]: any -> record<logins: table<applicationName: string, location: record, loginId: string, loginIdType: record, applicationId: string, instant: int, ipAddress: string, userId: string>, total: int> {
@@ -5259,7 +5453,7 @@ export def "system-login-record-search searchLoginRecordsWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Requests Elasticsearch to delete and rebuild the index for FusionAuth users or entities. Be very careful when running this request as it will  increase the CPU and I/O load on your database until the operation completes. Generally speaking you do not ever need to run this operation unless  instructed by FusionAuth support, or if you are migrating a database another system and you are not brining along the Elasticsearch index.   You have been warned.
@@ -5274,6 +5468,7 @@ export def "system-reindex reindexWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --index: string
 ]: any -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let input = $in
@@ -5284,7 +5479,7 @@ export def "system-reindex reindexWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the FusionAuth version string.
@@ -5299,13 +5494,14 @@ export def "system-version retrieveVersionWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/system/version")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a single webhook attempt log for the given Id.
@@ -5321,13 +5517,14 @@ export def "system-webhook-attempt-log retrieveWebhookAttemptLogWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<webhookAttemptLog: record<data: record, endInstant: int, id: string, startInstant: int, webhookCallResponse: record<exception: string, statusCode: int, url: string>, webhookEventLogId: string, webhookId: string, attemptResult: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/system/webhook-attempt-log/($webhookAttemptLogId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searches the webhook event logs with the specified criteria and pagination.
@@ -5343,6 +5540,7 @@ export def "system-webhook-event-log-search searchWebhookEventLogsWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # Search criteria for the webhook event log. — shape: {end?: int, event?: string, eventResult?: "Failed"|"Running"|"Succeeded", eventType?: "JWTPublicKeyUpdate"|"JWTRefreshTokenRevoke"|"JWTRefresh"|"AuditLogCreate"|"EventLogCreate"|"KickstartSuccess"|"GroupCreate"|"GroupCreateComplete"|"GroupDelete"|"GroupDeleteComplete"|"GroupMemberAdd"|"GroupMemberAddComplete"|"GroupMemberRemove"|"GroupMemberRemoveComplete"|"GroupMemberUpdate"|"GroupMemberUpdateComplete"|"GroupUpdate"|"GroupUpdateComplete"|"UserAction"|"UserBulkCreate"|"UserCreate"|"UserCreateComplete"|"UserDeactivate"|"UserDelete"|"UserDeleteComplete"|"UserEmailUpdate"|"UserEmailVerified"|"UserIdentityProviderLink"|"UserIdentityProviderUnlink"|"UserLoginIdDuplicateOnCreate"|"UserLoginIdDuplicateOnUpdate"|"UserLoginFailed"|"UserLoginNewDevice"|"UserLoginSuccess"|"UserLoginSuspicious"|"UserPasswordBreach"|"UserPasswordResetSend"|"UserPasswordResetStart"|"UserPasswordResetSuccess"|"UserPasswordUpdate"|"UserReactivate"|"UserRegistrationCreate"|"UserRegistrationCreateComplete"|"UserRegistrationDelete"|"UserRegistrationDeleteComplete"|"UserRegistrationUpdate"|"UserRegistrationUpdateComplete"|"UserRegistrationVerified"|"UserTwoFactorMethodAdd"|"UserTwoFactorMethodRemove"|"UserUpdate"|"UserUpdateComplete"|"Test"|"UserIdentityVerified"|"UserIdentityUpdate", start?: int, numberOfResults?: int, orderBy?: string, startRow?: int}
 ]: any -> record<total: int, webhookEventLogs: table<attempts: list, data: record, event: record, eventResult: string, eventType: string, id: string, insertInstant: int, lastAttemptInstant: int, lastUpdateInstant: int, linkedObjectId: string, sequence: int, failedAttempts: int, successfulAttempts: int>> {
   let input = $in
@@ -5353,7 +5551,7 @@ export def "system-webhook-event-log-search searchWebhookEventLogsWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves a single webhook event log for the given Id.
@@ -5369,13 +5567,14 @@ export def "system-webhook-event-log retrieveWebhookEventLogWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<webhookEventLog: record<attempts: list<record>, data: record, event: record<event: record>, eventResult: string, eventType: string, id: string, insertInstant: int, lastAttemptInstant: int, lastUpdateInstant: int, linkedObjectId: string, sequence: int, failedAttempts: int, successfulAttempts: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/system/webhook-event-log/($webhookEventLogId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a tenant. You can optionally specify an Id for the tenant, if not provided one will be generated.
@@ -5392,6 +5591,7 @@ export def "tenant createTenant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --sourceTenantId: string # format: uuid
   --tenant: record # shape: {data?: record, accessControlConfiguration?: record, captchaConfiguration?: record, configured?: bool, connectorPolicies?: list, emailConfiguration?: record, eventConfiguration?: record, externalIdentifierConfiguration?: record, failedAuthenticationConfiguration?: record, familyConfiguration?: record, formConfiguration?: record, httpSessionMaxInactiveInterval?: int, id?: string, insertInstant?: int, issuer?: string, jwtConfiguration?: record, lambdaConfiguration?: record, lastUpdateInstant?: int, loginConfiguration?: record, logoutURL?: string, maximumPasswordAge?: record, minimumPasswordAge?: record, multiFactorConfiguration?: record, name?: string, oauthConfiguration?: record, passwordEncryptionConfiguration?: record, passwordValidationRules?: record, phoneConfiguration?: record, rateLimitConfiguration?: record, registrationConfiguration?: record, scimServerConfiguration?: record, ssoConfiguration?: record, state?: "Active"|"Inactive"|"PendingDelete", themeId?: string, userDeletePolicy?: record, usernameConfiguration?: record, webAuthnConfiguration?: record}
@@ -5408,7 +5608,7 @@ export def "tenant createTenant" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates, via PATCH, the Tenant Manager configuration.
@@ -5424,6 +5624,7 @@ export def "tenant-manager patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tenantManagerConfiguration: record # Configuration object for the Tenant Manager. — shape: {applicationConfigurations?: list, attributeFormId?: string, brandName?: string, identityProviderTypeConfigurations?: record, insertInstant?: int, lastUpdateInstant?: int}
 ]: any -> record<tenantManagerConfiguration: record<applicationConfigurations: list<record>, attributeFormId: string, brandName: string, identityProviderTypeConfigurations: record, insertInstant: int, lastUpdateInstant: int>> {
   let input = $in
@@ -5434,7 +5635,7 @@ export def "tenant-manager patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the Tenant Manager configuration.
@@ -5450,6 +5651,7 @@ export def "tenant-manager updateTenantManagerConfigurationWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tenantManagerConfiguration: record # Configuration object for the Tenant Manager. — shape: {applicationConfigurations?: list, attributeFormId?: string, brandName?: string, identityProviderTypeConfigurations?: record, insertInstant?: int, lastUpdateInstant?: int}
 ]: any -> record<tenantManagerConfiguration: record<applicationConfigurations: list<record>, attributeFormId: string, brandName: string, identityProviderTypeConfigurations: record, insertInstant: int, lastUpdateInstant: int>> {
   let input = $in
@@ -5460,7 +5662,7 @@ export def "tenant-manager updateTenantManagerConfigurationWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a tenant manager identity provider type configuration for the given identity provider type.
@@ -5477,6 +5679,7 @@ export def "tenant-manager-identity-provider createTenantManagerIdentityProvider
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --typeConfiguration: record # Configuration object for identity provider types allowed in Tenant Manager — shape: {defaultAttributeMappings?: record, insertInstant?: int, lastUpdateInstant?: int, linkingStrategy?: "CreatePendingLink"|"Disabled"|"LinkAnonymously"|"LinkByEmail"|"LinkByEmailForExistingUser"|"LinkByUsername"|"LinkByUsernameForExistingUser"|"Unsupported", type?: "Apple"|"EpicGames"|"ExternalJWT"|"Facebook"|"Google"|"HYPR"|"LinkedIn"|"Nintendo"|"OpenIDConnect"|"SAMLv2"|"SAMLv2IdPInitiated"|"SonyPSN"|"Steam"|"Twitch"|"Twitter"|"Xbox", enabled?: bool}
 ]: any -> record<typeConfiguration: record<defaultAttributeMappings: record, insertInstant: int, lastUpdateInstant: int, linkingStrategy: string, type: string, enabled: bool>> {
   let input = $in
@@ -5487,7 +5690,7 @@ export def "tenant-manager-identity-provider createTenantManagerIdentityProvider
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the tenant manager identity provider type configuration for the given identity provider type.
@@ -5503,13 +5706,14 @@ export def "tenant-manager-identity-provider delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/tenant-manager/identity-provider/($type)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Patches the tenant manager identity provider type configuration for the given identity provider type.
@@ -5526,6 +5730,7 @@ export def "tenant-manager-identity-provider patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --typeConfiguration: record # Configuration object for identity provider types allowed in Tenant Manager — shape: {defaultAttributeMappings?: record, insertInstant?: int, lastUpdateInstant?: int, linkingStrategy?: "CreatePendingLink"|"Disabled"|"LinkAnonymously"|"LinkByEmail"|"LinkByEmailForExistingUser"|"LinkByUsername"|"LinkByUsernameForExistingUser"|"Unsupported", type?: "Apple"|"EpicGames"|"ExternalJWT"|"Facebook"|"Google"|"HYPR"|"LinkedIn"|"Nintendo"|"OpenIDConnect"|"SAMLv2"|"SAMLv2IdPInitiated"|"SonyPSN"|"Steam"|"Twitch"|"Twitter"|"Xbox", enabled?: bool}
 ]: any -> record<typeConfiguration: record<defaultAttributeMappings: record, insertInstant: int, lastUpdateInstant: int, linkingStrategy: string, type: string, enabled: bool>> {
   let input = $in
@@ -5536,7 +5741,7 @@ export def "tenant-manager-identity-provider patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the tenant manager identity provider type configuration for the given identity provider type.
@@ -5553,6 +5758,7 @@ export def "tenant-manager-identity-provider updateTenantManagerIdentityProvider
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --typeConfiguration: record # Configuration object for identity provider types allowed in Tenant Manager — shape: {defaultAttributeMappings?: record, insertInstant?: int, lastUpdateInstant?: int, linkingStrategy?: "CreatePendingLink"|"Disabled"|"LinkAnonymously"|"LinkByEmail"|"LinkByEmailForExistingUser"|"LinkByUsername"|"LinkByUsernameForExistingUser"|"Unsupported", type?: "Apple"|"EpicGames"|"ExternalJWT"|"Facebook"|"Google"|"HYPR"|"LinkedIn"|"Nintendo"|"OpenIDConnect"|"SAMLv2"|"SAMLv2IdPInitiated"|"SonyPSN"|"Steam"|"Twitch"|"Twitter"|"Xbox", enabled?: bool}
 ]: any -> record<typeConfiguration: record<defaultAttributeMappings: record, insertInstant: int, lastUpdateInstant: int, linkingStrategy: string, type: string, enabled: bool>> {
   let input = $in
@@ -5563,7 +5769,7 @@ export def "tenant-manager-identity-provider updateTenantManagerIdentityProvider
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the password validation rules for a specific tenant. This method requires a tenantId to be provided  through the use of a Tenant scoped API key or an HTTP header X-FusionAuth-TenantId to specify the Tenant Id.  This API does not require an API key.
@@ -5578,13 +5784,14 @@ export def "tenant-password-validation-rules retrievePasswordValidationRulesWith
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<passwordValidationRules: record<breachDetection: record<matchMode: string, notifyUserEmailTemplateId: string, onLogin: string, enabled: bool>, disallowUserLoginId: bool, maxLength: int, minLength: int, rememberPreviousPasswords: record<count: int, enabled: bool>, requireMixedCase: bool, requireNonAlpha: bool, requireNumber: bool, validateOnLogin: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/tenant/password-validation-rules")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the password validation rules for a specific tenant.  This API does not require an API key.
@@ -5600,13 +5807,14 @@ export def "tenant-password-validation-rules retrievePasswordValidationRulesWith
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<passwordValidationRules: record<breachDetection: record<matchMode: string, notifyUserEmailTemplateId: string, onLogin: string, enabled: bool>, disallowUserLoginId: bool, maxLength: int, minLength: int, rememberPreviousPasswords: record<count: int, enabled: bool>, requireMixedCase: bool, requireNonAlpha: bool, requireNumber: bool, validateOnLogin: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/tenant/password-validation-rules/($tenantId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searches tenants with the specified criteria and pagination.
@@ -5622,6 +5830,7 @@ export def "tenant-search searchTenantsWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # Search criteria for Tenants — shape: {name?: string, numberOfResults?: int, orderBy?: string, startRow?: int}
 ]: any -> record<tenants: table<data: record, accessControlConfiguration: record, captchaConfiguration: record, configured: bool, connectorPolicies: list, emailConfiguration: record, eventConfiguration: record, externalIdentifierConfiguration: record, failedAuthenticationConfiguration: record, familyConfiguration: record, formConfiguration: record, httpSessionMaxInactiveInterval: int, id: string, insertInstant: int, issuer: string, jwtConfiguration: record, lambdaConfiguration: record, lastUpdateInstant: int, loginConfiguration: record, logoutURL: string, maximumPasswordAge: record, minimumPasswordAge: record, multiFactorConfiguration: record, name: string, oauthConfiguration: record, passwordEncryptionConfiguration: record, passwordValidationRules: record, phoneConfiguration: record, rateLimitConfiguration: record, registrationConfiguration: record, scimServerConfiguration: record, ssoConfiguration: record, state: string, themeId: string, userDeletePolicy: record, usernameConfiguration: record, webAuthnConfiguration: record>, total: int> {
   let input = $in
@@ -5632,7 +5841,7 @@ export def "tenant-search searchTenantsWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a tenant. You can optionally specify an Id for the tenant, if not provided one will be generated.
@@ -5650,6 +5859,7 @@ export def "tenant createTenantWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --sourceTenantId: string # format: uuid
   --tenant: record # shape: {data?: record, accessControlConfiguration?: record, captchaConfiguration?: record, configured?: bool, connectorPolicies?: list, emailConfiguration?: record, eventConfiguration?: record, externalIdentifierConfiguration?: record, failedAuthenticationConfiguration?: record, familyConfiguration?: record, formConfiguration?: record, httpSessionMaxInactiveInterval?: int, id?: string, insertInstant?: int, issuer?: string, jwtConfiguration?: record, lambdaConfiguration?: record, lastUpdateInstant?: int, loginConfiguration?: record, logoutURL?: string, maximumPasswordAge?: record, minimumPasswordAge?: record, multiFactorConfiguration?: record, name?: string, oauthConfiguration?: record, passwordEncryptionConfiguration?: record, passwordValidationRules?: record, phoneConfiguration?: record, rateLimitConfiguration?: record, registrationConfiguration?: record, scimServerConfiguration?: record, ssoConfiguration?: record, state?: "Active"|"Inactive"|"PendingDelete", themeId?: string, userDeletePolicy?: record, usernameConfiguration?: record, webAuthnConfiguration?: record}
@@ -5666,7 +5876,7 @@ export def "tenant createTenantWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the tenant based on the given request (sent to the API as JSON). This permanently deletes all information, metrics, reports and data associated with the tenant and everything under the tenant (applications, users, etc). OR Deletes the tenant for the given Id asynchronously. This method is helpful if you do not want to wait for the delete operation to complete. OR Deletes the tenant based on the given Id on the URL. This permanently deletes all information, metrics, reports and data associated with the tenant and everything under the tenant (applications, users, etc).
@@ -5683,6 +5893,7 @@ export def "tenant delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --async: string
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --async: oneof<nothing, bool>
@@ -5699,7 +5910,7 @@ export def "tenant delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates, via PATCH, the tenant with the given Id.
@@ -5717,6 +5928,7 @@ export def "tenant patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --sourceTenantId: string # format: uuid
   --tenant: record # shape: {data?: record, accessControlConfiguration?: record, captchaConfiguration?: record, configured?: bool, connectorPolicies?: list, emailConfiguration?: record, eventConfiguration?: record, externalIdentifierConfiguration?: record, failedAuthenticationConfiguration?: record, familyConfiguration?: record, formConfiguration?: record, httpSessionMaxInactiveInterval?: int, id?: string, insertInstant?: int, issuer?: string, jwtConfiguration?: record, lambdaConfiguration?: record, lastUpdateInstant?: int, loginConfiguration?: record, logoutURL?: string, maximumPasswordAge?: record, minimumPasswordAge?: record, multiFactorConfiguration?: record, name?: string, oauthConfiguration?: record, passwordEncryptionConfiguration?: record, passwordValidationRules?: record, phoneConfiguration?: record, rateLimitConfiguration?: record, registrationConfiguration?: record, scimServerConfiguration?: record, ssoConfiguration?: record, state?: "Active"|"Inactive"|"PendingDelete", themeId?: string, userDeletePolicy?: record, usernameConfiguration?: record, webAuthnConfiguration?: record}
@@ -5733,7 +5945,7 @@ export def "tenant patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the tenant for the given Id.
@@ -5749,6 +5961,7 @@ export def "tenant retrieveTenantWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<tenant: record<data: record, accessControlConfiguration: record<uiIPAccessControlListId: string>, captchaConfiguration: record<captchaMethod: string, secretKey: string, siteKey: string, threshold: float, enabled: bool>, configured: bool, connectorPolicies: list<record>, emailConfiguration: record<additionalHeaders: list, debug: bool, defaultFromEmail: string, defaultFromName: string, emailUpdateEmailTemplateId: string, emailVerifiedEmailTemplateId: string, forgotPasswordEmailTemplateId: string, host: string, implicitEmailVerificationAllowed: bool, loginIdInUseOnCreateEmailTemplateId: string, loginIdInUseOnUpdateEmailTemplateId: string, loginNewDeviceEmailTemplateId: string, loginSuspiciousEmailTemplateId: string, password: string, passwordResetSuccessEmailTemplateId: string, passwordUpdateEmailTemplateId: string, passwordlessEmailTemplateId: string, port: int, properties: string, security: string, setPasswordEmailTemplateId: string, twoFactorMethodAddEmailTemplateId: string, twoFactorMethodRemoveEmailTemplateId: string, unverified: record, username: string, verificationEmailTemplateId: string, verificationStrategy: string, verifyEmail: bool, verifyEmailWhenChanged: bool>, eventConfiguration: record<events: record>, externalIdentifierConfiguration: record<authorizationGrantIdTimeToLiveInSeconds: int, changePasswordIdGenerator: record, changePasswordIdTimeToLiveInSeconds: int, deviceCodeTimeToLiveInSeconds: int, deviceUserCodeIdGenerator: record, emailVerificationIdGenerator: record, emailVerificationIdTimeToLiveInSeconds: int, emailVerificationOneTimeCodeGenerator: record, externalAuthenticationIdTimeToLiveInSeconds: int, identityProviderConnectionTestTimeToLiveInSeconds: int, loginIntentTimeToLiveInSeconds: int, oneTimePasswordTimeToLiveInSeconds: int, passwordlessLoginGenerator: record, passwordlessLoginOneTimeCodeGenerator: record, passwordlessLoginTimeToLiveInSeconds: int, pendingAccountLinkTimeToLiveInSeconds: int, phoneVerificationIdGenerator: record, phoneVerificationIdTimeToLiveInSeconds: int, phoneVerificationOneTimeCodeGenerator: record, registrationVerificationIdGenerator: record, registrationVerificationIdTimeToLiveInSeconds: int, registrationVerificationOneTimeCodeGenerator: record, rememberOAuthScopeConsentChoiceTimeToLiveInSeconds: int, samlv2AuthNRequestIdTimeToLiveInSeconds: int, setupPasswordIdGenerator: record, setupPasswordIdTimeToLiveInSeconds: int, trustTokenTimeToLiveInSeconds: int, twoFactorIdTimeToLiveInSeconds: int, twoFactorOneTimeCodeIdGenerator: record, twoFactorOneTimeCodeIdTimeToLiveInSeconds: int, twoFactorTrustIdTimeToLiveInSeconds: int, webAuthnAuthenticationChallengeTimeToLiveInSeconds: int, webAuthnRegistrationChallengeTimeToLiveInSeconds: int>, failedAuthenticationConfiguration: record<actionCancelPolicy: record, actionDuration: int, actionDurationUnit: string, emailUser: bool, resetCountInSeconds: int, tooManyAttempts: int, userActionId: string>, familyConfiguration: record<allowChildRegistrations: bool, confirmChildEmailTemplateId: string, deleteOrphanedAccounts: bool, deleteOrphanedAccountsDays: int, familyRequestEmailTemplateId: string, maximumChildAge: int, minimumOwnerAge: int, parentEmailRequired: bool, parentRegistrationEmailTemplateId: string, enabled: bool>, formConfiguration: record<adminUserFormId: string>, httpSessionMaxInactiveInterval: int, id: string, insertInstant: int, issuer: string, jwtConfiguration: record<accessTokenKeyId: string, idTokenKeyId: string, refreshTokenExpirationPolicy: string, refreshTokenOneTimeUseConfiguration: record, refreshTokenRevocationPolicy: record, refreshTokenSlidingWindowConfiguration: record, refreshTokenTimeToLiveInMinutes: int, refreshTokenUsagePolicy: string, timeToLiveInSeconds: int, enabled: bool>, lambdaConfiguration: record<loginValidationId: string, multiFactorRequirementId: string, scimEnterpriseUserRequestConverterId: string, scimEnterpriseUserResponseConverterId: string, scimGroupRequestConverterId: string, scimGroupResponseConverterId: string, scimUserRequestConverterId: string, scimUserResponseConverterId: string>, lastUpdateInstant: int, loginConfiguration: record<requireAuthentication: bool>, logoutURL: string, maximumPasswordAge: record<days: int, enabled: bool>, minimumPasswordAge: record<seconds: int, enabled: bool>, multiFactorConfiguration: record<authenticator: record, email: record, loginPolicy: string, sms: record, voice: record>, name: string, oauthConfiguration: record<clientCredentialsAccessTokenPopulateLambdaId: string>, passwordEncryptionConfiguration: record<encryptionScheme: string, encryptionSchemeFactor: int, modifyEncryptionSchemeOnLogin: bool>, passwordValidationRules: record<breachDetection: record, disallowUserLoginId: bool, maxLength: int, minLength: int, rememberPreviousPasswords: record, requireMixedCase: bool, requireNonAlpha: bool, requireNumber: bool, validateOnLogin: bool>, phoneConfiguration: record<forgotPasswordTemplateId: string, identityUpdateTemplateId: string, implicitPhoneVerificationAllowed: bool, loginIdInUseOnCreateTemplateId: string, loginIdInUseOnUpdateTemplateId: string, loginNewDeviceTemplateId: string, loginSuspiciousTemplateId: string, messengerId: string, passwordResetSuccessTemplateId: string, passwordUpdateTemplateId: string, passwordlessTemplateId: string, setPasswordTemplateId: string, twoFactorMethodAddTemplateId: string, twoFactorMethodRemoveTemplateId: string, unverified: record, verificationCompleteTemplateId: string, verificationStrategy: string, verificationTemplateId: string, verifyPhoneNumber: bool>, rateLimitConfiguration: record<failedLogin: record, forgotPassword: record, sendEmailVerification: record, sendPasswordless: record, sendPasswordlessPhone: record, sendPhoneVerification: record, sendRegistrationVerification: record, sendTwoFactor: record>, registrationConfiguration: record<blockedDomains: list>, scimServerConfiguration: record<clientEntityTypeId: string, schemas: record, serverEntityTypeId: string, enabled: bool>, ssoConfiguration: record<allowAccessTokenBootstrap: bool, deviceTrustTimeToLiveInSeconds: int>, state: string, themeId: string, userDeletePolicy: record<unverified: record>, usernameConfiguration: record<unique: record>, webAuthnConfiguration: record<bootstrapWorkflow: record, debug: bool, reauthenticationWorkflow: record, relyingPartyId: string, relyingPartyName: string, enabled: bool>>, tenants: table<data: record, accessControlConfiguration: record, captchaConfiguration: record, configured: bool, connectorPolicies: list, emailConfiguration: record, eventConfiguration: record, externalIdentifierConfiguration: record, failedAuthenticationConfiguration: record, familyConfiguration: record, formConfiguration: record, httpSessionMaxInactiveInterval: int, id: string, insertInstant: int, issuer: string, jwtConfiguration: record, lambdaConfiguration: record, lastUpdateInstant: int, loginConfiguration: record, logoutURL: string, maximumPasswordAge: record, minimumPasswordAge: record, multiFactorConfiguration: record, name: string, oauthConfiguration: record, passwordEncryptionConfiguration: record, passwordValidationRules: record, phoneConfiguration: record, rateLimitConfiguration: record, registrationConfiguration: record, scimServerConfiguration: record, ssoConfiguration: record, state: string, themeId: string, userDeletePolicy: record, usernameConfiguration: record, webAuthnConfiguration: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5758,7 +5971,7 @@ export def "tenant retrieveTenantWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the tenant with the given Id.
@@ -5776,6 +5989,7 @@ export def "tenant updateTenantWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --sourceTenantId: string # format: uuid
   --tenant: record # shape: {data?: record, accessControlConfiguration?: record, captchaConfiguration?: record, configured?: bool, connectorPolicies?: list, emailConfiguration?: record, eventConfiguration?: record, externalIdentifierConfiguration?: record, failedAuthenticationConfiguration?: record, familyConfiguration?: record, formConfiguration?: record, httpSessionMaxInactiveInterval?: int, id?: string, insertInstant?: int, issuer?: string, jwtConfiguration?: record, lambdaConfiguration?: record, lastUpdateInstant?: int, loginConfiguration?: record, logoutURL?: string, maximumPasswordAge?: record, minimumPasswordAge?: record, multiFactorConfiguration?: record, name?: string, oauthConfiguration?: record, passwordEncryptionConfiguration?: record, passwordValidationRules?: record, phoneConfiguration?: record, rateLimitConfiguration?: record, registrationConfiguration?: record, scimServerConfiguration?: record, ssoConfiguration?: record, state?: "Active"|"Inactive"|"PendingDelete", themeId?: string, userDeletePolicy?: record, usernameConfiguration?: record, webAuthnConfiguration?: record}
@@ -5792,7 +6006,7 @@ export def "tenant updateTenantWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a Theme. You can optionally specify an Id for the theme, if not provided one will be generated.
@@ -5808,6 +6022,7 @@ export def "theme createTheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sourceThemeId: string # format: uuid
   --theme: record # shape: {data?: record, defaultMessages?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, localizedMessages?: record, name?: string, stylesheet?: string, templates?: record, type?: "advanced"|"simple", variables?: record}
 ]: any -> record<theme: record<data: record, defaultMessages: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedMessages: record, name: string, stylesheet: string, templates: record<accountEdit: string, accountIndex: string, accountTwoFactorDisable: string, accountTwoFactorEnable: string, accountTwoFactorIndex: string, accountWebAuthnAdd: string, accountWebAuthnDelete: string, accountWebAuthnIndex: string, confirmationRequired: string, emailComplete: string, emailSent: string, emailVerificationRequired: string, emailVerify: string, helpers: string, index: string, oauth2Authorize: string, oauth2AuthorizedNotRegistered: string, oauth2ChildRegistrationNotAllowed: string, oauth2ChildRegistrationNotAllowedComplete: string, oauth2CompleteRegistration: string, oauth2Consent: string, oauth2Device: string, oauth2DeviceComplete: string, oauth2Error: string, oauth2Logout: string, oauth2Passwordless: string, oauth2Register: string, oauth2StartIdPLink: string, oauth2TwoFactor: string, oauth2TwoFactorEnable: string, oauth2TwoFactorEnableComplete: string, oauth2TwoFactorMethods: string, oauth2Wait: string, oauth2WebAuthn: string, oauth2WebAuthnReauth: string, oauth2WebAuthnReauthEnable: string, passwordChange: string, passwordComplete: string, passwordForgot: string, passwordSent: string, phoneComplete: string, phoneSent: string, phoneVerificationRequired: string, phoneVerify: string, registrationComplete: string, registrationSent: string, registrationVerificationRequired: string, registrationVerify: string, samlv2Logout: string, unauthorized: string, emailSend: string, registrationSend: string>, type: string, variables: record<alertBackgroundColor: string, alertFontColor: string, backgroundImageURL: string, backgroundSize: string, borderRadius: string, deleteButtonColor: string, deleteButtonFocusColor: string, deleteButtonTextColor: string, deleteButtonTextFocusColor: string, errorFontColor: string, errorIconColor: string, favicons: list, fontColor: string, fontFamily: string, footerDisplay: bool, iconBackgroundColor: string, iconColor: string, infoIconColor: string, inputBackgroundColor: string, inputIconColor: string, inputTextColor: string, linkTextColor: string, linkTextFocusColor: string, logoImageSize: string, logoImageURL: string, monoFontColor: string, monoFontFamily: string, pageBackgroundColor: string, panelBackgroundColor: string, primaryButtonColor: string, primaryButtonFocusColor: string, primaryButtonTextColor: string, primaryButtonTextFocusColor: string>>, themes: table<data: record, defaultMessages: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedMessages: record, name: string, stylesheet: string, templates: record, type: string, variables: record>> {
@@ -5819,7 +6034,7 @@ export def "theme createTheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Searches themes with the specified criteria and pagination.
@@ -5835,6 +6050,7 @@ export def "theme-search searchThemesWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # Search criteria for themes — shape: {name?: string, type?: "advanced"|"simple", numberOfResults?: int, orderBy?: string, startRow?: int}
 ]: any -> record<themes: table<data: record, defaultMessages: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedMessages: record, name: string, stylesheet: string, templates: record, type: string, variables: record>, total: int> {
   let input = $in
@@ -5845,7 +6061,7 @@ export def "theme-search searchThemesWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a Theme. You can optionally specify an Id for the theme, if not provided one will be generated.
@@ -5862,6 +6078,7 @@ export def "theme createThemeWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sourceThemeId: string # format: uuid
   --theme: record # shape: {data?: record, defaultMessages?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, localizedMessages?: record, name?: string, stylesheet?: string, templates?: record, type?: "advanced"|"simple", variables?: record}
 ]: any -> record<theme: record<data: record, defaultMessages: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedMessages: record, name: string, stylesheet: string, templates: record<accountEdit: string, accountIndex: string, accountTwoFactorDisable: string, accountTwoFactorEnable: string, accountTwoFactorIndex: string, accountWebAuthnAdd: string, accountWebAuthnDelete: string, accountWebAuthnIndex: string, confirmationRequired: string, emailComplete: string, emailSent: string, emailVerificationRequired: string, emailVerify: string, helpers: string, index: string, oauth2Authorize: string, oauth2AuthorizedNotRegistered: string, oauth2ChildRegistrationNotAllowed: string, oauth2ChildRegistrationNotAllowedComplete: string, oauth2CompleteRegistration: string, oauth2Consent: string, oauth2Device: string, oauth2DeviceComplete: string, oauth2Error: string, oauth2Logout: string, oauth2Passwordless: string, oauth2Register: string, oauth2StartIdPLink: string, oauth2TwoFactor: string, oauth2TwoFactorEnable: string, oauth2TwoFactorEnableComplete: string, oauth2TwoFactorMethods: string, oauth2Wait: string, oauth2WebAuthn: string, oauth2WebAuthnReauth: string, oauth2WebAuthnReauthEnable: string, passwordChange: string, passwordComplete: string, passwordForgot: string, passwordSent: string, phoneComplete: string, phoneSent: string, phoneVerificationRequired: string, phoneVerify: string, registrationComplete: string, registrationSent: string, registrationVerificationRequired: string, registrationVerify: string, samlv2Logout: string, unauthorized: string, emailSend: string, registrationSend: string>, type: string, variables: record<alertBackgroundColor: string, alertFontColor: string, backgroundImageURL: string, backgroundSize: string, borderRadius: string, deleteButtonColor: string, deleteButtonFocusColor: string, deleteButtonTextColor: string, deleteButtonTextFocusColor: string, errorFontColor: string, errorIconColor: string, favicons: list, fontColor: string, fontFamily: string, footerDisplay: bool, iconBackgroundColor: string, iconColor: string, infoIconColor: string, inputBackgroundColor: string, inputIconColor: string, inputTextColor: string, linkTextColor: string, linkTextFocusColor: string, logoImageSize: string, logoImageURL: string, monoFontColor: string, monoFontFamily: string, pageBackgroundColor: string, panelBackgroundColor: string, primaryButtonColor: string, primaryButtonFocusColor: string, primaryButtonTextColor: string, primaryButtonTextFocusColor: string>>, themes: table<data: record, defaultMessages: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedMessages: record, name: string, stylesheet: string, templates: record, type: string, variables: record>> {
@@ -5873,7 +6090,7 @@ export def "theme createThemeWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the theme for the given Id.
@@ -5889,13 +6106,14 @@ export def "theme delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/theme/($themeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates, via PATCH, the theme with the given Id.
@@ -5912,6 +6130,7 @@ export def "theme patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sourceThemeId: string # format: uuid
   --theme: record # shape: {data?: record, defaultMessages?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, localizedMessages?: record, name?: string, stylesheet?: string, templates?: record, type?: "advanced"|"simple", variables?: record}
 ]: any -> record<theme: record<data: record, defaultMessages: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedMessages: record, name: string, stylesheet: string, templates: record<accountEdit: string, accountIndex: string, accountTwoFactorDisable: string, accountTwoFactorEnable: string, accountTwoFactorIndex: string, accountWebAuthnAdd: string, accountWebAuthnDelete: string, accountWebAuthnIndex: string, confirmationRequired: string, emailComplete: string, emailSent: string, emailVerificationRequired: string, emailVerify: string, helpers: string, index: string, oauth2Authorize: string, oauth2AuthorizedNotRegistered: string, oauth2ChildRegistrationNotAllowed: string, oauth2ChildRegistrationNotAllowedComplete: string, oauth2CompleteRegistration: string, oauth2Consent: string, oauth2Device: string, oauth2DeviceComplete: string, oauth2Error: string, oauth2Logout: string, oauth2Passwordless: string, oauth2Register: string, oauth2StartIdPLink: string, oauth2TwoFactor: string, oauth2TwoFactorEnable: string, oauth2TwoFactorEnableComplete: string, oauth2TwoFactorMethods: string, oauth2Wait: string, oauth2WebAuthn: string, oauth2WebAuthnReauth: string, oauth2WebAuthnReauthEnable: string, passwordChange: string, passwordComplete: string, passwordForgot: string, passwordSent: string, phoneComplete: string, phoneSent: string, phoneVerificationRequired: string, phoneVerify: string, registrationComplete: string, registrationSent: string, registrationVerificationRequired: string, registrationVerify: string, samlv2Logout: string, unauthorized: string, emailSend: string, registrationSend: string>, type: string, variables: record<alertBackgroundColor: string, alertFontColor: string, backgroundImageURL: string, backgroundSize: string, borderRadius: string, deleteButtonColor: string, deleteButtonFocusColor: string, deleteButtonTextColor: string, deleteButtonTextFocusColor: string, errorFontColor: string, errorIconColor: string, favicons: list, fontColor: string, fontFamily: string, footerDisplay: bool, iconBackgroundColor: string, iconColor: string, infoIconColor: string, inputBackgroundColor: string, inputIconColor: string, inputTextColor: string, linkTextColor: string, linkTextFocusColor: string, logoImageSize: string, logoImageURL: string, monoFontColor: string, monoFontFamily: string, pageBackgroundColor: string, panelBackgroundColor: string, primaryButtonColor: string, primaryButtonFocusColor: string, primaryButtonTextColor: string, primaryButtonTextFocusColor: string>>, themes: table<data: record, defaultMessages: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedMessages: record, name: string, stylesheet: string, templates: record, type: string, variables: record>> {
@@ -5923,7 +6142,7 @@ export def "theme patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the theme for the given Id.
@@ -5939,13 +6158,14 @@ export def "theme retrieveThemeWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<theme: record<data: record, defaultMessages: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedMessages: record, name: string, stylesheet: string, templates: record<accountEdit: string, accountIndex: string, accountTwoFactorDisable: string, accountTwoFactorEnable: string, accountTwoFactorIndex: string, accountWebAuthnAdd: string, accountWebAuthnDelete: string, accountWebAuthnIndex: string, confirmationRequired: string, emailComplete: string, emailSent: string, emailVerificationRequired: string, emailVerify: string, helpers: string, index: string, oauth2Authorize: string, oauth2AuthorizedNotRegistered: string, oauth2ChildRegistrationNotAllowed: string, oauth2ChildRegistrationNotAllowedComplete: string, oauth2CompleteRegistration: string, oauth2Consent: string, oauth2Device: string, oauth2DeviceComplete: string, oauth2Error: string, oauth2Logout: string, oauth2Passwordless: string, oauth2Register: string, oauth2StartIdPLink: string, oauth2TwoFactor: string, oauth2TwoFactorEnable: string, oauth2TwoFactorEnableComplete: string, oauth2TwoFactorMethods: string, oauth2Wait: string, oauth2WebAuthn: string, oauth2WebAuthnReauth: string, oauth2WebAuthnReauthEnable: string, passwordChange: string, passwordComplete: string, passwordForgot: string, passwordSent: string, phoneComplete: string, phoneSent: string, phoneVerificationRequired: string, phoneVerify: string, registrationComplete: string, registrationSent: string, registrationVerificationRequired: string, registrationVerify: string, samlv2Logout: string, unauthorized: string, emailSend: string, registrationSend: string>, type: string, variables: record<alertBackgroundColor: string, alertFontColor: string, backgroundImageURL: string, backgroundSize: string, borderRadius: string, deleteButtonColor: string, deleteButtonFocusColor: string, deleteButtonTextColor: string, deleteButtonTextFocusColor: string, errorFontColor: string, errorIconColor: string, favicons: list, fontColor: string, fontFamily: string, footerDisplay: bool, iconBackgroundColor: string, iconColor: string, infoIconColor: string, inputBackgroundColor: string, inputIconColor: string, inputTextColor: string, linkTextColor: string, linkTextFocusColor: string, logoImageSize: string, logoImageURL: string, monoFontColor: string, monoFontFamily: string, pageBackgroundColor: string, panelBackgroundColor: string, primaryButtonColor: string, primaryButtonFocusColor: string, primaryButtonTextColor: string, primaryButtonTextFocusColor: string>>, themes: table<data: record, defaultMessages: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedMessages: record, name: string, stylesheet: string, templates: record, type: string, variables: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/theme/($themeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the theme with the given Id.
@@ -5962,6 +6182,7 @@ export def "theme updateThemeWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sourceThemeId: string # format: uuid
   --theme: record # shape: {data?: record, defaultMessages?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, localizedMessages?: record, name?: string, stylesheet?: string, templates?: record, type?: "advanced"|"simple", variables?: record}
 ]: any -> record<theme: record<data: record, defaultMessages: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedMessages: record, name: string, stylesheet: string, templates: record<accountEdit: string, accountIndex: string, accountTwoFactorDisable: string, accountTwoFactorEnable: string, accountTwoFactorIndex: string, accountWebAuthnAdd: string, accountWebAuthnDelete: string, accountWebAuthnIndex: string, confirmationRequired: string, emailComplete: string, emailSent: string, emailVerificationRequired: string, emailVerify: string, helpers: string, index: string, oauth2Authorize: string, oauth2AuthorizedNotRegistered: string, oauth2ChildRegistrationNotAllowed: string, oauth2ChildRegistrationNotAllowedComplete: string, oauth2CompleteRegistration: string, oauth2Consent: string, oauth2Device: string, oauth2DeviceComplete: string, oauth2Error: string, oauth2Logout: string, oauth2Passwordless: string, oauth2Register: string, oauth2StartIdPLink: string, oauth2TwoFactor: string, oauth2TwoFactorEnable: string, oauth2TwoFactorEnableComplete: string, oauth2TwoFactorMethods: string, oauth2Wait: string, oauth2WebAuthn: string, oauth2WebAuthnReauth: string, oauth2WebAuthnReauthEnable: string, passwordChange: string, passwordComplete: string, passwordForgot: string, passwordSent: string, phoneComplete: string, phoneSent: string, phoneVerificationRequired: string, phoneVerify: string, registrationComplete: string, registrationSent: string, registrationVerificationRequired: string, registrationVerify: string, samlv2Logout: string, unauthorized: string, emailSend: string, registrationSend: string>, type: string, variables: record<alertBackgroundColor: string, alertFontColor: string, backgroundImageURL: string, backgroundSize: string, borderRadius: string, deleteButtonColor: string, deleteButtonFocusColor: string, deleteButtonTextColor: string, deleteButtonTextFocusColor: string, errorFontColor: string, errorIconColor: string, favicons: list, fontColor: string, fontFamily: string, footerDisplay: bool, iconBackgroundColor: string, iconColor: string, infoIconColor: string, inputBackgroundColor: string, inputIconColor: string, inputTextColor: string, linkTextColor: string, linkTextFocusColor: string, logoImageSize: string, logoImageURL: string, monoFontColor: string, monoFontFamily: string, pageBackgroundColor: string, panelBackgroundColor: string, primaryButtonColor: string, primaryButtonFocusColor: string, primaryButtonTextColor: string, primaryButtonTextFocusColor: string>>, themes: table<data: record, defaultMessages: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedMessages: record, name: string, stylesheet: string, templates: record, type: string, variables: record>> {
@@ -5973,7 +6194,7 @@ export def "theme updateThemeWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Complete login using a 2FA challenge
@@ -5989,6 +6210,7 @@ export def "two-factor-login twoFactorLoginWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --code: string
   --trustComputer: oneof<nothing, bool>
   --twoFactorId: string
@@ -6007,7 +6229,7 @@ export def "two-factor-login twoFactorLoginWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate a Two Factor secret that can be used to enable Two Factor authentication for a User. The response will contain both the secret and a Base32 encoded form of the secret which can be shown to a User when using a 2 Step Authentication application such as Google Authenticator.
@@ -6022,13 +6244,14 @@ export def "two-factor-secret generateTwoFactorSecretUsingJWTWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<secret: string, secretBase32Encoded: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/two-factor/secret")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send a Two Factor authentication code to assist in setting up Two Factor authentication or disabling.
@@ -6043,6 +6266,7 @@ export def "two-factor-send sendTwoFactorCodeForEnableDisableWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationId: string # format: uuid
   --email: string
   --messageType: string@messageType-completer
@@ -6059,7 +6283,7 @@ export def "two-factor-send sendTwoFactorCodeForEnableDisableWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send a Two Factor authentication code to allow the completion of Two Factor authentication.
@@ -6075,6 +6299,7 @@ export def "two-factor-send sendTwoFactorCodeForLoginUsingMethodWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationId: string # format: uuid
   --email: string
   --messageType: string@messageType-completer
@@ -6091,7 +6316,7 @@ export def "two-factor-send sendTwoFactorCodeForLoginUsingMethodWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Start a Two-Factor login request by generating a two-factor identifier. This code can then be sent to the Two Factor Send  API (/api/two-factor/send)in order to send a one-time use code to a user. You can also use one-time use code returned  to send the code out-of-band. The Two-Factor login is completed by making a request to the Two-Factor Login  API (/api/two-factor/login). with the two-factor identifier and the one-time use code.  This API is intended to allow you to begin a Two-Factor login outside a normal login that originated from the Login API (/api/login).
@@ -6106,6 +6331,7 @@ export def "two-factor-start startTwoFactorLoginWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationId: string # format: uuid
   --code: string
   --loginId: string
@@ -6122,7 +6348,7 @@ export def "two-factor-start startTwoFactorLoginWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a user's two-factor status.  This can be used to see if a user will need to complete a two-factor challenge to complete a login, and optionally identify the state of the two-factor trust across various applications. This operation provides more payload options than retrieveTwoFactorStatus.
@@ -6138,6 +6364,7 @@ export def "two-factor-status retrieveTwoFactorStatusWithRequestWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # format: uuid
   --accessToken: string
   --action: string@action-completer # Communicate various actionscontexts in which multi-factor authentication can be used.
@@ -6153,7 +6380,7 @@ export def "two-factor-status retrieveTwoFactorStatusWithRequestWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a user's two-factor status.  This can be used to see if a user will need to complete a two-factor challenge to complete a login, and optionally identify the state of the two-factor trust across various applications.
@@ -6169,6 +6396,7 @@ export def "two-factor-status retrieveTwoFactorStatusWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # The user Id to retrieve the Two-Factor status.
   --applicationId: string # The optional applicationId to verify.
 ]: nothing -> record<trusts: table<applicationId: string, expiration: int, startInstant: int>, twoFactorTrustId: string> {
@@ -6178,7 +6406,7 @@ export def "two-factor-status retrieveTwoFactorStatusWithId" [
   let full_url = (build-url $base $"/api/two-factor/status/($twoFactorTrustId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a user. You can optionally specify an Id for the user, if not provided one will be generated.
@@ -6195,6 +6423,7 @@ export def "user createUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --applicationId: string # format: uuid
   --currentPassword: string
@@ -6216,7 +6445,7 @@ export def "user createUser" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the user by a verificationId. The intended use of this API is to retrieve a user after the forgot password workflow has been initiated and you may not know the user's email or username. OR Retrieves the user for the given username. OR Retrieves the user for the loginId, using specific loginIdTypes. OR Retrieves the user for the loginId. The loginId can be either the username or the email. OR Retrieves the user for the given email. OR Retrieves the user by a change password Id. The intended use of this API is to retrieve a user after the forgot password workflow has been initiated and you may not know the user's email or username.
@@ -6231,6 +6460,7 @@ export def "user retrieveUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --verificationId: string # The unique verification Id that has been set on the user object.
   --username: string # The username of the user.
   --loginId: string # The email or username of the user.
@@ -6247,7 +6477,7 @@ export def "user retrieveUser" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a user action. This action cannot be taken on a user until this call successfully returns. Anytime after that the user action can be applied to any user.
@@ -6263,6 +6493,7 @@ export def "user-action createUserAction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --userAction: record # An action that can be executed on a user (discipline or reward potentially). — shape: {active?: bool, cancelEmailTemplateId?: string, endEmailTemplateId?: string, id?: string, includeEmailInEventJSON?: bool, insertInstant?: int, lastUpdateInstant?: int, localizedNames?: record, modifyEmailTemplateId?: string, name?: string, options?: list, preventLogin?: bool, sendEndEvent?: bool, startEmailTemplateId?: string, temporal?: bool, transactionType?: "None"|"Any"|"SimpleMajority"|"SuperMajority"|"AbsoluteMajority", userEmailingEnabled?: bool, userNotificationsEnabled?: bool}
 ]: any -> record<userAction: record<active: bool, cancelEmailTemplateId: string, endEmailTemplateId: string, id: string, includeEmailInEventJSON: bool, insertInstant: int, lastUpdateInstant: int, localizedNames: record, modifyEmailTemplateId: string, name: string, options: list<record>, preventLogin: bool, sendEndEvent: bool, startEmailTemplateId: string, temporal: bool, transactionType: string, userEmailingEnabled: bool, userNotificationsEnabled: bool>, userActions: table<active: bool, cancelEmailTemplateId: string, endEmailTemplateId: string, id: string, includeEmailInEventJSON: bool, insertInstant: int, lastUpdateInstant: int, localizedNames: record, modifyEmailTemplateId: string, name: string, options: list, preventLogin: bool, sendEndEvent: bool, startEmailTemplateId: string, temporal: bool, transactionType: string, userEmailingEnabled: bool, userNotificationsEnabled: bool>> {
@@ -6276,7 +6507,7 @@ export def "user-action createUserAction" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the user action for the given Id. If you pass in null for the Id, this will return all the user actions. OR Retrieves all the user actions that are currently inactive.
@@ -6291,6 +6522,7 @@ export def "user-action retrieveUserAction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --inactive: string
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<userAction: record<active: bool, cancelEmailTemplateId: string, endEmailTemplateId: string, id: string, includeEmailInEventJSON: bool, insertInstant: int, lastUpdateInstant: int, localizedNames: record, modifyEmailTemplateId: string, name: string, options: list<record>, preventLogin: bool, sendEndEvent: bool, startEmailTemplateId: string, temporal: bool, transactionType: string, userEmailingEnabled: bool, userNotificationsEnabled: bool>, userActions: table<active: bool, cancelEmailTemplateId: string, endEmailTemplateId: string, id: string, includeEmailInEventJSON: bool, insertInstant: int, lastUpdateInstant: int, localizedNames: record, modifyEmailTemplateId: string, name: string, options: list, preventLogin: bool, sendEndEvent: bool, startEmailTemplateId: string, temporal: bool, transactionType: string, userEmailingEnabled: bool, userNotificationsEnabled: bool>> {
@@ -6302,7 +6534,7 @@ export def "user-action retrieveUserAction" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a user reason. This user action reason cannot be used when actioning a user until this call completes successfully. Anytime after that the user action reason can be used.
@@ -6318,6 +6550,7 @@ export def "user-action-reason createUserActionReason" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userActionReason: record # Models action reasons. — shape: {code?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, localizedTexts?: record, text?: string}
 ]: any -> record<userActionReason: record<code: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedTexts: record, text: string>, userActionReasons: table<code: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedTexts: record, text: string>> {
   let input = $in
@@ -6328,7 +6561,7 @@ export def "user-action-reason createUserActionReason" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the user action reason for the given Id. If you pass in null for the Id, this will return all the user action reasons.
@@ -6343,13 +6576,14 @@ export def "user-action-reason retrieveUserActionReason" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<userActionReason: record<code: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedTexts: record, text: string>, userActionReasons: table<code: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedTexts: record, text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/user-action-reason")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a user reason. This user action reason cannot be used when actioning a user until this call completes successfully. Anytime after that the user action reason can be used.
@@ -6366,6 +6600,7 @@ export def "user-action-reason createUserActionReasonWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userActionReason: record # Models action reasons. — shape: {code?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, localizedTexts?: record, text?: string}
 ]: any -> record<userActionReason: record<code: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedTexts: record, text: string>, userActionReasons: table<code: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedTexts: record, text: string>> {
   let input = $in
@@ -6376,7 +6611,7 @@ export def "user-action-reason createUserActionReasonWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the user action reason for the given Id.
@@ -6392,13 +6627,14 @@ export def "user-action-reason delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/user-action-reason/($userActionReasonId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates, via PATCH, the user action reason with the given Id.
@@ -6415,6 +6651,7 @@ export def "user-action-reason patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userActionReason: record # Models action reasons. — shape: {code?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, localizedTexts?: record, text?: string}
 ]: any -> record<userActionReason: record<code: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedTexts: record, text: string>, userActionReasons: table<code: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedTexts: record, text: string>> {
   let input = $in
@@ -6425,7 +6662,7 @@ export def "user-action-reason patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the user action reason for the given Id. If you pass in null for the Id, this will return all the user action reasons.
@@ -6441,13 +6678,14 @@ export def "user-action-reason retrieveUserActionReasonWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<userActionReason: record<code: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedTexts: record, text: string>, userActionReasons: table<code: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedTexts: record, text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/user-action-reason/($userActionReasonId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the user action reason with the given Id.
@@ -6464,6 +6702,7 @@ export def "user-action-reason updateUserActionReasonWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userActionReason: record # Models action reasons. — shape: {code?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, localizedTexts?: record, text?: string}
 ]: any -> record<userActionReason: record<code: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedTexts: record, text: string>, userActionReasons: table<code: string, id: string, insertInstant: int, lastUpdateInstant: int, localizedTexts: record, text: string>> {
   let input = $in
@@ -6474,7 +6713,7 @@ export def "user-action-reason updateUserActionReasonWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a user action. This action cannot be taken on a user until this call successfully returns. Anytime after that the user action can be applied to any user.
@@ -6491,6 +6730,7 @@ export def "user-action createUserActionWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --userAction: record # An action that can be executed on a user (discipline or reward potentially). — shape: {active?: bool, cancelEmailTemplateId?: string, endEmailTemplateId?: string, id?: string, includeEmailInEventJSON?: bool, insertInstant?: int, lastUpdateInstant?: int, localizedNames?: record, modifyEmailTemplateId?: string, name?: string, options?: list, preventLogin?: bool, sendEndEvent?: bool, startEmailTemplateId?: string, temporal?: bool, transactionType?: "None"|"Any"|"SimpleMajority"|"SuperMajority"|"AbsoluteMajority", userEmailingEnabled?: bool, userNotificationsEnabled?: bool}
 ]: any -> record<userAction: record<active: bool, cancelEmailTemplateId: string, endEmailTemplateId: string, id: string, includeEmailInEventJSON: bool, insertInstant: int, lastUpdateInstant: int, localizedNames: record, modifyEmailTemplateId: string, name: string, options: list<record>, preventLogin: bool, sendEndEvent: bool, startEmailTemplateId: string, temporal: bool, transactionType: string, userEmailingEnabled: bool, userNotificationsEnabled: bool>, userActions: table<active: bool, cancelEmailTemplateId: string, endEmailTemplateId: string, id: string, includeEmailInEventJSON: bool, insertInstant: int, lastUpdateInstant: int, localizedNames: record, modifyEmailTemplateId: string, name: string, options: list, preventLogin: bool, sendEndEvent: bool, startEmailTemplateId: string, temporal: bool, transactionType: string, userEmailingEnabled: bool, userNotificationsEnabled: bool>> {
@@ -6504,7 +6744,7 @@ export def "user-action createUserActionWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the user action for the given Id. This permanently deletes the user action and also any history and logs of the action being applied to any users. OR Deactivates the user action with the given Id.
@@ -6520,6 +6760,7 @@ export def "user-action delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hardDelete: string
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
@@ -6531,7 +6772,7 @@ export def "user-action delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates, via PATCH, the user action with the given Id.
@@ -6548,6 +6789,7 @@ export def "user-action patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --userAction: record # An action that can be executed on a user (discipline or reward potentially). — shape: {active?: bool, cancelEmailTemplateId?: string, endEmailTemplateId?: string, id?: string, includeEmailInEventJSON?: bool, insertInstant?: int, lastUpdateInstant?: int, localizedNames?: record, modifyEmailTemplateId?: string, name?: string, options?: list, preventLogin?: bool, sendEndEvent?: bool, startEmailTemplateId?: string, temporal?: bool, transactionType?: "None"|"Any"|"SimpleMajority"|"SuperMajority"|"AbsoluteMajority", userEmailingEnabled?: bool, userNotificationsEnabled?: bool}
 ]: any -> record<userAction: record<active: bool, cancelEmailTemplateId: string, endEmailTemplateId: string, id: string, includeEmailInEventJSON: bool, insertInstant: int, lastUpdateInstant: int, localizedNames: record, modifyEmailTemplateId: string, name: string, options: list<record>, preventLogin: bool, sendEndEvent: bool, startEmailTemplateId: string, temporal: bool, transactionType: string, userEmailingEnabled: bool, userNotificationsEnabled: bool>, userActions: table<active: bool, cancelEmailTemplateId: string, endEmailTemplateId: string, id: string, includeEmailInEventJSON: bool, insertInstant: int, lastUpdateInstant: int, localizedNames: record, modifyEmailTemplateId: string, name: string, options: list, preventLogin: bool, sendEndEvent: bool, startEmailTemplateId: string, temporal: bool, transactionType: string, userEmailingEnabled: bool, userNotificationsEnabled: bool>> {
@@ -6561,7 +6803,7 @@ export def "user-action patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the user action with the given Id. OR Reactivates the user action with the given Id.
@@ -6578,6 +6820,7 @@ export def "user-action updateUserActionWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reactivate: string
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --userAction: record # An action that can be executed on a user (discipline or reward potentially). — shape: {active?: bool, cancelEmailTemplateId?: string, endEmailTemplateId?: string, id?: string, includeEmailInEventJSON?: bool, insertInstant?: int, lastUpdateInstant?: int, localizedNames?: record, modifyEmailTemplateId?: string, name?: string, options?: list, preventLogin?: bool, sendEndEvent?: bool, startEmailTemplateId?: string, temporal?: bool, transactionType?: "None"|"Any"|"SimpleMajority"|"SuperMajority"|"AbsoluteMajority", userEmailingEnabled?: bool, userNotificationsEnabled?: bool}
@@ -6593,7 +6836,7 @@ export def "user-action updateUserActionWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the user action for the given Id. If you pass in null for the Id, this will return all the user actions.
@@ -6609,6 +6852,7 @@ export def "user-action retrieveUserActionWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<userAction: record<active: bool, cancelEmailTemplateId: string, endEmailTemplateId: string, id: string, includeEmailInEventJSON: bool, insertInstant: int, lastUpdateInstant: int, localizedNames: record, modifyEmailTemplateId: string, name: string, options: list<record>, preventLogin: bool, sendEndEvent: bool, startEmailTemplateId: string, temporal: bool, transactionType: string, userEmailingEnabled: bool, userNotificationsEnabled: bool>, userActions: table<active: bool, cancelEmailTemplateId: string, endEmailTemplateId: string, id: string, includeEmailInEventJSON: bool, insertInstant: int, lastUpdateInstant: int, localizedNames: record, modifyEmailTemplateId: string, name: string, options: list, preventLogin: bool, sendEndEvent: bool, startEmailTemplateId: string, temporal: bool, transactionType: string, userEmailingEnabled: bool, userNotificationsEnabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6618,7 +6862,7 @@ export def "user-action retrieveUserActionWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Takes an action on a user. The user being actioned is called the "actionee" and the user taking the action is called the "actioner". Both user ids are required in the request object.
@@ -6635,6 +6879,7 @@ export def "user-action actionUserWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: record # shape: {actioneeUserId?: string, actionerUserId?: string, applicationIds?: list, comment?: string, emailUser?: bool, expiry?: int, notifyUser?: bool, option?: string, reasonId?: string, userActionId?: string}
   --broadcast: oneof<nothing, bool>
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
@@ -6647,7 +6892,7 @@ export def "user-action actionUserWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves all the actions for the user with the given Id that are currently inactive. An inactive action means one that is time based and has been canceled or has expired, or is not time based. OR Retrieves all the actions for the user with the given Id that are currently active. An active action means one that is time based and has not been canceled, and has not ended. OR Retrieves all the actions for the user with the given Id that are currently preventing the User from logging in. OR Retrieves all the actions for the user with the given Id. This will return all time based actions that are active, and inactive as well as non-time based actions.
@@ -6662,6 +6907,7 @@ export def "user-action retrieveUserActioning" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # The Id of the user to fetch the actions for.
   --active: string
   --preventingLogin: string
@@ -6672,7 +6918,7 @@ export def "user-action retrieveUserActioning" [
   let full_url = (build-url $base "/api/user/action" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancels the user action.
@@ -6690,6 +6936,7 @@ export def "user-action cancelActionWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: record # shape: {actioneeUserId?: string, actionerUserId?: string, applicationIds?: list, comment?: string, emailUser?: bool, expiry?: int, notifyUser?: bool, option?: string, reasonId?: string, userActionId?: string}
   --broadcast: oneof<nothing, bool>
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
@@ -6702,7 +6949,7 @@ export def "user-action cancelActionWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Modifies a temporal user action by changing the expiration of the action and optionally adding a comment to the action.
@@ -6720,6 +6967,7 @@ export def "user-action modifyActionWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: record # shape: {actioneeUserId?: string, actionerUserId?: string, applicationIds?: list, comment?: string, emailUser?: bool, expiry?: int, notifyUser?: bool, option?: string, reasonId?: string, userActionId?: string}
   --broadcast: oneof<nothing, bool>
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
@@ -6732,7 +6980,7 @@ export def "user-action modifyActionWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves a single action log (the log of a user action that was taken on a user previously) for the given Id.
@@ -6748,13 +6996,14 @@ export def "user-action retrieveActionWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<action: record<actioneeUserId: string, actionerUserId: string, applicationIds: list<string>, comment: string, emailUserOnEnd: bool, endEventSent: bool, expiry: int, history: record<historyItems: list>, id: string, insertInstant: int, localizedName: string, localizedOption: string, localizedReason: string, name: string, notifyUserOnEnd: bool, option: string, reason: string, reasonCode: string, userActionId: string>, actions: table<actioneeUserId: string, actionerUserId: string, applicationIds: list, comment: string, emailUserOnEnd: bool, endEventSent: bool, expiry: int, history: record, id: string, insertInstant: int, localizedName: string, localizedOption: string, localizedReason: string, name: string, notifyUserOnEnd: bool, option: string, reason: string, reasonCode: string, userActionId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/user/action/($actionId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the users with the given Ids, or users matching the provided JSON query or queryString. The order of preference is Ids, query and then queryString, it is recommended to only provide one of the three for the request.  This method can be used to deactivate or permanently delete (hard-delete) users based upon the hardDelete boolean in the request body. Using the dryRun parameter you may also request the result of the action without actually deleting or deactivating any users. OR Deactivates the users with the given Ids.
@@ -6770,6 +7019,7 @@ export def "user-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userIds: string # The ids of the users to deactivate.
   --dryRun: string
   --hardDelete: string
@@ -6790,7 +7040,7 @@ export def "user-bulk delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Changes a user's password using their access token (JWT) instead of the changePasswordId A common use case for this method will be if you want to allow the user to change their own password.  Remember to send refreshToken in the request body if you want to get a new refresh token when login using the returned oneTimePassword. OR Changes a user's password using their identity (loginId and password). Using a loginId instead of the changePasswordId bypasses the email verification and allows a password to be changed directly without first calling the #forgotPassword method.
@@ -6806,6 +7056,7 @@ export def "user-change-password createUserChangePassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationId: string # format: uuid
   --changePasswordId: string
   --currentPassword: string
@@ -6825,7 +7076,7 @@ export def "user-change-password createUserChangePassword" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check to see if the user must obtain a Trust Request Id in order to complete a change password request. When a user has enabled Two-Factor authentication, before you are allowed to use the Change Password API to change your password, you must obtain a Trust Request Id by completing a Two-Factor Step-Up authentication.  An HTTP status code of 400 with a general error code of [TrustTokenRequired] indicates that a Trust Token is required to make a POST request to this API. OR Check to see if the user must obtain a Trust Request Id in order to complete a change password request. When a user has enabled Two-Factor authentication, before you are allowed to use the Change Password API to change your password, you must obtain a Trust Request Id by completing a Two-Factor Step-Up authentication.  An HTTP status code of 400 with a general error code of [TrustTokenRequired] indicates that a Trust Token is required to make a POST request to this API. OR Check to see if the user must obtain a Trust Request Id in order to complete a change password request. When a user has enabled Two-Factor authentication, before you are allowed to use the Change Password API to change your password, you must obtain a Trust Request Id by completing a Two-Factor Step-Up authentication.  An HTTP status code of 400 with a general error code of [TrustTokenRequired] indicates that a Trust Token is required to make a POST request to this API. OR Check to see if the user must obtain a Trust Request Id in order to complete a change password request. When a user has enabled Two-Factor authentication, before you are allowed to use the Change Password API to change your password, you must obtain a Trust Request Id by completing a Two-Factor Step-Up authentication.  An HTTP status code of 400 with a general error code of [TrustTokenRequired] indicates that a Trust Token is required to make a POST request to this API. OR Check to see if the user must obtain a Trust Token Id in order to complete a change password request. When a user has enabled Two-Factor authentication, before you are allowed to use the Change Password API to change your password, you must obtain a Trust Token by completing a Two-Factor Step-Up authentication.  An HTTP status code of 400 with a general error code of [TrustTokenRequired] indicates that a Trust Token is required to make a POST request to this API. OR Check to see if the user must obtain a Trust Token Id in order to complete a change password request. When a user has enabled Two-Factor authentication, before you are allowed to use the Change Password API to change your password, you must obtain a Trust Token by completing a Two-Factor Step-Up authentication.  An HTTP status code of 400 with a general error code of [TrustTokenRequired] indicates that a Trust Token is required to make a POST request to this API.
@@ -6840,6 +7091,7 @@ export def "user-change-password retrieveUserChangePassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --loginId: string # The loginId of the User that you intend to change the password for.
   --loginIdTypes: list # The identity types that FusionAuth will compare the loginId to.
   --ipAddress: string # IP address of the user changing their password. This is used for MFA risk assessment.
@@ -6850,7 +7102,7 @@ export def "user-change-password retrieveUserChangePassword" [
   let full_url = (build-url $base "/api/user/change-password" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Changes a user's password using the change password Id. This usually occurs after an email has been sent to the user and they clicked on a link to reset their password.  As of version 1.32.2, prefer sending the changePasswordId in the request body. To do this, omit the first parameter, and set the value in the request body.
@@ -6867,6 +7119,7 @@ export def "user-change-password changePasswordWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationId: string # format: uuid
   --body-changePasswordId: string
   --currentPassword: string
@@ -6886,7 +7139,7 @@ export def "user-change-password changePasswordWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check to see if the user must obtain a Trust Token Id in order to complete a change password request. When a user has enabled Two-Factor authentication, before you are allowed to use the Change Password API to change your password, you must obtain a Trust Token by completing a Two-Factor Step-Up authentication.  An HTTP status code of 400 with a general error code of [TrustTokenRequired] indicates that a Trust Token is required to make a POST request to this API. OR Check to see if the user must obtain a Trust Token Id in order to complete a change password request. When a user has enabled Two-Factor authentication, before you are allowed to use the Change Password API to change your password, you must obtain a Trust Token by completing a Two-Factor Step-Up authentication.  An HTTP status code of 400 with a general error code of [TrustTokenRequired] indicates that a Trust Token is required to make a POST request to this API.
@@ -6902,6 +7155,7 @@ export def "user-change-password retrieveUserChangePasswordWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ipAddress: string # IP address of the user changing their password. This is used for MFA risk assessment.
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6910,7 +7164,7 @@ export def "user-change-password retrieveUserChangePasswordWithId" [
   let full_url = (build-url $base $"/api/user/change-password/($changePasswordId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a comment to the user's account.
@@ -6926,6 +7180,7 @@ export def "user-comment commentOnUserWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --userComment: record # A log for an event that happened to a User. — shape: {comment?: string, commenterId?: string, id?: string, insertInstant?: int, userId?: string}
 ]: any -> record<userComment: record<comment: string, commenterId: string, id: string, insertInstant: int, userId: string>, userComments: table<comment: string, commenterId: string, id: string, insertInstant: int, userId: string>> {
@@ -6939,7 +7194,7 @@ export def "user-comment commentOnUserWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Searches user comments with the specified criteria and pagination.
@@ -6955,6 +7210,7 @@ export def "user-comment-search searchUserCommentsWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # Search criteria for user comments. — shape: {comment?: string, commenterId?: string, tenantId?: string, userId?: string, numberOfResults?: int, orderBy?: string, startRow?: int}
 ]: any -> record<total: int, userComments: table<comment: string, commenterId: string, id: string, insertInstant: int, userId: string>> {
   let input = $in
@@ -6965,7 +7221,7 @@ export def "user-comment-search searchUserCommentsWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves all the comments for the user with the given Id.
@@ -6981,6 +7237,7 @@ export def "user-comment retrieveUserCommentsWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<userComment: record<comment: string, commenterId: string, id: string, insertInstant: int, userId: string>, userComments: table<comment: string, commenterId: string, id: string, insertInstant: int, userId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6990,7 +7247,7 @@ export def "user-comment retrieveUserCommentsWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a single User consent.
@@ -7006,6 +7263,7 @@ export def "user-consent createUserConsent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userConsent: record # Models a User consent. — shape: {data?: record, consent?: record, consentId?: string, giverUserId?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, status?: "Active"|"Revoked", userId?: string, values?: list}
 ]: any -> record<userConsent: record<data: record, consent: record<data: record, consentEmailTemplateId: string, countryMinimumAgeForSelfConsent: record, defaultMinimumAgeForSelfConsent: int, emailPlus: record, id: string, insertInstant: int, lastUpdateInstant: int, multipleValuesAllowed: bool, name: string, values: list>, consentId: string, giverUserId: string, id: string, insertInstant: int, lastUpdateInstant: int, status: string, userId: string, values: list<string>>, userConsents: table<data: record, consent: record, consentId: string, giverUserId: string, id: string, insertInstant: int, lastUpdateInstant: int, status: string, userId: string, values: list>> {
   let input = $in
@@ -7016,7 +7274,7 @@ export def "user-consent createUserConsent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves all the consents for a User.
@@ -7031,6 +7289,7 @@ export def "user-consent retrieveUserConsentsWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # The User's Id
 ]: nothing -> record<userConsent: record<data: record, consent: record<data: record, consentEmailTemplateId: string, countryMinimumAgeForSelfConsent: record, defaultMinimumAgeForSelfConsent: int, emailPlus: record, id: string, insertInstant: int, lastUpdateInstant: int, multipleValuesAllowed: bool, name: string, values: list>, consentId: string, giverUserId: string, id: string, insertInstant: int, lastUpdateInstant: int, status: string, userId: string, values: list<string>>, userConsents: table<data: record, consent: record, consentId: string, giverUserId: string, id: string, insertInstant: int, lastUpdateInstant: int, status: string, userId: string, values: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7039,7 +7298,7 @@ export def "user-consent retrieveUserConsentsWithId" [
   let full_url = (build-url $base "/api/user/consent" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a single User consent.
@@ -7056,6 +7315,7 @@ export def "user-consent createUserConsentWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userConsent: record # Models a User consent. — shape: {data?: record, consent?: record, consentId?: string, giverUserId?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, status?: "Active"|"Revoked", userId?: string, values?: list}
 ]: any -> record<userConsent: record<data: record, consent: record<data: record, consentEmailTemplateId: string, countryMinimumAgeForSelfConsent: record, defaultMinimumAgeForSelfConsent: int, emailPlus: record, id: string, insertInstant: int, lastUpdateInstant: int, multipleValuesAllowed: bool, name: string, values: list>, consentId: string, giverUserId: string, id: string, insertInstant: int, lastUpdateInstant: int, status: string, userId: string, values: list<string>>, userConsents: table<data: record, consent: record, consentId: string, giverUserId: string, id: string, insertInstant: int, lastUpdateInstant: int, status: string, userId: string, values: list>> {
   let input = $in
@@ -7066,7 +7326,7 @@ export def "user-consent createUserConsentWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates, via PATCH, a single User consent by Id.
@@ -7083,6 +7343,7 @@ export def "user-consent patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userConsent: record # Models a User consent. — shape: {data?: record, consent?: record, consentId?: string, giverUserId?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, status?: "Active"|"Revoked", userId?: string, values?: list}
 ]: any -> record<userConsent: record<data: record, consent: record<data: record, consentEmailTemplateId: string, countryMinimumAgeForSelfConsent: record, defaultMinimumAgeForSelfConsent: int, emailPlus: record, id: string, insertInstant: int, lastUpdateInstant: int, multipleValuesAllowed: bool, name: string, values: list>, consentId: string, giverUserId: string, id: string, insertInstant: int, lastUpdateInstant: int, status: string, userId: string, values: list<string>>, userConsents: table<data: record, consent: record, consentId: string, giverUserId: string, id: string, insertInstant: int, lastUpdateInstant: int, status: string, userId: string, values: list>> {
   let input = $in
@@ -7093,7 +7354,7 @@ export def "user-consent patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a single User consent by Id.
@@ -7109,13 +7370,14 @@ export def "user-consent retrieveUserConsentWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<userConsent: record<data: record, consent: record<data: record, consentEmailTemplateId: string, countryMinimumAgeForSelfConsent: record, defaultMinimumAgeForSelfConsent: int, emailPlus: record, id: string, insertInstant: int, lastUpdateInstant: int, multipleValuesAllowed: bool, name: string, values: list>, consentId: string, giverUserId: string, id: string, insertInstant: int, lastUpdateInstant: int, status: string, userId: string, values: list<string>>, userConsents: table<data: record, consent: record, consentId: string, giverUserId: string, id: string, insertInstant: int, lastUpdateInstant: int, status: string, userId: string, values: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/user/consent/($userConsentId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revokes a single User consent by Id.
@@ -7131,13 +7393,14 @@ export def "user-consent revokeUserConsentWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/user/consent/($userConsentId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a single User consent by Id.
@@ -7154,6 +7417,7 @@ export def "user-consent updateUserConsentWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userConsent: record # Models a User consent. — shape: {data?: record, consent?: record, consentId?: string, giverUserId?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, status?: "Active"|"Revoked", userId?: string, values?: list}
 ]: any -> record<userConsent: record<data: record, consent: record<data: record, consentEmailTemplateId: string, countryMinimumAgeForSelfConsent: record, defaultMinimumAgeForSelfConsent: int, emailPlus: record, id: string, insertInstant: int, lastUpdateInstant: int, multipleValuesAllowed: bool, name: string, values: list>, consentId: string, giverUserId: string, id: string, insertInstant: int, lastUpdateInstant: int, status: string, userId: string, values: list<string>>, userConsents: table<data: record, consent: record, consentId: string, giverUserId: string, id: string, insertInstant: int, lastUpdateInstant: int, status: string, userId: string, values: list>> {
   let input = $in
@@ -7164,7 +7428,7 @@ export def "user-consent updateUserConsentWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a family with the user Id in the request as the owner and sole member of the family. You can optionally specify an Id for the family, if not provided one will be generated.
@@ -7180,6 +7444,7 @@ export def "user-family createFamily" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --familyMember: record # Models a single family member. — shape: {data?: record, insertInstant?: int, lastUpdateInstant?: int, owner?: bool, role?: "Child"|"Teen"|"Adult", userId?: string}
 ]: any -> record<families: table<members: list, id: string, insertInstant: int, lastUpdateInstant: int>, family: record<members: list<record>, id: string, insertInstant: int, lastUpdateInstant: int>> {
@@ -7193,7 +7458,7 @@ export def "user-family createFamily" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves all the families that a user belongs to.
@@ -7208,6 +7473,7 @@ export def "user-family retrieveFamiliesWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # The User's id
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<families: table<members: list, id: string, insertInstant: int, lastUpdateInstant: int>, family: record<members: list<record>, id: string, insertInstant: int, lastUpdateInstant: int>> {
@@ -7219,7 +7485,7 @@ export def "user-family retrieveFamiliesWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves all the children for the given parent email address.
@@ -7234,6 +7500,7 @@ export def "user-family-pending retrievePendingChildrenWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --parentEmail: string # The email of the parent.
 ]: nothing -> record<users: table<preferredLanguages: list, active: bool, birthDate: string, cleanSpeakId: string, data: record, email: string, expiry: int, firstName: string, fullName: string, imageUrl: string, insertInstant: int, lastName: string, legacyIdentifier: string, lastUpdateInstant: int, middleName: string, mobilePhone: string, parentEmail: string, phoneNumber: string, tenantId: string, timezone: string, twoFactor: record, memberships: list, registrations: list, identities: list, breachedPasswordLastCheckedInstant: int, breachedPasswordStatus: string, connectorId: string, encryptionScheme: string, factor: int, id: string, lastLoginInstant: int, password: string, passwordChangeReason: string, passwordChangeRequired: bool, passwordLastUpdateInstant: int, salt: string, uniqueUsername: string, username: string, usernameStatus: string, verified: bool, verifiedInstant: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7242,7 +7509,7 @@ export def "user-family-pending retrievePendingChildrenWithId" [
   let full_url = (build-url $base "/api/user/family/pending" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sends out an email to a parent that they need to register and create a family or need to log in and add a child to their existing family.
@@ -7257,6 +7524,7 @@ export def "user-family-request sendFamilyRequestEmailWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --parentEmail: string
 ]: any -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let input = $in
@@ -7267,7 +7535,7 @@ export def "user-family-request sendFamilyRequestEmailWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates a family with a given Id. OR Adds a user to an existing family. The family Id must be specified.
@@ -7284,6 +7552,7 @@ export def "user-family updateUserFamilyWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --familyMember: record # Models a single family member. — shape: {data?: record, insertInstant?: int, lastUpdateInstant?: int, owner?: bool, role?: "Child"|"Teen"|"Adult", userId?: string}
 ]: any -> record<families: table<members: list, id: string, insertInstant: int, lastUpdateInstant: int>, family: record<members: list<record>, id: string, insertInstant: int, lastUpdateInstant: int>> {
@@ -7297,7 +7566,7 @@ export def "user-family updateUserFamilyWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a family with the user Id in the request as the owner and sole member of the family. You can optionally specify an Id for the family, if not provided one will be generated.
@@ -7314,6 +7583,7 @@ export def "user-family createFamilyWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --familyMember: record # Models a single family member. — shape: {data?: record, insertInstant?: int, lastUpdateInstant?: int, owner?: bool, role?: "Child"|"Teen"|"Adult", userId?: string}
 ]: any -> record<families: table<members: list, id: string, insertInstant: int, lastUpdateInstant: int>, family: record<members: list<record>, id: string, insertInstant: int, lastUpdateInstant: int>> {
@@ -7327,7 +7597,7 @@ export def "user-family createFamilyWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves all the members of a family by the unique Family Id.
@@ -7343,6 +7613,7 @@ export def "user-family retrieveFamilyMembersByFamilyIdWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<families: table<members: list, id: string, insertInstant: int, lastUpdateInstant: int>, family: record<members: list<record>, id: string, insertInstant: int, lastUpdateInstant: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7352,7 +7623,7 @@ export def "user-family retrieveFamilyMembersByFamilyIdWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Removes a user from the family with the given Id.
@@ -7369,6 +7640,7 @@ export def "user-family removeUserFromFamilyWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7378,7 +7650,7 @@ export def "user-family removeUserFromFamilyWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Begins the forgot password sequence, which kicks off an email to the user so that they can reset their password.
@@ -7394,6 +7666,7 @@ export def "user-forgot-password forgotPasswordWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationId: string # format: uuid
   --changePasswordId: string
   --loginId: string
@@ -7413,7 +7686,7 @@ export def "user-forgot-password forgotPasswordWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk imports users. This request performs minimal validation and runs batch inserts of users with the expectation that each user does not yet exist and each registration corresponds to an existing FusionAuth Application. This is done to increases the insert performance.  Therefore, if you encounter an error due to a database key violation, the response will likely offer a generic explanation. If you encounter an error, you may optionally enable additional validation to receive a JSON response body with specific validation errors. This will slow the request down but will allow you to identify the cause of the failure. See the validateDbConstraints request parameter.
@@ -7430,6 +7703,7 @@ export def "user-import importUsersWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --encryptionScheme: string
   --factor: int
   --users: list # item shape: {preferredLanguages?: list, active?: bool, birthDate?: string, cleanSpeakId?: string, data?: record, email?: string, expiry?: int, firstName?: string, fullName?: string, imageUrl?: string, insertInstant?: int, lastName?: string, legacyIdentifier?: string, lastUpdateInstant?: int, middleName?: string, mobilePhone?: string, parentEmail?: string, phoneNumber?: string, tenantId?: string, timezone?: string, twoFactor?: record, memberships?: list, registrations?: list, identities?: list, breachedPasswordLastCheckedInstant?: int, breachedPasswordStatus?: "None"|"ExactMatch"|"SubAddressMatch"|"PasswordOnly"|"CommonPassword", connectorId?: string, encryptionScheme?: string, factor?: int, id?: string, lastLoginInstant?: int, password?: string, passwordChangeReason?: "Administrative"|"Breached"|"Expired"|"Validation", passwordChangeRequired?: bool, passwordLastUpdateInstant?: int, salt?: string, uniqueUsername?: string, username?: string, usernameStatus?: "ACTIVE"|"PENDING"|"REJECTED", verified?: bool, verifiedInstant?: int}
@@ -7444,7 +7718,7 @@ export def "user-import importUsersWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the last number of login records for a user. OR Retrieves the last number of login records.
@@ -7459,6 +7733,7 @@ export def "user-recent-login retrieveUserRecentLogin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # The Id of the user.
   --offset: string # The initial record. e.g. 0 is the last login, 100 will be the 100th most recent login.
   --limit: string # (Optional, defaults to 10) The number of records to retrieve.
@@ -7469,7 +7744,7 @@ export def "user-recent-login retrieveUserRecentLogin" [
   let full_url = (build-url $base "/api/user/recent-login" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk imports refresh tokens. This request performs minimal validation and runs batch inserts of refresh tokens with the expectation that each token represents a user that already exists and is registered for the corresponding FusionAuth Application. This is done to increases the insert performance.  Therefore, if you encounter an error due to a database key violation, the response will likely offer a generic explanation. If you encounter an error, you may optionally enable additional validation to receive a JSON response body with specific validation errors. This will slow the request down but will allow you to identify the cause of the failure. See the validateDbConstraints request parameter.
@@ -7485,6 +7760,7 @@ export def "user-refresh-token-import importRefreshTokensWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --refreshTokens: list # item shape: {applicationId?: string, data?: record, id?: string, insertInstant?: int, metaData?: record, startInstant?: int, tenantId?: string, token?: string, userId?: string}
   --validateDbConstraints: oneof<nothing, bool>
 ]: any -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
@@ -7496,7 +7772,7 @@ export def "user-refresh-token-import importRefreshTokensWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Registers a user for an application. If you provide the User and the UserRegistration object on this request, it will create the user as well as register them for the application. This is called a Full Registration. However, if you only provide the UserRegistration object, then the user must already exist and they will be registered for the application. The user Id can also be provided and it will either be used to look up an existing user or it will be used for the newly created User.
@@ -7514,6 +7790,7 @@ export def "user-registration register" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --disableDomainBlock: oneof<nothing, bool>
   --generateAuthenticationToken: oneof<nothing, bool>
@@ -7536,7 +7813,7 @@ export def "user-registration register" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates, via PATCH, the registration for the user with the given Id and the application defined in the request.
@@ -7555,6 +7832,7 @@ export def "user-registration patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --disableDomainBlock: oneof<nothing, bool>
   --generateAuthenticationToken: oneof<nothing, bool>
@@ -7577,7 +7855,7 @@ export def "user-registration patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Registers a user for an application. If you provide the User and the UserRegistration object on this request, it will create the user as well as register them for the application. This is called a Full Registration. However, if you only provide the UserRegistration object, then the user must already exist and they will be registered for the application. The user Id can also be provided and it will either be used to look up an existing user or it will be used for the newly created User.
@@ -7596,6 +7874,7 @@ export def "user-registration registerWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --disableDomainBlock: oneof<nothing, bool>
   --generateAuthenticationToken: oneof<nothing, bool>
@@ -7618,7 +7897,7 @@ export def "user-registration registerWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the registration for the user with the given Id and the application defined in the request.
@@ -7637,6 +7916,7 @@ export def "user-registration updateRegistrationWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --disableDomainBlock: oneof<nothing, bool>
   --generateAuthenticationToken: oneof<nothing, bool>
@@ -7659,7 +7939,7 @@ export def "user-registration updateRegistrationWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the user registration for the given user and application along with the given JSON body that contains the event information. OR Deletes the user registration for the given user and application.
@@ -7677,6 +7957,7 @@ export def "user-registration delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
 ]: any -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
@@ -7690,7 +7971,7 @@ export def "user-registration delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the user registration for the user with the given Id and the given application Id.
@@ -7707,6 +7988,7 @@ export def "user-registration retrieveRegistrationWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<refreshToken: string, refreshTokenId: string, registration: record<data: record, preferredLanguages: list<string>, tokens: record, applicationId: string, authenticationToken: string, cleanSpeakId: string, id: string, insertInstant: int, lastLoginInstant: int, lastUpdateInstant: int, roles: list<any>, timezone: string, username: string, usernameStatus: string, verified: bool, verifiedInstant: int>, registrationVerificationId: string, registrationVerificationOneTimeCode: string, token: string, tokenExpirationInstant: int, user: record<preferredLanguages: list<string>, active: bool, birthDate: string, cleanSpeakId: string, data: record, email: string, expiry: int, firstName: string, fullName: string, imageUrl: string, insertInstant: int, lastName: string, legacyIdentifier: string, lastUpdateInstant: int, middleName: string, mobilePhone: string, parentEmail: string, phoneNumber: string, tenantId: string, timezone: string, twoFactor: record<methods: list, recoveryCodes: list>, memberships: list<record>, registrations: list<record>, identities: list<record>, breachedPasswordLastCheckedInstant: int, breachedPasswordStatus: string, connectorId: string, encryptionScheme: string, factor: int, id: string, lastLoginInstant: int, password: string, passwordChangeReason: string, passwordChangeRequired: bool, passwordLastUpdateInstant: int, salt: string, uniqueUsername: string, username: string, usernameStatus: string, verified: bool, verifiedInstant: int>, verificationIds: table<id: string, oneTimeCode: string, type: record, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7716,7 +7998,7 @@ export def "user-registration retrieveRegistrationWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the users for the given Ids. If any Id is invalid, it is ignored.
@@ -7731,6 +8013,7 @@ export def "user-search searchUsersByIdsWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: string # The user Ids to search for.
 ]: nothing -> record<total: int, nextResults: string, users: table<preferredLanguages: list, active: bool, birthDate: string, cleanSpeakId: string, data: record, email: string, expiry: int, firstName: string, fullName: string, imageUrl: string, insertInstant: int, lastName: string, legacyIdentifier: string, lastUpdateInstant: int, middleName: string, mobilePhone: string, parentEmail: string, phoneNumber: string, tenantId: string, timezone: string, twoFactor: record, memberships: list, registrations: list, identities: list, breachedPasswordLastCheckedInstant: int, breachedPasswordStatus: string, connectorId: string, encryptionScheme: string, factor: int, id: string, lastLoginInstant: int, password: string, passwordChangeReason: string, passwordChangeRequired: bool, passwordLastUpdateInstant: int, salt: string, uniqueUsername: string, username: string, usernameStatus: string, verified: bool, verifiedInstant: int>, expandable: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7739,7 +8022,7 @@ export def "user-search searchUsersByIdsWithId" [
   let full_url = (build-url $base "/api/user/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the users for the given search criteria and pagination.
@@ -7755,6 +8038,7 @@ export def "user-search searchUsersByQueryWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # This class is the user query. It provides a build pattern as well as public fields for use on forms and in actions. — shape: {accurateTotal?: bool, ids?: list, nextResults?: string, query?: string, queryString?: string, sortFields?: list}
   --expand: list
 ]: any -> record<total: int, nextResults: string, users: table<preferredLanguages: list, active: bool, birthDate: string, cleanSpeakId: string, data: record, email: string, expiry: int, firstName: string, fullName: string, imageUrl: string, insertInstant: int, lastName: string, legacyIdentifier: string, lastUpdateInstant: int, middleName: string, mobilePhone: string, parentEmail: string, phoneNumber: string, tenantId: string, timezone: string, twoFactor: record, memberships: list, registrations: list, identities: list, breachedPasswordLastCheckedInstant: int, breachedPasswordStatus: string, connectorId: string, encryptionScheme: string, factor: int, id: string, lastLoginInstant: int, password: string, passwordChangeReason: string, passwordChangeRequired: bool, passwordLastUpdateInstant: int, salt: string, uniqueUsername: string, username: string, usernameStatus: string, verified: bool, verifiedInstant: int>, expandable: list<string>> {
@@ -7766,7 +8050,7 @@ export def "user-search searchUsersByQueryWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate two-factor recovery codes for a user. Generating two-factor recovery codes will invalidate any existing recovery codes.
@@ -7782,13 +8066,14 @@ export def "user-two-factor-recovery-code generateTwoFactorRecoveryCodesWithId" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<recoveryCodes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/user/two-factor/recovery-code/($userId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve two-factor recovery codes for a user.
@@ -7804,13 +8089,14 @@ export def "user-two-factor-recovery-code retrieveTwoFactorRecoveryCodesWithId" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<recoveryCodes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/user/two-factor/recovery-code/($userId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disable two-factor authentication for a user using a JSON body rather than URL parameters. OR Disable two-factor authentication for a user.
@@ -7827,6 +8113,7 @@ export def "user-two-factor delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --methodId: string # The two-factor method identifier you wish to disable
   --code: string # The two-factor code used verify the the caller knows the two-factor secret.
   --applicationId: string # format: uuid
@@ -7843,7 +8130,7 @@ export def "user-two-factor delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Enable two-factor authentication for a user.
@@ -7860,6 +8147,7 @@ export def "user-two-factor enableTwoFactorWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationId: string # format: uuid
   --authenticatorId: string
   --code: string
@@ -7879,7 +8167,7 @@ export def "user-two-factor enableTwoFactorWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Re-sends the verification email to the user. If the Application has configured a specific email template this will be used instead of the tenant configuration. OR Re-sends the verification email to the user. OR Generate a new Email Verification Id to be used with the Verify Email API. This API will not attempt to send an email to the User. This API may be used to collect the verificationId for use with a third party system.
@@ -7894,6 +8182,7 @@ export def "user-verify-email updateUserVerifyEmail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationId: string # The unique Application Id to used to resolve an application specific email template.
   --email: string # The email address of the user that needs a new verification email.
   --sendVerifyEmail: string
@@ -7904,7 +8193,7 @@ export def "user-verify-email updateUserVerifyEmail" [
   let full_url = (build-url $base "/api/user/verify-email" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Administratively verify a user's email address. Use this method to bypass email verification for the user.  The request body will contain the userId to be verified. An API key is required when sending the userId in the request body. OR Confirms a user's email address.   The request body will contain the verificationId. You may also be required to send a one-time use code based upon your configuration. When  the tenant is configured to gate a user until their email address is verified, this procedures requires two values instead of one.  The verificationId is a high entropy value and the one-time use code is a low entropy value that is easily entered in a user interactive form. The  two values together are able to confirm a user's email address and mark the user's email address as verified.
@@ -7920,6 +8209,7 @@ export def "user-verify-email createUserVerifyEmail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --oneTimeCode: string
   --userId: string # format: uuid
   --verificationId: string
@@ -7933,7 +8223,7 @@ export def "user-verify-email createUserVerifyEmail" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Re-sends the application registration verification email to the user. OR Generate a new Application Registration Verification Id to be used with the Verify Registration API. This API will not attempt to send an email to the User. This API may be used to collect the verificationId for use with a third party system.
@@ -7948,6 +8238,7 @@ export def "user-verify-registration updateUserVerifyRegistration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # The email address of the user that needs a new verification email.
   --applicationId: string # The Id of the application to be verified.
   --sendVerifyPasswordEmail: string
@@ -7958,7 +8249,7 @@ export def "user-verify-registration updateUserVerifyRegistration" [
   let full_url = (build-url $base "/api/user/verify-registration" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Confirms a user's registration.   The request body will contain the verificationId. You may also be required to send a one-time use code based upon your configuration. When  the application is configured to gate a user until their registration is verified, this procedures requires two values instead of one.  The verificationId is a high entropy value and the one-time use code is a low entropy value that is easily entered in a user interactive form. The  two values together are able to confirm a user's registration and mark the user's registration as verified.
@@ -7974,6 +8265,7 @@ export def "user-verify-registration verifyUserRegistrationWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --oneTimeCode: string
   --verificationId: string
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
@@ -7986,7 +8278,7 @@ export def "user-verify-registration verifyUserRegistrationWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a user. You can optionally specify an Id for the user, if not provided one will be generated.
@@ -8004,6 +8296,7 @@ export def "user createUserWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --applicationId: string # format: uuid
   --currentPassword: string
@@ -8025,7 +8318,7 @@ export def "user createUserWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the user based on the given request (sent to the API as JSON). This permanently deletes all information, metrics, reports and data associated with the user. OR Deletes the user for the given Id. This permanently deletes all information, metrics, reports and data associated with the user. OR Deactivates the user with the given Id.
@@ -8042,6 +8335,7 @@ export def "user delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hardDelete: string
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --hardDelete: oneof<nothing, bool>
@@ -8058,7 +8352,7 @@ export def "user delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates, via PATCH, the user with the given Id.
@@ -8076,6 +8370,7 @@ export def "user patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --applicationId: string # format: uuid
   --currentPassword: string
@@ -8097,7 +8392,7 @@ export def "user patch" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the user with the given Id. OR Reactivates the user with the given Id.
@@ -8115,6 +8410,7 @@ export def "user updateUserWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --reactivate: string
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --applicationId: string # format: uuid
@@ -8138,7 +8434,7 @@ export def "user updateUserWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the user for the given Id.
@@ -8154,6 +8450,7 @@ export def "user retrieveUserWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
 ]: nothing -> record<emailVerificationId: string, emailVerificationOneTimeCode: string, registrationVerificationIds: record, registrationVerificationOneTimeCodes: record, token: string, tokenExpirationInstant: int, user: record<preferredLanguages: list<string>, active: bool, birthDate: string, cleanSpeakId: string, data: record, email: string, expiry: int, firstName: string, fullName: string, imageUrl: string, insertInstant: int, lastName: string, legacyIdentifier: string, lastUpdateInstant: int, middleName: string, mobilePhone: string, parentEmail: string, phoneNumber: string, tenantId: string, timezone: string, twoFactor: record<methods: list, recoveryCodes: list>, memberships: list<record>, registrations: list<record>, identities: list<record>, breachedPasswordLastCheckedInstant: int, breachedPasswordStatus: string, connectorId: string, encryptionScheme: string, factor: int, id: string, lastLoginInstant: int, password: string, passwordChangeReason: string, passwordChangeRequired: bool, passwordLastUpdateInstant: int, salt: string, uniqueUsername: string, username: string, usernameStatus: string, verified: bool, verifiedInstant: int>, verificationIds: table<id: string, oneTimeCode: string, type: record, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8163,7 +8460,7 @@ export def "user retrieveUserWithId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes all of the WebAuthn credentials for the given User Id.
@@ -8178,6 +8475,7 @@ export def "webauthn delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # The unique Id of the User to delete WebAuthn passkeys for.
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8186,7 +8484,7 @@ export def "webauthn delete" [
   let full_url = (build-url $base "/api/webauthn" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves all WebAuthn credentials for the given user.
@@ -8201,6 +8499,7 @@ export def "webauthn retrieveWebAuthnCredentialsForUserWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userId: string # The user's ID.
 ]: nothing -> record<credential: record<algorithm: string, attestationType: string, authenticatorSupportsUserVerification: bool, credentialId: string, data: record, discoverable: bool, displayName: string, id: string, insertInstant: int, lastUseInstant: int, name: string, publicKey: string, relyingPartyId: string, signCount: int, tenantId: string, transports: list<string>, userAgent: string, userId: string>, credentials: table<algorithm: string, attestationType: string, authenticatorSupportsUserVerification: bool, credentialId: string, data: record, discoverable: bool, displayName: string, id: string, insertInstant: int, lastUseInstant: int, name: string, publicKey: string, relyingPartyId: string, signCount: int, tenantId: string, transports: list, userAgent: string, userId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8209,7 +8508,7 @@ export def "webauthn retrieveWebAuthnCredentialsForUserWithId" [
   let full_url = (build-url $base "/api/webauthn" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Complete a WebAuthn authentication ceremony by validating the signature against the previously generated challenge without logging the user in
@@ -8226,6 +8525,7 @@ export def "webauthn-assert completeWebAuthnAssertionWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --credential: record # Request to authenticate with WebAuthn — shape: {clientExtensionResults?: record, id?: string, rpId?: string, response?: record, type?: string}
   --origin: string
   --rpId: string
@@ -8244,7 +8544,7 @@ export def "webauthn-assert completeWebAuthnAssertionWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Import a WebAuthn credential
@@ -8260,6 +8560,7 @@ export def "webauthn-import importWebAuthnCredentialWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --credentials: list # item shape: {algorithm?: "ES256"|"ES384"|"ES512"|"RS256"|"RS384"|"RS512"|"PS256"|"PS384"|"PS512", attestationType?: "basic"|"self"|"attestationCa"|"anonymizationCa"|"none", authenticatorSupportsUserVerification?: bool, credentialId?: string, data?: record, discoverable?: bool, displayName?: string, id?: string, insertInstant?: int, lastUseInstant?: int, name?: string, publicKey?: string, relyingPartyId?: string, signCount?: int, tenantId?: string, transports?: list, userAgent?: string, userId?: string}
   --validateDbConstraints: oneof<nothing, bool>
 ]: any -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
@@ -8271,7 +8572,7 @@ export def "webauthn-import importWebAuthnCredentialWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Complete a WebAuthn authentication ceremony by validating the signature against the previously generated challenge and then login the user in
@@ -8288,6 +8589,7 @@ export def "webauthn-login completeWebAuthnLoginWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --credential: record # Request to authenticate with WebAuthn — shape: {clientExtensionResults?: record, id?: string, rpId?: string, response?: record, type?: string}
   --origin: string
   --rpId: string
@@ -8306,7 +8608,7 @@ export def "webauthn-login completeWebAuthnLoginWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Complete a WebAuthn registration ceremony by validating the client request and saving the new credential
@@ -8322,6 +8624,7 @@ export def "webauthn-register-complete completeWebAuthnRegistrationWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --credential: record # Request to register a new public key with WebAuthn — shape: {clientExtensionResults?: record, id?: string, rpId?: string, response?: record, transports?: list, type?: string}
   --origin: string
   --rpId: string
@@ -8335,7 +8638,7 @@ export def "webauthn-register-complete completeWebAuthnRegistrationWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Start a WebAuthn registration ceremony by generating a new challenge for the user
@@ -8350,6 +8653,7 @@ export def "webauthn-register-start startWebAuthnRegistrationWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --displayName: string
   --name: string
   --userAgent: string
@@ -8364,7 +8668,7 @@ export def "webauthn-register-start startWebAuthnRegistrationWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Start a WebAuthn authentication ceremony by generating a new challenge for the user
@@ -8379,6 +8683,7 @@ export def "webauthn-start startWebAuthnLoginWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationId: string # format: uuid
   --credentialId: string # format: uuid
   --loginId: string
@@ -8395,7 +8700,7 @@ export def "webauthn-start startWebAuthnLoginWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the WebAuthn credential for the given Id.
@@ -8411,13 +8716,14 @@ export def "webauthn delete-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/webauthn/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the WebAuthn credential for the given Id.
@@ -8433,13 +8739,14 @@ export def "webauthn retrieveWebAuthnCredentialWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<credential: record<algorithm: string, attestationType: string, authenticatorSupportsUserVerification: bool, credentialId: string, data: record, discoverable: bool, displayName: string, id: string, insertInstant: int, lastUseInstant: int, name: string, publicKey: string, relyingPartyId: string, signCount: int, tenantId: string, transports: list<string>, userAgent: string, userId: string>, credentials: table<algorithm: string, attestationType: string, authenticatorSupportsUserVerification: bool, credentialId: string, data: record, discoverable: bool, displayName: string, id: string, insertInstant: int, lastUseInstant: int, name: string, publicKey: string, relyingPartyId: string, signCount: int, tenantId: string, transports: list, userAgent: string, userId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/webauthn/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a webhook. You can optionally specify an Id for the webhook, if not provided one will be generated.
@@ -8455,6 +8762,7 @@ export def "webhook createWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --webhook: record # A server where events are sent. This includes user action events and any other events sent by FusionAuth. — shape: {connectTimeout?: int, data?: record, description?: string, eventsEnabled?: record, global?: bool, headers?: record, httpAuthenticationPassword?: string, httpAuthenticationUsername?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, readTimeout?: int, signatureConfiguration?: record, sslCertificate?: string, sslCertificateKeyId?: string, tenantIds?: list, url?: string}
 ]: any -> record<webhook: record<connectTimeout: int, data: record, description: string, eventsEnabled: record, global: bool, headers: record, httpAuthenticationPassword: string, httpAuthenticationUsername: string, id: string, insertInstant: int, lastUpdateInstant: int, readTimeout: int, signatureConfiguration: record<signingKeyId: string, enabled: bool>, sslCertificate: string, sslCertificateKeyId: string, tenantIds: list<string>, url: string>, webhooks: table<connectTimeout: int, data: record, description: string, eventsEnabled: record, global: bool, headers: record, httpAuthenticationPassword: string, httpAuthenticationUsername: string, id: string, insertInstant: int, lastUpdateInstant: int, readTimeout: int, signatureConfiguration: record, sslCertificate: string, sslCertificateKeyId: string, tenantIds: list, url: string>> {
   let input = $in
@@ -8465,7 +8773,7 @@ export def "webhook createWebhook" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the webhook for the given Id. If you pass in null for the Id, this will return all the webhooks.
@@ -8480,13 +8788,14 @@ export def "webhook retrieveWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<webhook: record<connectTimeout: int, data: record, description: string, eventsEnabled: record, global: bool, headers: record, httpAuthenticationPassword: string, httpAuthenticationUsername: string, id: string, insertInstant: int, lastUpdateInstant: int, readTimeout: int, signatureConfiguration: record<signingKeyId: string, enabled: bool>, sslCertificate: string, sslCertificateKeyId: string, tenantIds: list<string>, url: string>, webhooks: table<connectTimeout: int, data: record, description: string, eventsEnabled: record, global: bool, headers: record, httpAuthenticationPassword: string, httpAuthenticationUsername: string, id: string, insertInstant: int, lastUpdateInstant: int, readTimeout: int, signatureConfiguration: record, sslCertificate: string, sslCertificateKeyId: string, tenantIds: list, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/webhook")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searches webhooks with the specified criteria and pagination.
@@ -8502,6 +8811,7 @@ export def "webhook-search searchWebhooksWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: record # Search criteria for webhooks. — shape: {description?: string, tenantId?: string, url?: string, numberOfResults?: int, orderBy?: string, startRow?: int}
 ]: any -> record<total: int, webhooks: table<connectTimeout: int, data: record, description: string, eventsEnabled: record, global: bool, headers: record, httpAuthenticationPassword: string, httpAuthenticationUsername: string, id: string, insertInstant: int, lastUpdateInstant: int, readTimeout: int, signatureConfiguration: record, sslCertificate: string, sslCertificateKeyId: string, tenantIds: list, url: string>> {
   let input = $in
@@ -8512,7 +8822,7 @@ export def "webhook-search searchWebhooksWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a webhook. You can optionally specify an Id for the webhook, if not provided one will be generated.
@@ -8529,6 +8839,7 @@ export def "webhook createWebhookWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --webhook: record # A server where events are sent. This includes user action events and any other events sent by FusionAuth. — shape: {connectTimeout?: int, data?: record, description?: string, eventsEnabled?: record, global?: bool, headers?: record, httpAuthenticationPassword?: string, httpAuthenticationUsername?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, readTimeout?: int, signatureConfiguration?: record, sslCertificate?: string, sslCertificateKeyId?: string, tenantIds?: list, url?: string}
 ]: any -> record<webhook: record<connectTimeout: int, data: record, description: string, eventsEnabled: record, global: bool, headers: record, httpAuthenticationPassword: string, httpAuthenticationUsername: string, id: string, insertInstant: int, lastUpdateInstant: int, readTimeout: int, signatureConfiguration: record<signingKeyId: string, enabled: bool>, sslCertificate: string, sslCertificateKeyId: string, tenantIds: list<string>, url: string>, webhooks: table<connectTimeout: int, data: record, description: string, eventsEnabled: record, global: bool, headers: record, httpAuthenticationPassword: string, httpAuthenticationUsername: string, id: string, insertInstant: int, lastUpdateInstant: int, readTimeout: int, signatureConfiguration: record, sslCertificate: string, sslCertificateKeyId: string, tenantIds: list, url: string>> {
   let input = $in
@@ -8539,7 +8850,7 @@ export def "webhook createWebhookWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the webhook for the given Id.
@@ -8555,13 +8866,14 @@ export def "webhook delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/webhook/($webhookId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Patches the webhook with the given Id.
@@ -8578,6 +8890,7 @@ export def "webhook patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --webhook: record # A server where events are sent. This includes user action events and any other events sent by FusionAuth. — shape: {connectTimeout?: int, data?: record, description?: string, eventsEnabled?: record, global?: bool, headers?: record, httpAuthenticationPassword?: string, httpAuthenticationUsername?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, readTimeout?: int, signatureConfiguration?: record, sslCertificate?: string, sslCertificateKeyId?: string, tenantIds?: list, url?: string}
 ]: any -> record<webhook: record<connectTimeout: int, data: record, description: string, eventsEnabled: record, global: bool, headers: record, httpAuthenticationPassword: string, httpAuthenticationUsername: string, id: string, insertInstant: int, lastUpdateInstant: int, readTimeout: int, signatureConfiguration: record<signingKeyId: string, enabled: bool>, sslCertificate: string, sslCertificateKeyId: string, tenantIds: list<string>, url: string>, webhooks: table<connectTimeout: int, data: record, description: string, eventsEnabled: record, global: bool, headers: record, httpAuthenticationPassword: string, httpAuthenticationUsername: string, id: string, insertInstant: int, lastUpdateInstant: int, readTimeout: int, signatureConfiguration: record, sslCertificate: string, sslCertificateKeyId: string, tenantIds: list, url: string>> {
   let input = $in
@@ -8588,7 +8901,7 @@ export def "webhook patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the webhook for the given Id. If you pass in null for the Id, this will return all the webhooks.
@@ -8604,13 +8917,14 @@ export def "webhook retrieveWebhookWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<webhook: record<connectTimeout: int, data: record, description: string, eventsEnabled: record, global: bool, headers: record, httpAuthenticationPassword: string, httpAuthenticationUsername: string, id: string, insertInstant: int, lastUpdateInstant: int, readTimeout: int, signatureConfiguration: record<signingKeyId: string, enabled: bool>, sslCertificate: string, sslCertificateKeyId: string, tenantIds: list<string>, url: string>, webhooks: table<connectTimeout: int, data: record, description: string, eventsEnabled: record, global: bool, headers: record, httpAuthenticationPassword: string, httpAuthenticationUsername: string, id: string, insertInstant: int, lastUpdateInstant: int, readTimeout: int, signatureConfiguration: record, sslCertificate: string, sslCertificateKeyId: string, tenantIds: list, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/webhook/($webhookId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the webhook with the given Id.
@@ -8627,6 +8941,7 @@ export def "webhook updateWebhookWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --webhook: record # A server where events are sent. This includes user action events and any other events sent by FusionAuth. — shape: {connectTimeout?: int, data?: record, description?: string, eventsEnabled?: record, global?: bool, headers?: record, httpAuthenticationPassword?: string, httpAuthenticationUsername?: string, id?: string, insertInstant?: int, lastUpdateInstant?: int, readTimeout?: int, signatureConfiguration?: record, sslCertificate?: string, sslCertificateKeyId?: string, tenantIds?: list, url?: string}
 ]: any -> record<webhook: record<connectTimeout: int, data: record, description: string, eventsEnabled: record, global: bool, headers: record, httpAuthenticationPassword: string, httpAuthenticationUsername: string, id: string, insertInstant: int, lastUpdateInstant: int, readTimeout: int, signatureConfiguration: record<signingKeyId: string, enabled: bool>, sslCertificate: string, sslCertificateKeyId: string, tenantIds: list<string>, url: string>, webhooks: table<connectTimeout: int, data: record, description: string, eventsEnabled: record, global: bool, headers: record, httpAuthenticationPassword: string, httpAuthenticationUsername: string, id: string, insertInstant: int, lastUpdateInstant: int, readTimeout: int, signatureConfiguration: record, sslCertificate: string, sslCertificateKeyId: string, tenantIds: list, url: string>> {
   let input = $in
@@ -8637,7 +8952,7 @@ export def "webhook updateWebhookWithId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Approve a device grant. OR Approve a device grant.
@@ -8652,13 +8967,14 @@ export def "oauth2-device-approve createDeviceApprove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<deviceGrantStatus: string, deviceInfo: record<description: string, lastAccessedAddress: string, lastAccessedInstant: int, name: string, type: string>, identityProviderLink: record<data: record, displayName: string, identityProviderId: string, identityProviderName: string, identityProviderType: string, identityProviderUserId: string, insertInstant: int, lastLoginInstant: int, tenantId: string, token: string, userId: string>, tenantId: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/device/approve")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a user_code that is part of an in-progress Device Authorization Grant.  This API is useful if you want to build your own login workflow to complete a device grant.  This request will require an API key. OR Retrieve a user_code that is part of an in-progress Device Authorization Grant.  This API is useful if you want to build your own login workflow to complete a device grant.
@@ -8673,13 +8989,14 @@ export def "oauth2-device-user-code retrieveDeviceUserCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/device/user-code")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a user_code that is part of an in-progress Device Authorization Grant.  This API is useful if you want to build your own login workflow to complete a device grant. OR Retrieve a user_code that is part of an in-progress Device Authorization Grant.  This API is useful if you want to build your own login workflow to complete a device grant.  This request will require an API key.
@@ -8694,13 +9011,14 @@ export def "oauth2-device-user-code createDeviceUserCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/device/user-code")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Validates the end-user provided user_code from the user-interaction of the Device Authorization Grant. If you build your own activation form you should validate the user provided code prior to beginning the Authorization grant. OR Validates the end-user provided user_code from the user-interaction of the Device Authorization Grant. If you build your own activation form you should validate the user provided code prior to beginning the Authorization grant.
@@ -8715,6 +9033,7 @@ export def "oauth2-device-validate retrieveDeviceValidate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-code: string # The end-user verification code.
   --client-id: string # The client Id.
 ]: nothing -> any {
@@ -8724,7 +9043,7 @@ export def "oauth2-device-validate retrieveDeviceValidate" [
   let full_url = (build-url $base "/oauth2/device/validate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start the Device Authorization flow using a request body OR Start the Device Authorization flow using form-encoded parameters
@@ -8739,13 +9058,14 @@ export def "oauth2-device-authorize authorize" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<device_code: string, expires_in: int, interval: int, user_code: string, verification_uri: string, verification_uri_complete: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/device_authorize")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Inspect an access token issued as the result of the Client Credentials Grant. OR Inspect an access token issued as the result of the Client Credentials Grant. OR Inspect an access token issued as the result of the User based grant such as the Authorization Code Grant, Implicit Grant, the User Credentials Grant or the Refresh Grant. OR Inspect an access token issued as the result of the User based grant such as the Authorization Code Grant, Implicit Grant, the User Credentials Grant or the Refresh Grant.
@@ -8760,13 +9080,14 @@ export def "oauth2-introspect createIntrospect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/introspect")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Exchange User Credentials for a Token. If you will be using the Resource Owner Password Credential Grant, you will make a request to the Token endpoint to exchange the user’s email and password for an access token. OR Exchange User Credentials for a Token. If you will be using the Resource Owner Password Credential Grant, you will make a request to the Token endpoint to exchange the user’s email and password for an access token. OR Exchange a Refresh Token for an Access Token. If you will be using the Refresh Token Grant, you will make a request to the Token endpoint to exchange the user’s refresh token for an access token. OR Exchange a Refresh Token for an Access Token. If you will be using the Refresh Token Grant, you will make a request to the Token endpoint to exchange the user’s refresh token for an access token. OR Exchanges an OAuth authorization code for an access token. Makes a request to the Token endpoint to exchange the authorization code returned from the Authorize endpoint for an access token. OR Exchanges an OAuth authorization code and code_verifier for an access token. Makes a request to the Token endpoint to exchange the authorization code returned from the Authorize endpoint and a code_verifier for an access token. OR Exchanges an OAuth authorization code and code_verifier for an access token. Makes a request to the Token endpoint to exchange the authorization code returned from the Authorize endpoint and a code_verifier for an access token. OR Exchanges an OAuth authorization code for an access token. Makes a request to the Token endpoint to exchange the authorization code returned from the Authorize endpoint for an access token. OR Make a Client Credentials grant request to obtain an access token. OR Make a Client Credentials grant request to obtain an access token.
@@ -8781,13 +9102,14 @@ export def "oauth2-token createToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<expires_in: int, id_token: string, refresh_token: string, refresh_token_id: string, scope: string, access_token: string, token_type: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/token")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Call the UserInfo endpoint to retrieve User Claims from the access token issued by FusionAuth.
@@ -8802,11 +9124,12 @@ export def "oauth2-userinfo retrieveUserInfoFromAccessTokenWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/userinfo")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

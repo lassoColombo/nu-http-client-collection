@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -76,7 +77,7 @@ def tape-completer [] { ["A" "B" "C"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "stocks-bars list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -109,6 +110,7 @@ export def "stocks-bars list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # The comma-separated list of stock ticker symbols to query for. (e.g. AAPL,TSLA)
   --start: string # Filter data equal to or after this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --end: string # Filter data equal to or before this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
@@ -124,7 +126,7 @@ export def "stocks-bars list" [
   let full_url = (build-url $base "/v2/stocks/bars" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Latest Bar data for multiple stock symbols
@@ -139,6 +141,7 @@ export def "stocks-bars-latest list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # The comma-separated list of stock ticker symbols to query for. (e.g. AAPL,TSLA)
   --feed: string@feed-completer # Which feed to pull market data from. This is either `iex`, `otc`, or `sip`. `sip` and `otc` are only available to those with a subscription (e.g. sip)
 ]: nothing -> record<bars: record> {
@@ -148,7 +151,7 @@ export def "stocks-bars-latest list" [
   let full_url = (build-url $base "/v2/stocks/bars/latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bars
@@ -164,6 +167,7 @@ export def "stocks-bars get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # Filter data equal to or after this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --end: string # Filter data equal to or before this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --timeframe: string # Timeframe for the aggregation. Values are customizeable, frequently used examples: 1Min, 15Min, 1Hour, 1Day. Limits: 1Min-59Min, 1Hour-23Hour.
@@ -178,7 +182,7 @@ export def "stocks-bars get" [
   let full_url = (build-url $base $"/v2/stocks/($symbol)/bars" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Latest Bars for Symbol
@@ -194,6 +198,7 @@ export def "stocks-bars-latest get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --feed: string@feed-completer # Which feed to pull market data from. This is either `iex`, `otc`, or `sip`. `sip` and `otc` are only available to those with a subscription (e.g. sip)
 ]: nothing -> record<symbol: string, bar: record<t: string, x: string, o: float, h: float, l: float, c: float, v: float, n: int, vw: float>> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
@@ -202,7 +207,7 @@ export def "stocks-bars-latest get" [
   let full_url = (build-url $base $"/v2/stocks/($symbol)/bars/latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Trade data for multiple stock symbols
@@ -217,6 +222,7 @@ export def "stocks-trades list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # The comma-separated list of stock ticker symbols to query for. (e.g. AAPL,TSLA)
   --start: string # Filter data equal to or after this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --end: string # Filter data equal to or before this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
@@ -230,7 +236,7 @@ export def "stocks-trades list" [
   let full_url = (build-url $base "/v2/stocks/trades" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Latest Trades data for multiple stock symbols
@@ -245,6 +251,7 @@ export def "stocks-trades-latest list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # The comma-separated list of stock ticker symbols to query for. (e.g. AAPL,TSLA)
   --feed: string@feed-completer # Which feed to pull market data from. This is either `iex`, `otc`, or `sip`. `sip` and `otc` are only available to those with a subscription (e.g. sip)
 ]: nothing -> record<trades: record> {
@@ -254,7 +261,7 @@ export def "stocks-trades-latest list" [
   let full_url = (build-url $base "/v2/stocks/trades/latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Trades
@@ -270,6 +277,7 @@ export def "stocks-trades get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # Filter data equal to or after this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --end: string # Filter data equal to or before this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --limit: int # Number of data points to return. Must be in range 1-10000, defaults to 1000.
@@ -282,7 +290,7 @@ export def "stocks-trades get" [
   let full_url = (build-url $base $"/v2/stocks/($symbol)/trades" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Latest Trade
@@ -298,6 +306,7 @@ export def "stocks-trades-latest get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --feed: string@feed-completer # Which feed to pull market data from. This is either `iex`, `otc`, or `sip`. `sip` and `otc` are only available to those with a subscription (e.g. sip)
 ]: nothing -> record<trade: record<t: string, x: string, p: float, s: float, c: list<string>, i: int, z: string, tks: string>, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
@@ -306,7 +315,7 @@ export def "stocks-trades-latest get" [
   let full_url = (build-url $base $"/v2/stocks/($symbol)/trades/latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Quotes for multiple stock symbols
@@ -321,6 +330,7 @@ export def "stocks-quotes list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # The comma-separated list of stock ticker symbols to query for. (e.g. AAPL,TSLA)
   --start: string # Filter data equal to or after this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --end: string # Filter data equal to or before this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
@@ -334,7 +344,7 @@ export def "stocks-quotes list" [
   let full_url = (build-url $base "/v2/stocks/quotes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Latest Quotes for multiple stock symbols
@@ -349,6 +359,7 @@ export def "stocks-quotes-latest list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # The comma-separated list of stock ticker symbols to query for. (e.g. AAPL,TSLA)
   --feed: string@feed-completer # Which feed to pull market data from. This is either `iex`, `otc`, or `sip`. `sip` and `otc` are only available to those with a subscription (e.g. sip)
 ]: nothing -> record<quotes: record> {
@@ -358,7 +369,7 @@ export def "stocks-quotes-latest list" [
   let full_url = (build-url $base "/v2/stocks/quotes/latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Quotes for stock symbol
@@ -374,6 +385,7 @@ export def "stocks-quotes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # Filter data equal to or after this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --end: string # Filter data equal to or before this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --limit: int # Number of data points to return. Must be in range 1-10000, defaults to 1000.
@@ -386,7 +398,7 @@ export def "stocks-quotes get" [
   let full_url = (build-url $base $"/v2/stocks/($symbol)/quotes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Latest Quote for stock symbol
@@ -402,6 +414,7 @@ export def "stocks-quotes-latest get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --feed: string@feed-completer # Which feed to pull market data from. This is either `iex`, `otc`, or `sip`. `sip` and `otc` are only available to those with a subscription (e.g. sip)
 ]: nothing -> record<quote: record<t: string, ax: string, ap: float, as: float, bx: string, bp: float, bs: float, c: list<string>, x: string, z: string>, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
@@ -410,7 +423,7 @@ export def "stocks-quotes-latest get" [
   let full_url = (build-url $base $"/v2/stocks/($symbol)/quotes/latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Snapshots for multiple stock symbols
@@ -425,6 +438,7 @@ export def "stocks-snapshots get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # The comma-separated list of stock ticker symbols to query for. (e.g. AAPL,TSLA)
   --feed: string@feed-completer # Which feed to pull market data from. This is either `iex`, `otc`, or `sip`. `sip` and `otc` are only available to those with a subscription (e.g. sip)
 ]: nothing -> record {
@@ -434,7 +448,7 @@ export def "stocks-snapshots get" [
   let full_url = (build-url $base "/v2/stocks/snapshots" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Snapshot for a stock symbol
@@ -450,6 +464,7 @@ export def "stocks-snapshot get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --feed: string@feed-completer # Which feed to pull market data from. This is either `iex`, `otc`, or `sip`. `sip` and `otc` are only available to those with a subscription (e.g. sip)
 ]: nothing -> record<latestTrade: record<t: string, x: string, p: float, s: float, c: list<string>, i: int, z: string, tks: string>, latestQuote: record<t: string, ax: string, ap: float, as: float, bx: string, bp: float, bs: float, c: list<string>, x: string, z: string>, minuteBar: record<t: string, x: string, o: float, h: float, l: float, c: float, v: float, n: int, vw: float>, dailyBar: record<t: string, x: string, o: float, h: float, l: float, c: float, v: float, n: int, vw: float>, prevDailyBar: record<t: string, x: string, o: float, h: float, l: float, c: float, v: float, n: int, vw: float>> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
@@ -458,7 +473,7 @@ export def "stocks-snapshot get" [
   let full_url = (build-url $base $"/v2/stocks/($symbol)/snapshot" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Trade data for multiple crypto symbols
@@ -473,6 +488,7 @@ export def "v1beta1-crypto-trades list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # Filter data equal to or after this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --end: string # Filter data equal to or before this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --exchanges: string # A comma separated list of which crypto exchanges to pull the data from. Alpaca currently supports `ERSX`, `CBSE`, and `FTXU` (e.g. ERSX,CBSE)
@@ -486,7 +502,7 @@ export def "v1beta1-crypto-trades list" [
   let full_url = (build-url $base "/v1beta1/crypto/trades" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Latest Trade data for multiple Crypto symbols
@@ -501,6 +517,7 @@ export def "v1beta1-crypto-trades-latest list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # The comma-separated list of crypto symbols to query for. Note, currently all crypto symbols must be appended with "USD", ie "BTCUSD,ETHUSD" would get both BTC and ETH (e.g. BTCUSD,ETHUSD)
   --exchange: string@exchange-completer # Which crypto exchange to pull the data from. Alpaca currently supports `ERSX`, `CBSE`, and `FTXU` (e.g. ERSX)
 ]: nothing -> record<trades: record> {
@@ -510,7 +527,7 @@ export def "v1beta1-crypto-trades-latest list" [
   let full_url = (build-url $base "/v1beta1/crypto/trades/latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Trade data for a crypto symbol
@@ -526,6 +543,7 @@ export def "v1beta1-crypto-trades get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # Filter data equal to or after this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --end: string # Filter data equal to or before this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --exchanges: string # A comma separated list of which crypto exchanges to pull the data from. Alpaca currently supports `ERSX`, `CBSE`, and `FTXU` (e.g. ERSX,CBSE)
@@ -538,7 +556,7 @@ export def "v1beta1-crypto-trades get" [
   let full_url = (build-url $base $"/v1beta1/crypto/($symbol)/trades" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Latest Trades
@@ -554,6 +572,7 @@ export def "v1beta1-crypto-trades-latest get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --exchange: string@exchange-completer # Which crypto exchange to pull the data from. Alpaca currently supports `ERSX`, `CBSE`, and `FTXU` (e.g. ERSX)
 ]: nothing -> record<trade: record<t: string, x: string, p: float, s: float, c: list<string>, i: int, z: string, tks: string>, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
@@ -562,7 +581,7 @@ export def "v1beta1-crypto-trades-latest get" [
   let full_url = (build-url $base $"/v1beta1/crypto/($symbol)/trades/latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Bars for multiple Crypto symbols
@@ -577,6 +596,7 @@ export def "v1beta1-crypto-bars list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # The comma-separated list of crypto symbols to query for. Note, currently all crypto symbols must be appended with "USD", ie "BTCUSD,ETHUSD" would get both BTC and ETH (e.g. BTCUSD,ETHUSD)
   --start: string # Filter data equal to or after this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --end: string # Filter data equal to or before this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
@@ -591,7 +611,7 @@ export def "v1beta1-crypto-bars list" [
   let full_url = (build-url $base "/v1beta1/crypto/bars" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Latest Bars for multiple Crypto symbols
@@ -606,6 +626,7 @@ export def "v1beta1-crypto-bars-latest list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # The comma-separated list of crypto symbols to query for. Note, currently all crypto symbols must be appended with "USD", ie "BTCUSD,ETHUSD" would get both BTC and ETH (e.g. BTCUSD,ETHUSD)
   --exchange: string@exchange-completer # Which crypto exchange to pull the data from. Alpaca currently supports `ERSX`, `CBSE`, and `FTXU` (e.g. ERSX)
 ]: nothing -> record<bars: record> {
@@ -615,7 +636,7 @@ export def "v1beta1-crypto-bars-latest list" [
   let full_url = (build-url $base "/v1beta1/crypto/bars/latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Bar data for a crypto symbol
@@ -631,6 +652,7 @@ export def "v1beta1-crypto-bars get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # Filter data equal to or after this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --end: string # Filter data equal to or before this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --timeframe: string # Timeframe for the aggregation. Values are customizeable, frequently used examples: 1Min, 15Min, 1Hour, 1Day. Limits: 1Min-59Min, 1Hour-23Hour.
@@ -644,7 +666,7 @@ export def "v1beta1-crypto-bars get" [
   let full_url = (build-url $base $"/v1beta1/crypto/($symbol)/bars" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Latest Bar data for a Crypto symbol
@@ -660,6 +682,7 @@ export def "v1beta1-crypto-bars-latest get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --exchange: string@exchange-completer # Which crypto exchange to pull the data from. Alpaca currently supports `ERSX`, `CBSE`, and `FTXU` (e.g. ERSX)
 ]: nothing -> record<symbol: string, bar: record<t: string, x: string, o: float, h: float, l: float, c: float, v: float, n: int, vw: float>> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
@@ -668,7 +691,7 @@ export def "v1beta1-crypto-bars-latest get" [
   let full_url = (build-url $base $"/v1beta1/crypto/($symbol)/bars/latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Quotes for multiple crypto symbols
@@ -683,6 +706,7 @@ export def "v1beta1-crypto-quotes list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # Filter data equal to or after this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --end: string # Filter data equal to or before this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --exchanges: string # A comma separated list of which crypto exchanges to pull the data from. Alpaca currently supports `ERSX`, `CBSE`, and `FTXU` (e.g. ERSX,CBSE)
@@ -696,7 +720,7 @@ export def "v1beta1-crypto-quotes list" [
   let full_url = (build-url $base "/v1beta1/crypto/quotes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Latest Quotes for multiple Crypto symbols
@@ -711,6 +735,7 @@ export def "v1beta1-crypto-quotes-latest list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # The comma-separated list of crypto symbols to query for. Note, currently all crypto symbols must be appended with "USD", ie "BTCUSD,ETHUSD" would get both BTC and ETH (e.g. BTCUSD,ETHUSD)
   --exchange: string@exchange-completer # Which crypto exchange to pull the data from. Alpaca currently supports `ERSX`, `CBSE`, and `FTXU` (e.g. ERSX)
 ]: nothing -> record<quotes: record> {
@@ -720,7 +745,7 @@ export def "v1beta1-crypto-quotes-latest list" [
   let full_url = (build-url $base "/v1beta1/crypto/quotes/latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Quotes for crypto symbol
@@ -736,6 +761,7 @@ export def "v1beta1-crypto-quotes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # Filter data equal to or after this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --end: string # Filter data equal to or before this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --exchanges: string # A comma separated list of which crypto exchanges to pull the data from. Alpaca currently supports `ERSX`, `CBSE`, and `FTXU` (e.g. ERSX,CBSE)
@@ -748,7 +774,7 @@ export def "v1beta1-crypto-quotes get" [
   let full_url = (build-url $base $"/v1beta1/crypto/($symbol)/quotes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Latest Quote
@@ -764,6 +790,7 @@ export def "v1beta1-crypto-quotes-latest get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --exchange: string@exchange-completer # Which crypto exchange to pull the data from. Alpaca currently supports `ERSX`, `CBSE`, and `FTXU` (e.g. ERSX)
 ]: nothing -> record<quote: record<t: string, ax: string, ap: float, as: float, bx: string, bp: float, bs: float, c: list<string>, x: string, z: string>, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
@@ -772,7 +799,7 @@ export def "v1beta1-crypto-quotes-latest get" [
   let full_url = (build-url $base $"/v1beta1/crypto/($symbol)/quotes/latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Snapshots for multiple crypto symbols
@@ -787,6 +814,7 @@ export def "v1beta1-crypto-snapshots get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --exchange: string@exchange-completer # Which crypto exchange to pull the data from. Alpaca currently supports `ERSX`, `CBSE`, and `FTXU` (e.g. ERSX)
   --symbols: string # The comma-separated list of crypto symbols to query for. Note, currently all crypto symbols must be appended with "USD", ie "BTCUSD,ETHUSD" would get both BTC and ETH (e.g. BTCUSD,ETHUSD)
@@ -797,7 +825,7 @@ export def "v1beta1-crypto-snapshots get" [
   let full_url = (build-url $base "/v1beta1/crypto/snapshots" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Snapshot for a crypto symbol
@@ -813,6 +841,7 @@ export def "v1beta1-crypto-snapshot get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --exchange: string@exchange-completer # Which crypto exchange to pull the data from. Alpaca currently supports `ERSX`, `CBSE`, and `FTXU` (e.g. ERSX)
 ]: nothing -> record<latestTrade: record<t: string, x: string, p: float, s: float, c: list<string>, i: int, z: string, tks: string>, latestQuote: record<t: string, ax: string, ap: float, as: float, bx: string, bp: float, bs: float, c: list<string>, x: string, z: string>, minuteBar: record<t: string, x: string, o: float, h: float, l: float, c: float, v: float, n: int, vw: float>, dailyBar: record<t: string, x: string, o: float, h: float, l: float, c: float, v: float, n: int, vw: float>, prevDailyBar: record<t: string, x: string, o: float, h: float, l: float, c: float, v: float, n: int, vw: float>> {
@@ -822,7 +851,7 @@ export def "v1beta1-crypto-snapshot get" [
   let full_url = (build-url $base $"/v1beta1/crypto/($symbol)/snapshot" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Latest XBBO for multiple crypto symbols
@@ -837,6 +866,7 @@ export def "v1beta1-crypto-xbbos-latest get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --symbols: string # The comma-separated list of crypto symbols to query for. Note, currently all crypto symbols must be appended with "USD", ie "BTCUSD,ETHUSD" would get both BTC and ETH (e.g. BTCUSD,ETHUSD)
   --exchanges: string # A comma separated list of which crypto exchanges to pull the data from. Alpaca currently supports `ERSX`, `CBSE`, and `FTXU` (e.g. ERSX,CBSE)
 ]: nothing -> record<xbbos: record> {
@@ -846,7 +876,7 @@ export def "v1beta1-crypto-xbbos-latest get" [
   let full_url = (build-url $base "/v1beta1/crypto/xbbos/latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Latest XBBO for a single crypto symbol
@@ -862,6 +892,7 @@ export def "v1beta1-crypto-xbbo-latest get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --exchanges: string # A comma separated list of which crypto exchanges to pull the data from. Alpaca currently supports `ERSX`, `CBSE`, and `FTXU` (e.g. ERSX,CBSE)
 ]: nothing -> record<symbol: string, xbbo: record<t: string, ax: string, ap: float, as: float, bx: string, bp: float, bs: float>> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
@@ -870,7 +901,7 @@ export def "v1beta1-crypto-xbbo-latest get" [
   let full_url = (build-url $base $"/v1beta1/crypto/($symbol)/xbbo/latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get list of crypto spreads per exchange
@@ -885,13 +916,14 @@ export def "v1beta1-crypto-meta-spreads get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<spreads: record> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1beta1/crypto/meta/spreads")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # News API
@@ -906,6 +938,7 @@ export def "v1beta1-news get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # Filter data equal to or after this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --end: string # Filter data equal to or before this time in RFC-3339 format. Fractions of a second are not accepted. (format: date-time, e.g. 2021-01-01T00:00:00Z)
   --symbols: string # The comma-separated list of crypto symbols to query for. Note, currently all crypto symbols must be appended with "USD", ie "BTCUSD,ETHUSD" would get both BTC and ETH (e.g. BTCUSD,ETHUSD)
@@ -921,7 +954,7 @@ export def "v1beta1-news get" [
   let full_url = (build-url $base "/v1beta1/news" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Top Market Movers by Market type
@@ -937,6 +970,7 @@ export def "v1beta1-screener-movers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --top: int # Number of top market movers to fetch (gainers and losers). Will return number top for each. By default 10 gainers and 10 losers. (default: 10)
 ]: nothing -> record<gainers: table<symbol: string, percent_change: float, change: float, price: float>, losers: table<symbol: string, percent_change: float, change: float, price: float>, market_type: string, last_updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
@@ -945,7 +979,7 @@ export def "v1beta1-screener-movers get" [
   let full_url = (build-url $base $"/v1beta1/screener/($market_type)/movers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Logo for symbol
@@ -961,6 +995,7 @@ export def "v1beta1-logos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --placeholder: oneof<nothing, bool> # If true then the api will generate a placeholder image if no logo was found. Defaults to true (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
@@ -969,7 +1004,7 @@ export def "v1beta1-logos get" [
   let full_url = (build-url $base $"/v1beta1/logos/($crypto_or_stock_symbol)" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get List of supported exchanges
@@ -984,13 +1019,14 @@ export def "stocks-meta-exchanges get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/stocks/meta/exchanges")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get list of Conditions
@@ -1006,6 +1042,7 @@ export def "stocks-meta-conditions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --tape: string@tape-completer # What kind of conditions to retrieve, "A" and "B" return CTS, where "C" will give you UTP  (e.g. A)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
@@ -1014,5 +1051,5 @@ export def "stocks-meta-conditions get" [
   let full_url = (build-url $base $"/v2/stocks/meta/conditions/($type)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

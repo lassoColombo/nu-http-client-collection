@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -94,7 +95,7 @@ def currency-completer [] { ["token" "usd"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "ping ping-server" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -127,13 +128,14 @@ export def "ping ping-server" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<gecko_says: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ping")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Coin Price by IDs, Symbols, or Names
@@ -148,6 +150,7 @@ export def "simple-price simple-price" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --vs-currencies: string # Target currency of coins, comma-separated if querying more than 1 currency.  *refers to [`/simple/supported_vs_currencies`](/reference/simple-supported-currencies) (default: usd)
   --ids: string # Coins' IDs, comma-separated if querying more than 1 coin.  *refers to [`/coins/list`](/reference/coins-list) (default: bitcoin)
   --names: string # Coins' names, comma-separated if querying more than 1 coin. (default: Bitcoin)
@@ -165,7 +168,7 @@ export def "simple-price simple-price" [
   let full_url = (build-url $base "/simple/price" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search Queries
@@ -180,6 +183,7 @@ export def "search search-data" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # Search query
 ]: nothing -> record<coins: table<id: string, name: string, api_symbol: string, symbol: string, market_cap_rank: int, thumb: string, large: string>, exchanges: table<id: string, name: string, market_type: string, thumb: string, large: string>, icos: list<record>, categories: table<id: string, name: string>, nfts: table<id: string, name: string, symbol: string, thumb: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
@@ -188,7 +192,7 @@ export def "search search-data" [
   let full_url = (build-url $base "/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Currencies List
@@ -203,13 +207,14 @@ export def "simple-supported-vs-currencies simple-supported-currencies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/simple/supported_vs_currencies")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Coin Price by Token Addresses
@@ -225,6 +230,7 @@ export def "simple-token-price simple-token-price" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contract-addresses: string # Token contract addresses, comma-separated if querying more than 1 token (default: 0x2260fac5e5542a773aa44fbcfedf7c193bc2c599)
   --vs-currencies: string # Target currency of coins, comma-separated if querying more than 1 currency.  *refers to [`/simple/supported_vs_currencies`](/reference/simple-supported-currencies) (default: usd)
   --include-market-cap: oneof<nothing, bool> # Include market capitalization.  Default: false
@@ -239,7 +245,7 @@ export def "simple-token-price simple-token-price" [
   let full_url = (build-url $base $"/simple/token_price/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Coins List
@@ -254,6 +260,7 @@ export def "coins-list coins-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-platform: oneof<nothing, bool> # Include platform and token's contract addresses.  Default: false
   --status: string@status-completer # Filter by status of coins.  Default: active
 ]: nothing -> table<id: string, symbol: string, name: string, platforms: record> {
@@ -263,7 +270,7 @@ export def "coins-list coins-list" [
   let full_url = (build-url $base "/coins/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Coin Data by ID
@@ -279,6 +286,7 @@ export def "coins coins-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --localization: oneof<nothing, bool> # Include all localized languages in the response.  Default: true
   --tickers: oneof<nothing, bool> # Include tickers data.  Default: true
   --market-data: oneof<nothing, bool> # Include market data.  Default: true
@@ -294,7 +302,7 @@ export def "coins coins-id" [
   let full_url = (build-url $base $"/coins/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Coins List with Market Data
@@ -309,6 +317,7 @@ export def "coins-markets coins-markets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --vs-currency: string # Target currency of coins and market data.  *refers to [`/simple/supported_vs_currencies`](/reference/simple-supported-currencies) (default: usd)
   --ids: string # Coins' IDs, comma-separated if querying more than 1 coin.  *refers to [`/coins/list`](/reference/coins-list) (default: bitcoin)
   --names: string # Coins' names, comma-separated if querying more than 1 coin. (default: Bitcoin)
@@ -330,7 +339,7 @@ export def "coins-markets coins-markets" [
   let full_url = (build-url $base "/coins/markets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Coin Tickers by ID
@@ -346,6 +355,7 @@ export def "coins-tickers coins-id-tickers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --exchange-ids: string # Exchange ID.  *refers to [`/exchanges/list`](/reference/exchanges-list)
   --include-exchange-logo: oneof<nothing, bool> # Include exchange logo.  Default: false
   --page: int # Page through results
@@ -359,7 +369,7 @@ export def "coins-tickers coins-id-tickers" [
   let full_url = (build-url $base $"/coins/($id)/tickers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Coin Historical Data by ID
@@ -375,6 +385,7 @@ export def "coins-history coins-id-history" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # The date of data snapshot.  Format: `dd-mm-yyyy` (default: 30-12-2025)
   --localization: oneof<nothing, bool> # Include all the localized languages in response.  Default: true
 ]: nothing -> record<id: string, symbol: string, name: string, localization: record, image: record<thumb: string, small: string>, market_data: record<current_price: record, market_cap: record, total_volume: record>, community_data: record<facebook_likes: float, reddit_average_posts_48h: float, reddit_average_comments_48h: float, reddit_subscribers: float, reddit_accounts_active_48h: float>, developer_data: record<forks: float, stars: float, subscribers: float, total_issues: float, closed_issues: float, pull_requests_merged: float, pull_request_contributors: float, code_additions_deletions_4_weeks: record<additions: float, deletions: float>, commit_count_4_weeks: float>, public_interest_stats: record<alexa_rank: float, bing_matches: float>> {
@@ -384,7 +395,7 @@ export def "coins-history coins-id-history" [
   let full_url = (build-url $base $"/coins/($id)/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Coin Historical Chart Data by ID
@@ -400,6 +411,7 @@ export def "coins-market-chart coins-id-market-chart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --vs-currency: string # Target currency of market data.  *refers to [`/simple/supported_vs_currencies`](/reference/simple-supported-currencies). (default: usd)
   --days: string # Data up to number of days ago.  You may use any integer or `max` for number of days. (default: 1)
   --interval: string@interval-completer # Data interval, leave empty for auto granularity.
@@ -411,7 +423,7 @@ export def "coins-market-chart coins-id-market-chart" [
   let full_url = (build-url $base $"/coins/($id)/market_chart" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Coin Historical Chart Data within Time Range by ID
@@ -427,6 +439,7 @@ export def "coins-market-chart-range coins-id-market-chart-range" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --vs-currency: string # Target currency of market data.  *refers to [`/simple/supported_vs_currencies`](/reference/simple-supported-currencies). (default: usd)
   --qp-from: int # Starting date in UNIX timestamp. (default: 1767024000)
   --qp-to: int # Ending date in UNIX timestamp. (default: 1777564800)
@@ -438,7 +451,7 @@ export def "coins-market-chart-range coins-id-market-chart-range" [
   let full_url = (build-url $base $"/coins/($id)/market_chart/range" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Coin OHLC Chart by ID
@@ -454,6 +467,7 @@ export def "coins-ohlc coins-id-ohlc" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --vs-currency: string # Target currency of price data.  *refers to [`/simple/supported_vs_currencies`](/reference/simple-supported-currencies). (default: usd)
   --days: string@days-completer # Data up to number of days ago. (default: 1)
   --precision: string@precision-completer # Decimal place for currency price value.
@@ -464,7 +478,7 @@ export def "coins-ohlc coins-id-ohlc" [
   let full_url = (build-url $base $"/coins/($id)/ohlc" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Coin Data by Token Address
@@ -481,13 +495,14 @@ export def "coins-contract coins-contract-address" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, symbol: string, name: string, web_slug: string, asset_platform_id: string, platforms: record, detail_platforms: record, block_time_in_minutes: float, hashing_algorithm: string, categories: list<string>, preview_listing: bool, public_notice: string, additional_notices: list<string>, localization: record, description: record, links: record<homepage: list<string>, whitepaper: string, blockchain_site: list<string>, official_forum_url: list<string>, chat_url: list<string>, announcement_url: list<string>, snapshot_url: string, twitter_screen_name: string, facebook_username: string, bitcointalk_thread_identifier: int, telegram_channel_identifier: string, subreddit_url: string, repos_url: record<github: list, bitbucket: list>>, image: record<thumb: string, small: string, large: string>, country_origin: string, genesis_date: string, contract_address: string, sentiment_votes_up_percentage: float, sentiment_votes_down_percentage: float, watchlist_portfolio_users: float, market_cap_rank: int, market_cap_rank_with_rehypothecated: int, market_data: record<current_price: record, total_value_locked: float, mcap_to_tvl_ratio: float, fdv_to_tvl_ratio: float, roi: record<times: float, currency: string, percentage: float>, ath: record, ath_change_percentage: record, ath_date: record, atl: record, atl_change_percentage: record, atl_date: record, market_cap: record, fully_diluted_valuation: record, market_cap_fdv_ratio: float, market_cap_rank: int, outstanding_token_value_usd: float, market_cap_rank_with_rehypothecated: int, total_volume: record, high_24h: record, low_24h: record, price_change_24h: float, price_change_percentage_24h: float, price_change_percentage_7d: float, price_change_percentage_14d: float, price_change_percentage_30d: float, price_change_percentage_60d: float, price_change_percentage_200d: float, price_change_percentage_1y: float, market_cap_change_24h: float, market_cap_change_percentage_24h: float, price_change_24h_in_currency: record, price_change_percentage_1h_in_currency: record, price_change_percentage_24h_in_currency: record, price_change_percentage_7d_in_currency: record, price_change_percentage_14d_in_currency: record, price_change_percentage_30d_in_currency: record, price_change_percentage_60d_in_currency: record, price_change_percentage_200d_in_currency: record, price_change_percentage_1y_in_currency: record, market_cap_change_24h_in_currency: record, market_cap_change_percentage_24h_in_currency: record, total_supply: float, max_supply: float, max_supply_infinite: bool, circulating_supply: float, outstanding_supply: float, last_updated: string, sparkline_7d: list<float>>, community_data: record<facebook_likes: float, reddit_average_posts_48h: float, reddit_average_comments_48h: float, reddit_subscribers: float, reddit_accounts_active_48h: float, telegram_channel_user_count: float>, developer_data: record<forks: float, stars: float, subscribers: float, total_issues: float, closed_issues: float, pull_requests_merged: float, pull_request_contributors: float, code_additions_deletions_4_weeks: record<additions: float, deletions: float>, commit_count_4_weeks: float, last_4_weeks_commit_activity_series: list<float>>, status_updates: table<description: string, category: string, created_at: string, user: string, user_title: string>, last_updated: string, tickers: table<base: string, target: string, market: record, last: float, volume: float, converted_last: record, converted_volume: record, trust_score: string, bid_ask_spread_percentage: float, timestamp: string, last_traded_at: string, last_fetch_at: string, is_anomaly: bool, is_stale: bool, trade_url: string, token_info_url: string, coin_id: string, target_coin_id: string, coin_mcap_usd: float>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/coins/($id)/contract/($contract_address)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Coin Historical Chart Data by Token Address
@@ -504,6 +519,7 @@ export def "coins-contract-market-chart contract-address-market-chart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --vs-currency: string # Target currency of market data.  *refers to [`/simple/supported_vs_currencies`](/reference/simple-supported-currencies). (default: usd)
   --days: string # Data up to number of days ago.  You may use any integer or `max` for number of days. (default: 1)
   --interval: string@interval-completer # Data interval, leave empty for auto granularity.
@@ -515,7 +531,7 @@ export def "coins-contract-market-chart contract-address-market-chart" [
   let full_url = (build-url $base $"/coins/($id)/contract/($contract_address)/market_chart" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Coin Historical Chart Data within Time Range by Token Address
@@ -532,6 +548,7 @@ export def "coins-contract-market-chart-range contract-address-market-chart-rang
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --vs-currency: string # Target currency of market data.  *refers to [`/simple/supported_vs_currencies`](/reference/simple-supported-currencies). (default: usd)
   --qp-from: int # Starting date in UNIX timestamp. (default: 1767024000)
   --qp-to: int # Ending date in UNIX timestamp. (default: 1777564800)
@@ -543,7 +560,7 @@ export def "coins-contract-market-chart-range contract-address-market-chart-rang
   let full_url = (build-url $base $"/coins/($id)/contract/($contract_address)/market_chart/range" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Asset Platforms List
@@ -558,6 +575,7 @@ export def "asset-platforms asset-platforms-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string@filter-completer # Apply relevant filters to results.
 ]: nothing -> table<id: string, chain_identifier: float, name: string, shortname: string, native_coin_id: string, image: record<thumb: string, small: string, large: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
@@ -566,7 +584,7 @@ export def "asset-platforms asset-platforms-list" [
   let full_url = (build-url $base "/asset_platforms" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Token Lists by Asset Platform ID
@@ -582,13 +600,14 @@ export def "token-lists-alljson token-lists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, logoURI: string, keywords: list<string>, timestamp: string, tokens: table<chainId: float, address: string, name: string, symbol: string, decimals: float, logoURI: string>, version: record<major: float, minor: float, patch: float>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/token_lists/($asset_platform_id)/all.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Coins Categories List
@@ -603,13 +622,14 @@ export def "coins-categories-list coins-categories-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<category_id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/coins/categories/list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Coins Categories List with Market Data
@@ -624,6 +644,7 @@ export def "coins-categories coins-categories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string@order-completer-2 # Sort results by field.  Default: `market_cap_desc`
 ]: nothing -> table<id: string, name: string, market_cap: float, market_cap_change_24h: float, content: string, top_3_coins_id: list<string>, top_3_coins: list<string>, volume_24h: float, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
@@ -632,7 +653,7 @@ export def "coins-categories coins-categories" [
   let full_url = (build-url $base "/coins/categories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Exchanges List with Data
@@ -647,6 +668,7 @@ export def "exchanges exchanges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --per-page: float # Total results per page.  Default: 100.  Valid values: 1...250
   --page: float # Page through results.  Default: 1
 ]: nothing -> table<id: string, name: string, year_established: float, country: string, description: string, url: string, image: string, has_trading_incentive: bool, trust_score: float, trust_score_rank: float, trade_volume_24h_btc: float> {
@@ -656,7 +678,7 @@ export def "exchanges exchanges" [
   let full_url = (build-url $base "/exchanges" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Exchanges List
@@ -671,6 +693,7 @@ export def "exchanges-list exchanges-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer # Filter by status of exchanges.  Default: `active`
 ]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
@@ -679,7 +702,7 @@ export def "exchanges-list exchanges-list" [
   let full_url = (build-url $base "/exchanges/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Exchange Data by ID
@@ -695,6 +718,7 @@ export def "exchanges exchanges-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dex-pair-format: string@dex-pair-format-completer # Set to `symbol` to display DEX pair base and target as symbols.  Default: `contract_address`
 ]: nothing -> record<name: string, year_established: float, country: string, description: string, url: string, image: string, facebook_url: string, reddit_url: string, telegram_url: string, slack_url: string, other_url_1: string, other_url_2: string, twitter_handle: string, has_trading_incentive: bool, centralized: bool, public_notice: string, alert_notice: string, trust_score: float, trust_score_rank: float, coins: float, pairs: float, trade_volume_24h_btc: float, tickers: table<base: string, target: string, market: record, last: float, volume: float, converted_last: record, converted_volume: record, trust_score: string, bid_ask_spread_percentage: float, timestamp: string, last_traded_at: string, last_fetch_at: string, is_anomaly: bool, is_stale: bool, trade_url: string, token_info_url: string, coin_id: string, target_coin_id: string, coin_mcap_usd: float>, status_updates: table<description: string, category: string, created_at: string, user: string, user_title: string, pin: bool, project: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
@@ -703,7 +727,7 @@ export def "exchanges exchanges-id" [
   let full_url = (build-url $base $"/exchanges/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Exchange Tickers by ID
@@ -719,6 +743,7 @@ export def "exchanges-tickers exchanges-id-tickers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --coin-ids: string # Filter tickers by coin IDs, comma-separated if querying more than 1 coin.  *refers to [`/coins/list`](/reference/coins-list).
   --include-exchange-logo: oneof<nothing, bool> # Include exchange logo.  Default: false
   --page: float # Page through results.
@@ -732,7 +757,7 @@ export def "exchanges-tickers exchanges-id-tickers" [
   let full_url = (build-url $base $"/exchanges/($id)/tickers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Exchange Volume Chart by ID
@@ -748,6 +773,7 @@ export def "exchanges-volume-chart exchanges-id-volume-chart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --days: string@days-completer # Data up to number of days ago. (default: 1)
 ]: nothing -> list<list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
@@ -756,7 +782,7 @@ export def "exchanges-volume-chart exchanges-id-volume-chart" [
   let full_url = (build-url $base $"/exchanges/($id)/volume_chart" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Derivatives Tickers List
@@ -771,13 +797,14 @@ export def "derivatives derivatives-tickers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<market: string, symbol: string, index_id: string, price: string, price_percentage_change_24h: float, contract_type: string, index: float, basis: float, spread: float, funding_rate: float, open_interest: float, volume_24h: float, last_traded_at: float, expired_at: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/derivatives")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Derivatives Exchanges List with Data
@@ -792,6 +819,7 @@ export def "derivatives-exchanges derivatives-exchanges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string@order-completer-4 # Sort order of responses.  Default: `open_interest_btc_desc`
   --per-page: int # Total results per page.
   --page: int # Page through results.  Default value: 1
@@ -802,7 +830,7 @@ export def "derivatives-exchanges derivatives-exchanges" [
   let full_url = (build-url $base "/derivatives/exchanges" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Derivatives Exchange Data by ID
@@ -818,6 +846,7 @@ export def "derivatives-exchanges derivatives-exchanges-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-tickers: string@include-tickers-completer # Include tickers data.  Default: tickers data is not included.
 ]: nothing -> record<name: string, open_interest_btc: float, trade_volume_24h_btc: string, number_of_perpetual_pairs: int, number_of_futures_pairs: int, image: string, year_established: int, country: string, description: string, url: string, tickers: table<symbol: string, base: string, target: string, coin_id: string, target_coin_id: string, trade_url: string, contract_type: string, last: float, h24_percentage_change: float, index: float, index_basis_percentage: float, bid_ask_spread: float, funding_rate: float, open_interest_usd: float, h24_volume: float, converted_volume: record, converted_last: record, last_traded: float, expired_at: float>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
@@ -826,7 +855,7 @@ export def "derivatives-exchanges derivatives-exchanges-id" [
   let full_url = (build-url $base $"/derivatives/exchanges/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Derivatives Exchanges List
@@ -841,13 +870,14 @@ export def "derivatives-exchanges-list derivatives-exchanges-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/derivatives/exchanges/list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Entities List
@@ -862,6 +892,7 @@ export def "entities-list entities-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --entity-type: string@entity-type-completer # Filter by entity type.
   --per-page: int # Total results per page.  Default value: 100  Valid values: 1...250
   --page: int # Page through results.  Default value: 1
@@ -872,7 +903,7 @@ export def "entities-list entities-list" [
   let full_url = (build-url $base "/entities/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Crypto Treasury Holdings by Coin ID
@@ -889,6 +920,7 @@ export def "public-treasury companies-public-treasury" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --per-page: int # Total results per page.  Default value: 250  Valid values: 1...250
   --page: int # Page through results.  Default value: 1
   --order: string@order-completer-5 # Sort order for results.  Default: `total_holdings_usd_desc`
@@ -899,7 +931,7 @@ export def "public-treasury companies-public-treasury" [
   let full_url = (build-url $base $"/($entity)/public_treasury/($coin_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Crypto Treasury Holdings by Entity ID
@@ -915,6 +947,7 @@ export def "public-treasury public-treasury-entity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --holding-amount-change: string # Include holding amount change for specified timeframes, comma-separated if querying more than 1 timeframe.  Valid values: `7d`, `14d`, `30d`, `90d`, `1y`, `ytd`
   --holding-change-percentage: string # Include holding change percentage for specified timeframes, comma-separated if querying more than 1 timeframe.  Valid values: `7d`, `14d`, `30d`, `90d`, `1y`, `ytd`
 ]: nothing -> record<name: string, id: string, type: string, symbol: string, country: string, website_url: string, twitter_screen_name: string, total_treasury_value_usd: float, unrealized_pnl: float, m_nav: float, total_asset_value_per_share_usd: float, holdings: table<coin_id: string, amount: float, percentage_of_total_supply: float, amount_per_share: float, entity_value_usd_percentage: float, current_value_usd: float, total_entry_value_usd: float, average_entry_value_usd: float, unrealized_pnl: float, holding_amount_change: record, holding_change_percentage: record>> {
@@ -924,7 +957,7 @@ export def "public-treasury public-treasury-entity" [
   let full_url = (build-url $base $"/public_treasury/($entity_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Crypto Treasury Holdings Historical Chart Data by ID
@@ -941,6 +974,7 @@ export def "public-treasury-holding-chart public-treasury-entity-chart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --days: string # Data up to number of days ago.  Valid values: `7`, `14`, `30`, `90`, `180`, `365` (default: 365)
   --include-empty-intervals: oneof<nothing, bool> # Include empty intervals with no transaction data.  Default: `false`
 ]: nothing -> record<holdings: list<list<float>>, holding_value_in_usd: list<list<float>>> {
@@ -950,7 +984,7 @@ export def "public-treasury-holding-chart public-treasury-entity-chart" [
   let full_url = (build-url $base $"/public_treasury/($entity_id)/($coin_id)/holding_chart" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Crypto Treasury Transaction History by Entity ID
@@ -966,6 +1000,7 @@ export def "public-treasury-transaction-history public-treasury-transaction-hist
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --per-page: int # Total results per page.  Default value: 100  Valid values: 1...250
   --page: int # Page through results.  Default value: 1
   --order: string@order-completer-6 # Sort order of transactions.  Default: `date_desc`
@@ -977,7 +1012,7 @@ export def "public-treasury-transaction-history public-treasury-transaction-hist
   let full_url = (build-url $base $"/public_treasury/($entity_id)/transaction_history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # NFTs List
@@ -992,6 +1027,7 @@ export def "nfts-list nfts-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string@order-completer-7 # Sort order of responses.
   --per-page: int # Total results per page.  Valid values: 1...250
   --page: int # Page through results.
@@ -1002,7 +1038,7 @@ export def "nfts-list nfts-list" [
   let full_url = (build-url $base "/nfts/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # NFTs Collection Data by ID
@@ -1018,13 +1054,14 @@ export def "nfts nfts-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, web_slug: string, contract_address: string, asset_platform_id: string, name: string, symbol: string, image: record<small: string, small_2x: string>, banner_image: string, description: string, native_currency: string, native_currency_symbol: string, market_cap_rank: int, floor_price: record<native_currency: float, usd: float>, market_cap: record<native_currency: float, usd: float>, volume_24h: record<native_currency: float, usd: float>, floor_price_in_usd_24h_percentage_change: float, floor_price_24h_percentage_change: record<usd: float, native_currency: float>, market_cap_24h_percentage_change: record<usd: float, native_currency: float>, volume_24h_percentage_change: record<usd: float, native_currency: float>, number_of_unique_addresses: float, number_of_unique_addresses_24h_percentage_change: float, volume_in_usd_24h_percentage_change: float, total_supply: float, one_day_sales: float, one_day_sales_24h_percentage_change: float, one_day_average_sale_price: float, one_day_average_sale_price_24h_percentage_change: float, links: record<homepage: string, twitter: string, discord: string>, floor_price_7d_percentage_change: record<usd: float, native_currency: float>, floor_price_14d_percentage_change: record<usd: float, native_currency: float>, floor_price_30d_percentage_change: record<usd: float, native_currency: float>, floor_price_60d_percentage_change: record<usd: float, native_currency: float>, floor_price_1y_percentage_change: record<usd: float, native_currency: float>, explorers: table<name: string, link: string>, user_favorites_count: int, ath: record<native_currency: float, usd: float>, ath_change_percentage: record<native_currency: float, usd: float>, ath_date: record<native_currency: string, usd: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/nfts/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # NFTs Collection Data by Contract Address
@@ -1041,13 +1078,14 @@ export def "nfts-contract nfts-contract-address" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, web_slug: string, contract_address: string, asset_platform_id: string, name: string, symbol: string, image: record<small: string, small_2x: string>, banner_image: string, description: string, native_currency: string, native_currency_symbol: string, market_cap_rank: int, floor_price: record<native_currency: float, usd: float>, market_cap: record<native_currency: float, usd: float>, volume_24h: record<native_currency: float, usd: float>, floor_price_in_usd_24h_percentage_change: float, floor_price_24h_percentage_change: record<usd: float, native_currency: float>, market_cap_24h_percentage_change: record<usd: float, native_currency: float>, volume_24h_percentage_change: record<usd: float, native_currency: float>, number_of_unique_addresses: float, number_of_unique_addresses_24h_percentage_change: float, volume_in_usd_24h_percentage_change: float, total_supply: float, one_day_sales: float, one_day_sales_24h_percentage_change: float, one_day_average_sale_price: float, one_day_average_sale_price_24h_percentage_change: float, links: record<homepage: string, twitter: string, discord: string>, floor_price_7d_percentage_change: record<usd: float, native_currency: float>, floor_price_14d_percentage_change: record<usd: float, native_currency: float>, floor_price_30d_percentage_change: record<usd: float, native_currency: float>, floor_price_60d_percentage_change: record<usd: float, native_currency: float>, floor_price_1y_percentage_change: record<usd: float, native_currency: float>, explorers: table<name: string, link: string>, user_favorites_count: int, ath: record<native_currency: float, usd: float>, ath_change_percentage: record<native_currency: float, usd: float>, ath_date: record<native_currency: string, usd: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/nfts/($asset_platform_id)/contract/($contract_address)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # BTC-to-Currency Exchange Rates
@@ -1062,13 +1100,14 @@ export def "exchange-rates exchange-rates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<rates: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/exchange_rates")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Trending Search List
@@ -1083,13 +1122,14 @@ export def "search-trending trending-search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<coins: table<item: record>, nfts: table<id: string, name: string, symbol: string, thumb: string, nft_contract_id: int, native_currency_symbol: string, floor_price_in_native_currency: float, floor_price_24h_percentage_change: float, data: record>, categories: table<id: int, name: string, top_3_coins_images: list, market_cap_1h_change: float, slug: string, coins_count: string, data: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/search/trending")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Crypto Global Market Data
@@ -1104,13 +1144,14 @@ export def "global crypto-global" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<active_cryptocurrencies: int, upcoming_icos: int, ongoing_icos: int, ended_icos: int, markets: int, total_market_cap: record, total_volume: record, market_cap_percentage: record, market_cap_change_percentage_24h_usd: float, volume_change_percentage_24h_usd: float, updated_at: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/global")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Global DeFi Market Data
@@ -1125,13 +1166,14 @@ export def "global-decentralized-finance-defi global-defi" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<defi_market_cap: string, eth_market_cap: string, defi_to_eth_ratio: string, trading_volume_24h: string, defi_dominance: string, top_coin_name: string, top_coin_defi_dominance: float>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/global/decentralized_finance_defi")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Specific Pool Data by Pool Address
@@ -1148,6 +1190,7 @@ export def "onchain-networks-pools pool-address" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # Attributes to include, comma-separated if more than one.  Available values: `base_token`, `quote_token`, `dex`
   --include-volume-breakdown: oneof<nothing, bool> # Include volume breakdown.  Default: `false`
   --include-composition: oneof<nothing, bool> # Include pool composition.  Default: `false`
@@ -1158,7 +1201,7 @@ export def "onchain-networks-pools pool-address" [
   let full_url = (build-url $base $"/onchain/networks/($network)/pools/($address)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Trending Pools List
@@ -1173,6 +1216,7 @@ export def "onchain-networks-trending-pools trending-pools-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # Attributes to include, comma-separated if more than one.  Available values: `base_token`, `quote_token`, `dex`, `network`
   --page: int # Page through results.  Default value: 1
   --duration: string@duration-completer # Duration to sort trending list by.  Default: `24h`
@@ -1184,7 +1228,7 @@ export def "onchain-networks-trending-pools trending-pools-list" [
   let full_url = (build-url $base "/onchain/networks/trending_pools" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Trending Pools by Network
@@ -1200,6 +1244,7 @@ export def "onchain-networks-trending-pools trending-pools-network" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # Attributes to include, comma-separated if more than one.  Available values: `base_token`, `quote_token`, `dex`
   --page: int # Page through results.  Default value: 1
   --duration: string@duration-completer # Duration to sort trending list by.  Default: `24h`
@@ -1211,7 +1256,7 @@ export def "onchain-networks-trending-pools trending-pools-network" [
   let full_url = (build-url $base $"/onchain/networks/($network)/trending_pools" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Top Pools by Network
@@ -1227,6 +1272,7 @@ export def "onchain-networks-pools top-pools-network" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # Attributes to include, comma-separated if more than one.  Available values: `base_token`, `quote_token`, `dex`
   --page: int # Page through results.  Default value: 1
   --qp-sort: string@sort-completer # Sort the pools by field.  Default: `h24_tx_count_desc`
@@ -1238,7 +1284,7 @@ export def "onchain-networks-pools top-pools-network" [
   let full_url = (build-url $base $"/onchain/networks/($network)/pools" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Top Pools by DEX
@@ -1255,6 +1301,7 @@ export def "onchain-networks-dexes-pools top-pools-dex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # Attributes to include, comma-separated if more than one.  Available values: `base_token`, `quote_token`, `dex`
   --page: int # Page through results.  Default value: 1
   --qp-sort: string@sort-completer # Sort the pools by field.  Default: `h24_tx_count_desc`
@@ -1266,7 +1313,7 @@ export def "onchain-networks-dexes-pools top-pools-dex" [
   let full_url = (build-url $base $"/onchain/networks/($network)/dexes/($dex)/pools" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Top Pools by Token Address
@@ -1283,6 +1330,7 @@ export def "onchain-networks-tokens-pools top-pools-contract-address" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # Attributes to include, comma-separated if more than one.  Available values: `base_token`, `quote_token`, `dex`
   --include-inactive-source: oneof<nothing, bool> # Include tokens from inactive pools using the most recent swap.  Default: `false`
   --page: int # Page through results.  Default value: 1
@@ -1295,7 +1343,7 @@ export def "onchain-networks-tokens-pools top-pools-contract-address" [
   let full_url = (build-url $base $"/onchain/networks/($network)/tokens/($token_address)/pools" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Token Data by Token Address
@@ -1312,6 +1360,7 @@ export def "onchain-networks-tokens token-data-contract-address" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer # Attributes to include.
   --include-composition: oneof<nothing, bool> # Include pool composition.  Default: `false`
   --include-inactive-source: oneof<nothing, bool> # Include token data from inactive pools using the most recent swap.  Default: `false`
@@ -1322,7 +1371,7 @@ export def "onchain-networks-tokens token-data-contract-address" [
   let full_url = (build-url $base $"/onchain/networks/($network)/tokens/($address)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Tokens Data by Token Addresses
@@ -1339,6 +1388,7 @@ export def "onchain-networks-tokens-multi tokens-data-contract-addresses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer # Attributes to include.
   --include-composition: oneof<nothing, bool> # Include pool composition.  Default: `false`
   --include-inactive-source: oneof<nothing, bool> # Include tokens from inactive pools using the most recent swap.  Default: `false`
@@ -1349,7 +1399,7 @@ export def "onchain-networks-tokens-multi tokens-data-contract-addresses" [
   let full_url = (build-url $base $"/onchain/networks/($network)/tokens/multi/($addresses)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Token Info by Token Address
@@ -1366,13 +1416,14 @@ export def "onchain-networks-tokens-info token-info-contract-address" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: string, type: string, attributes: record<address: string, name: string, symbol: string, decimals: int, image_url: string, image: record, coingecko_coin_id: string, websites: list, discord_url: string, farcaster_url: string, zora_url: string, telegram_handle: string, twitter_handle: string, description: string, gt_score: float, gt_score_details: record, gt_verified: bool, categories: list, gt_category_ids: list, holders: record, mint_authority: string, freeze_authority: string, is_honeypot: any>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/onchain/networks/($network)/tokens/($address)/info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pool Tokens Info by Pool Address
@@ -1389,6 +1440,7 @@ export def "onchain-networks-pools-info pool-token-info-contract-address" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-1 # Attributes to include.
 ]: nothing -> record<data: table<id: string, type: string, attributes: record, relationships: record>, included: table<id: string, type: string, attributes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
@@ -1397,7 +1449,7 @@ export def "onchain-networks-pools-info pool-token-info-contract-address" [
   let full_url = (build-url $base $"/onchain/networks/($network)/pools/($pool_address)/info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Most Recently Updated Tokens List
@@ -1412,6 +1464,7 @@ export def "onchain-tokens-info-recently-updated tokens-info-recent-updated" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-2 # Attributes for related resources to include.
   --network: string # Filter tokens by provided network.  *refers to [`/onchain/networks`](/reference/networks-list).
 ]: nothing -> record<data: table<id: string, type: string, attributes: record, relationships: record>, included: table<id: string, type: string, attributes: record>> {
@@ -1421,7 +1474,7 @@ export def "onchain-tokens-info-recently-updated tokens-info-recent-updated" [
   let full_url = (build-url $base "/onchain/tokens/info_recently_updated" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pool OHLCV Chart by Pool Address
@@ -1439,6 +1492,7 @@ export def "onchain-networks-pools-ohlcv pool-ohlcv-contract-address" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --aggregate: string # Time period to aggregate each OHLCV.  Available values (day): `1`  Available values (hour): `1`, `4`, `12`  Available values (minute): `1`, `5`, `15`  Default value: 1
   --before-timestamp: int # Return OHLCV data before this timestamp (integer seconds since epoch).
   --limit: int # Number of OHLCV results to return, maximum 1000.  Default value: 100
@@ -1452,7 +1506,7 @@ export def "onchain-networks-pools-ohlcv pool-ohlcv-contract-address" [
   let full_url = (build-url $base $"/onchain/networks/($network)/pools/($pool_address)/ohlcv/($timeframe)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Past 24 Hour Trades by Pool Address
@@ -1469,6 +1523,7 @@ export def "onchain-networks-pools-trades pool-trades-contract-address" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --trade-volume-in-usd-greater-than: float # Filter trades by trade volume in USD greater than this value.  Default value: 0
   --qp-token: string # Return trades for token, use this to invert the chart.  Available values: `base`, `quote`, or token address.  Default: `base`
 ]: nothing -> record<data: table<id: string, type: string, attributes: record>> {
@@ -1478,7 +1533,7 @@ export def "onchain-networks-pools-trades pool-trades-contract-address" [
   let full_url = (build-url $base $"/onchain/networks/($network)/pools/($pool_address)/trades" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # New Pools List
@@ -1493,6 +1548,7 @@ export def "onchain-networks-new-pools latest-pools-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # Attributes to include, comma-separated if more than one.  Available values: `base_token`, `quote_token`, `dex`, `network`
   --page: int # Page through results.  Default value: 1
   --include-gt-community-data: oneof<nothing, bool> # Include GeckoTerminal community data (sentiment votes, suspicious reports).  Default: `false`
@@ -1503,7 +1559,7 @@ export def "onchain-networks-new-pools latest-pools-list" [
   let full_url = (build-url $base "/onchain/networks/new_pools" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # New Pools by Network
@@ -1519,6 +1575,7 @@ export def "onchain-networks-new-pools latest-pools-network" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # Attributes to include, comma-separated if more than one.  Available values: `base_token`, `quote_token`, `dex`
   --page: int # Page through results.  Default value: 1
   --include-gt-community-data: oneof<nothing, bool> # Include GeckoTerminal community data (sentiment votes, suspicious reports).  Default: `false`
@@ -1529,7 +1586,7 @@ export def "onchain-networks-new-pools latest-pools-network" [
   let full_url = (build-url $base $"/onchain/networks/($network)/new_pools" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Multiple Pools Data by Pool Addresses
@@ -1546,6 +1603,7 @@ export def "onchain-networks-pools-multi pools-addresses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include: string # Attributes to include, comma-separated if more than one.  Available values: `base_token`, `quote_token`, `dex`
   --include-volume-breakdown: oneof<nothing, bool> # Include volume breakdown.  Default: `false`
   --include-composition: oneof<nothing, bool> # Include pool composition.  Default: `false`
@@ -1556,7 +1614,7 @@ export def "onchain-networks-pools-multi pools-addresses" [
   let full_url = (build-url $base $"/onchain/networks/($network)/pools/multi/($addresses)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search Pools & Tokens
@@ -1571,6 +1629,7 @@ export def "onchain-search-pools search-pools" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # Search query: pool contract address, token name, token symbol, or token contract address. (default: weth)
   --network: string # Network ID.  *refers to [`/onchain/networks`](/reference/networks-list).
   --include: string # Attributes to include, comma-separated if more than one.  Available values: `base_token`, `quote_token`, `dex`
@@ -1582,7 +1641,7 @@ export def "onchain-search-pools search-pools" [
   let full_url = (build-url $base "/onchain/search/pools" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Token Price by Token Addresses
@@ -1599,6 +1658,7 @@ export def "onchain-simple-networks-token-price onchain-simple-price" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-market-cap: oneof<nothing, bool> # Include market capitalization.  Default: `false`
   --mcap-fdv-fallback: oneof<nothing, bool> # Return FDV if market cap is not available.  Default: `false`
   --include-24hr-vol: oneof<nothing, bool> # Include 24hr volume.  Default: `false`
@@ -1612,7 +1672,7 @@ export def "onchain-simple-networks-token-price onchain-simple-price" [
   let full_url = (build-url $base $"/onchain/simple/networks/($network)/token_price/($addresses)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Networks List
@@ -1627,6 +1687,7 @@ export def "onchain-networks networks-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page through results.  Default value: 1
 ]: nothing -> record<data: table<id: string, type: string, attributes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
@@ -1635,7 +1696,7 @@ export def "onchain-networks networks-list" [
   let full_url = (build-url $base "/onchain/networks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DEXs List by Network
@@ -1651,6 +1712,7 @@ export def "onchain-networks-dexes dexes-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page through results.  Default value: 1
 ]: nothing -> record<data: table<id: string, type: string, attributes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-demo-api-key"))
@@ -1659,5 +1721,5 @@ export def "onchain-networks-dexes dexes-list" [
   let full_url = (build-url $base $"/onchain/networks/($network)/dexes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

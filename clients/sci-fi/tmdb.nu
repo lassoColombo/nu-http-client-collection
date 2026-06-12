@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "collection CollectionDetails" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -101,6 +102,7 @@ export def "collection CollectionDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
 ]: nothing -> record<overview: string, parts: table<media_type: string, id: int, title: string, original_language: string, original_title: string, adult: bool, backdrop_path: string, genre_ids: list, overview: string, popularity: float, poster_path: string, release_date: string, video: bool, vote_average: float, vote_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -109,7 +111,7 @@ export def "collection CollectionDetails" [
   let full_url = (build-url $base $"/collection/($collection_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Details
@@ -125,13 +127,14 @@ export def "company CompanyDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, parent_company: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/company/($company_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Images
@@ -147,13 +150,14 @@ export def "company-images CompanyImages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, logos: table<aspect_ratio: float, file_path: string, height: int, id: string, file_type: string, vote_average: float, vote_count: int, width: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/company/($company_id)/images")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Details
@@ -168,13 +172,14 @@ export def "configuration ConfigurationDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<images: record<base_url: string, secure_base_url: string, backdrop_sizes: list<string>, logo_sizes: list<string>, poster_sizes: list<string>, profile_sizes: list<string>, still_sizes: list<string>>, change_keys: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configuration")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Countries
@@ -189,6 +194,7 @@ export def "configuration-countries ConfigurationCountries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
 ]: nothing -> table<iso_3166_1: string, english_name: string, native_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -197,7 +203,7 @@ export def "configuration-countries ConfigurationCountries" [
   let full_url = (build-url $base "/configuration/countries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Jobs
@@ -212,13 +218,14 @@ export def "configuration-jobs ConfigurationJobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<department: string, jobs: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configuration/jobs")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Languages
@@ -233,13 +240,14 @@ export def "configuration-languages ConfigurationLanguages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<iso_639_1: string, english_name: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configuration/languages")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Primary Translations
@@ -254,13 +262,14 @@ export def "configuration-primary-translations ConfigurationPrimaryTranslations"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configuration/primary_translations")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Timezones
@@ -275,13 +284,14 @@ export def "configuration-timezones ConfigurationTimezones" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<iso_3166_1: string, zones: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configuration/timezones")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Movie List
@@ -296,6 +306,7 @@ export def "genre-movie-list GenreMovieList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
 ]: nothing -> record<genres: table<id: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -304,7 +315,7 @@ export def "genre-movie-list GenreMovieList" [
   let full_url = (build-url $base "/genre/movie/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # TV List
@@ -319,6 +330,7 @@ export def "genre-tv-list GenreTvList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
 ]: nothing -> record<genres: table<id: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -327,7 +339,7 @@ export def "genre-tv-list GenreTvList" [
   let full_url = (build-url $base "/genre/tv/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Details
@@ -343,13 +355,14 @@ export def "keyword KeywordDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/keyword/($keyword_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Movies
@@ -367,6 +380,7 @@ export def "keyword-movies KeywordMovies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-adult: oneof<nothing, bool> # default: false
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
   --page: int # format: int32, default: 1
@@ -377,7 +391,7 @@ export def "keyword-movies KeywordMovies" [
   let full_url = (build-url $base $"/keyword/($keyword_id)/movies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Details
@@ -393,13 +407,14 @@ export def "network NetworkDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<headquarters: string, homepage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/network/($network_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Images
@@ -415,13 +430,14 @@ export def "network-images NetworkImages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, logos: table<aspect_ratio: float, file_path: string, height: int, id: string, file_type: string, vote_average: float, vote_count: int, width: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/network/($network_id)/images")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Now Playing
@@ -436,6 +452,7 @@ export def "movie-now-playing MovieNowPlayingList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
   --page: int # format: int32, default: 1
   --region: string # `ISO-3166-1` code
@@ -446,7 +463,7 @@ export def "movie-now-playing MovieNowPlayingList" [
   let full_url = (build-url $base "/movie/now_playing" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Popular
@@ -461,6 +478,7 @@ export def "movie-popular MoviePopularList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
   --page: int # format: int32, default: 1
   --region: string # `ISO-3166-1` code
@@ -471,7 +489,7 @@ export def "movie-popular MoviePopularList" [
   let full_url = (build-url $base "/movie/popular" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Top Rated
@@ -486,6 +504,7 @@ export def "movie-top-rated MovieTopRatedList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
   --page: int # format: int32, default: 1
   --region: string # `ISO-3166-1` code
@@ -496,7 +515,7 @@ export def "movie-top-rated MovieTopRatedList" [
   let full_url = (build-url $base "/movie/top_rated" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upcoming
@@ -511,6 +530,7 @@ export def "movie-upcoming MovieUpcomingList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
   --page: int # format: int32, default: 1
   --region: string # `ISO-3166-1` code
@@ -521,7 +541,7 @@ export def "movie-upcoming MovieUpcomingList" [
   let full_url = (build-url $base "/movie/upcoming" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Details
@@ -537,6 +557,7 @@ export def "movie MovieDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
   --append-to-response: list # comma separated list of endpoints within this namespace, 20 items max
 ]: nothing -> record<id: int, title: string, original_language: string, original_title: string, adult: bool, backdrop_path: string, belongs_to_collection: record<id: int, name: string, poster_path: string, backdrop_path: string>, budget: int, genres: table<id: int, name: string>, homepage: string, imdb_id: string, origin_country: list<string>, overview: string, popularity: float, poster_path: string, production_companies: table<id: int, name: string, origin_country: string, logo_path: string>, production_countries: table<iso_3166_1: string, name: string>, release_date: string, revenue: int, runtime: int, spoken_languages: table<iso_639_1: string, english_name: string, name: string>, status: string, tagline: string, video: bool, vote_average: float, vote_count: int, credits: record<id: int, cast: list<record>, crew: list<record>>, keywords: record<id: int, keywords: list<record>>, recommendations: record<page: int, total_pages: int, total_results: int, results: list<any>>, similar: record<page: int, total_pages: int, total_results: int, results: list<record>>> {
@@ -546,7 +567,7 @@ export def "movie MovieDetails" [
   let full_url = (build-url $base $"/movie/($movie_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Credits
@@ -562,6 +583,7 @@ export def "movie-credits MovieCredits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
 ]: nothing -> record<id: int, cast: table<cast_id: int, character: string, order: int>, crew: table<department: string, job: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -570,7 +592,7 @@ export def "movie-credits MovieCredits" [
   let full_url = (build-url $base $"/movie/($movie_id)/credits" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Keywords
@@ -586,13 +608,14 @@ export def "movie-keywords MovieKeywords" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, keywords: table<id: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/movie/($movie_id)/keywords")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Recommendations
@@ -608,6 +631,7 @@ export def "movie-recommendations MovieRecommendations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
   --page: int # format: int32, default: 1
 ]: nothing -> record<page: int, total_pages: int, total_results: int, results: table<id: int, title: string, original_language: string, original_title: string, adult: bool, backdrop_path: string, genre_ids: list, overview: string, popularity: float, poster_path: string, release_date: string, video: bool, vote_average: float, vote_count: int>> {
@@ -617,7 +641,7 @@ export def "movie-recommendations MovieRecommendations" [
   let full_url = (build-url $base $"/movie/($movie_id)/recommendations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Similar
@@ -633,6 +657,7 @@ export def "movie-similar MovieSimilar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
   --page: int # format: int32, default: 1
 ]: nothing -> record<page: int, total_pages: int, total_results: int, results: table<id: int, title: string, original_language: string, original_title: string, adult: bool, backdrop_path: string, genre_ids: list, overview: string, popularity: float, poster_path: string, release_date: string, video: bool, vote_average: float, vote_count: int>> {
@@ -642,7 +667,7 @@ export def "movie-similar MovieSimilar" [
   let full_url = (build-url $base $"/movie/($movie_id)/similar" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Collection
@@ -657,6 +682,7 @@ export def "search-collection SearchCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string
   --include-adult: oneof<nothing, bool> # default: false
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
@@ -669,7 +695,7 @@ export def "search-collection SearchCollection" [
   let full_url = (build-url $base "/search/collection" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Keyword
@@ -684,6 +710,7 @@ export def "search-keyword SearchKeyword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string
   --page: int # format: int32, default: 1
 ]: nothing -> record<page: int, total_pages: int, total_results: int, results: table<id: int, name: string>> {
@@ -693,7 +720,7 @@ export def "search-keyword SearchKeyword" [
   let full_url = (build-url $base "/search/keyword" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Movie
@@ -708,6 +735,7 @@ export def "search-movie SearchMovie" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string
   --include-adult: oneof<nothing, bool> # default: false
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
@@ -722,7 +750,7 @@ export def "search-movie SearchMovie" [
   let full_url = (build-url $base "/search/movie" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Multi
@@ -737,6 +765,7 @@ export def "search-multi SearchMulti" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string
   --include-adult: oneof<nothing, bool> # default: false
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
@@ -748,7 +777,7 @@ export def "search-multi SearchMulti" [
   let full_url = (build-url $base "/search/multi" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Person
@@ -763,6 +792,7 @@ export def "search-person SearchPerson" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string
   --include-adult: oneof<nothing, bool> # default: false
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
@@ -774,7 +804,7 @@ export def "search-person SearchPerson" [
   let full_url = (build-url $base "/search/person" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # TV
@@ -789,6 +819,7 @@ export def "search-tv SearchTV" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string
   --first-air-date-year: string
   --include-adult: oneof<nothing, bool> # default: false
@@ -802,7 +833,7 @@ export def "search-tv SearchTV" [
   let full_url = (build-url $base "/search/tv" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Details
@@ -818,6 +849,7 @@ export def "tv TvSeriesDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
   --append-to-response: list # comma separated list of endpoints within this namespace, 20 items max
 ]: nothing -> record<created_by: table<id: int, name: string, credit_id: string, original_name: string, gender: int, profile_path: string>, episode_run_time: list<int>, genres: table<id: int, name: string>, homepage: string, in_production: bool, languages: list<string>, last_air_date: string, last_episode_to_air: record<episode_type: string, show_id: int>, next_episode_to_air: record<episode_type: string, show_id: int>, networks: table<id: int, name: string, origin_country: string, logo_path: string>, number_of_episodes: int, number_of_seasons: int, production_companies: table<id: int, name: string, origin_country: string, logo_path: string>, production_countries: table<iso_3166_1: string, name: string>, seasons: table<episode_count: int>, spoken_languages: table<iso_639_1: string, english_name: string, name: string>, status: string, tagline: string, type: string, recommendations: record<page: int, total_pages: int, total_results: int, results: list<any>>, similar: record<page: int, total_pages: int, total_results: int, results: list<record>>> {
@@ -827,7 +859,7 @@ export def "tv TvSeriesDetails" [
   let full_url = (build-url $base $"/tv/($series_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Credits
@@ -843,6 +875,7 @@ export def "tv-credits TvSeriesCredits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
 ]: nothing -> record<id: int, cast: table<cast_id: int, character: string, order: int>, crew: table<department: string, job: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -851,5 +884,5 @@ export def "tv-credits TvSeriesCredits" [
   let full_url = (build-url $base $"/tv/($series_id)/credits" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

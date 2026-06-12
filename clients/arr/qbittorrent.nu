@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -70,7 +71,7 @@ def priority-completer [] { ["0" "1" "6" "7"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-login authLoginPost" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -104,6 +105,7 @@ export def "auth-login authLoginPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Referer: string
   --Origin: string
   username: string
@@ -119,7 +121,7 @@ export def "auth-login authLoginPost" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Logout
@@ -135,13 +137,14 @@ export def "auth-logout authLogoutPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/logout")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get application version
@@ -157,13 +160,14 @@ export def "app-version appVersionGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/app/version")
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get API version
@@ -179,13 +183,14 @@ export def "app-webapi-version appWebapiVersionGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/app/webapiVersion")
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get build info
@@ -201,13 +206,14 @@ export def "app-build-info appBuildInfoGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<qt: string, libtorrent: string, boost: string, openssl: string, bitness: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/app/buildInfo")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Shutdown application
@@ -223,13 +229,14 @@ export def "app-shutdown appShutdownGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/app/shutdown")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get application preferences
@@ -245,13 +252,14 @@ export def "app-preferences appPreferencesGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<locale: string, create_subfolder_enabled: bool, start_paused_enabled: bool, auto_delete_mode: int, preallocate_all: bool, incomplete_files_ext: bool, auto_tmm_enabled: bool, torrent_changed_tmm_enabled: bool, save_path_changed_tmm_enabled: bool, category_changed_tmm_enabled: bool, save_path: string, temp_path_enabled: bool, temp_path: string, scan_dirs: record, export_dir: string, export_dir_fin: string, mail_notification_enabled: bool, mail_notification_sender: string, mail_notification_email: string, mail_notification_smtp: string, mail_notification_ssl_enabled: bool, mail_notification_auth_enabled: bool, mail_notification_username: string, mail_notification_password: string, autorun_enabled: bool, autorun_program: string, queueing_enabled: bool, max_active_downloads: int, max_active_torrents: int, max_active_uploads: int, dont_count_slow_torrents: bool, slow_torrent_dl_rate_threshold: int, slow_torrent_ul_rate_threshold: int, slow_torrent_inactive_timer: int, max_ratio_enabled: bool, max_ratio: float, max_ratio_act: int, listen_port: int, upnp: bool, random_port: bool, dl_limit: int, up_limit: int, max_connec: int, max_connec_per_torrent: int, max_uploads: int, max_uploads_per_torrent: int, stop_tracker_timeout: int, enable_piece_extent_affinity: bool, bittorrent_protocol: int, limit_utp_rate: bool, limit_tcp_overhead: bool, limit_lan_peers: bool, alt_dl_limit: int, alt_up_limit: int, scheduler_enabled: bool, schedule_from_hour: int, schedule_from_min: int, schedule_to_hour: int, schedule_to_min: int, scheduler_days: int, dht: bool, pex: bool, lsd: bool, encryption: int, anonymous_mode: bool, proxy_type: int, proxy_ip: string, proxy_port: int, proxy_peer_connections: bool, proxy_auth_enabled: bool, proxy_username: string, proxy_password: string, proxy_torrents_only: bool, ip_filter_enabled: bool, ip_filter_path: string, ip_filter_trackers: bool, web_ui_domain_list: list<string>, web_ui_address: string, web_ui_port: int, web_ui_upnp: bool, web_ui_username: string, web_ui_csrf_protection_enabled: bool, web_ui_clickjacking_protection_enabled: bool, web_ui_secure_cookie_enabled: bool, web_ui_max_auth_fail_count: int, web_ui_ban_duration: int, web_ui_session_timeout: int, web_ui_host_header_validation_enabled: bool, bypass_local_auth: bool, bypass_auth_subnet_whitelist_enabled: bool, bypass_auth_subnet_whitelist: list<string>, alternative_webui_enabled: bool, alternative_webui_path: string, use_https: bool, ssl_key: string, ssl_cert: string, web_ui_https_key_path: string, web_ui_https_cert_path: string, dyndns_enabled: bool, dyndns_service: int, dyndns_username: string, dyndns_password: string, dyndns_domain: string, rss_refresh_interval: int, rss_max_articles_per_feed: int, rss_processing_enabled: bool, rss_auto_downloading_enabled: bool, rss_download_repack_proper_episodes: bool, rss_smart_episode_filters: string, add_trackers_enabled: bool, add_trackers: string, web_ui_use_custom_http_headers_enabled: bool, web_ui_custom_http_headers: string, max_seeding_time_enabled: bool, max_seeding_time: int, announce_ip: string, announce_to_all_tiers: bool, announce_to_all_trackers: bool, async_io_threads: int, banned_IPs: string, checking_memory_use: int, current_interface_address: string, current_network_interface: string, disk_cache: int, disk_cache_ttl: int, embedded_tracker_port: int, enable_coalesce_read_write: bool, enable_embedded_tracker: bool, enable_multi_connections_from_same_ip: bool, enable_os_cache: bool, enable_upload_suggestions: bool, file_pool_size: int, outgoing_ports_max: int, outgoing_ports_min: int, recheck_completed_torrents: bool, resolve_peer_countries: bool, save_resume_data_interval: int, send_buffer_low_watermark: int, send_buffer_watermark: int, send_buffer_watermark_factor: int, socket_backlog_size: int, upload_choking_algorithm: int, upload_slots_behavior: int, upnp_lease_duration: int, utp_tcp_mixed_mode: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/app/preferences")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set application preferences
@@ -267,6 +275,7 @@ export def "app-set-preferences appSetPreferencesPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   json: any # A json object with key-value pairs of the settings you want to change and their new values.
 ]: any -> any {
   let input = $in
@@ -277,7 +286,7 @@ export def "app-set-preferences appSetPreferencesPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get default save path
@@ -293,13 +302,14 @@ export def "app-default-save-path appDefaultSavePathGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/app/defaultSavePath")
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get log
@@ -315,6 +325,7 @@ export def "log-main logMainPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --normal: oneof<nothing, bool> # Include normal messages (default: `true`) (default: true)
   --info: oneof<nothing, bool> # Include info messages (default: `true`) (default: true)
   --warning: oneof<nothing, bool> # Include warning messages (default: `true`) (default: true)
@@ -329,7 +340,7 @@ export def "log-main logMainPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get peer log
@@ -345,6 +356,7 @@ export def "log-peers logPeersPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   last_known_id: int # Exclude messages with "message id" <= `last_known_id` (default: `-1`) (format: int64, default: -1)
 ]: any -> table<id: int, ip: string, timestamp: int, blocked: bool, reason: string> {
   let input = $in
@@ -355,7 +367,7 @@ export def "log-peers logPeersPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get main data
@@ -371,6 +383,7 @@ export def "sync-maindata syncMaindataPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --rid: int # Response ID. If not provided, `rid=0` will be assumed. If the given `rid` is different from the one of last server reply, `full_update` will be `true` (see the server reply details for more info) (format: int64)
 ]: any -> record<rid: int, full_update: bool, torrents: record, torrents_removed: list<string>, categories: record, categories_removed: list<string>, tags: list<string>, tags_removed: list<string>, server_state: record<dl_info_speed: int, dl_info_data: int, up_info_speed: int, up_info_data: int, dl_rate_limit: int, up_rate_limit: int, dht_nodes: int, connection_status: string, queueing: bool, use_alt_speed_limits: bool, refresh_interval: int>> {
   let input = $in
@@ -381,7 +394,7 @@ export def "sync-maindata syncMaindataPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get torrent peers data
@@ -397,6 +410,7 @@ export def "sync-torrent-peers syncTorrentPeersPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hash: string # Torrent hash
   --rid: int # Response ID. If not provided, `rid=0` will be assumed. If the given `rid` is different from the one of last server reply, `full_update` will be `true` (see the server reply details for more info) (format: int64)
 ]: any -> record {
@@ -408,7 +422,7 @@ export def "sync-torrent-peers syncTorrentPeersPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get global transfer info
@@ -424,13 +438,14 @@ export def "transfer-info transferInfoGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<dl_info_speed: int, dl_info_data: int, up_info_speed: int, up_info_data: int, dl_rate_limit: int, up_rate_limit: int, dht_nodes: int, connection_status: string, queueing: bool, use_alt_speed_limits: bool, refresh_interval: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get alternative speed limits state
@@ -446,13 +461,14 @@ export def "transfer-speed-limits-mode transferSpeedLimitsModeGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/speedLimitsMode")
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Toggle alternative speed limits
@@ -468,13 +484,14 @@ export def "transfer-toggle-speed-limits-mode transferToggleSpeedLimitsModeGet" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/toggleSpeedLimitsMode")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get global download limit
@@ -490,13 +507,14 @@ export def "transfer-download-limit transferDownloadLimitGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/downloadLimit")
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set global download limit
@@ -512,6 +530,7 @@ export def "transfer-set-download-limit transferSetDownloadLimitPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The global download speed limit to set in bytes/second (format: int64)
 ]: any -> any {
   let input = $in
@@ -522,7 +541,7 @@ export def "transfer-set-download-limit transferSetDownloadLimitPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get global upload limit
@@ -538,13 +557,14 @@ export def "transfer-upload-limit transferUploadLimitGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/uploadLimit")
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set global upload limit
@@ -560,6 +580,7 @@ export def "transfer-set-upload-limit transferSetUploadLimitPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The global upload speed limit to set in bytes/second (format: int64)
 ]: any -> any {
   let input = $in
@@ -570,7 +591,7 @@ export def "transfer-set-upload-limit transferSetUploadLimitPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Ban peers
@@ -586,6 +607,7 @@ export def "transfer-ban-peers transferBanPeersPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --peers: list # The peer to ban, or multiple peers separated by a pipe `|`. Each peer is a colon-separated `host:port`
 ]: any -> any {
   let input = $in
@@ -596,7 +618,7 @@ export def "transfer-ban-peers transferBanPeersPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get torrent list
@@ -612,6 +634,7 @@ export def "torrents-info torrentsInfoPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string@filter-completer # Filter torrent list by state. Allowed state filters: `all`, `downloading`, `seeding`, `completed`, `paused`, `active`, `inactive`, `resumed`, `stalled`, `stalled_uploading`, `stalled_downloading`, `errored`
   --category: string # Get torrents with the given category (empty string means "without category"; no "category" parameter means "any category" <- broken until [#11748](https://github.com/qbittorrent/qBittorrent/issues/11748) is resolved). Remember to URL-encode the category name. For example, `My category` becomes `My%20category`
   --tag: string # Get torrents with the given tag (empty string means "without tag"; no "tag" parameter means "any tag". Remember to URL-encode the category name. For example, `My tag` becomes `My%20tag`
@@ -629,7 +652,7 @@ export def "torrents-info torrentsInfoPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get torrent generic properties
@@ -645,6 +668,7 @@ export def "torrents-properties torrentsPropertiesPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hash: string # The hash of the torrent you want to get the generic properties of
 ]: any -> record<save_path: string, creation_date: int, piece_size: int, comment: string, total_wasted: int, total_uploaded: int, total_uploaded_session: int, total_downloaded: int, total_downloaded_session: int, up_limit: int, dl_limit: int, time_elapsed: int, seeding_time: int, nb_connections: int, nb_connections_limit: int, share_ratio: float, addition_date: int, completion_date: int, created_by: string, dl_speed_avg: int, dl_speed: int, eta: int, last_seen: int, peers: int, peers_total: int, pieces_have: int, pieces_num: int, reannounce: int, seeds: int, seeds_total: int, total_size: int, up_speed_avg: int, up_speed: int> {
   let input = $in
@@ -655,7 +679,7 @@ export def "torrents-properties torrentsPropertiesPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get torrent trackers
@@ -671,6 +695,7 @@ export def "torrents-trackers torrentsTrackersPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hash: string # The hash of the torrent you want to get the trackers of
 ]: any -> table<url: string, status: int, tier: int, num_peers: int, num_seeds: int, num_leeches: int, num_downloaded: int, msg: string> {
   let input = $in
@@ -681,7 +706,7 @@ export def "torrents-trackers torrentsTrackersPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get torrent web seeds
@@ -697,6 +722,7 @@ export def "torrents-webseeds torrentWebseedsPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hash: string # The hash of the torrent you want to get the webseeds of
 ]: any -> table<url: string> {
   let input = $in
@@ -707,7 +733,7 @@ export def "torrents-webseeds torrentWebseedsPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get torrent contents
@@ -723,6 +749,7 @@ export def "torrents-files torrentsFilesPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hash: string # The hash of the torrent you want to get the contents of
   --indexes: list # The indexes of the files you want to retrieve. `indexes` can contain multiple values separated by `|`.
 ]: any -> table<index: int, name: string, size: int, progress: float, priority: int, is_seed: bool, piece_range: list<int>, availability: float> {
@@ -734,7 +761,7 @@ export def "torrents-files torrentsFilesPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get torrent pieces' states
@@ -750,6 +777,7 @@ export def "torrents-piece-states torrentsPieceStatesPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hash: string # The hash of the torrent you want to get the pieces' states of
 ]: any -> list<int> {
   let input = $in
@@ -760,7 +788,7 @@ export def "torrents-piece-states torrentsPieceStatesPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get torrent pieces' hashes
@@ -776,6 +804,7 @@ export def "torrents-piece-hashes torrentsPieceHashesPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hash: string # The hash of the torrent you want to get the pieces' hashes of
 ]: any -> list<string> {
   let input = $in
@@ -786,7 +815,7 @@ export def "torrents-piece-hashes torrentsPieceHashesPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Pause torrents
@@ -802,6 +831,7 @@ export def "torrents-pause torrentsPausePost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
 ]: any -> any {
   let input = $in
@@ -812,7 +842,7 @@ export def "torrents-pause torrentsPausePost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Resume torrents
@@ -828,6 +858,7 @@ export def "torrents-resume torrentsResumePost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
 ]: any -> any {
   let input = $in
@@ -838,7 +869,7 @@ export def "torrents-resume torrentsResumePost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete torrents
@@ -854,6 +885,7 @@ export def "torrents-delete torrentsDeletePost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
   --deleteFiles: oneof<nothing, bool> # If set to `true`, the downloaded data will also be deleted, otherwise has no effect.
 ]: any -> any {
@@ -865,7 +897,7 @@ export def "torrents-delete torrentsDeletePost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Recheck torrents
@@ -881,6 +913,7 @@ export def "torrents-recheck torrentsRecheckPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
 ]: any -> any {
   let input = $in
@@ -891,7 +924,7 @@ export def "torrents-recheck torrentsRecheckPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Reannounce torrents
@@ -907,6 +940,7 @@ export def "torrents-reannounce torrentsReannouncePost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
 ]: any -> any {
   let input = $in
@@ -917,7 +951,7 @@ export def "torrents-reannounce torrentsReannouncePost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add new torrent
@@ -933,6 +967,7 @@ export def "torrents-add torrentsAddPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -942,7 +977,7 @@ export def "torrents-add torrentsAddPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Add trackers to torrent
@@ -958,6 +993,7 @@ export def "torrents-add-trackers torrentsAddTrackersPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hash: string # e.g. 8c212779b4abde7c6bc608063a0d008b7e40ce32
   urls: string # e.g. http://192.168.0.1/announce%0Audp://192.168.0.1:3333/dummyAnnounce
 ]: any -> any {
@@ -969,7 +1005,7 @@ export def "torrents-add-trackers torrentsAddTrackersPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Edit trackers
@@ -985,6 +1021,7 @@ export def "torrents-edit-tracker torrentsEditTrackerPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hash: string # The hash of the torrent
   origUrl: string # The tracker URL you want to edit
   newUrl: string # The new URL to replace the `origUrl`
@@ -997,7 +1034,7 @@ export def "torrents-edit-tracker torrentsEditTrackerPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove trackers
@@ -1013,6 +1050,7 @@ export def "torrents-remove-trackers torrentsRemoveTrackersPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hash: string # The hash of the torrent
   urls: list # URLs to remove, separated by `|`
 ]: any -> any {
@@ -1024,7 +1062,7 @@ export def "torrents-remove-trackers torrentsRemoveTrackersPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add peers
@@ -1040,6 +1078,7 @@ export def "torrents-add-peers torrentsAddPeersPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list # The hash of the torrent, or multiple hashes separated by a pipe `|`
   peers: list # The peer to add, or multiple peers separated by a pipe `|`. Each peer is a colon-separated `host:port`
 ]: any -> any {
@@ -1051,7 +1090,7 @@ export def "torrents-add-peers torrentsAddPeersPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Increase torrent priority
@@ -1067,6 +1106,7 @@ export def "torrents-increase-prio torrentsIncreasePrioPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
 ]: any -> any {
   let input = $in
@@ -1077,7 +1117,7 @@ export def "torrents-increase-prio torrentsIncreasePrioPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Decrease torrent priority
@@ -1093,6 +1133,7 @@ export def "torrents-decrease-prio torrentsDecreasePrioPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
 ]: any -> any {
   let input = $in
@@ -1103,7 +1144,7 @@ export def "torrents-decrease-prio torrentsDecreasePrioPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Maximal torrent priority
@@ -1119,6 +1160,7 @@ export def "torrents-top-prio torrentsTopPrioPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
 ]: any -> any {
   let input = $in
@@ -1129,7 +1171,7 @@ export def "torrents-top-prio torrentsTopPrioPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Minimal torrent priority
@@ -1145,6 +1187,7 @@ export def "torrents-bottom-prio torrentsBottomPrioPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
 ]: any -> any {
   let input = $in
@@ -1155,7 +1198,7 @@ export def "torrents-bottom-prio torrentsBottomPrioPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set file priority
@@ -1171,6 +1214,7 @@ export def "torrents-file-prio torrentsFilePrioPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hash: string # The hash of the torrent
   id: list # File ids, separated by `|`
   priority: int@priority-completer # File priority to set (consult [torrent contents API](https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#get-torrent-contents) for possible values) (format: int32)
@@ -1183,7 +1227,7 @@ export def "torrents-file-prio torrentsFilePrioPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get torrent download limit
@@ -1199,6 +1243,7 @@ export def "torrents-download-limit torrentsDownloadLimitPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
 ]: any -> record {
   let input = $in
@@ -1209,7 +1254,7 @@ export def "torrents-download-limit torrentsDownloadLimitPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set torrent download limit
@@ -1225,6 +1270,7 @@ export def "torrents-set-download-limit torrentsSetDownloadLimitPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
   limit: int # format: int64
 ]: any -> any {
@@ -1236,7 +1282,7 @@ export def "torrents-set-download-limit torrentsSetDownloadLimitPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set torrent share limit
@@ -1252,6 +1298,7 @@ export def "torrents-set-share-limits torrentsSetShareLimitsPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
   ratioLimit: float # `ratioLimit` is the max ratio the torrent should be seeded until. `-2` means the global limit should be used, -1 means no limit. (format: float)
   seedingTimeLimit: float # `seedingTimeLimit` is the max amount of time the torrent should be seeded. `-2` means the global limit should be used, `-1` means no limit. (format: float)
@@ -1264,7 +1311,7 @@ export def "torrents-set-share-limits torrentsSetShareLimitsPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get torrent upload limit
@@ -1280,6 +1327,7 @@ export def "torrents-upload-limit torrentsUploadLimitPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
 ]: any -> record {
   let input = $in
@@ -1290,7 +1338,7 @@ export def "torrents-upload-limit torrentsUploadLimitPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set torrent upload limit
@@ -1306,6 +1354,7 @@ export def "torrents-set-upload-limit torrentsSetUploadLimitPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
   limit: int # format: int64
 ]: any -> any {
@@ -1317,7 +1366,7 @@ export def "torrents-set-upload-limit torrentsSetUploadLimitPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set torrent location
@@ -1333,6 +1382,7 @@ export def "torrents-set-location torrentsSetLocationPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
   location: string # `location` is the location to download the torrent to. If the location doesn't exist, the torrent's location is unchanged.
 ]: any -> any {
@@ -1344,7 +1394,7 @@ export def "torrents-set-location torrentsSetLocationPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set torrent name
@@ -1360,6 +1410,7 @@ export def "torrents-rename torrentsRenamePost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hash: string # e.g. 8c212779b4abde7c6bc608063a0d008b7e40ce32
   name: string # e.g. This%20is%20a%20test
 ]: any -> any {
@@ -1371,7 +1422,7 @@ export def "torrents-rename torrentsRenamePost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set torrent category
@@ -1387,6 +1438,7 @@ export def "torrents-set-category torrentsSetCategoryPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
   category: string # `category` is the torrent category you want to set.
 ]: any -> any {
@@ -1398,7 +1450,7 @@ export def "torrents-set-category torrentsSetCategoryPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get all categories
@@ -1414,13 +1466,14 @@ export def "torrents-categories torrentsCategoriesGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/torrents/categories")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add new category
@@ -1436,6 +1489,7 @@ export def "torrents-create-category torrentsCreateCategoryPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   category: string
   savePath: string
 ]: any -> any {
@@ -1447,7 +1501,7 @@ export def "torrents-create-category torrentsCreateCategoryPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Edit category
@@ -1463,6 +1517,7 @@ export def "torrents-edit-category torrentsEditCategoryPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   category: string
   savePath: string
 ]: any -> any {
@@ -1474,7 +1529,7 @@ export def "torrents-edit-category torrentsEditCategoryPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove categories
@@ -1490,6 +1545,7 @@ export def "torrents-remove-categories torrentsRemoveCategoriesPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   categories: string # `categories` can contain multiple cateogies separated by `\n` (%0A urlencoded) (e.g. Category1%0ACategory2)
 ]: any -> any {
   let input = $in
@@ -1500,7 +1556,7 @@ export def "torrents-remove-categories torrentsRemoveCategoriesPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add torrent tags
@@ -1516,6 +1572,7 @@ export def "torrents-add-tags torrentsAddTagsPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
   tags: list
 ]: any -> any {
@@ -1527,7 +1584,7 @@ export def "torrents-add-tags torrentsAddTagsPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove torrent tags
@@ -1543,6 +1600,7 @@ export def "torrents-remove-tags torrentsRemoveTagsPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
   tags: list
 ]: any -> any {
@@ -1554,7 +1612,7 @@ export def "torrents-remove-tags torrentsRemoveTagsPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get all tags
@@ -1570,13 +1628,14 @@ export def "torrents-tags torrentsTagsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/torrents/tags")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create tags
@@ -1592,6 +1651,7 @@ export def "torrents-create-tags torrentsCreateTagsPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   tags: list # `tags` is a list of tags you want to create. Can contain multiple tags separated by `,`. (e.g. [TagName1, TagName2])
 ]: any -> any {
   let input = $in
@@ -1602,7 +1662,7 @@ export def "torrents-create-tags torrentsCreateTagsPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete tags
@@ -1618,6 +1678,7 @@ export def "torrents-delete-tags torrentsDeleteTagsPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   tags: list # `tags` is a list of tags you want to delete. Can contain multiple tags separated by `,`. (e.g. [TagName1, TagName2])
 ]: any -> any {
   let input = $in
@@ -1628,7 +1689,7 @@ export def "torrents-delete-tags torrentsDeleteTagsPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set automatic torrent management
@@ -1644,6 +1705,7 @@ export def "torrents-set-auto-management torrentsSetAutoManagementPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
   --enable: oneof<nothing, bool> # `enable` is a boolean, affects the torrents listed in `hashes`, default is `false` (default: false)
 ]: any -> any {
@@ -1655,7 +1717,7 @@ export def "torrents-set-auto-management torrentsSetAutoManagementPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Toggle sequential download
@@ -1671,6 +1733,7 @@ export def "torrents-toggle-sequential-download torrentsToggleSequentialDownload
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
 ]: any -> any {
   let input = $in
@@ -1681,7 +1744,7 @@ export def "torrents-toggle-sequential-download torrentsToggleSequentialDownload
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set first/last piece priority
@@ -1697,6 +1760,7 @@ export def "torrents-toggle-first-last-piece-prio torrentsToggleFirstLastPiecePr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
 ]: any -> any {
   let input = $in
@@ -1707,7 +1771,7 @@ export def "torrents-toggle-first-last-piece-prio torrentsToggleFirstLastPiecePr
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set force start
@@ -1723,6 +1787,7 @@ export def "torrents-set-force-start torrentsSetForceStartPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
   --value: oneof<nothing, bool> # `value` is a boolean, affects the torrents listed in `hashes`, default is `false` (default: false)
 ]: any -> any {
@@ -1734,7 +1799,7 @@ export def "torrents-set-force-start torrentsSetForceStartPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set super seeding
@@ -1750,6 +1815,7 @@ export def "torrents-set-super-seeding torrentsSetSuperSeedingPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hashes: list
   --value: oneof<nothing, bool> # `value` is a boolean, affects the torrents listed in `hashes`, default is `false` (default: false)
 ]: any -> any {
@@ -1761,7 +1827,7 @@ export def "torrents-set-super-seeding torrentsSetSuperSeedingPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Rename file
@@ -1777,6 +1843,7 @@ export def "torrents-rename-file torrentsRenameFilePost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hash: string # The hash of the torrent
   oldPath: string # The old path of the torrent
   newPath: string # The new path to use for the file
@@ -1789,7 +1856,7 @@ export def "torrents-rename-file torrentsRenameFilePost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Rename folder
@@ -1805,6 +1872,7 @@ export def "torrents-rename-folder torrentsRenameFolderPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   hash: string # The hash of the torrent
   oldPath: string # The old path of the torrent
   newPath: string # The new path to use for the file
@@ -1817,7 +1885,7 @@ export def "torrents-rename-folder torrentsRenameFolderPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add folder
@@ -1833,6 +1901,7 @@ export def "rss-add-folder rssAddFolderPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   path: string # Full path of added folder (e.g. "The Pirate Bay\Top100")
 ]: any -> any {
   let input = $in
@@ -1843,7 +1912,7 @@ export def "rss-add-folder rssAddFolderPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add feed
@@ -1859,6 +1928,7 @@ export def "rss-add-feed rssAddFeedPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-url: string # URL of RSS feed (e.g. "http://thepiratebay.org/rss//top100/200")
   --path: string # Full path of added folder (e.g. "The Pirate Bay\Top100\Video")
 ]: any -> any {
@@ -1870,7 +1940,7 @@ export def "rss-add-feed rssAddFeedPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove item
@@ -1886,6 +1956,7 @@ export def "rss-remove-item rssRemoveItemPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   path: string # Full path of removed item (e.g. "The Pirate Bay\Top100")
 ]: any -> any {
   let input = $in
@@ -1896,7 +1967,7 @@ export def "rss-remove-item rssRemoveItemPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Move item
@@ -1912,6 +1983,7 @@ export def "rss-move-item rssMoveItemPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   itemPath: string # Current full path of item (e.g. "The Pirate Bay\Top100")
   destPath: string # New full path of item (e.g. "The Pirate Bay")
 ]: any -> any {
@@ -1923,7 +1995,7 @@ export def "rss-move-item rssMoveItemPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get all items
@@ -1939,6 +2011,7 @@ export def "rss-items rssItemsPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --withData: oneof<nothing, bool> # True if you need current feed articles
 ]: any -> record {
   let input = $in
@@ -1949,7 +2022,7 @@ export def "rss-items rssItemsPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Mark as read
@@ -1965,6 +2038,7 @@ export def "rss-mark-as-read rssMarkAsReadPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   itemPath: string # Current full path of item (e.g. "The Pirate Bay\Top100")
   --articleId: string # ID of article
 ]: any -> any {
@@ -1976,7 +2050,7 @@ export def "rss-mark-as-read rssMarkAsReadPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Refresh item
@@ -1992,6 +2066,7 @@ export def "rss-refresh-item rssRefreshItemPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   itemPath: string # Current full path of item (e.g. "The Pirate Bay\Top100")
 ]: any -> any {
   let input = $in
@@ -2002,7 +2077,7 @@ export def "rss-refresh-item rssRefreshItemPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set auto-downloading rule
@@ -2019,6 +2094,7 @@ export def "rss-set-rule rssSetRulePost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   ruleName: string # Rule name (e.g. "Punisher")
   ruleDef: record # JSON encoded rule definition  Rule definition is JSON encoded dictionary with the following fields: | Field                     | Type   | Description                                             | | ------------------------- | ------ | ------------------------------------------------------- | | enabled                   | bool   | Whether the rule is enabled                             | | mustContain               | string | The substring that the torrent name must contain        | | mustNotContain            | string | The substring that the torrent name must not contain    | | useRegex                  | bool   | Enable regex mode in "mustContain" and "mustNotContain" | | episodeFilter             | string | Episode filter definition                               | | smartFilter               | bool   | Enable smart episode filter                             | | previouslyMatchedEpisodes | list   | The list of episode IDs already matched by smart filter | | affectedFeeds             | list   | The feed URLs the rule applied to                       | | ignoreDays                | number | Ignore sunsequent rule matches                          | | lastMatch                 | string | The rule last match time                                | | addPaused                 | bool   | Add matched torrent in paused mode                      | | assignedCategory          | string | Assign category to the torrent                          | | savePath                  | string | Save torrent to the given directory                     | — shape: {enabled?: bool, mustContain?: string, mustNotContain?: string, useRegex?: bool, episodeFilter?: string, smartFilter?: bool, previouslyMatchedEpisodes?: list, affectedFeeds?: list, ignoreDays?: float, lastMatch?: string, addPaused?: bool, assignedCategory?: string, savePath?: string}
 ]: any -> any {
@@ -2030,7 +2106,7 @@ export def "rss-set-rule rssSetRulePost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Rename auto-downloading rule
@@ -2046,6 +2122,7 @@ export def "rss-rename-rule rssRenameRulePost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   ruleName: string # Rule name (e.g. "Punisher")
   newRuleName: string # New rule name (e.g. "The Punisher")
 ]: any -> any {
@@ -2057,7 +2134,7 @@ export def "rss-rename-rule rssRenameRulePost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove auto-downloading rule
@@ -2073,6 +2150,7 @@ export def "rss-remove-rule rssRemoveRulePost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   ruleName: string # Rule name (e.g. "Punisher")
 ]: any -> any {
   let input = $in
@@ -2083,7 +2161,7 @@ export def "rss-remove-rule rssRemoveRulePost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get all auto-downloading rules
@@ -2099,13 +2177,14 @@ export def "rss-rules rssRulesGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rss/rules")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all articles matching a rule
@@ -2121,6 +2200,7 @@ export def "rss-matching-articles rssMatchingArticlesPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   ruleName: string # Rule name (e.g. "Linux")
 ]: any -> record {
   let input = $in
@@ -2131,7 +2211,7 @@ export def "rss-matching-articles rssMatchingArticlesPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Start search
@@ -2147,6 +2227,7 @@ export def "search-start searchStartPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   pattern: string # Pattern to search for (e.g. "Ubuntu 18.04")
   plugins: list # Plugins to use for searching (e.g. "legittorrents"). Supports multiple plugins separated by `|`. Also supports `all` and `enabled`
   category: list # Categories to limit your search to (e.g. "legittorrents"). Available categories depend on the specified `plugins`. Also supports `all`
@@ -2159,7 +2240,7 @@ export def "search-start searchStartPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Stop search
@@ -2175,6 +2256,7 @@ export def "search-stop searchStopPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: float # ID of the search job
 ]: any -> any {
   let input = $in
@@ -2185,7 +2267,7 @@ export def "search-stop searchStopPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get search status
@@ -2201,6 +2283,7 @@ export def "search-status searchStatusPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: float # ID of the search job. If not specified, all search jobs are returned
 ]: any -> table<id: float, status: string, total: float> {
   let input = $in
@@ -2211,7 +2294,7 @@ export def "search-status searchStatusPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get search results
@@ -2227,6 +2310,7 @@ export def "search-results searchResultsPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: float # ID of the search job
   --limit: float # max number of results to return. 0 or negative means no limit
   --offset: float # result to start at. A negative number means count backwards (e.g. -2 returns the 2 most recent results)
@@ -2239,7 +2323,7 @@ export def "search-results searchResultsPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete search
@@ -2255,6 +2339,7 @@ export def "search-delete searchDeletePost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   id: float # ID of the search job
 ]: any -> any {
   let input = $in
@@ -2265,7 +2350,7 @@ export def "search-delete searchDeletePost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get search plugins
@@ -2281,13 +2366,14 @@ export def "search-plugins searchPluginsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<enabled: bool, fullName: string, name: string, supportedCategories: list<record>, url: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/search/plugins")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Install search plugin
@@ -2303,6 +2389,7 @@ export def "search-install-plugin searchInstallPluginPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   sources: list # Url or file path of the plugin to install (e.g. "https://raw.githubusercontent.com/qbittorrent/search-plugins/master/nova3/engines/legittorrents.py"). Supports multiple sources separated by `|`
 ]: any -> any {
   let input = $in
@@ -2313,7 +2400,7 @@ export def "search-install-plugin searchInstallPluginPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Uninstall search plugin
@@ -2329,6 +2416,7 @@ export def "search-uninstall-plugin searchUninstallPluginPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   names: list # Name of the plugin to uninstall (e.g. "legittorrents"). Supports multiple names separated by `|`
 ]: any -> any {
   let input = $in
@@ -2339,7 +2427,7 @@ export def "search-uninstall-plugin searchUninstallPluginPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Enable search plugin
@@ -2355,6 +2443,7 @@ export def "search-enable-plugin searchEnablePluginPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   names: list # Name of the plugin to enable/disable (e.g. "legittorrents"). Supports multiple names separated by `|`
   --enable: oneof<nothing, bool> # Whether the plugins should be enabled
 ]: any -> any {
@@ -2366,7 +2455,7 @@ export def "search-enable-plugin searchEnablePluginPost" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Update search plugins
@@ -2382,11 +2471,12 @@ export def "search-update-plugins searchUpdatePluginsPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/search/updatePlugins")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

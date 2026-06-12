@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -72,7 +73,7 @@ def sort-direction-completer [] { ["asc" "desc"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "pages list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -105,13 +106,14 @@ export def "pages list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, created_at: string, updated_at: string, name: string, page_description: string, headline: string, branding: string, subdomain: string, domain: string, url: string, support_url: string, hidden_from_search: bool, allow_page_subscribers: bool, allow_incident_subscribers: bool, allow_email_subscribers: bool, allow_sms_subscribers: bool, allow_rss_atom_feeds: bool, allow_webhook_subscribers: bool, notifications_from_email: string, notifications_email_footer: string, activity_score: float, twitter_username: string, viewers_must_be_team_members: bool, ip_restrictions: string, city: string, state: string, country: string, time_zone: string, css_body_background_color: string, css_font_color: string, css_light_font_color: string, css_greens: string, css_yellows: string, css_oranges: string, css_blues: string, css_reds: string, css_border_color: string, css_graph_color: string, css_link_color: string, css_no_data: string, favicon_logo: string, transactional_logo: string, hero_cover: string, email_logo: string, twitter_logo: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pages")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a page
@@ -127,13 +129,14 @@ export def "pages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, created_at: string, updated_at: string, name: string, page_description: string, headline: string, branding: string, subdomain: string, domain: string, url: string, support_url: string, hidden_from_search: bool, allow_page_subscribers: bool, allow_incident_subscribers: bool, allow_email_subscribers: bool, allow_sms_subscribers: bool, allow_rss_atom_feeds: bool, allow_webhook_subscribers: bool, notifications_from_email: string, notifications_email_footer: string, activity_score: float, twitter_username: string, viewers_must_be_team_members: bool, ip_restrictions: string, city: string, state: string, country: string, time_zone: string, css_body_background_color: string, css_font_color: string, css_light_font_color: string, css_greens: string, css_yellows: string, css_oranges: string, css_blues: string, css_reds: string, css_border_color: string, css_graph_color: string, css_link_color: string, css_no_data: string, favicon_logo: string, transactional_logo: string, hero_cover: string, email_logo: string, twitter_logo: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a page
@@ -150,6 +153,7 @@ export def "pages patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: record # shape: {name?: string, domain?: string, subdomain?: string, url?: string, branding?: "basic"|"premium", css_body_background_color?: string, css_font_color?: string, css_light_font_color?: string, css_greens?: string, css_yellows?: string, css_oranges?: string, css_reds?: string, css_blues?: string, css_border_color?: string, css_graph_color?: string, css_link_color?: string, css_no_data?: string, hidden_from_search?: bool, viewers_must_be_team_members?: bool, allow_page_subscribers?: bool, allow_incident_subscribers?: bool, allow_email_subscribers?: bool, allow_sms_subscribers?: bool, allow_rss_atom_feeds?: bool, allow_webhook_subscribers?: bool, notifications_from_email?: string, time_zone?: string, notifications_email_footer?: string}
 ]: any -> record<id: string, created_at: string, updated_at: string, name: string, page_description: string, headline: string, branding: string, subdomain: string, domain: string, url: string, support_url: string, hidden_from_search: bool, allow_page_subscribers: bool, allow_incident_subscribers: bool, allow_email_subscribers: bool, allow_sms_subscribers: bool, allow_rss_atom_feeds: bool, allow_webhook_subscribers: bool, notifications_from_email: string, notifications_email_footer: string, activity_score: float, twitter_username: string, viewers_must_be_team_members: bool, ip_restrictions: string, city: string, state: string, country: string, time_zone: string, css_body_background_color: string, css_font_color: string, css_light_font_color: string, css_greens: string, css_yellows: string, css_oranges: string, css_blues: string, css_reds: string, css_border_color: string, css_graph_color: string, css_link_color: string, css_no_data: string, favicon_logo: string, transactional_logo: string, hero_cover: string, email_logo: string, twitter_logo: string> {
   let input = $in
@@ -160,7 +164,7 @@ export def "pages patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a page
@@ -177,6 +181,7 @@ export def "pages put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: record # shape: {name?: string, domain?: string, subdomain?: string, url?: string, branding?: "basic"|"premium", css_body_background_color?: string, css_font_color?: string, css_light_font_color?: string, css_greens?: string, css_yellows?: string, css_oranges?: string, css_reds?: string, css_blues?: string, css_border_color?: string, css_graph_color?: string, css_link_color?: string, css_no_data?: string, hidden_from_search?: bool, viewers_must_be_team_members?: bool, allow_page_subscribers?: bool, allow_incident_subscribers?: bool, allow_email_subscribers?: bool, allow_sms_subscribers?: bool, allow_rss_atom_feeds?: bool, allow_webhook_subscribers?: bool, notifications_from_email?: string, time_zone?: string, notifications_email_footer?: string}
 ]: any -> record<id: string, created_at: string, updated_at: string, name: string, page_description: string, headline: string, branding: string, subdomain: string, domain: string, url: string, support_url: string, hidden_from_search: bool, allow_page_subscribers: bool, allow_incident_subscribers: bool, allow_email_subscribers: bool, allow_sms_subscribers: bool, allow_rss_atom_feeds: bool, allow_webhook_subscribers: bool, notifications_from_email: string, notifications_email_footer: string, activity_score: float, twitter_username: string, viewers_must_be_team_members: bool, ip_restrictions: string, city: string, state: string, country: string, time_zone: string, css_body_background_color: string, css_font_color: string, css_light_font_color: string, css_greens: string, css_yellows: string, css_oranges: string, css_blues: string, css_reds: string, css_border_color: string, css_graph_color: string, css_link_color: string, css_no_data: string, favicon_logo: string, transactional_logo: string, hero_cover: string, email_logo: string, twitter_logo: string> {
   let input = $in
@@ -187,7 +192,7 @@ export def "pages put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of page access users
@@ -203,6 +208,7 @@ export def "pages-page-access-users list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Email address to search for
   --page: int # Page offset to fetch. Beginning February 28, 2023, this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
   --per-page: int # Number of results to return per page. Beginning February 28, 2023, a default and maximum limit of 100 will be imposed and this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
@@ -213,7 +219,7 @@ export def "pages-page-access-users list" [
   let full_url = (build-url $base $"/pages/($page_id)/page_access_users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a page access user
@@ -230,6 +236,7 @@ export def "pages-page-access-users post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-access-user: record # shape: {external_login?: string, email?: string, page_access_group_ids?: list, subscribe_to_components?: bool}
 ]: any -> record<id: string, page_id: string, email: string, external_login: string, page_access_group_id: string, page_access_group_ids: string, created_at: string, updated_at: string> {
   let input = $in
@@ -240,7 +247,7 @@ export def "pages-page-access-users post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete page access user
@@ -257,13 +264,14 @@ export def "pages-page-access-users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/page_access_users/($page_access_user_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get page access user
@@ -280,13 +288,14 @@ export def "pages-page-access-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, page_id: string, email: string, external_login: string, page_access_group_id: string, page_access_group_ids: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/page_access_users/($page_access_user_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update page access user
@@ -303,13 +312,14 @@ export def "pages-page-access-users patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, page_id: string, email: string, external_login: string, page_access_group_id: string, page_access_group_ids: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/page_access_users/($page_access_user_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update page access user
@@ -326,13 +336,14 @@ export def "pages-page-access-users put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, page_id: string, email: string, external_login: string, page_access_group_id: string, page_access_group_ids: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/page_access_users/($page_access_user_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove components for page access user
@@ -349,6 +360,7 @@ export def "pages-page-access-users-components delete-by-page_id-page_access_use
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --component-ids: list # List of components codes to remove.  If omitted, all components will be removed.
 ]: any -> record<id: string, page_id: string, email: string, external_login: string, page_access_group_id: string, page_access_group_ids: string, created_at: string, updated_at: string> {
   let input = $in
@@ -359,7 +371,7 @@ export def "pages-page-access-users-components delete-by-page_id-page_access_use
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get components for page access user
@@ -376,6 +388,7 @@ export def "pages-page-access-users-components get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page offset to fetch. Beginning February 28, 2023, this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
   --per-page: int # Number of results to return per page. Beginning February 28, 2023, a default and maximum limit of 100 will be imposed and this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
 ]: nothing -> table<id: string, page_id: string, group_id: string, created_at: string, updated_at: string, group: bool, name: string, description: string, position: int, status: string, showcase: bool, only_show_if_degraded: bool, automation_email: string, start_date: string> {
@@ -385,7 +398,7 @@ export def "pages-page-access-users-components get" [
   let full_url = (build-url $base $"/pages/($page_id)/page_access_users/($page_access_user_id)/components" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add components for page access user
@@ -402,6 +415,7 @@ export def "pages-page-access-users-components patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   component_ids: list # List of component codes to allow access to
 ]: any -> record<id: string, page_id: string, email: string, external_login: string, page_access_group_id: string, page_access_group_ids: string, created_at: string, updated_at: string> {
   let input = $in
@@ -412,7 +426,7 @@ export def "pages-page-access-users-components patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Replace components for page access user
@@ -429,6 +443,7 @@ export def "pages-page-access-users-components post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   component_ids: list # List of component codes to allow access to
 ]: any -> record<id: string, page_id: string, email: string, external_login: string, page_access_group_id: string, page_access_group_ids: string, created_at: string, updated_at: string> {
   let input = $in
@@ -439,7 +454,7 @@ export def "pages-page-access-users-components post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add components for page access user
@@ -456,6 +471,7 @@ export def "pages-page-access-users-components put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   component_ids: list # List of component codes to allow access to
 ]: any -> record<id: string, page_id: string, email: string, external_login: string, page_access_group_id: string, page_access_group_ids: string, created_at: string, updated_at: string> {
   let input = $in
@@ -466,7 +482,7 @@ export def "pages-page-access-users-components put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove component for page access user
@@ -484,13 +500,14 @@ export def "pages-page-access-users-components delete-by-page_id-page_access_use
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, page_id: string, email: string, external_login: string, page_access_group_id: string, page_access_group_ids: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/page_access_users/($page_access_user_id)/components/($component_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete metrics for page access user
@@ -507,6 +524,7 @@ export def "pages-page-access-users-metrics delete-by-page_id-page_access_user_i
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --metric-ids: list # List of metrics to remove
 ]: any -> record<id: string, page_id: string, email: string, external_login: string, page_access_group_id: string, page_access_group_ids: string, created_at: string, updated_at: string> {
   let input = $in
@@ -517,7 +535,7 @@ export def "pages-page-access-users-metrics delete-by-page_id-page_access_user_i
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get metrics for page access user
@@ -534,6 +552,7 @@ export def "pages-page-access-users-metrics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page offset to fetch. Beginning February 28, 2023, this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
   --per-page: int # Number of results to return per page. Beginning February 28, 2023, a default and maximum limit of 100 will be imposed and this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
 ]: nothing -> table<id: string, metrics_provider_id: string, metric_identifier: string, name: string, display: bool, tooltip_description: string, backfilled: bool, y_axis_min: float, y_axis_max: float, y_axis_hidden: bool, suffix: string, decimal_places: int, most_recent_data_at: string, created_at: string, updated_at: string, last_fetched_at: string, backfill_percentage: int, reference_name: string> {
@@ -543,7 +562,7 @@ export def "pages-page-access-users-metrics get" [
   let full_url = (build-url $base $"/pages/($page_id)/page_access_users/($page_access_user_id)/metrics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add metrics for page access user
@@ -560,6 +579,7 @@ export def "pages-page-access-users-metrics patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   metric_ids: list # List of metrics to add
 ]: any -> record<id: string, page_id: string, email: string, external_login: string, page_access_group_id: string, page_access_group_ids: string, created_at: string, updated_at: string> {
   let input = $in
@@ -570,7 +590,7 @@ export def "pages-page-access-users-metrics patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Replace metrics for page access user
@@ -587,6 +607,7 @@ export def "pages-page-access-users-metrics post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   metric_ids: list # List of metrics to add
 ]: any -> record<id: string, page_id: string, email: string, external_login: string, page_access_group_id: string, page_access_group_ids: string, created_at: string, updated_at: string> {
   let input = $in
@@ -597,7 +618,7 @@ export def "pages-page-access-users-metrics post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add metrics for page access user
@@ -614,6 +635,7 @@ export def "pages-page-access-users-metrics put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   metric_ids: list # List of metrics to add
 ]: any -> record<id: string, page_id: string, email: string, external_login: string, page_access_group_id: string, page_access_group_ids: string, created_at: string, updated_at: string> {
   let input = $in
@@ -624,7 +646,7 @@ export def "pages-page-access-users-metrics put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete metric for page access user
@@ -642,13 +664,14 @@ export def "pages-page-access-users-metrics delete-by-page_id-page_access_user_i
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, page_id: string, email: string, external_login: string, page_access_group_id: string, page_access_group_ids: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/page_access_users/($page_access_user_id)/metrics/($metric_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of page access groups
@@ -664,6 +687,7 @@ export def "pages-page-access-groups list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page offset to fetch. Beginning February 28, 2023, this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
   --per-page: int # Number of results to return per page. Beginning February 28, 2023, a default and maximum limit of 100 will be imposed and this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
 ]: nothing -> table<id: string, page_id: string, name: string, page_access_user_ids: list<string>, external_identifier: string, metric_ids: list<string>, component_ids: list<string>, created_at: string, updated_at: string> {
@@ -673,7 +697,7 @@ export def "pages-page-access-groups list" [
   let full_url = (build-url $base $"/pages/($page_id)/page_access_groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a page access group
@@ -690,6 +714,7 @@ export def "pages-page-access-groups post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-access-group: record # shape: {name?: string, external_identifier?: string, component_ids?: list, metric_ids?: list, page_access_user_ids?: list}
 ]: any -> record<id: string, page_id: string, name: string, page_access_user_ids: list<string>, external_identifier: string, metric_ids: list<string>, component_ids: list<string>, created_at: string, updated_at: string> {
   let input = $in
@@ -700,7 +725,7 @@ export def "pages-page-access-groups post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a page access group
@@ -717,13 +742,14 @@ export def "pages-page-access-groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, page_id: string, name: string, page_access_user_ids: list<string>, external_identifier: string, metric_ids: list<string>, component_ids: list<string>, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/page_access_groups/($page_access_group_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a page access group
@@ -740,13 +766,14 @@ export def "pages-page-access-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, page_id: string, name: string, page_access_user_ids: list<string>, external_identifier: string, metric_ids: list<string>, component_ids: list<string>, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/page_access_groups/($page_access_group_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a page access group
@@ -764,6 +791,7 @@ export def "pages-page-access-groups patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-access-group: record # shape: {name?: string, external_identifier?: string, component_ids?: list, metric_ids?: list, page_access_user_ids?: list}
 ]: any -> record<id: string, page_id: string, name: string, page_access_user_ids: list<string>, external_identifier: string, metric_ids: list<string>, component_ids: list<string>, created_at: string, updated_at: string> {
   let input = $in
@@ -774,7 +802,7 @@ export def "pages-page-access-groups patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a page access group
@@ -792,6 +820,7 @@ export def "pages-page-access-groups put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-access-group: record # shape: {name?: string, external_identifier?: string, component_ids?: list, metric_ids?: list, page_access_user_ids?: list}
 ]: any -> record<id: string, page_id: string, name: string, page_access_user_ids: list<string>, external_identifier: string, metric_ids: list<string>, component_ids: list<string>, created_at: string, updated_at: string> {
   let input = $in
@@ -802,7 +831,7 @@ export def "pages-page-access-groups put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete components for a page access group
@@ -819,6 +848,7 @@ export def "pages-page-access-groups-components delete-by-page_id-page_access_gr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --component-ids: list
 ]: any -> record<id: string, page_id: string, name: string, page_access_user_ids: list<string>, external_identifier: string, metric_ids: list<string>, component_ids: list<string>, created_at: string, updated_at: string> {
   let input = $in
@@ -829,7 +859,7 @@ export def "pages-page-access-groups-components delete-by-page_id-page_access_gr
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List components for a page access group
@@ -846,6 +876,7 @@ export def "pages-page-access-groups-components get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page offset to fetch. Beginning February 28, 2023, this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
   --per-page: int # Number of results to return per page. Beginning February 28, 2023, a default and maximum limit of 100 will be imposed and this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
 ]: nothing -> table<id: string, page_id: string, group_id: string, created_at: string, updated_at: string, group: bool, name: string, description: string, position: int, status: string, showcase: bool, only_show_if_degraded: bool, automation_email: string, start_date: string> {
@@ -855,7 +886,7 @@ export def "pages-page-access-groups-components get" [
   let full_url = (build-url $base $"/pages/($page_id)/page_access_groups/($page_access_group_id)/components" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add components to page access group
@@ -872,6 +903,7 @@ export def "pages-page-access-groups-components patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --component-ids: list # List of Component identifiers
 ]: any -> record<id: string, page_id: string, name: string, page_access_user_ids: list<string>, external_identifier: string, metric_ids: list<string>, component_ids: list<string>, created_at: string, updated_at: string> {
   let input = $in
@@ -882,7 +914,7 @@ export def "pages-page-access-groups-components patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Replace components for a page access group
@@ -899,6 +931,7 @@ export def "pages-page-access-groups-components post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   component_ids: list # List of components codes to set on the page access group
 ]: any -> record<id: string, page_id: string, name: string, page_access_user_ids: list<string>, external_identifier: string, metric_ids: list<string>, component_ids: list<string>, created_at: string, updated_at: string> {
   let input = $in
@@ -909,7 +942,7 @@ export def "pages-page-access-groups-components post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add components to page access group
@@ -926,6 +959,7 @@ export def "pages-page-access-groups-components put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --component-ids: list # List of Component identifiers
 ]: any -> record<id: string, page_id: string, name: string, page_access_user_ids: list<string>, external_identifier: string, metric_ids: list<string>, component_ids: list<string>, created_at: string, updated_at: string> {
   let input = $in
@@ -936,7 +970,7 @@ export def "pages-page-access-groups-components put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a component from a page access group
@@ -954,13 +988,14 @@ export def "pages-page-access-groups-components delete-by-page_id-page_access_gr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, page_id: string, name: string, page_access_user_ids: list<string>, external_identifier: string, metric_ids: list<string>, component_ids: list<string>, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/page_access_groups/($page_access_group_id)/components/($component_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resend confirmations to a list of subscribers
@@ -976,6 +1011,7 @@ export def "pages-subscribers-resend-confirmation post-by-page_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   subscribers: string # The array of subscriber codes to resend confirmations for, or "all" to resend confirmations to all subscribers. Only unconfirmed email subscribers will receive this notification.
 ]: any -> any {
   let input = $in
@@ -986,7 +1022,7 @@ export def "pages-subscribers-resend-confirmation post-by-page_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unsubscribe a list of subscribers
@@ -1002,6 +1038,7 @@ export def "pages-subscribers-unsubscribe post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   subscribers: string # The array of subscriber codes to unsubscribe (limited to 100), or "all" to unsubscribe all subscribers if the number of subscribers is less than 100.
   --type: string@type-completer # If this is present, only unsubscribe subscribers of this type.
   --state: string@state-completer # If this is present, only unsubscribe subscribers in this state. Specify state "all" to unsubscribe subscribers in any states. (default: active)
@@ -1015,7 +1052,7 @@ export def "pages-subscribers-unsubscribe post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reactivate a list of subscribers
@@ -1031,6 +1068,7 @@ export def "pages-subscribers-reactivate post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   subscribers: string # The array of quarantined subscriber codes to reactivate, or "all" to reactivate all quarantined subscribers.
   --type: string@type-completer # If this is present, only reactivate subscribers of this type.
 ]: any -> any {
@@ -1042,7 +1080,7 @@ export def "pages-subscribers-reactivate post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a histogram of subscribers by type and then state
@@ -1058,13 +1096,14 @@ export def "pages-subscribers-histogram-by-state get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<email: record<active: int, unconfirmed: int, quarantined: int, total: int>, sms: record<active: int, unconfirmed: int, quarantined: int, total: int>, webhook: record<active: int, unconfirmed: int, quarantined: int, total: int>, integration_partner: record<active: int, unconfirmed: int, quarantined: int, total: int>, slack: record<active: int, unconfirmed: int, quarantined: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/subscribers/histogram_by_state")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a count of subscribers by type
@@ -1080,6 +1119,7 @@ export def "pages-subscribers-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # If this is present, only count subscribers of this type.
   --state: string@state-completer # If this is present, only count subscribers in this state. Specify state "all" to count subscribers in any states. (default: active)
 ]: nothing -> record<email: int, sms: int, webhook: int, integration_partner: int, slack: int> {
@@ -1089,7 +1129,7 @@ export def "pages-subscribers-count get" [
   let full_url = (build-url $base $"/pages/($page_id)/subscribers/count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of unsubscribed subscribers
@@ -1105,6 +1145,7 @@ export def "pages-subscribers-unsubscribed get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page offset to fetch. Beginning February 28, 2023, this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
   --per-page: int # Number of results to return per page. Beginning February 28, 2023, a default and maximum limit of 100 will be imposed and this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
 ]: nothing -> table<id: string, skip_confirmation_notification: bool, mode: string, email: string, endpoint: string, phone_number: string, phone_country: string, display_phone_number: string, obfuscated_channel_name: string, workspace_name: string, quarantined_at: string, purge_at: string, components: string, page_access_user_id: string, created_at: string> {
@@ -1114,7 +1155,7 @@ export def "pages-subscribers-unsubscribed get" [
   let full_url = (build-url $base $"/pages/($page_id)/subscribers/unsubscribed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of subscribers
@@ -1130,6 +1171,7 @@ export def "pages-subscribers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # If this is specified, search the contact information (email, endpoint, or phone number) for the provided value. This parameter doesn’t support searching for Slack subscribers.
   --type: string@type-completer # If specified, only return subscribers of the indicated type.
   --state: string@state-completer # If this is present, only return subscribers in this state. Specify state "all" to find subscribers in any states. (default: active)
@@ -1144,7 +1186,7 @@ export def "pages-subscribers list" [
   let full_url = (build-url $base $"/pages/($page_id)/subscribers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a subscriber
@@ -1161,6 +1203,7 @@ export def "pages-subscribers post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscriber: record # shape: {email?: string, endpoint?: string, phone_country?: string, phone_number?: string, skip_confirmation_notification?: bool, page_access_user?: string, component_ids?: list}
 ]: any -> record<id: string, skip_confirmation_notification: bool, mode: string, email: string, endpoint: string, phone_number: string, phone_country: string, display_phone_number: string, obfuscated_channel_name: string, workspace_name: string, quarantined_at: string, purge_at: string, components: string, page_access_user_id: string, created_at: string> {
   let input = $in
@@ -1171,7 +1214,7 @@ export def "pages-subscribers post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Resend confirmation to a subscriber
@@ -1188,13 +1231,14 @@ export def "pages-subscribers-resend-confirmation post-by-page_id-subscriber_id"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/subscribers/($subscriber_id)/resend_confirmation")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unsubscribe a subscriber
@@ -1211,6 +1255,7 @@ export def "pages-subscribers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --skip-unsubscription-notification: oneof<nothing, bool> # If skip_unsubscription_notification is true, the subscriber does not receive any notifications when they are unsubscribed.
 ]: nothing -> record<id: string, skip_confirmation_notification: bool, mode: string, email: string, endpoint: string, phone_number: string, phone_country: string, display_phone_number: string, obfuscated_channel_name: string, workspace_name: string, quarantined_at: string, purge_at: string, components: string, page_access_user_id: string, created_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1219,7 +1264,7 @@ export def "pages-subscribers delete" [
   let full_url = (build-url $base $"/pages/($page_id)/subscribers/($subscriber_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a subscriber
@@ -1236,13 +1281,14 @@ export def "pages-subscribers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, skip_confirmation_notification: bool, mode: string, email: string, endpoint: string, phone_number: string, phone_country: string, display_phone_number: string, obfuscated_channel_name: string, workspace_name: string, quarantined_at: string, purge_at: string, components: string, page_access_user_id: string, created_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/subscribers/($subscriber_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a subscriber
@@ -1259,6 +1305,7 @@ export def "pages-subscribers patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --component-ids: list # A list of component ids for which the subscriber should recieve updates for. Components must be an array with at least one element if it is passed at all. Each component must belong to the page indicated in the path. To set the subscriber to be subscribed to all components on the page, exclude this parameter.
 ]: any -> record<id: string, skip_confirmation_notification: bool, mode: string, email: string, endpoint: string, phone_number: string, phone_country: string, display_phone_number: string, obfuscated_channel_name: string, workspace_name: string, quarantined_at: string, purge_at: string, components: string, page_access_user_id: string, created_at: string> {
   let input = $in
@@ -1269,7 +1316,7 @@ export def "pages-subscribers patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of templates
@@ -1285,6 +1332,7 @@ export def "pages-incident-templates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page offset to fetch. (format: int32, default: 1)
   --per-page: int # Number of results to return per page. (format: int32, default: 100)
 ]: nothing -> table<id: string, components: list<record>, name: string, title: string, body: string, group_id: string, update_status: string, should_tweet: bool, should_send_notifications: bool> {
@@ -1294,7 +1342,7 @@ export def "pages-incident-templates get" [
   let full_url = (build-url $base $"/pages/($page_id)/incident_templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a template
@@ -1311,6 +1359,7 @@ export def "pages-incident-templates post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --template: record # shape: {name: string, title: string, body: string, group_id?: string, update_status?: "investigating"|"identified"|"monitoring"|"resolved"|"scheduled"|"in_progress"|"verifying"|"completed", should_tweet?: bool, should_send_notifications?: bool, component_ids?: list}
 ]: any -> record<id: string, components: table<id: string, page_id: string, group_id: string, created_at: string, updated_at: string, group: bool, name: string, description: string, position: int, status: string, showcase: bool, only_show_if_degraded: bool, automation_email: string, start_date: string>, name: string, title: string, body: string, group_id: string, update_status: string, should_tweet: bool, should_send_notifications: bool> {
   let input = $in
@@ -1321,7 +1370,7 @@ export def "pages-incident-templates post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of incidents
@@ -1337,6 +1386,7 @@ export def "pages-incidents list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # If this is specified, search for the text query string in the incidents' name, status, postmortem_body, and incident_updates fields.
   --limit: int # The maximum number of rows to return per page. The default and maximum limit is 100. (format: int32)
   --page: int # Page offset to fetch. (format: int32)
@@ -1347,7 +1397,7 @@ export def "pages-incidents list" [
   let full_url = (build-url $base $"/pages/($page_id)/incidents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an incident
@@ -1364,6 +1414,7 @@ export def "pages-incidents post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --incident: record # shape: {name: string, status?: "investigating"|"identified"|"monitoring"|"resolved"|"scheduled"|"in_progress"|"verifying"|"completed", impact_override?: "none"|"maintenance"|"minor"|"major"|"critical", scheduled_for?: string, scheduled_until?: string, scheduled_remind_prior?: bool, auto_transition_to_maintenance_state?: bool, auto_transition_to_operational_state?: bool, scheduled_auto_in_progress?: bool, scheduled_auto_completed?: bool, auto_transition_deliver_notifications_at_start?: bool, auto_transition_deliver_notifications_at_end?: bool, metadata?: record, deliver_notifications?: bool, auto_tweet_at_beginning?: bool, auto_tweet_on_completion?: bool, auto_tweet_on_creation?: bool, auto_tweet_one_hour_before?: bool, backfill_date?: string, backfilled?: bool, body?: string, components?: record, component_ids?: list, scheduled_auto_transition?: bool}
 ]: any -> record<id: string, components: table<id: string, page_id: string, group_id: string, created_at: string, updated_at: string, group: bool, name: string, description: string, position: int, status: string, showcase: bool, only_show_if_degraded: bool, automation_email: string, start_date: string>, created_at: string, impact: string, impact_override: string, incident_updates: table<id: string, incident_id: string, affected_components: list, body: string, created_at: string, custom_tweet: string, deliver_notifications: bool, display_at: string, status: string, tweet_id: string, twitter_updated_at: string, updated_at: string, wants_twitter_update: bool>, metadata: any, monitoring_at: string, name: string, page_id: string, postmortem_body: string, postmortem_body_last_updated_at: string, postmortem_ignored: bool, postmortem_notified_subscribers: bool, postmortem_notified_twitter: bool, postmortem_published_at: bool, resolved_at: string, scheduled_auto_completed: bool, scheduled_auto_in_progress: bool, scheduled_for: string, auto_transition_deliver_notifications_at_end: bool, auto_transition_deliver_notifications_at_start: bool, auto_transition_to_maintenance_state: bool, auto_transition_to_operational_state: bool, scheduled_remind_prior: bool, scheduled_reminded_at: string, scheduled_until: string, shortlink: string, status: string, updated_at: string> {
   let input = $in
@@ -1374,7 +1425,7 @@ export def "pages-incidents post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of active maintenances
@@ -1390,6 +1441,7 @@ export def "pages-incidents-active-maintenance get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page offset to fetch. (format: int32, default: 1)
   --per-page: int # Number of results to return per page. (format: int32, default: 100)
 ]: nothing -> table<id: string, components: list<record>, created_at: string, impact: string, impact_override: string, incident_updates: list<record>, metadata: any, monitoring_at: string, name: string, page_id: string, postmortem_body: string, postmortem_body_last_updated_at: string, postmortem_ignored: bool, postmortem_notified_subscribers: bool, postmortem_notified_twitter: bool, postmortem_published_at: bool, resolved_at: string, scheduled_auto_completed: bool, scheduled_auto_in_progress: bool, scheduled_for: string, auto_transition_deliver_notifications_at_end: bool, auto_transition_deliver_notifications_at_start: bool, auto_transition_to_maintenance_state: bool, auto_transition_to_operational_state: bool, scheduled_remind_prior: bool, scheduled_reminded_at: string, scheduled_until: string, shortlink: string, status: string, updated_at: string> {
@@ -1399,7 +1451,7 @@ export def "pages-incidents-active-maintenance get" [
   let full_url = (build-url $base $"/pages/($page_id)/incidents/active_maintenance" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of upcoming incidents
@@ -1415,6 +1467,7 @@ export def "pages-incidents-upcoming get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page offset to fetch. (format: int32, default: 1)
   --per-page: int # Number of results to return per page. (format: int32, default: 100)
 ]: nothing -> table<id: string, components: list<record>, created_at: string, impact: string, impact_override: string, incident_updates: list<record>, metadata: any, monitoring_at: string, name: string, page_id: string, postmortem_body: string, postmortem_body_last_updated_at: string, postmortem_ignored: bool, postmortem_notified_subscribers: bool, postmortem_notified_twitter: bool, postmortem_published_at: bool, resolved_at: string, scheduled_auto_completed: bool, scheduled_auto_in_progress: bool, scheduled_for: string, auto_transition_deliver_notifications_at_end: bool, auto_transition_deliver_notifications_at_start: bool, auto_transition_to_maintenance_state: bool, auto_transition_to_operational_state: bool, scheduled_remind_prior: bool, scheduled_reminded_at: string, scheduled_until: string, shortlink: string, status: string, updated_at: string> {
@@ -1424,7 +1477,7 @@ export def "pages-incidents-upcoming get" [
   let full_url = (build-url $base $"/pages/($page_id)/incidents/upcoming" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of scheduled incidents
@@ -1440,6 +1493,7 @@ export def "pages-incidents-scheduled get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page offset to fetch. (format: int32, default: 1)
   --per-page: int # Number of results to return per page. (format: int32, default: 100)
 ]: nothing -> table<id: string, components: list<record>, created_at: string, impact: string, impact_override: string, incident_updates: list<record>, metadata: any, monitoring_at: string, name: string, page_id: string, postmortem_body: string, postmortem_body_last_updated_at: string, postmortem_ignored: bool, postmortem_notified_subscribers: bool, postmortem_notified_twitter: bool, postmortem_published_at: bool, resolved_at: string, scheduled_auto_completed: bool, scheduled_auto_in_progress: bool, scheduled_for: string, auto_transition_deliver_notifications_at_end: bool, auto_transition_deliver_notifications_at_start: bool, auto_transition_to_maintenance_state: bool, auto_transition_to_operational_state: bool, scheduled_remind_prior: bool, scheduled_reminded_at: string, scheduled_until: string, shortlink: string, status: string, updated_at: string> {
@@ -1449,7 +1503,7 @@ export def "pages-incidents-scheduled get" [
   let full_url = (build-url $base $"/pages/($page_id)/incidents/scheduled" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of unresolved incidents
@@ -1465,6 +1519,7 @@ export def "pages-incidents-unresolved get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page offset to fetch. (format: int32, default: 1)
   --per-page: int # Number of results to return per page. (format: int32, default: 100)
 ]: nothing -> table<id: string, components: list<record>, created_at: string, impact: string, impact_override: string, incident_updates: list<record>, metadata: any, monitoring_at: string, name: string, page_id: string, postmortem_body: string, postmortem_body_last_updated_at: string, postmortem_ignored: bool, postmortem_notified_subscribers: bool, postmortem_notified_twitter: bool, postmortem_published_at: bool, resolved_at: string, scheduled_auto_completed: bool, scheduled_auto_in_progress: bool, scheduled_for: string, auto_transition_deliver_notifications_at_end: bool, auto_transition_deliver_notifications_at_start: bool, auto_transition_to_maintenance_state: bool, auto_transition_to_operational_state: bool, scheduled_remind_prior: bool, scheduled_reminded_at: string, scheduled_until: string, shortlink: string, status: string, updated_at: string> {
@@ -1474,7 +1529,7 @@ export def "pages-incidents-unresolved get" [
   let full_url = (build-url $base $"/pages/($page_id)/incidents/unresolved" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an incident
@@ -1491,13 +1546,14 @@ export def "pages-incidents delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, components: table<id: string, page_id: string, group_id: string, created_at: string, updated_at: string, group: bool, name: string, description: string, position: int, status: string, showcase: bool, only_show_if_degraded: bool, automation_email: string, start_date: string>, created_at: string, impact: string, impact_override: string, incident_updates: table<id: string, incident_id: string, affected_components: list, body: string, created_at: string, custom_tweet: string, deliver_notifications: bool, display_at: string, status: string, tweet_id: string, twitter_updated_at: string, updated_at: string, wants_twitter_update: bool>, metadata: any, monitoring_at: string, name: string, page_id: string, postmortem_body: string, postmortem_body_last_updated_at: string, postmortem_ignored: bool, postmortem_notified_subscribers: bool, postmortem_notified_twitter: bool, postmortem_published_at: bool, resolved_at: string, scheduled_auto_completed: bool, scheduled_auto_in_progress: bool, scheduled_for: string, auto_transition_deliver_notifications_at_end: bool, auto_transition_deliver_notifications_at_start: bool, auto_transition_to_maintenance_state: bool, auto_transition_to_operational_state: bool, scheduled_remind_prior: bool, scheduled_reminded_at: string, scheduled_until: string, shortlink: string, status: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/incidents/($incident_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an incident
@@ -1514,13 +1570,14 @@ export def "pages-incidents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, components: table<id: string, page_id: string, group_id: string, created_at: string, updated_at: string, group: bool, name: string, description: string, position: int, status: string, showcase: bool, only_show_if_degraded: bool, automation_email: string, start_date: string>, created_at: string, impact: string, impact_override: string, incident_updates: table<id: string, incident_id: string, affected_components: list, body: string, created_at: string, custom_tweet: string, deliver_notifications: bool, display_at: string, status: string, tweet_id: string, twitter_updated_at: string, updated_at: string, wants_twitter_update: bool>, metadata: any, monitoring_at: string, name: string, page_id: string, postmortem_body: string, postmortem_body_last_updated_at: string, postmortem_ignored: bool, postmortem_notified_subscribers: bool, postmortem_notified_twitter: bool, postmortem_published_at: bool, resolved_at: string, scheduled_auto_completed: bool, scheduled_auto_in_progress: bool, scheduled_for: string, auto_transition_deliver_notifications_at_end: bool, auto_transition_deliver_notifications_at_start: bool, auto_transition_to_maintenance_state: bool, auto_transition_to_operational_state: bool, scheduled_remind_prior: bool, scheduled_reminded_at: string, scheduled_until: string, shortlink: string, status: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/incidents/($incident_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an incident
@@ -1538,6 +1595,7 @@ export def "pages-incidents patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --incident: record # shape: {name?: string, status?: "investigating"|"identified"|"monitoring"|"resolved"|"scheduled"|"in_progress"|"verifying"|"completed", impact_override?: "none"|"maintenance"|"minor"|"major"|"critical", scheduled_for?: string, scheduled_until?: string, scheduled_remind_prior?: bool, auto_transition_to_maintenance_state?: bool, auto_transition_to_operational_state?: bool, scheduled_auto_in_progress?: bool, scheduled_auto_completed?: bool, auto_transition_deliver_notifications_at_start?: bool, auto_transition_deliver_notifications_at_end?: bool, metadata?: record, deliver_notifications?: bool, auto_tweet_at_beginning?: bool, auto_tweet_on_completion?: bool, auto_tweet_on_creation?: bool, auto_tweet_one_hour_before?: bool, backfill_date?: string, backfilled?: bool, body?: string, components?: record, component_ids?: list, scheduled_auto_transition?: bool}
 ]: any -> record<id: string, components: table<id: string, page_id: string, group_id: string, created_at: string, updated_at: string, group: bool, name: string, description: string, position: int, status: string, showcase: bool, only_show_if_degraded: bool, automation_email: string, start_date: string>, created_at: string, impact: string, impact_override: string, incident_updates: table<id: string, incident_id: string, affected_components: list, body: string, created_at: string, custom_tweet: string, deliver_notifications: bool, display_at: string, status: string, tweet_id: string, twitter_updated_at: string, updated_at: string, wants_twitter_update: bool>, metadata: any, monitoring_at: string, name: string, page_id: string, postmortem_body: string, postmortem_body_last_updated_at: string, postmortem_ignored: bool, postmortem_notified_subscribers: bool, postmortem_notified_twitter: bool, postmortem_published_at: bool, resolved_at: string, scheduled_auto_completed: bool, scheduled_auto_in_progress: bool, scheduled_for: string, auto_transition_deliver_notifications_at_end: bool, auto_transition_deliver_notifications_at_start: bool, auto_transition_to_maintenance_state: bool, auto_transition_to_operational_state: bool, scheduled_remind_prior: bool, scheduled_reminded_at: string, scheduled_until: string, shortlink: string, status: string, updated_at: string> {
   let input = $in
@@ -1548,7 +1606,7 @@ export def "pages-incidents patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update an incident
@@ -1566,6 +1624,7 @@ export def "pages-incidents put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --incident: record # shape: {name?: string, status?: "investigating"|"identified"|"monitoring"|"resolved"|"scheduled"|"in_progress"|"verifying"|"completed", impact_override?: "none"|"maintenance"|"minor"|"major"|"critical", scheduled_for?: string, scheduled_until?: string, scheduled_remind_prior?: bool, auto_transition_to_maintenance_state?: bool, auto_transition_to_operational_state?: bool, scheduled_auto_in_progress?: bool, scheduled_auto_completed?: bool, auto_transition_deliver_notifications_at_start?: bool, auto_transition_deliver_notifications_at_end?: bool, metadata?: record, deliver_notifications?: bool, auto_tweet_at_beginning?: bool, auto_tweet_on_completion?: bool, auto_tweet_on_creation?: bool, auto_tweet_one_hour_before?: bool, backfill_date?: string, backfilled?: bool, body?: string, components?: record, component_ids?: list, scheduled_auto_transition?: bool}
 ]: any -> record<id: string, components: table<id: string, page_id: string, group_id: string, created_at: string, updated_at: string, group: bool, name: string, description: string, position: int, status: string, showcase: bool, only_show_if_degraded: bool, automation_email: string, start_date: string>, created_at: string, impact: string, impact_override: string, incident_updates: table<id: string, incident_id: string, affected_components: list, body: string, created_at: string, custom_tweet: string, deliver_notifications: bool, display_at: string, status: string, tweet_id: string, twitter_updated_at: string, updated_at: string, wants_twitter_update: bool>, metadata: any, monitoring_at: string, name: string, page_id: string, postmortem_body: string, postmortem_body_last_updated_at: string, postmortem_ignored: bool, postmortem_notified_subscribers: bool, postmortem_notified_twitter: bool, postmortem_published_at: bool, resolved_at: string, scheduled_auto_completed: bool, scheduled_auto_in_progress: bool, scheduled_for: string, auto_transition_deliver_notifications_at_end: bool, auto_transition_deliver_notifications_at_start: bool, auto_transition_to_maintenance_state: bool, auto_transition_to_operational_state: bool, scheduled_remind_prior: bool, scheduled_reminded_at: string, scheduled_until: string, shortlink: string, status: string, updated_at: string> {
   let input = $in
@@ -1576,7 +1635,7 @@ export def "pages-incidents put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a previous incident update
@@ -1595,6 +1654,7 @@ export def "pages-incidents-incident-updates patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --incident-update: record # shape: {wants_twitter_update?: bool, body?: string, display_at?: string, deliver_notifications?: bool}
 ]: any -> record<id: string, incident_id: string, affected_components: list<record>, body: string, created_at: string, custom_tweet: string, deliver_notifications: bool, display_at: string, status: string, tweet_id: string, twitter_updated_at: string, updated_at: string, wants_twitter_update: bool> {
   let input = $in
@@ -1605,7 +1665,7 @@ export def "pages-incidents-incident-updates patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a previous incident update
@@ -1624,6 +1684,7 @@ export def "pages-incidents-incident-updates put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --incident-update: record # shape: {wants_twitter_update?: bool, body?: string, display_at?: string, deliver_notifications?: bool}
 ]: any -> record<id: string, incident_id: string, affected_components: list<record>, body: string, created_at: string, custom_tweet: string, deliver_notifications: bool, display_at: string, status: string, tweet_id: string, twitter_updated_at: string, updated_at: string, wants_twitter_update: bool> {
   let input = $in
@@ -1634,7 +1695,7 @@ export def "pages-incidents-incident-updates put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of incident subscribers
@@ -1651,6 +1712,7 @@ export def "pages-incidents-subscribers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page offset to fetch. Beginning February 28, 2023, this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
   --per-page: int # Number of results to return per page. Beginning February 28, 2023, a default and maximum limit of 100 will be imposed and this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
 ]: nothing -> table<id: string, skip_confirmation_notification: bool, mode: string, email: string, endpoint: string, phone_number: string, phone_country: string, display_phone_number: string, obfuscated_channel_name: string, workspace_name: string, quarantined_at: string, purge_at: string, components: string, page_access_user_id: string, created_at: string> {
@@ -1660,7 +1722,7 @@ export def "pages-incidents-subscribers list" [
   let full_url = (build-url $base $"/pages/($page_id)/incidents/($incident_id)/subscribers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an incident subscriber
@@ -1678,6 +1740,7 @@ export def "pages-incidents-subscribers post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --subscriber: record # shape: {email?: string, phone_country?: string, phone_number?: string, skip_confirmation_notification?: bool}
 ]: any -> record<id: string, skip_confirmation_notification: bool, mode: string, email: string, endpoint: string, phone_number: string, phone_country: string, display_phone_number: string, obfuscated_channel_name: string, workspace_name: string, quarantined_at: string, purge_at: string, components: string, page_access_user_id: string, created_at: string> {
   let input = $in
@@ -1688,7 +1751,7 @@ export def "pages-incidents-subscribers post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unsubscribe an incident subscriber
@@ -1706,13 +1769,14 @@ export def "pages-incidents-subscribers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, skip_confirmation_notification: bool, mode: string, email: string, endpoint: string, phone_number: string, phone_country: string, display_phone_number: string, obfuscated_channel_name: string, workspace_name: string, quarantined_at: string, purge_at: string, components: string, page_access_user_id: string, created_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/incidents/($incident_id)/subscribers/($subscriber_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an incident subscriber
@@ -1730,13 +1794,14 @@ export def "pages-incidents-subscribers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, skip_confirmation_notification: bool, mode: string, email: string, endpoint: string, phone_number: string, phone_country: string, display_phone_number: string, obfuscated_channel_name: string, workspace_name: string, quarantined_at: string, purge_at: string, components: string, page_access_user_id: string, created_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/incidents/($incident_id)/subscribers/($subscriber_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resend confirmation to an incident subscriber
@@ -1754,13 +1819,14 @@ export def "pages-incidents-subscribers-resend-confirmation post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/incidents/($incident_id)/subscribers/($subscriber_id)/resend_confirmation")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Postmortem
@@ -1777,13 +1843,14 @@ export def "pages-incidents-postmortem delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/incidents/($incident_id)/postmortem")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Postmortem
@@ -1800,13 +1867,14 @@ export def "pages-incidents-postmortem get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<preview_key: string, body: string, body_updated_at: string, body_draft: string, body_draft_updated_at: string, published_at: string, notify_subscribers: bool, notify_twitter: bool, custom_tweet: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/incidents/($incident_id)/postmortem")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Postmortem
@@ -1824,6 +1892,7 @@ export def "pages-incidents-postmortem put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --postmortem: record # shape: {body_draft: string}
 ]: any -> record<preview_key: string, body: string, body_updated_at: string, body_draft: string, body_draft_updated_at: string, published_at: string, notify_subscribers: bool, notify_twitter: bool, custom_tweet: string, created_at: string, updated_at: string> {
   let input = $in
@@ -1834,7 +1903,7 @@ export def "pages-incidents-postmortem put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Publish Postmortem
@@ -1852,6 +1921,7 @@ export def "pages-incidents-postmortem-publish put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --postmortem: record # shape: {notify_twitter?: bool, notify_subscribers?: bool, custom_tweet?: string}
 ]: any -> record<preview_key: string, body: string, body_updated_at: string, body_draft: string, body_draft_updated_at: string, published_at: string, notify_subscribers: bool, notify_twitter: bool, custom_tweet: string, created_at: string, updated_at: string> {
   let input = $in
@@ -1862,7 +1932,7 @@ export def "pages-incidents-postmortem-publish put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revert Postmortem
@@ -1879,13 +1949,14 @@ export def "pages-incidents-postmortem-revert put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<preview_key: string, body: string, body_updated_at: string, body_draft: string, body_draft_updated_at: string, published_at: string, notify_subscribers: bool, notify_twitter: bool, custom_tweet: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/incidents/($incident_id)/postmortem/revert")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of components
@@ -1901,6 +1972,7 @@ export def "pages-components list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page offset to fetch. Beginning February 28, 2023, this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
   --per-page: int # Number of results to return per page. Beginning February 28, 2023, a default and maximum limit of 100 will be imposed and this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
 ]: nothing -> table<id: string, page_id: string, group_id: string, created_at: string, updated_at: string, group: bool, name: string, description: string, position: int, status: string, showcase: bool, only_show_if_degraded: bool, automation_email: string, start_date: string> {
@@ -1910,7 +1982,7 @@ export def "pages-components list" [
   let full_url = (build-url $base $"/pages/($page_id)/components" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a component
@@ -1927,6 +1999,7 @@ export def "pages-components post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --component: record # shape: {description?: string, status?: "operational"|"under_maintenance"|"degraded_performance"|"partial_outage"|"major_outage"|"", name?: string, only_show_if_degraded?: bool, group_id?: string, showcase?: bool, start_date?: string}
 ]: any -> record<id: string, page_id: string, group_id: string, created_at: string, updated_at: string, group: bool, name: string, description: string, position: int, status: string, showcase: bool, only_show_if_degraded: bool, automation_email: string, start_date: string> {
   let input = $in
@@ -1937,7 +2010,7 @@ export def "pages-components post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a component
@@ -1954,13 +2027,14 @@ export def "pages-components delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/components/($component_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a component
@@ -1977,13 +2051,14 @@ export def "pages-components get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, page_id: string, group_id: string, created_at: string, updated_at: string, group: bool, name: string, description: string, position: int, status: string, showcase: bool, only_show_if_degraded: bool, automation_email: string, start_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/components/($component_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a component
@@ -2001,6 +2076,7 @@ export def "pages-components patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --component: record # shape: {description?: string, status?: "operational"|"under_maintenance"|"degraded_performance"|"partial_outage"|"major_outage"|"", name?: string, only_show_if_degraded?: bool, group_id?: string, showcase?: bool, start_date?: string}
 ]: any -> record<id: string, page_id: string, group_id: string, created_at: string, updated_at: string, group: bool, name: string, description: string, position: int, status: string, showcase: bool, only_show_if_degraded: bool, automation_email: string, start_date: string> {
   let input = $in
@@ -2011,7 +2087,7 @@ export def "pages-components patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a component
@@ -2029,6 +2105,7 @@ export def "pages-components put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --component: record # shape: {description?: string, status?: "operational"|"under_maintenance"|"degraded_performance"|"partial_outage"|"major_outage"|"", name?: string, only_show_if_degraded?: bool, group_id?: string, showcase?: bool, start_date?: string}
 ]: any -> record<id: string, page_id: string, group_id: string, created_at: string, updated_at: string, group: bool, name: string, description: string, position: int, status: string, showcase: bool, only_show_if_degraded: bool, automation_email: string, start_date: string> {
   let input = $in
@@ -2039,7 +2116,7 @@ export def "pages-components put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get uptime data for a component
@@ -2056,13 +2133,14 @@ export def "pages-components-uptime get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<range_start: string, range_end: string, uptime_percentage: float, major_outage: int, partial_outage: int, warnings: string, id: string, name: string, related_events: record<id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/components/($component_id)/uptime")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove page access users from component
@@ -2079,13 +2157,14 @@ export def "pages-components-page-access-users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, page_id: string, group_id: string, created_at: string, updated_at: string, group: bool, name: string, description: string, position: int, status: string, showcase: bool, only_show_if_degraded: bool, automation_email: string, start_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/components/($component_id)/page_access_users")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add page access users to a component
@@ -2102,6 +2181,7 @@ export def "pages-components-page-access-users post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   page_access_user_ids: list # List of page access users to add to component
 ]: any -> record<id: string, page_id: string, group_id: string, created_at: string, updated_at: string, group: bool, name: string, description: string, position: int, status: string, showcase: bool, only_show_if_degraded: bool, automation_email: string, start_date: string> {
   let input = $in
@@ -2112,7 +2192,7 @@ export def "pages-components-page-access-users post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove page access groups from a component
@@ -2129,13 +2209,14 @@ export def "pages-components-page-access-groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, page_id: string, group_id: string, created_at: string, updated_at: string, group: bool, name: string, description: string, position: int, status: string, showcase: bool, only_show_if_degraded: bool, automation_email: string, start_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/components/($component_id)/page_access_groups")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add page access groups to a component
@@ -2152,13 +2233,14 @@ export def "pages-components-page-access-groups post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, page_id: string, group_id: string, created_at: string, updated_at: string, group: bool, name: string, description: string, position: int, status: string, showcase: bool, only_show_if_degraded: bool, automation_email: string, start_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/components/($component_id)/page_access_groups")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of component groups
@@ -2174,6 +2256,7 @@ export def "pages-component-groups list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page offset to fetch. Beginning February 28, 2023, this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
   --per-page: int # Number of results to return per page. Beginning February 28, 2023, a default and maximum limit of 100 will be imposed and this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
 ]: nothing -> table<id: string, page_id: string, name: string, description: string, components: string, position: string, created_at: string, updated_at: string> {
@@ -2183,7 +2266,7 @@ export def "pages-component-groups list" [
   let full_url = (build-url $base $"/pages/($page_id)/component-groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a component group
@@ -2200,6 +2283,7 @@ export def "pages-component-groups post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # Description of the component group.
   --component-group: record # shape: {components: list, name: string}
 ]: any -> record<id: string, page_id: string, name: string, description: string, components: string, position: string, created_at: string, updated_at: string> {
@@ -2211,7 +2295,7 @@ export def "pages-component-groups post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a component group
@@ -2228,13 +2312,14 @@ export def "pages-component-groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, page_id: string, name: string, description: string, components: string, position: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/component-groups/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a component group
@@ -2251,13 +2336,14 @@ export def "pages-component-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, page_id: string, name: string, description: string, components: string, position: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/component-groups/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a component group
@@ -2275,6 +2361,7 @@ export def "pages-component-groups patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # Updated description of the component group.
   --component-group: record # shape: {components: list, name: string}
 ]: any -> record<id: string, page_id: string, name: string, description: string, components: string, position: string, created_at: string, updated_at: string> {
@@ -2286,7 +2373,7 @@ export def "pages-component-groups patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a component group
@@ -2304,6 +2391,7 @@ export def "pages-component-groups put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # Updated description of the component group.
   --component-group: record # shape: {components: list, name: string}
 ]: any -> record<id: string, page_id: string, name: string, description: string, components: string, position: string, created_at: string, updated_at: string> {
@@ -2315,7 +2403,7 @@ export def "pages-component-groups put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get uptime data for a component group
@@ -2332,13 +2420,14 @@ export def "pages-component-groups-uptime get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<range_start: string, range_end: string, uptime_percentage: float, major_outage: int, partial_outage: int, warnings: string, id: string, name: string, related_events: record<component_id: string, incidents: record<id: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/component-groups/($id)/uptime")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add data points to metrics
@@ -2355,6 +2444,7 @@ export def "pages-metrics-data post-by-page_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   data: record # Add data points to metrics (e.g. {metric_id: [{value: 6.0274563, timestamp: 0}, {value: 6.0274563, timestamp: 0}]}) — shape: {metric_id?: list}
 ]: any -> record<metric_id: table<timestamp: int, value: float>> {
   let input = $in
@@ -2365,7 +2455,7 @@ export def "pages-metrics-data post-by-page_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of metrics
@@ -2381,6 +2471,7 @@ export def "pages-metrics list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page offset to fetch. Beginning February 28, 2023, this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
   --per-page: int # Number of results to return per page. Beginning February 28, 2023, a default and maximum limit of 100 will be imposed and this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
 ]: nothing -> record<id: string, metrics_provider_id: string, metric_identifier: string, name: string, display: bool, tooltip_description: string, backfilled: bool, y_axis_min: float, y_axis_max: float, y_axis_hidden: bool, suffix: string, decimal_places: int, most_recent_data_at: string, created_at: string, updated_at: string, last_fetched_at: string, backfill_percentage: int, reference_name: string> {
@@ -2390,7 +2481,7 @@ export def "pages-metrics list" [
   let full_url = (build-url $base $"/pages/($page_id)/metrics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a metric
@@ -2407,13 +2498,14 @@ export def "pages-metrics delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, metrics_provider_id: string, metric_identifier: string, name: string, display: bool, tooltip_description: string, backfilled: bool, y_axis_min: float, y_axis_max: float, y_axis_hidden: bool, suffix: string, decimal_places: int, most_recent_data_at: string, created_at: string, updated_at: string, last_fetched_at: string, backfill_percentage: int, reference_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/metrics/($metric_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a metric
@@ -2430,13 +2522,14 @@ export def "pages-metrics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, metrics_provider_id: string, metric_identifier: string, name: string, display: bool, tooltip_description: string, backfilled: bool, y_axis_min: float, y_axis_max: float, y_axis_hidden: bool, suffix: string, decimal_places: int, most_recent_data_at: string, created_at: string, updated_at: string, last_fetched_at: string, backfill_percentage: int, reference_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/metrics/($metric_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a metric
@@ -2454,6 +2547,7 @@ export def "pages-metrics patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --metric: record # shape: {name?: string, metric_identifier?: string}
 ]: any -> record<id: string, metrics_provider_id: string, metric_identifier: string, name: string, display: bool, tooltip_description: string, backfilled: bool, y_axis_min: float, y_axis_max: float, y_axis_hidden: bool, suffix: string, decimal_places: int, most_recent_data_at: string, created_at: string, updated_at: string, last_fetched_at: string, backfill_percentage: int, reference_name: string> {
   let input = $in
@@ -2464,7 +2558,7 @@ export def "pages-metrics patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a metric
@@ -2482,6 +2576,7 @@ export def "pages-metrics put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --metric: record # shape: {name?: string, metric_identifier?: string}
 ]: any -> record<id: string, metrics_provider_id: string, metric_identifier: string, name: string, display: bool, tooltip_description: string, backfilled: bool, y_axis_min: float, y_axis_max: float, y_axis_hidden: bool, suffix: string, decimal_places: int, most_recent_data_at: string, created_at: string, updated_at: string, last_fetched_at: string, backfill_percentage: int, reference_name: string> {
   let input = $in
@@ -2492,7 +2587,7 @@ export def "pages-metrics put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reset data for a metric
@@ -2509,13 +2604,14 @@ export def "pages-metrics-data delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, metrics_provider_id: string, metric_identifier: string, name: string, display: bool, tooltip_description: string, backfilled: bool, y_axis_min: float, y_axis_max: float, y_axis_hidden: bool, suffix: string, decimal_places: int, most_recent_data_at: string, created_at: string, updated_at: string, last_fetched_at: string, backfill_percentage: int, reference_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/metrics/($metric_id)/data")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add data to a metric
@@ -2533,6 +2629,7 @@ export def "pages-metrics-data post-by-page_id-metric_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {timestamp?: int, value?: float}
 ]: any -> record<data: record<timestamp: int, value: float>> {
   let input = $in
@@ -2543,7 +2640,7 @@ export def "pages-metrics-data post-by-page_id-metric_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a list of metric providers
@@ -2559,13 +2656,14 @@ export def "pages-metrics-providers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, type: string, disabled: bool, metric_base_uri: string, last_revalidated_at: string, created_at: string, updated_at: string, page_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/metrics_providers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a metric provider
@@ -2582,6 +2680,7 @@ export def "pages-metrics-providers post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --metrics-provider: record # shape: {email?: string, password?: string, api_key?: string, api_token?: string, application_key?: string, type?: string, metric_base_uri?: string}
 ]: any -> record<id: string, type: string, disabled: bool, metric_base_uri: string, last_revalidated_at: string, created_at: string, updated_at: string, page_id: int> {
   let input = $in
@@ -2592,7 +2691,7 @@ export def "pages-metrics-providers post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a metric provider
@@ -2609,13 +2708,14 @@ export def "pages-metrics-providers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, disabled: bool, metric_base_uri: string, last_revalidated_at: string, created_at: string, updated_at: string, page_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/metrics_providers/($metrics_provider_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a metric provider
@@ -2632,13 +2732,14 @@ export def "pages-metrics-providers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, type: string, disabled: bool, metric_base_uri: string, last_revalidated_at: string, created_at: string, updated_at: string, page_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/metrics_providers/($metrics_provider_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a metric provider
@@ -2656,6 +2757,7 @@ export def "pages-metrics-providers patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --metrics-provider: record # shape: {type?: string, metric_base_uri?: string}
 ]: any -> record<id: string, type: string, disabled: bool, metric_base_uri: string, last_revalidated_at: string, created_at: string, updated_at: string, page_id: int> {
   let input = $in
@@ -2666,7 +2768,7 @@ export def "pages-metrics-providers patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a metric provider
@@ -2684,6 +2786,7 @@ export def "pages-metrics-providers put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --metrics-provider: record # shape: {type?: string, metric_base_uri?: string}
 ]: any -> record<id: string, type: string, disabled: bool, metric_base_uri: string, last_revalidated_at: string, created_at: string, updated_at: string, page_id: int> {
   let input = $in
@@ -2694,7 +2797,7 @@ export def "pages-metrics-providers put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List metrics for a metric provider
@@ -2711,6 +2814,7 @@ export def "pages-metrics-providers-metrics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page offset to fetch. Beginning February 28, 2023, this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
   --per-page: int # Number of results to return per page. Beginning February 28, 2023, a default and maximum limit of 100 will be imposed and this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
 ]: nothing -> record<id: string, metrics_provider_id: string, metric_identifier: string, name: string, display: bool, tooltip_description: string, backfilled: bool, y_axis_min: float, y_axis_max: float, y_axis_hidden: bool, suffix: string, decimal_places: int, most_recent_data_at: string, created_at: string, updated_at: string, last_fetched_at: string, backfill_percentage: int, reference_name: string> {
@@ -2720,7 +2824,7 @@ export def "pages-metrics-providers-metrics get" [
   let full_url = (build-url $base $"/pages/($page_id)/metrics_providers/($metrics_provider_id)/metrics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a metric for a metric provider
@@ -2738,6 +2842,7 @@ export def "pages-metrics-providers-metrics post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --metric: record # shape: {name?: string, metric_identifier?: string, transform?: string, suffix?: string, y_axis_min?: int, y_axis_max?: int, y_axis_hidden?: bool, display?: bool, decimal_places?: int, tooltip_description?: string}
 ]: any -> record<id: string, metrics_provider_id: string, metric_identifier: string, name: string, display: bool, tooltip_description: string, backfilled: bool, y_axis_min: float, y_axis_max: float, y_axis_hidden: bool, suffix: string, decimal_places: int, most_recent_data_at: string, created_at: string, updated_at: string, last_fetched_at: string, backfill_percentage: int, reference_name: string> {
   let input = $in
@@ -2748,7 +2853,7 @@ export def "pages-metrics-providers-metrics post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get status embed config settings
@@ -2764,13 +2869,14 @@ export def "pages-status-embed-config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<page_id: string, position: string, incident_background_color: string, incident_text_color: string, maintenance_background_color: string, maintenance_text_color: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pages/($page_id)/status_embed_config")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update status embed config settings
@@ -2787,6 +2893,7 @@ export def "pages-status-embed-config patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status-embed-config: record # shape: {position?: string, incident_background_color?: string, incident_text_color?: string, maintenance_background_color?: string, maintenance_text_color?: string}
 ]: any -> record<page_id: string, position: string, incident_background_color: string, incident_text_color: string, maintenance_background_color: string, maintenance_text_color: string> {
   let input = $in
@@ -2797,7 +2904,7 @@ export def "pages-status-embed-config patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update status embed config settings
@@ -2814,6 +2921,7 @@ export def "pages-status-embed-config put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status-embed-config: record # shape: {position?: string, incident_background_color?: string, incident_text_color?: string, maintenance_background_color?: string, maintenance_text_color?: string}
 ]: any -> record<page_id: string, position: string, incident_background_color: string, incident_text_color: string, maintenance_background_color: string, maintenance_text_color: string> {
   let input = $in
@@ -2824,7 +2932,7 @@ export def "pages-status-embed-config put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a user's permissions
@@ -2841,13 +2949,14 @@ export def "organizations-permissions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<user_id: string, pages: record<page_id: string, page_configuration: bool, incident_manager: bool, maintenance_manager: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization_id)/permissions/($user_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user's role permissions
@@ -2865,6 +2974,7 @@ export def "organizations-permissions put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pages: record # shape: {page_id?: record}
 ]: any -> record<data: record<user_id: string, pages: record<page_id: string, page_configuration: bool, incident_manager: bool, maintenance_manager: bool>>> {
   let input = $in
@@ -2875,7 +2985,7 @@ export def "organizations-permissions put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a user
@@ -2892,13 +3002,14 @@ export def "organizations-users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, organization_id: string, email: string, first_name: string, last_name: string, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization_id)/users/($user_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of users
@@ -2914,6 +3025,7 @@ export def "organizations-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page offset to fetch. Beginning February 28, 2023, this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
   --per-page: int # Number of results to return per page. Beginning February 28, 2023, a default and maximum limit of 100 will be imposed and this endpoint will return paginated data even if this query parameter is not provided. (format: int32)
 ]: nothing -> table<id: string, organization_id: string, email: string, first_name: string, last_name: string, created_at: string, updated_at: string> {
@@ -2923,7 +3035,7 @@ export def "organizations-users get" [
   let full_url = (build-url $base $"/organizations/($organization_id)/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a user
@@ -2940,6 +3052,7 @@ export def "organizations-users post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   user: record # shape: {email?: string, password?: string, first_name?: string, last_name?: string}
 ]: any -> record<id: string, organization_id: string, email: string, first_name: string, last_name: string, created_at: string, updated_at: string> {
   let input = $in
@@ -2950,5 +3063,5 @@ export def "organizations-users post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

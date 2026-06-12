@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -76,7 +77,7 @@ def dataType-completer [] { ["boolean" "number" "object" "secret" "string"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "environments list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -108,6 +109,7 @@ export def "environments list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --expand: string
   --filter: string
@@ -125,7 +127,7 @@ export def "environments list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /environments
@@ -141,6 +143,7 @@ export def "environments createEnvironment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
@@ -163,7 +166,7 @@ export def "environments createEnvironment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /environments/{environmentID}
@@ -178,6 +181,7 @@ export def "environments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --expand: string
   --X-Ping-External-Session-ID: string
@@ -191,7 +195,7 @@ export def "environments get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /environments/{environmentID}
@@ -208,6 +212,7 @@ export def "environments replaceEnvironmentById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
@@ -231,7 +236,7 @@ export def "environments replaceEnvironmentById" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /environments/{environmentID}
@@ -246,6 +251,7 @@ export def "environments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
 ]: nothing -> any {
@@ -256,7 +262,7 @@ export def "environments delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /environments/{environmentID}/billOfMaterials
@@ -271,6 +277,7 @@ export def "environments-bill-of-materials get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
@@ -282,7 +289,7 @@ export def "environments-bill-of-materials get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /environments/{environmentID}/billOfMaterials
@@ -298,6 +305,7 @@ export def "environments-bill-of-materials replaceBillOfMaterialsByEnvironmentId
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
@@ -313,7 +321,7 @@ export def "environments-bill-of-materials replaceBillOfMaterialsByEnvironmentId
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /environments/{environmentID}/connectorInstances
@@ -328,6 +336,7 @@ export def "environments-connector-instances list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
 ]: nothing -> record<_embedded: record<connectorInstances: list<record>>, _links: record<environment: record<href: string, name: string, profile: string, title: string, type: string>, self: record<href: string, name: string, profile: string, title: string, type: string>>> {
@@ -338,7 +347,7 @@ export def "environments-connector-instances list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /environments/{environmentID}/connectorInstances
@@ -354,6 +363,7 @@ export def "environments-connector-instances createConnectorInstance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
   name: string
@@ -370,7 +380,7 @@ export def "environments-connector-instances createConnectorInstance" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /environments/{environmentID}/connectorInstances/{connectorInstanceID}
@@ -386,6 +396,7 @@ export def "environments-connector-instances get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
 ]: nothing -> record<_links: record<environment: record<href: string, name: string, profile: string, title: string, type: string>, self: record<href: string, name: string, profile: string, title: string, type: string>, connectorInstance_clone: record<href: string, name: string, profile: string, title: string, type: string>, applications: record<href: string, name: string, profile: string, title: string, type: string>, deviceAuthenticationPolicies: record<href: string, name: string, profile: string, title: string, type: string>, gateways: record<href: string, name: string, profile: string, title: string, type: string>, notificationsPolicies: record<href: string, name: string, profile: string, title: string, type: string>>, connector: record<id: string>, environment: record<id: string>, id: string, name: string, createdAt: string, properties: record, updatedAt: string> {
@@ -396,7 +407,7 @@ export def "environments-connector-instances get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /environments/{environmentID}/connectorInstances/{connectorInstanceID}
@@ -412,6 +423,7 @@ export def "environments-connector-instances createConnectorInstanceById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
   --body: record
@@ -425,7 +437,7 @@ export def "environments-connector-instances createConnectorInstanceById" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.pingidentity.connectorInstance.clone+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.pingidentity.connectorInstance.clone+json" $body
 }
 
 # PUT /environments/{environmentID}/connectorInstances/{connectorInstanceID}
@@ -442,6 +454,7 @@ export def "environments-connector-instances replaceConnectorInstanceById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
   name: string
@@ -458,7 +471,7 @@ export def "environments-connector-instances replaceConnectorInstanceById" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /environments/{environmentID}/connectorInstances/{connectorInstanceID}
@@ -474,6 +487,7 @@ export def "environments-connector-instances delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
 ]: nothing -> any {
@@ -484,7 +498,7 @@ export def "environments-connector-instances delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /environments/{environmentID}/connectors
@@ -499,6 +513,7 @@ export def "environments-connectors list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
 ]: nothing -> record<_embedded: record<connectors: list<record>>, _links: record<environment: record<href: string, name: string, profile: string, title: string, type: string>, self: record<href: string, name: string, profile: string, title: string, type: string>>> {
@@ -509,7 +524,7 @@ export def "environments-connectors list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /environments/{environmentID}/connectors/{connectorID}
@@ -525,6 +540,7 @@ export def "environments-connectors get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
 ]: nothing -> record<_links: record<environment: record<href: string, name: string, profile: string, title: string, type: string>, self: record<href: string, name: string, profile: string, title: string, type: string>>, createdAt: string, environment: record<id: string>, id: string, metadata: record<colors: record<canvas: string, canvasText: string, dark: string>, logos: record<canvas: record>, type: string, vendor: string>, name: string, version: string, description: string, updatedAt: string> {
@@ -535,7 +551,7 @@ export def "environments-connectors get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /environments/{environmentID}/connectors/{connectorID}/details
@@ -551,6 +567,7 @@ export def "environments-connectors-details get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
 ]: nothing -> record<environment: record<id: string>, _links: record<environment: record<href: string, name: string, profile: string, title: string, type: string>, self: record<href: string, name: string, profile: string, title: string, type: string>>, accountConfigView: record<items: list<record>, componentViewSize: string>, capabilities: record, credentialsView: record<items: list<record>>, flowSections: table<name: string, value: string>, properties: record, sections: table<name: string, value: string, default: bool>> {
@@ -561,7 +578,7 @@ export def "environments-connectors-details get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /environments/{environmentID}/davinciApplications
@@ -576,6 +593,7 @@ export def "environments-davinci-applications list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
 ]: nothing -> record<_links: record<environment: record<href: string, name: string, profile: string, title: string, type: string>, self: record<href: string, name: string, profile: string, title: string, type: string>>, _embedded: record<davinciApplications: list<record>>> {
@@ -586,7 +604,7 @@ export def "environments-davinci-applications list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /environments/{environmentID}/davinciApplications
@@ -601,6 +619,7 @@ export def "environments-davinci-applications createDavinciApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
   name: string
@@ -615,7 +634,7 @@ export def "environments-davinci-applications createDavinciApplication" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /environments/{environmentID}/davinciApplications/{davinciApplicationID}
@@ -631,6 +650,7 @@ export def "environments-davinci-applications get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
 ]: nothing -> record<_links: record<self: record<href: string, name: string, profile: string, title: string, type: string>, environment: record<href: string, name: string, profile: string, title: string, type: string>, flowPolicies: record<href: string, name: string, profile: string, title: string, type: string>, davinciApplication_rotateKey: record<href: string, name: string, profile: string, title: string, type: string>, davinciApplication_rotateSecret: record<href: string, name: string, profile: string, title: string, type: string>>, apiKey: record<enabled: bool, value: string>, environment: record<id: string>, id: string, name: string, oauth: record<clientSecret: string, enforceSignedRequestOpenid: bool, grantTypes: list<string>, logoutUris: list<string>, redirectUris: list<string>, scopes: list<string>, spJwksOpenid: string, spjwksUrl: string>, createdAt: string, updatedAt: string> {
@@ -641,7 +661,7 @@ export def "environments-davinci-applications get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /environments/{environmentID}/davinciApplications/{davinciApplicationID}
@@ -659,6 +679,7 @@ export def "environments-davinci-applications replaceDavinciApplicationById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
   name: string
@@ -675,7 +696,7 @@ export def "environments-davinci-applications replaceDavinciApplicationById" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /environments/{environmentID}/davinciApplications/{davinciApplicationID}
@@ -691,6 +712,7 @@ export def "environments-davinci-applications delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
 ]: nothing -> any {
@@ -701,7 +723,7 @@ export def "environments-davinci-applications delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /environments/{environmentID}/davinciApplications/{davinciApplicationID}/flowPolicies
@@ -717,6 +739,7 @@ export def "environments-davinci-applications-flow-policies list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
 ]: nothing -> record<_links: record<self: record<href: string, name: string, profile: string, title: string, type: string>, environment: record<href: string, name: string, profile: string, title: string, type: string>, davinciApplication: record<href: string, name: string, profile: string, title: string, type: string>>, _embedded: record<flowPolicies: list<record>>> {
@@ -727,7 +750,7 @@ export def "environments-davinci-applications-flow-policies list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /environments/{environmentID}/davinciApplications/{davinciApplicationID}/flowPolicies
@@ -745,6 +768,7 @@ export def "environments-davinci-applications-flow-policies createFlowPolicyByDa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
   flowDistributions: list # item shape: {id: string, version: float, ip?: list, successNodes?: list, weight?: float}
@@ -762,7 +786,7 @@ export def "environments-davinci-applications-flow-policies createFlowPolicyByDa
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /environments/{environmentID}/davinciApplications/{davinciApplicationID}/flowPolicies/{flowPolicyID}
@@ -779,6 +803,7 @@ export def "environments-davinci-applications-flow-policies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
 ]: nothing -> record<_links: record<self: record<href: string, name: string, profile: string, title: string, type: string>, environment: record<href: string, name: string, profile: string, title: string, type: string>, davinciApplication: record<href: string, name: string, profile: string, title: string, type: string>, flow__index_: record<href: string, name: string, profile: string, title: string, type: string>, version__flowId___index_: record<href: string, name: string, profile: string, title: string, type: string>>, environment: record<id: string>, flowDistributions: table<id: string, version: float, ip: list, successNodes: list, weight: float>, id: string, name: string, status: string, application: record<id: string>, createdAt: string, trigger: record<configuration: record<mfa: record, pwd: record>, type: string>, updatedAt: string> {
@@ -789,7 +814,7 @@ export def "environments-davinci-applications-flow-policies get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /environments/{environmentID}/davinciApplications/{davinciApplicationID}/flowPolicies/{flowPolicyID}
@@ -808,6 +833,7 @@ export def "environments-davinci-applications-flow-policies replaceFlowPolicyByI
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
   name: string # default: New Policy
@@ -825,7 +851,7 @@ export def "environments-davinci-applications-flow-policies replaceFlowPolicyByI
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /environments/{environmentID}/davinciApplications/{davinciApplicationID}/flowPolicies/{flowPolicyID}
@@ -842,6 +868,7 @@ export def "environments-davinci-applications-flow-policies delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
 ]: nothing -> any {
@@ -852,7 +879,7 @@ export def "environments-davinci-applications-flow-policies delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /environments/{environmentID}/davinciApplications/{davinciApplicationID}/flowPolicies/{flowPolicyID}/events
@@ -869,6 +896,7 @@ export def "environments-davinci-applications-flow-policies-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
 ]: nothing -> record<_links: record<self: record<href: string, name: string, profile: string, title: string, type: string>, environment: record<href: string, name: string, profile: string, title: string, type: string>>, _embedded: record<events: list<record>>> {
@@ -879,7 +907,7 @@ export def "environments-davinci-applications-flow-policies-events get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /environments/{environmentID}/davinciApplications/{davinciApplicationID}/key
@@ -895,6 +923,7 @@ export def "environments-davinci-applications-key rotateKeyByDavinciApplicationI
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
   --body: record
@@ -908,7 +937,7 @@ export def "environments-davinci-applications-key rotateKeyByDavinciApplicationI
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.pingidentity.davinciApplication.rotateKey+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.pingidentity.davinciApplication.rotateKey+json" $body
 }
 
 # POST /environments/{environmentID}/davinciApplications/{davinciApplicationID}/secret
@@ -924,6 +953,7 @@ export def "environments-davinci-applications-secret rotateSecretByDavinciApplic
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
   --body: record
@@ -937,7 +967,7 @@ export def "environments-davinci-applications-secret rotateSecretByDavinciApplic
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.pingidentity.davinciApplication.rotateSecret+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.pingidentity.davinciApplication.rotateSecret+json" $body
 }
 
 # GET /environments/{environmentID}/flowPolicies/{flowPolicyID}
@@ -953,6 +983,7 @@ export def "environments-flow-policies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
@@ -964,7 +995,7 @@ export def "environments-flow-policies get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /environments/{environmentID}/flows
@@ -979,6 +1010,7 @@ export def "environments-flows list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --attributes: string
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
@@ -991,7 +1023,7 @@ export def "environments-flows list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /environments/{environmentID}/flows
@@ -1011,6 +1043,7 @@ export def "environments-flows createFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
   name: string
@@ -1032,7 +1065,7 @@ export def "environments-flows createFlow" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /environments/{environmentID}/flows/{flowID}
@@ -1048,6 +1081,7 @@ export def "environments-flows get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --attributes: string
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
@@ -1060,7 +1094,7 @@ export def "environments-flows get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /environments/{environmentID}/flows/{flowID}
@@ -1081,6 +1115,7 @@ export def "environments-flows replaceFlowById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
   name: string
@@ -1102,7 +1137,7 @@ export def "environments-flows replaceFlowById" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /environments/{environmentID}/flows/{flowID}
@@ -1118,6 +1153,7 @@ export def "environments-flows delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
 ]: nothing -> any {
@@ -1128,7 +1164,7 @@ export def "environments-flows delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /environments/{environmentID}/flows/{flowID}#clone+json
@@ -1144,6 +1180,7 @@ export def "environments-flows cloneFlowByIdAsCloneJson" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
   --body: record
@@ -1157,7 +1194,7 @@ export def "environments-flows cloneFlowByIdAsCloneJson" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.pingidentity.flow.clone+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.pingidentity.flow.clone+json" $body
 }
 
 # POST /environments/{environmentID}/flows/{flowID}#deploy+json
@@ -1173,6 +1210,7 @@ export def "environments-flows deployFlowByIdAsDeployJson" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
   --body: record
@@ -1186,7 +1224,7 @@ export def "environments-flows deployFlowByIdAsDeployJson" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.pingidentity.flow.deploy+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.pingidentity.flow.deploy+json" $body
 }
 
 # POST /environments/{environmentID}/flows/{flowID}#validate+json
@@ -1202,6 +1240,7 @@ export def "environments-flows validateFlowByIdAsValidateJson" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
   --body: record
@@ -1215,7 +1254,7 @@ export def "environments-flows validateFlowByIdAsValidateJson" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.pingidentity.flow.validate+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.pingidentity.flow.validate+json" $body
 }
 
 # PUT /environments/{environmentID}/flows/{flowID}/enabled
@@ -1231,6 +1270,7 @@ export def "environments-flows-enabled updateEnabledByFlowId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
   --enabled: oneof<nothing, bool>
@@ -1245,7 +1285,7 @@ export def "environments-flows-enabled updateEnabledByFlowId" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /environments/{environmentID}/flows/{flowID}/versions
@@ -1261,6 +1301,7 @@ export def "environments-flows-versions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
 ]: nothing -> record<_embedded: record<versions: list<record>>, _links: record<environment: record<href: string, name: string, profile: string, title: string, type: string>, self: record<href: string, name: string, profile: string, title: string, type: string>>> {
@@ -1271,7 +1312,7 @@ export def "environments-flows-versions list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /environments/{environmentID}/flows/{flowID}/versions/{versionID}
@@ -1288,6 +1329,7 @@ export def "environments-flows-versions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
 ]: nothing -> record<_links: record<environment: record<href: string, name: string, profile: string, title: string, type: string>, self: record<href: string, name: string, profile: string, title: string, type: string>, details: record<href: string, name: string, profile: string, title: string, type: string>, flow_export: record<href: string, name: string, profile: string, title: string, type: string>, flow_revert: record<href: string, name: string, profile: string, title: string, type: string>>, environment: record<id: string>, flow: record<id: string, name: string>, version: float, alias: string, clonedFrom: float, createdAt: string, deployedAt: string, updatedAt: string> {
@@ -1298,7 +1340,7 @@ export def "environments-flows-versions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE /environments/{environmentID}/flows/{flowID}/versions/{versionID}
@@ -1315,6 +1357,7 @@ export def "environments-flows-versions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
 ]: nothing -> any {
@@ -1325,7 +1368,7 @@ export def "environments-flows-versions delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /environments/{environmentID}/flows/{flowID}/versions/{versionID}/alias
@@ -1342,6 +1385,7 @@ export def "environments-flows-versions-alias replaceAliasByFlowIdAndVersionId" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
   alias: string
@@ -1356,7 +1400,7 @@ export def "environments-flows-versions-alias replaceAliasByFlowIdAndVersionId" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /environments/{environmentID}/flows/{flowID}/versions/{versionID}/details
@@ -1373,6 +1417,7 @@ export def "environments-flows-versions-details get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
@@ -1385,7 +1430,7 @@ export def "environments-flows-versions-details get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /environments/{environmentID}/snapshots
@@ -1400,6 +1445,7 @@ export def "environments-snapshots createSnapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
@@ -1416,7 +1462,7 @@ export def "environments-snapshots createSnapshot" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /environments/{environmentID}/snapshots/{snapshotID}
@@ -1432,6 +1478,7 @@ export def "environments-snapshots get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
   --filter: string
   --X-Ping-External-Session-ID: string
@@ -1445,7 +1492,7 @@ export def "environments-snapshots get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /environments/{environmentID}/snapshots/{snapshotID}/versions
@@ -1461,6 +1508,7 @@ export def "environments-snapshots-versions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
@@ -1472,7 +1520,7 @@ export def "environments-snapshots-versions list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /environments/{environmentID}/snapshots/{snapshotID}/versions/{versionID}
@@ -1489,6 +1537,7 @@ export def "environments-snapshots-versions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string
   --attributes: string
   --filter: string
@@ -1503,7 +1552,7 @@ export def "environments-snapshots-versions get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /environments/{environmentID}/totalIdentities
@@ -1518,6 +1567,7 @@ export def "environments-total-identities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --filter: string
   --X-Ping-External-Session-ID: string
@@ -1531,7 +1581,7 @@ export def "environments-total-identities get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/hal+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /environments/{environmentID}/variables
@@ -1546,6 +1596,7 @@ export def "environments-variables list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # format: int32, default: 10
   --cursor: string
   --filter: string
@@ -1560,7 +1611,7 @@ export def "environments-variables list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /environments/{environmentID}/variables
@@ -1576,6 +1627,7 @@ export def "environments-variables createVariable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
   name: string
@@ -1598,7 +1650,7 @@ export def "environments-variables createVariable" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /environments/{environmentID}/variables/{variableID}
@@ -1614,6 +1666,7 @@ export def "environments-variables get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
 ]: nothing -> record<_links: record<environment: record<href: string, name: string, profile: string, title: string, type: string>, self: record<href: string, name: string, profile: string, title: string, type: string>>, dataType: string, environment: record<id: string>, id: string, name: string, context: string, createdAt: string, displayName: string, flow: record<id: string>, max: float, min: float, mutable: bool, updatedAt: string, value: any> {
@@ -1624,7 +1677,7 @@ export def "environments-variables get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /environments/{environmentID}/variables/{variableID}
@@ -1641,6 +1694,7 @@ export def "environments-variables replaceVariableById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
   name: string
@@ -1663,7 +1717,7 @@ export def "environments-variables replaceVariableById" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # DELETE /environments/{environmentID}/variables/{variableID}
@@ -1679,6 +1733,7 @@ export def "environments-variables delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
 ]: nothing -> any {
@@ -1689,5 +1744,5 @@ export def "environments-variables delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

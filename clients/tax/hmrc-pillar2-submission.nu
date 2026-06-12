@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "organisations-pillar-two-setup-organisation get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -100,6 +101,7 @@ export def "organisations-pillar-two-setup-organisation get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer token for authentication
   --X-Pillar2-Id: string # Pillar 2 Id - Pattern: [A-Z0-9]{1,15}
   --Accept: string # Specifies the expected response format as versioned JSON from the HMRC API (v1.0). If not provided, it will default to application/vnd.hmrc.1.0+json. (e.g. application/vnd.hmrc.1.0+json)
@@ -111,7 +113,7 @@ export def "organisations-pillar-two-setup-organisation get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Test Organisation
@@ -129,6 +131,7 @@ export def "organisations-pillar-two-setup-organisation updateTestOrganisation" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer token for authentication
   --X-Pillar2-Id: string # Pillar 2 Id - Pattern: [A-Z0-9]{1,15}
   --Accept: string # Specifies the expected response format as versioned JSON from the HMRC API (v1.0). If not provided, it will default to application/vnd.hmrc.1.0+json. (e.g. application/vnd.hmrc.1.0+json)
@@ -146,7 +149,7 @@ export def "organisations-pillar-two-setup-organisation updateTestOrganisation" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Test Organisation
@@ -164,6 +167,7 @@ export def "organisations-pillar-two-setup-organisation createTestOrganisation" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer token for authentication
   --X-Pillar2-Id: string # Pillar 2 Id - Pattern: [A-Z0-9]{1,15}
   --Accept: string # Specifies the expected response format as versioned JSON from the HMRC API (v1.0). If not provided, it will default to application/vnd.hmrc.1.0+json. (e.g. application/vnd.hmrc.1.0+json)
@@ -181,7 +185,7 @@ export def "organisations-pillar-two-setup-organisation createTestOrganisation" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Test Organisation
@@ -196,6 +200,7 @@ export def "organisations-pillar-two-setup-organisation delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer token for authentication
   --X-Pillar2-Id: string # Pillar 2 Id - Pattern: [A-Z0-9]{1,15}
   --Accept: string # Specifies the expected response format as versioned JSON from the HMRC API (v1.0). If not provided, it will default to application/vnd.hmrc.1.0+json. (e.g. application/vnd.hmrc.1.0+json)
@@ -207,7 +212,7 @@ export def "organisations-pillar-two-setup-organisation delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create A Test GloBE Information Return
@@ -222,6 +227,7 @@ export def "organisations-pillar-two-setup-globe-information-return createGIR" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer token for authentication
   --X-Pillar2-Id: string # Pillar 2 Id - Pattern: [A-Z0-9]{1,15}
   --Accept: string # Specifies the expected response format as versioned JSON from the HMRC API (v1.0). If not provided, it will default to application/vnd.hmrc.1.0+json. (e.g. application/vnd.hmrc.1.0+json)
@@ -238,7 +244,7 @@ export def "organisations-pillar-two-setup-globe-information-return createGIR" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Amend UK Tax Return
@@ -254,6 +260,7 @@ export def "organisations-pillar-two-uk-tax-return amendUKTR" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer token for authentication
   --X-Pillar2-Id: string # Pillar2 ID for the submission
   --Accept: string # Specifies the expected response format as versioned JSON from the HMRC API (v1.0). If not provided, it will default to application/vnd.hmrc.1.0+json. (e.g. application/vnd.hmrc.1.0+json)
@@ -273,7 +280,7 @@ export def "organisations-pillar-two-uk-tax-return amendUKTR" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Submit UK Tax Return
@@ -289,6 +296,7 @@ export def "organisations-pillar-two-uk-tax-return submitUKTR" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer token for authentication
   --X-Pillar2-Id: string # Pillar2 ID for the submission
   --Accept: string # Specifies the expected response format as versioned JSON from the HMRC API (v1.0). If not provided, it will default to application/vnd.hmrc.1.0+json. (e.g. application/vnd.hmrc.1.0+json)
@@ -308,7 +316,7 @@ export def "organisations-pillar-two-uk-tax-return submitUKTR" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Submit Below-Threshold Notification
@@ -323,6 +331,7 @@ export def "organisations-pillar-two-below-threshold-notification submitBTN" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Authorization: string # Bearer token for authentication
   --X-Pillar2-Id: string # Pillar2 ID for the submission
   --Accept: string # Specifies the expected response format as versioned JSON from the HMRC API (v1.0). If not provided, it will default to application/vnd.hmrc.1.0+json. (e.g. application/vnd.hmrc.1.0+json)
@@ -339,7 +348,7 @@ export def "organisations-pillar-two-below-threshold-notification submitBTN" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve Obligations and Submissions
@@ -354,6 +363,7 @@ export def "organisations-pillar-two-obligations-and-submissions retrieveData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromDate: string
   --toDate: string
 ]: nothing -> record<processingDate: string, accountingPeriodDetails: table<startDate: string, endDate: string, dueDate: string, underEnquiry: bool, obligations: list>> {
@@ -363,7 +373,7 @@ export def "organisations-pillar-two-obligations-and-submissions retrieveData" [
   let full_url = (build-url $base "/organisations/pillar-two/obligations-and-submissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve Overseas Return Notification
@@ -378,6 +388,7 @@ export def "organisations-pillar-two-overseas-return-notification retrieveORN" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountingPeriodFrom: string # Period start date (format: date)
   --accountingPeriodTo: string # Period end date (format: date)
   --Authorization: string # Bearer token for authentication
@@ -392,7 +403,7 @@ export def "organisations-pillar-two-overseas-return-notification retrieveORN" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Amend Overseas Return Notification
@@ -407,6 +418,7 @@ export def "organisations-pillar-two-overseas-return-notification amendORN" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pillar2-Id: string # Pillar2 ID for the submission.
   --Authorization: string # Bearer token for authentication
   --Accept: string # Specifies the expected response format as versioned JSON from the HMRC API (v1.0). If not provided, it will default to application/vnd.hmrc.1.0+json. (e.g. application/vnd.hmrc.1.0+json)
@@ -428,7 +440,7 @@ export def "organisations-pillar-two-overseas-return-notification amendORN" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Submit Overseas Return Notification
@@ -443,6 +455,7 @@ export def "organisations-pillar-two-overseas-return-notification submitORN" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pillar2-Id: string # Pillar2 ID for the submission.
   --Authorization: string # Bearer token for authentication
   --Accept: string # Specifies the expected response format as versioned JSON from the HMRC API (v1.0). If not provided, it will default to application/vnd.hmrc.1.0+json. (e.g. application/vnd.hmrc.1.0+json)
@@ -464,7 +477,7 @@ export def "organisations-pillar-two-overseas-return-notification submitORN" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve Account Activity
@@ -479,6 +492,7 @@ export def "organisations-pillar-two-account-activity retrieveAccountActivity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromDate: string # Start of period to retrieve activity from. (format: date)
   --toDate: string # End of period to retrieve activity from. (format: date)
   --Authorization: string # Bearer token for authentication
@@ -493,5 +507,5 @@ export def "organisations-pillar-two-account-activity retrieveAccountActivity" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

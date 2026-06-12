@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -70,7 +71,7 @@ def state-completer [] { ["failed" "gateway_processing_failed" "gateway_processi
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "gateways-optionsjson optionslist" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,13 +104,14 @@ export def "gateways-optionsjson optionslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<gateways: table<gateway_type: string, name: string, auth_modes: list, characteristics: list, payment_methods: list, gateway_specific_fields: list, supported_countries: list, supported_cardtypes: list, regions: list, homepage: string, company_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/gateways_options.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List created gateways
@@ -124,6 +126,7 @@ export def "gatewaysjson gatewayslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string@order-completer # The order of the returned list. Default is `asc`, which returns the oldest records first. To list newer records first, use `desc`.
   --since-token: string # The token of the item to start from (e.g., the last token received in the previous list if iterating through records)
 ]: nothing -> record<gateways: table<token: string, name: string, gateway_type: string, state: string, redacted: bool, credentials: list, characteristics: list, payment_methods: list, gateway_specific_fields: list>> {
@@ -133,7 +136,7 @@ export def "gatewaysjson gatewayslist" [
   let full_url = (build-url $base "/gateways.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create gateway
@@ -149,6 +152,7 @@ export def "gatewaysjson gatewayscreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --gateway: record # shape: {gateway_type: string, description?: any}
 ]: any -> record<gateway: record<token: string, name: string, gateway_type: string, state: string, redacted: bool, credentials: list<any>, characteristics: list<string>, payment_methods: list<string>, gateway_specific_fields: list<string>>> {
   let input = $in
@@ -159,7 +163,7 @@ export def "gatewaysjson gatewayscreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Show gateway
@@ -175,13 +179,14 @@ export def "gateways gatewaysshow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<gateway: record<token: string, name: string, gateway_type: string, state: string, redacted: bool, credentials: list<any>, characteristics: list<string>, payment_methods: list<string>, gateway_specific_fields: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/gateways/($gateway_token).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a gateway
@@ -198,6 +203,7 @@ export def "gateways gatewaysupdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --gateway: record # shape: {description?: any}
 ]: any -> record<gateway: record<token: string, name: string, gateway_type: string, state: string, redacted: bool, credentials: list<any>, characteristics: list<string>, payment_methods: list<string>, gateway_specific_fields: list<string>>> {
   let input = $in
@@ -208,7 +214,7 @@ export def "gateways gatewaysupdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retain
@@ -224,13 +230,14 @@ export def "gateways-retainjson gatewaysretain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/gateways/($gateway_token)/retain.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Redact
@@ -246,13 +253,14 @@ export def "gateways-redactjson gatewaysredact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/gateways/($gateway_token)/redact.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Transactions
@@ -268,6 +276,7 @@ export def "gateways-transactionsjson transactions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string@order-completer # The order of the returned list. Default is `asc`, which returns the oldest records first. To list newer records first, use `desc`.
   --since-token: string # The token of the item to start from (e.g., the last token received in the previous list if iterating through records)
   --state: string@state-completer # The transaction state on which to filter the returned list. Can be one of `succeeded`, `failed`, `gateway_processing_failed`, `gateway_processing_result_unknown`.
@@ -278,7 +287,7 @@ export def "gateways-transactionsjson transactions" [
   let full_url = (build-url $base $"/gateways/($gateway_token)/transactions.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List supported receivers
@@ -293,13 +302,14 @@ export def "receivers-optionsjson optionslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<receivers: table<name: any, receiver_type: any, hostnames: any, company_name: any>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/receivers_options.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List created receivers
@@ -314,6 +324,7 @@ export def "receiversjson receiverslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string@order-completer # The order of the returned list. Default is `asc`, which returns the oldest records first. To list newer records first, use `desc`.
   --since-token: string # The token of the item to start from (e.g., the last token received in the previous list if iterating through records)
 ]: nothing -> record<receivers: table<company_name: any, token: any, receiver_type: any, hostnames: any, state: string, credentials: list, protocol_user: any>> {
@@ -323,7 +334,7 @@ export def "receiversjson receiverslist" [
   let full_url = (build-url $base "/receivers.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create receiver
@@ -339,6 +350,7 @@ export def "receiversjson receiverscreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --receiver: record # shape: {receiver_type: any, hostnames?: any, credentials?: list, protocol?: record}
 ]: any -> record<receiver: record<company_name: any, token: any, receiver_type: any, hostnames: any, state: string, credentials: list<record>, protocol_user: any>> {
   let input = $in
@@ -349,7 +361,7 @@ export def "receiversjson receiverscreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Show receiver
@@ -365,13 +377,14 @@ export def "receivers receiversshow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<receiver: record<company_name: any, token: any, receiver_type: any, hostnames: any, state: string, credentials: list<record>, protocol_user: any>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/receivers/($receiver_token).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update receiver
@@ -388,6 +401,7 @@ export def "receivers receiversupdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --receiver: record # shape: {credentials: list}
 ]: any -> any {
   let input = $in
@@ -398,7 +412,7 @@ export def "receivers receiversupdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Redact receiver
@@ -414,13 +428,14 @@ export def "receivers-redactjson receiversredact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/receivers/($receiver_token)/redact.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create payment method
@@ -436,6 +451,7 @@ export def "payment-methodsjson methodscreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --payment-method: record # shape: {credit_card?: record, bank_account?: record, android_pay?: record, google_pay?: record, apple_pay?: record, payment_method_type?: any, reference?: any, gateway_type?: any, retained?: any, email?: any, first_name?: string, last_name?: string, address_1?: string, address_2?: string, city?: string, state?: string, zip?: string, country?: string, allow_blank_name?: bool, allow_expired_date?: bool, allow_blank_date?: bool, eligible_for_card_updater?: bool, metadata?: record, data?: any}
 ]: any -> any {
   let input = $in
@@ -446,7 +462,7 @@ export def "payment-methodsjson methodscreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List
@@ -461,6 +477,7 @@ export def "payment-methodsjson methodslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string@order-completer # The order of the returned list. Default is `asc`, which returns the oldest records first. To list newer records first, use `desc`.
   --since-token: string # The token of the item to start from (e.g., the last token received in the previous list if iterating through records)
   --metadata: string # A metadata key/value pair represented as a hash (e.g. `metadata[key]=value`).
@@ -472,7 +489,7 @@ export def "payment-methodsjson methodslist" [
   let full_url = (build-url $base "/payment_methods.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Show payment method
@@ -488,13 +505,14 @@ export def "payment-methods methodsshow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<payment_method: record<token: any, created_at: any, updated_at: any, email: any, data: any, metadata: record, storage_state: any, redacted: any, test: any, payment_method_type: any, errors: list<any>, last_four_digits: any, first_six_digits: any, card_type: string, first_name: any, last_name: any, full_name: any, address1: any, address2: any, city: any, state: any, zip: any, country: any, phone_number: any, company: any, shipping_address1: any, shipping_address2: any, shipping_city: any, shipping_state: any, shipping_zip: any, shipping_country: any, shipping_phone_number: any, verification_value: any, number: any, month: any, year: any, account_type: any, account_holder_type: any, routing_number_display_digits: any, account_number_display_digits: any, third_party_token: any, gateway_type: any>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/payment_methods/($payment_method_token).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update payment method
@@ -511,6 +529,7 @@ export def "payment-methods methodsupdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --payment-method: record # shape: {allow_blank_name?: bool, allow_expired_date?: bool, allow_blank_date?: bool, eligible_for_card_updater?: bool, metadata?: record}
 ]: any -> record<payment_method: record<token: any, created_at: any, updated_at: any, email: any, data: any, metadata: record, storage_state: any, redacted: any, test: any, payment_method_type: any, errors: list<any>, last_four_digits: any, first_six_digits: any, card_type: string, first_name: any, last_name: any, full_name: any, address1: any, address2: any, city: any, state: any, zip: any, country: any, phone_number: any, company: any, shipping_address1: any, shipping_address2: any, shipping_city: any, shipping_state: any, shipping_zip: any, shipping_country: any, shipping_phone_number: any, verification_value: any, number: any, month: any, year: any, account_type: any, account_holder_type: any, routing_number_display_digits: any, account_number_display_digits: any, third_party_token: any, gateway_type: any>> {
   let input = $in
@@ -521,7 +540,7 @@ export def "payment-methods methodsupdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete metadata
@@ -537,6 +556,7 @@ export def "payment-methods-metadatajson metadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --keys: list # An array of metadata key whose key/value pairs will be deleted. If a metadata key does not already exist, it will be ignored.
 ]: any -> record<payment_method: record<token: any, created_at: any, updated_at: any, email: any, data: any, metadata: record, storage_state: any, redacted: any, test: any, payment_method_type: any, errors: list<any>, last_four_digits: any, first_six_digits: any, card_type: string, first_name: any, last_name: any, full_name: any, address1: any, address2: any, city: any, state: any, zip: any, country: any, phone_number: any, company: any, shipping_address1: any, shipping_address2: any, shipping_city: any, shipping_state: any, shipping_zip: any, shipping_country: any, shipping_phone_number: any, verification_value: any, number: any, month: any, year: any, account_type: any, account_holder_type: any, routing_number_display_digits: any, account_number_display_digits: any, third_party_token: any, gateway_type: any>> {
   let input = $in
@@ -547,7 +567,7 @@ export def "payment-methods-metadatajson metadata" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retain payment method
@@ -563,13 +583,14 @@ export def "payment-methods-retainjson methodsretain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/payment_methods/($payment_method_token)/retain.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Store payment method
@@ -586,6 +607,7 @@ export def "gateways-storejson gatewaysstore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --transaction: record # shape: {payment_method_token: any, currency_code?: any}
 ]: any -> any {
   let input = $in
@@ -596,7 +618,7 @@ export def "gateways-storejson gatewaysstore" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Redact payment method
@@ -613,6 +635,7 @@ export def "payment-methods-redactjson methodsredact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --transaction: record # shape: {remove_from_gateway?: any}
 ]: any -> any {
   let input = $in
@@ -623,7 +646,7 @@ export def "payment-methods-redactjson methodsredact" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Recache
@@ -640,6 +663,7 @@ export def "payment-methods-recachejson methodsrecache" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --payment-method: record # shape: {credit_card?: record}
 ]: any -> any {
   let input = $in
@@ -650,7 +674,7 @@ export def "payment-methods-recachejson methodsrecache" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Transactions
@@ -666,6 +690,7 @@ export def "payment-methods-transactionsjson transactions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string@order-completer # The order of the returned list. Default is `asc`, which returns the oldest records first. To list newer records first, use `desc`.
   --since-token: string # The token of the item to start from (e.g., the last token received in the previous list if iterating through records)
 ]: nothing -> record<transactions: table<token: string, created_at: any, updated_at: any, succeeded: bool, transaction_type: any, retained: bool, state: any, message_key: any, message: string, amount: int, gateway_transaction_id: any, retain_on_success: any, payment_method_added: any, on_test_gateway: any, response: any, payment_methods_submitted: any, payment_methods_included: any, payment_methods_excluded: any, gateway: record, receiver: record, payment_method: record, basis_payment_method: record>> {
@@ -675,7 +700,7 @@ export def "payment-methods-transactionsjson transactions" [
   let full_url = (build-url $base $"/payment_methods/($payment_method_token)/transactions.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List certificates
@@ -690,6 +715,7 @@ export def "certificatesjson certificateslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string@order-completer # The order of the returned list. Default is `asc`, which returns the oldest records first. To list newer records first, use `desc`.
   --since-token: string # The token of the item to start from (e.g., the last token received in the previous list if iterating through records)
 ]: nothing -> record<certificates: table<token: any, created_at: any, updated_at: any, algorithm: any, cn: any, o: any, ou: any, c: any, st: any, l: any, email_address: any, public_key: any, public_key_hash: any, csr: any, pem: any>> {
@@ -699,7 +725,7 @@ export def "certificatesjson certificateslist" [
   let full_url = (build-url $base "/certificates.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create certificate
@@ -715,6 +741,7 @@ export def "certificatesjson certificatescreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --certificate: record # shape: {algorithm: "ec-prime256v1", cn: any, o?: any, ou?: any, c?: any, st?: any, l?: any, email_address?: any}
 ]: any -> record<certificate: record<token: any, created_at: any, updated_at: any, algorithm: any, cn: any, o: any, ou: any, c: any, st: any, l: any, email_address: any, public_key: any, public_key_hash: any, csr: any, pem: any>> {
   let input = $in
@@ -725,7 +752,7 @@ export def "certificatesjson certificatescreate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update certificate
@@ -742,6 +769,7 @@ export def "certificates certificatesupdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --certificate: record # shape: {pem: any}
 ]: any -> record<certificate: record<token: any, created_at: any, updated_at: any, algorithm: any, cn: any, o: any, ou: any, c: any, st: any, l: any, email_address: any, public_key: any, public_key_hash: any, csr: any, pem: any>> {
   let input = $in
@@ -752,7 +780,7 @@ export def "certificates certificatesupdate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List transactions
@@ -767,6 +795,7 @@ export def "transactionsjson transactionslist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string@order-completer # The order of the returned list. Default is `asc`, which returns the oldest records first. To list newer records first, use `desc`.
   --since-token: string # The token of the item to start from (e.g., the last token received in the previous list if iterating through records)
   --state: string@state-completer # The transaction state on which to filter the returned list. Can be one of `succeeded`, `failed`, `gateway_processing_failed`, `gateway_processing_result_unknown`.
@@ -778,7 +807,7 @@ export def "transactionsjson transactionslist" [
   let full_url = (build-url $base "/transactions.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Show transaction
@@ -794,13 +823,14 @@ export def "transactions transactionsshow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<payment_method: record<token: string, created_at: any, updated_at: any, succeeded: bool, transaction_type: any, retained: bool, state: any, message_key: any, message: string, amount: int, gateway_transaction_id: any, retain_on_success: any, payment_method_added: any, on_test_gateway: any, response: any, payment_methods_submitted: any, payment_methods_included: any, payment_methods_excluded: any, gateway: record<token: string, name: string, gateway_type: string, state: string, redacted: bool, credentials: list, characteristics: list, payment_methods: list, gateway_specific_fields: list>, receiver: record<company_name: any, token: any, receiver_type: any, hostnames: any, state: string, credentials: list, protocol_user: any>, payment_method: record<token: any, created_at: any, updated_at: any, email: any, data: any, metadata: record, storage_state: any, redacted: any, test: any, payment_method_type: any, errors: list, last_four_digits: any, first_six_digits: any, card_type: string, first_name: any, last_name: any, full_name: any, address1: any, address2: any, city: any, state: any, zip: any, country: any, phone_number: any, company: any, shipping_address1: any, shipping_address2: any, shipping_city: any, shipping_state: any, shipping_zip: any, shipping_country: any, shipping_phone_number: any, verification_value: any, number: any, month: any, year: any, account_type: any, account_holder_type: any, routing_number_display_digits: any, account_number_display_digits: any, third_party_token: any, gateway_type: any>, basis_payment_method: record<token: any, created_at: any, updated_at: any, email: any, data: any, metadata: record, storage_state: any, redacted: any, test: any, payment_method_type: any, errors: list, last_four_digits: any, first_six_digits: any, card_type: string, first_name: any, last_name: any, full_name: any, address1: any, address2: any, city: any, state: any, zip: any, country: any, phone_number: any, company: any, shipping_address1: any, shipping_address2: any, shipping_city: any, shipping_state: any, shipping_zip: any, shipping_country: any, shipping_phone_number: any, verification_value: any, number: any, month: any, year: any, account_type: any, account_holder_type: any, routing_number_display_digits: any, account_number_display_digits: any, third_party_token: any, gateway_type: any>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/transactions/($transaction_token).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Transcript
@@ -816,13 +846,14 @@ export def "transactions-transcript transactionstranscript" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/transactions/($transaction_token)/transcript")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Purchase
@@ -838,6 +869,7 @@ export def "gateways-purchasejson gatewayspurchase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --transaction: any
 ]: any -> any {
   let input = $in
@@ -848,7 +880,7 @@ export def "gateways-purchasejson gatewayspurchase" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reference purchase
@@ -865,6 +897,7 @@ export def "transactions-purchasejson transactionspurchase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --transaction: record # shape: {amount: int, currency_code: any, order_id?: any, description?: any, retain_on_success?: any, ip?: any, email?: any, shipping_address?: record, allow_blank_name?: bool, allow_expired_date?: bool, allow_blank_date?: bool}
 ]: any -> any {
   let input = $in
@@ -875,7 +908,7 @@ export def "transactions-purchasejson transactionspurchase" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authorize
@@ -891,6 +924,7 @@ export def "gateways-authorizejson gatewaysauthorize" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --transaction: any
 ]: any -> any {
   let input = $in
@@ -901,7 +935,7 @@ export def "gateways-authorizejson gatewaysauthorize" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Capture
@@ -918,6 +952,7 @@ export def "transactions-capturejson transactionscapture" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --transaction: record # shape: {amount?: any, currency_code?: any}
 ]: any -> any {
   let input = $in
@@ -928,7 +963,7 @@ export def "transactions-capturejson transactionscapture" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Void
@@ -944,13 +979,14 @@ export def "transactions-voidjson transactionsvoid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/transactions/($transaction_token)/void.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Credit (refund)
@@ -967,6 +1003,7 @@ export def "transactions-creditjson transactionscredit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --transaction: record # shape: {amount?: any, currency_code?: any}
 ]: any -> any {
   let input = $in
@@ -977,7 +1014,7 @@ export def "transactions-creditjson transactionscredit" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # General credit
@@ -994,6 +1031,7 @@ export def "gateways-general-creditjson credit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --transaction: record # shape: {payment_method_token: any, amount: any, currency_code: any, order_id?: any, description?: any, continue_caching?: any, ip?: any, email?: any}
 ]: any -> any {
   let input = $in
@@ -1004,7 +1042,7 @@ export def "gateways-general-creditjson credit" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Verify
@@ -1021,6 +1059,7 @@ export def "gateways-verifyjson gatewaysverify" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --transaction: any # shape: {payment_method_token?: any, retain_on_success?: any, currency_code?: any, ip?: any}
 ]: any -> any {
   let input = $in
@@ -1031,7 +1070,7 @@ export def "gateways-verifyjson gatewaysverify" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deliver
@@ -1048,6 +1087,7 @@ export def "receivers-deliverjson receiversdeliver" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --delivery: any # shape: {continue_caching?: any, payment_method_token?: any, url?: any, request_method?: any, headers?: any, body?: any, encode_response?: any}
 ]: any -> any {
   let input = $in
@@ -1058,7 +1098,7 @@ export def "receivers-deliverjson receiversdeliver" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Export
@@ -1075,6 +1115,7 @@ export def "receivers-exportjson receiversexport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --delivery: any # shape: {payment_method_tokens?: list, payment_method_data?: record, url?: any, body?: any, callback_url?: any}
 ]: any -> any {
   let input = $in
@@ -1085,5 +1126,5 @@ export def "receivers-exportjson receiversexport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

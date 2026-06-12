@@ -1,4 +1,4 @@
-# Auto-generated client for Service Management Public REST API v1001.0.0-SNAPSHOT-fc7a4733e5b961216b9bf0a12338994ae0045171
+# Auto-generated client for Service Management Public REST API v1001.0.0-SNAPSHOT-bedacd980694b20cc2d075e07957144168b04bde
 # Source: https://developer.atlassian.com/cloud/jira/service-desk/swagger.v3.json
 # Auth: --token flag or $env.SERVICE_MANAGEMENT_PUBLIC_REST_API_TOKEN
 
@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -70,7 +71,7 @@ def decision-completer [] { ["approve" "decline"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "rest-servicedeskapi-assets-workspace get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,6 +104,7 @@ export def "rest-servicedeskapi-assets-workspace get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # The starting index of the returned workspace IDs. Base index: 0 See the [Pagination](#pagination) section for more details. (format: int32, default: 0)
   --limit: int # The maximum number of workspace IDs to return per page. Default: 50 See the [Pagination](#pagination) section for more details. (format: int32, default: 50)
 ]: nothing -> record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: table<workspaceId: string>> {
@@ -112,7 +114,7 @@ export def "rest-servicedeskapi-assets-workspace get" [
   let full_url = (build-url $base "/rest/servicedeskapi/assets/workspace" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create customer
@@ -127,6 +129,7 @@ export def "rest-servicedeskapi-customer createCustomer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --strictConflictStatusCode: oneof<nothing, bool> # Optional boolean flag to return 409 Conflict status code for duplicate customer creation request
   --displayName: string # Customer's name for display in the UI.
   --email: string # Customer's email address.
@@ -141,7 +144,7 @@ export def "rest-servicedeskapi-customer createCustomer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revoke portal only access for user
@@ -157,13 +160,14 @@ export def "rest-servicedeskapi-customer-user-revoke-portal-only-access revokePo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/servicedeskapi/customer/user/($accountId)/revoke-portal-only-access")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get info
@@ -178,13 +182,14 @@ export def "rest-servicedeskapi-info get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_links: record<self: string>, buildChangeSet: string, buildDate: record<epochMillis: int, friendly: string, iso8601: string, jira: string>, isLicensedForUse: bool, platformVersion: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/servicedeskapi/info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get insight workspaces
@@ -199,6 +204,7 @@ export def "rest-servicedeskapi-insight-workspace get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # format: int32, default: 0
   --limit: int # format: int32, default: 50
 ]: nothing -> record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: table<workspaceId: string>> {
@@ -208,7 +214,7 @@ export def "rest-servicedeskapi-insight-workspace get" [
   let full_url = (build-url $base "/rest/servicedeskapi/insight/workspace" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get articles
@@ -223,6 +229,7 @@ export def "rest-servicedeskapi-knowledgebase-article get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # The string used to filter the articles (required).
   --highlight: oneof<nothing, bool> # If set to true matching query term in the title and excerpt will be highlighted using the `@@@hl@@@term@@@endhl@@@` syntax. Default: false. (default: false)
   --start: int # (Deprecated) The starting index of the returned objects. Base index: 0. (format: int32)
@@ -236,7 +243,7 @@ export def "rest-servicedeskapi-knowledgebase-article get" [
   let full_url = (build-url $base "/rest/servicedeskapi/knowledgebase/article" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # View knowledge base article
@@ -252,13 +259,14 @@ export def "rest-servicedeskapi-knowledgebase-article-view viewArticle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/servicedeskapi/knowledgebase/article/view/($pageId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get organizations
@@ -273,6 +281,7 @@ export def "rest-servicedeskapi-organization list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # The starting index of the returned objects. Base index: 0. See the [Pagination](#pagination) section for more details. (format: int32)
   --limit: int # The maximum number of organizations to return per page. Default: 50. See the [Pagination](#pagination) section for more details. (format: int32)
   --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*.
@@ -283,7 +292,7 @@ export def "rest-servicedeskapi-organization list" [
   let full_url = (build-url $base "/rest/servicedeskapi/organization" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create organization
@@ -298,6 +307,7 @@ export def "rest-servicedeskapi-organization createOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Name of the organization. Must contain 1-200 characters.
 ]: any -> record<_links: record<self: string>, created: record<epochMillis: int, friendly: string, iso8601: string, jira: string>, id: string, name: string, scimManaged: bool, uuid: string> {
   let input = $in
@@ -308,7 +318,7 @@ export def "rest-servicedeskapi-organization createOrganization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete organization
@@ -324,13 +334,14 @@ export def "rest-servicedeskapi-organization delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/servicedeskapi/organization/($organizationId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get organization
@@ -346,13 +357,14 @@ export def "rest-servicedeskapi-organization get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_links: record<self: string>, created: record<epochMillis: int, friendly: string, iso8601: string, jira: string>, id: string, name: string, scimManaged: bool, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/servicedeskapi/organization/($organizationId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get properties keys
@@ -368,13 +380,14 @@ export def "rest-servicedeskapi-organization-property list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/servicedeskapi/organization/($organizationId)/property")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete property
@@ -391,13 +404,14 @@ export def "rest-servicedeskapi-organization-property delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/servicedeskapi/organization/($organizationId)/property/($propertyKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get property
@@ -414,13 +428,14 @@ export def "rest-servicedeskapi-organization-property get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/servicedeskapi/organization/($organizationId)/property/($propertyKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set property
@@ -437,6 +452,7 @@ export def "rest-servicedeskapi-organization-property setProperty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -446,7 +462,7 @@ export def "rest-servicedeskapi-organization-property setProperty" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove users from organization
@@ -462,6 +478,7 @@ export def "rest-servicedeskapi-organization-user removeUsersFromOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountIds: list # List of customers, specific by account IDs, to add to or remove from the organization.
   --body-organizationId: int # The organizationId in which users need to be added (format: int32)
   --usernames: list # This property is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details. Use `accountIds` instead.
@@ -474,7 +491,7 @@ export def "rest-servicedeskapi-organization-user removeUsersFromOrganization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get users in organization
@@ -490,6 +507,7 @@ export def "rest-servicedeskapi-organization-user get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # The starting index of the returned objects. Base index: 0. See the [Pagination](#pagination) section for more details. (format: int32)
   --limit: int # The maximum number of users to return per page. Default: 50. See the [Pagination](#pagination) section for more details. (format: int32)
 ]: nothing -> record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: table<_links: record, accountId: string, active: bool, displayName: string, emailAddress: string, key: string, name: string, timeZone: string>> {
@@ -499,7 +517,7 @@ export def "rest-servicedeskapi-organization-user get" [
   let full_url = (build-url $base $"/rest/servicedeskapi/organization/($organizationId)/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add users to organization
@@ -515,6 +533,7 @@ export def "rest-servicedeskapi-organization-user addUsersToOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountIds: list # List of customers, specific by account IDs, to add to or remove from the organization.
   --body-organizationId: int # The organizationId in which users need to be added (format: int32)
   --usernames: list # This property is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details. Use `accountIds` instead.
@@ -527,7 +546,7 @@ export def "rest-servicedeskapi-organization-user addUsersToOrganization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get customer requests
@@ -542,6 +561,7 @@ export def "rest-servicedeskapi-request list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --searchTerm: string # Filters customer requests where the request summary matches the `searchTerm`. [Wildcards](https://confluence.atlassian.com/display/JIRACORECLOUD/Search+syntax+for+text+fields) can be used in the `searchTerm` parameter.
   --requestOwnership: list # Filters customer requests using the following values:   *  `OWNED_REQUESTS` returns customer requests where the user is the creator.  *  `PARTICIPATED_REQUESTS` returns customer requests where the user is a participant.  *  `ORGANIZATION` returns customer requests for an organization of which the user is a member when used in conjunction with `organizationId`.  *  `ALL_ORGANIZATIONS` returns customer requests that belong to all organizations of which the user is a member.  *  `APPROVER` returns customer requests where the user is an approver. Can be used in conjunction with `approvalStatus` to filter pending or complete approvals.  *  `ALL_REQUESTS` returns all customer requests. **Deprecated and will be removed, as the returned requests may change if more values are added in the future. Instead, explicitly list the desired filtering strategies.**  Multiple values of the query parameter are supported. For example, `requestOwnership=OWNED_REQUESTS&requestOwnership=PARTICIPATED_REQUESTS` will only return customer requests where the user is the creator or a participant. If not specified, filtering defaults to `OWNED_REQUESTS`, `PARTICIPATED_REQUESTS`, and `ALL_ORGANIZATIONS`.
   --requestStatus: string # Filters customer requests where the request is closed, open, or either of the two where:   *  `CLOSED_REQUESTS` returns customer requests that are closed.  *  `OPEN_REQUESTS` returns customer requests that are open.  *  `ALL_REQUESTS` returns all customer requests.
@@ -559,7 +579,7 @@ export def "rest-servicedeskapi-request list" [
   let full_url = (build-url $base "/rest/servicedeskapi/request" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create customer request
@@ -574,6 +594,7 @@ export def "rest-servicedeskapi-request createCustomerRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --channel: string # (Experimental) Shows extra information for the request channel.
   --form: any # Provides answers to the form associated with a request type that is attached to the request on creation. Jira fields should be omitted from `requestFieldValues` if they are linked to form answers. Form answers in ADF format should have `isAdfRequest` set to true. Form answers are not currently validated.
   --isAdfRequest: oneof<nothing, bool> # (Experimental) Whether to accept rich text fields in Atlassian Document Format (ADF).
@@ -591,7 +612,7 @@ export def "rest-servicedeskapi-request createCustomerRequest" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get customer request by id or key
@@ -607,6 +628,7 @@ export def "rest-servicedeskapi-request get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # A multi-value parameter indicating which properties of the customer request to expand, where:   *  `serviceDesk` returns additional service desk details.  *  `requestType` returns additional customer request type details.  *  `participant` returns the participant details.  *  `sla` returns the SLA information.  *  `status` returns the status transitions, in chronological order.  *  `attachment` returns the attachments.  *  `action` returns the actions that the user can or cannot perform.  *  `comment` returns the comments.  *  `comment.attachment` returns the attachment details for each comment.  *  `comment.renderedBody` (Experimental) return the rendered body in HTML format (in addition to the raw body) for each comment.
 ]: nothing -> record<_expands: list<string>, _links: record<agent: string, jiraRest: string, self: string, web: string>, actions: record<addAttachment: record<allowed: bool>, addComment: record<allowed: bool>, addParticipant: record<allowed: bool>, removeParticipant: record<allowed: bool>>, attachments: record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: list<record>>, comments: record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: list<record>>, createdDate: record<epochMillis: int, friendly: string, iso8601: string, jira: string>, currentStatus: record<status: string, statusCategory: string, statusDate: record<epochMillis: int, friendly: string, iso8601: string, jira: string>>, issueId: string, issueKey: string, participants: record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: list<record>>, reporter: record<_links: record<avatarUrls: record, jiraRest: string, self: string>, accountId: string, active: bool, displayName: string, emailAddress: string, key: string, name: string, timeZone: string>, requestFieldValues: table<fieldId: string, label: string, renderedValue: record, value: any>, requestType: record<_expands: list<string>, _links: record<self: string>, canCreateRequest: bool, description: string, fields: record<canAddRequestParticipants: bool, canRaiseOnBehalfOf: bool, requestTypeFields: list>, groupIds: list<string>, helpText: string, icon: record<_links: record, id: string>, id: string, issueTypeId: string, name: string, portalId: string, practice: string, restrictionStatus: string, serviceDeskId: string>, requestTypeId: string, serviceDesk: record<_links: record<self: string>, id: string, projectId: string, projectKey: string, projectName: string, projectTypeKey: string>, serviceDeskId: string, sla: record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: list<record>>, status: record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: list<record>>, summary: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -615,7 +637,7 @@ export def "rest-servicedeskapi-request get" [
   let full_url = (build-url $base $"/rest/servicedeskapi/request/($issueIdOrKey)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get approvals
@@ -631,6 +653,7 @@ export def "rest-servicedeskapi-request-approval list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # The starting index of the returned objects. Base index: 0. See the [Pagination](#pagination) section for more details. (format: int32)
   --limit: int # The maximum number of approvals to return per page. Default: 50. See the [Pagination](#pagination) section for more details. (format: int32)
 ]: nothing -> record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: table<_links: record, approvers: list, canAnswerApproval: bool, completedDate: record, createdDate: record, finalDecision: string, id: string, name: string>> {
@@ -640,7 +663,7 @@ export def "rest-servicedeskapi-request-approval list" [
   let full_url = (build-url $base $"/rest/servicedeskapi/request/($issueIdOrKey)/approval" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get approval by id
@@ -657,13 +680,14 @@ export def "rest-servicedeskapi-request-approval get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_links: record<self: string>, approvers: table<approver: record, approverDecision: string>, canAnswerApproval: bool, completedDate: record<epochMillis: int, friendly: string, iso8601: string, jira: string>, createdDate: record<epochMillis: int, friendly: string, iso8601: string, jira: string>, finalDecision: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/servicedeskapi/request/($issueIdOrKey)/approval/($approvalId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Answer approval
@@ -680,6 +704,7 @@ export def "rest-servicedeskapi-request-approval answerApproval" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --decision: string@decision-completer # Response to the approval request.
 ]: any -> record<_links: record<self: string>, approvers: table<approver: record, approverDecision: string>, canAnswerApproval: bool, completedDate: record<epochMillis: int, friendly: string, iso8601: string, jira: string>, createdDate: record<epochMillis: int, friendly: string, iso8601: string, jira: string>, finalDecision: string, id: string, name: string> {
   let input = $in
@@ -690,7 +715,7 @@ export def "rest-servicedeskapi-request-approval answerApproval" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get attachments for request
@@ -706,6 +731,7 @@ export def "rest-servicedeskapi-request-attachment list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # The starting index of the returned attachment. Base index: 0. See the [Pagination](#pagination) section for more details. (format: int32, default: 0)
   --limit: int # The maximum number of comments to return per page. Default: 50. See the [Pagination](#pagination) section for more details. (format: int32, default: 50)
 ]: nothing -> record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: table<_links: record, author: record, created: record, filename: string, mimeType: string, size: int>> {
@@ -715,7 +741,7 @@ export def "rest-servicedeskapi-request-attachment list" [
   let full_url = (build-url $base $"/rest/servicedeskapi/request/($issueIdOrKey)/attachment" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create comment with attachment
@@ -731,6 +757,7 @@ export def "rest-servicedeskapi-request-attachment createCommentWithAttachment" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additionalComment: any # Additional content of the comment
   --public: oneof<nothing, bool> # Controls whether the comment and its attachments are visible to customers
   --temporaryAttachmentIds: list # List of IDs for the temporary attachments to be added to the customer request.
@@ -743,7 +770,7 @@ export def "rest-servicedeskapi-request-attachment createCommentWithAttachment" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get attachment content
@@ -760,13 +787,14 @@ export def "rest-servicedeskapi-request-attachment get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/servicedeskapi/request/($issueIdOrKey)/attachment/($attachmentId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get attachment thumbnail
@@ -783,13 +811,14 @@ export def "rest-servicedeskapi-request-attachment-thumbnail get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/servicedeskapi/request/($issueIdOrKey)/attachment/($attachmentId)/thumbnail")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get request comments
@@ -805,6 +834,7 @@ export def "rest-servicedeskapi-request-comment list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --public: oneof<nothing, bool> # Specifies whether to return public comments or not. Default: true.
   --internal: oneof<nothing, bool> # Specifies whether to return internal comments or not. Default: true.
   --expand: list # A multi-value parameter indicating which properties of the comment to expand:   *  `attachment` returns the attachment details, if any, for each comment. (If you want to get all attachments for a request, use [servicedeskapi/request/\{issueIdOrKey\}/attachment](#api-request-issueIdOrKey-attachment-get).)  *  `renderedBody` (Experimental) returns the rendered body in HTML format (in addition to the raw body) for each comment.
@@ -817,7 +847,7 @@ export def "rest-servicedeskapi-request-comment list" [
   let full_url = (build-url $base $"/rest/servicedeskapi/request/($issueIdOrKey)/comment" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create request comment
@@ -833,6 +863,7 @@ export def "rest-servicedeskapi-request-comment createRequestComment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-body: string # Content of the comment.
   --public: oneof<nothing, bool> # Indicates whether the comment is public (true) or private/internal (false).
 ]: any -> record<_expands: list<string>, _links: record<self: string>, attachments: record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: list<record>>, author: record<_links: record<avatarUrls: record, jiraRest: string, self: string>, accountId: string, active: bool, displayName: string, emailAddress: string, key: string, name: string, timeZone: string>, body: string, created: record<epochMillis: int, friendly: string, iso8601: string, jira: string>, id: string, public: bool, renderedBody: record<html: string>> {
@@ -844,7 +875,7 @@ export def "rest-servicedeskapi-request-comment createRequestComment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get request comment by id
@@ -861,6 +892,7 @@ export def "rest-servicedeskapi-request-comment get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # A multi-value parameter indicating which properties of the comment to expand:   *  `attachment` returns the attachment details, if any, for the comment. (If you want to get all attachments for a request, use [servicedeskapi/request/\{issueIdOrKey\}/attachment](#api-request-issueIdOrKey-attachment-get).)  *  `renderedBody` (Experimental) returns the rendered body in HTML format (in addition to the raw body) of the comment.
 ]: nothing -> record<_expands: list<string>, _links: record<self: string>, attachments: record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: list<record>>, author: record<_links: record<avatarUrls: record, jiraRest: string, self: string>, accountId: string, active: bool, displayName: string, emailAddress: string, key: string, name: string, timeZone: string>, body: string, created: record<epochMillis: int, friendly: string, iso8601: string, jira: string>, id: string, public: bool, renderedBody: record<html: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -869,7 +901,7 @@ export def "rest-servicedeskapi-request-comment get" [
   let full_url = (build-url $base $"/rest/servicedeskapi/request/($issueIdOrKey)/comment/($commentId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get comment attachments
@@ -886,6 +918,7 @@ export def "rest-servicedeskapi-request-comment-attachment get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # The starting index of the returned comments. Base index: 0. See the [Pagination](#pagination) section for more details. (format: int32)
   --limit: int # The maximum number of comments to return per page. Default: 50. See the [Pagination](#pagination) section for more details. (format: int32)
 ]: nothing -> record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: table<_links: record, author: record, created: record, filename: string, mimeType: string, size: int>> {
@@ -895,7 +928,7 @@ export def "rest-servicedeskapi-request-comment-attachment get" [
   let full_url = (build-url $base $"/rest/servicedeskapi/request/($issueIdOrKey)/comment/($commentId)/attachment" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unsubscribe
@@ -911,13 +944,14 @@ export def "rest-servicedeskapi-request-notification unsubscribe" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/servicedeskapi/request/($issueIdOrKey)/notification")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get subscription status
@@ -933,13 +967,14 @@ export def "rest-servicedeskapi-request-notification get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<subscribed: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/servicedeskapi/request/($issueIdOrKey)/notification")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Subscribe
@@ -955,13 +990,14 @@ export def "rest-servicedeskapi-request-notification subscribe" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/servicedeskapi/request/($issueIdOrKey)/notification")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove request participants
@@ -977,6 +1013,7 @@ export def "rest-servicedeskapi-request-participant removeRequestParticipants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountIds: list # List of users, specified by account IDs, to add to or remove as participants in the request.
   --usernames: list # This property is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details. Use `accountIds` instead.
 ]: any -> record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: table<_links: record, accountId: string, active: bool, displayName: string, emailAddress: string, key: string, name: string, timeZone: string>> {
@@ -988,7 +1025,7 @@ export def "rest-servicedeskapi-request-participant removeRequestParticipants" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get request participants
@@ -1004,6 +1041,7 @@ export def "rest-servicedeskapi-request-participant get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # The starting index of the returned objects. Base index: 0. See the [Pagination](#pagination) section for more details. (format: int32)
   --limit: int # The maximum number of request types to return per page. Default: 50. See the [Pagination](#pagination) section for more details. (format: int32)
 ]: nothing -> record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: table<_links: record, accountId: string, active: bool, displayName: string, emailAddress: string, key: string, name: string, timeZone: string>> {
@@ -1013,7 +1051,7 @@ export def "rest-servicedeskapi-request-participant get" [
   let full_url = (build-url $base $"/rest/servicedeskapi/request/($issueIdOrKey)/participant" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add request participants
@@ -1029,6 +1067,7 @@ export def "rest-servicedeskapi-request-participant addRequestParticipants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountIds: list # List of users, specified by account IDs, to add to or remove as participants in the request.
   --usernames: list # This property is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details. Use `accountIds` instead.
 ]: any -> record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: table<_links: record, accountId: string, active: bool, displayName: string, emailAddress: string, key: string, name: string, timeZone: string>> {
@@ -1040,7 +1079,7 @@ export def "rest-servicedeskapi-request-participant addRequestParticipants" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get sla information
@@ -1056,6 +1095,7 @@ export def "rest-servicedeskapi-request-sla list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # The starting index of the returned objects. Base index: 0. See the [Pagination](#pagination) section for more details. (format: int32)
   --limit: int # The maximum number of request types to return per page. Default: 50. See the [Pagination](#pagination) section for more details. (format: int32)
 ]: nothing -> record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: table<_links: record, completedCycles: list, id: string, name: string, ongoingCycle: record, slaDisplayFormat: string>> {
@@ -1065,7 +1105,7 @@ export def "rest-servicedeskapi-request-sla list" [
   let full_url = (build-url $base $"/rest/servicedeskapi/request/($issueIdOrKey)/sla" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get sla information by id
@@ -1082,13 +1122,14 @@ export def "rest-servicedeskapi-request-sla get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_links: record<self: string>, completedCycles: table<breachTime: record, breached: bool, elapsedTime: record, goalDuration: record, remainingTime: record, startTime: record, stopTime: record>, id: string, name: string, ongoingCycle: record<breachTime: record<epochMillis: int, friendly: string, iso8601: string, jira: string>, breached: bool, elapsedTime: record<friendly: string, millis: int>, goalDuration: record<friendly: string, millis: int>, paused: bool, remainingTime: record<friendly: string, millis: int>, startTime: record<epochMillis: int, friendly: string, iso8601: string, jira: string>, withinCalendarHours: bool>, slaDisplayFormat: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/servicedeskapi/request/($issueIdOrKey)/sla/($slaMetricId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get customer request status
@@ -1104,6 +1145,7 @@ export def "rest-servicedeskapi-request-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # The starting index of the returned objects. Base index: 0. See the [Pagination](#pagination) section for more details. (format: int32)
   --limit: int # The maximum number of items to return per page. Default: 50. See the [Pagination](#pagination) section for more details. (format: int32)
 ]: nothing -> record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: table<status: string, statusCategory: string, statusDate: record>> {
@@ -1113,7 +1155,7 @@ export def "rest-servicedeskapi-request-status get" [
   let full_url = (build-url $base $"/rest/servicedeskapi/request/($issueIdOrKey)/status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get customer transitions
@@ -1129,6 +1171,7 @@ export def "rest-servicedeskapi-request-transition get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # The starting index of the returned objects. Base index: 0. See the [Pagination](#pagination) section for more details. (format: int32)
   --limit: int # The maximum number of items to return per page. Default: 50. See the [Pagination](#pagination) section for more details. (format: int32)
 ]: nothing -> record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: table<id: string, name: string>> {
@@ -1138,7 +1181,7 @@ export def "rest-servicedeskapi-request-transition get" [
   let full_url = (build-url $base $"/rest/servicedeskapi/request/($issueIdOrKey)/transition" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Perform customer transition
@@ -1154,6 +1197,7 @@ export def "rest-servicedeskapi-request-transition performCustomerTransition" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additionalComment: any # Comment explaining the reason for the transition.
   --id: string # ID of the transition to be performed.
 ]: any -> any {
@@ -1165,7 +1209,7 @@ export def "rest-servicedeskapi-request-transition performCustomerTransition" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete feedback
@@ -1181,13 +1225,14 @@ export def "rest-servicedeskapi-request-feedback delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/servicedeskapi/request/($requestIdOrKey)/feedback")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get feedback
@@ -1203,13 +1248,14 @@ export def "rest-servicedeskapi-request-feedback get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<comment: record<body: string>, rating: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/servicedeskapi/request/($requestIdOrKey)/feedback")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Post feedback
@@ -1225,6 +1271,7 @@ export def "rest-servicedeskapi-request-feedback post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --comment: any # (Optional) The comment provided with this feedback.
   --rating: int # A numeric representation of the rating, this must be an integer value between 1 and 5. (format: int32)
   --type: string # Indicates the type of feedback, supported values: `csat`.
@@ -1237,7 +1284,7 @@ export def "rest-servicedeskapi-request-feedback post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all request types
@@ -1252,6 +1299,7 @@ export def "rest-servicedeskapi-requesttype get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --searchQuery: string # String to be used to filter the results.
   --serviceDeskId: list # Filter the request types by service desk Ids provided. Multiple values of the query parameter are supported. For example, `serviceDeskId=1&serviceDeskId=2` will return request types only for service desks 1 and 2.
   --start: int # The starting index of the returned objects. Base index: 0. See the [Pagination](#pagination) section for more details. (format: int32)
@@ -1266,7 +1314,7 @@ export def "rest-servicedeskapi-requesttype get" [
   let full_url = (build-url $base "/rest/servicedeskapi/requesttype" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get service desks
@@ -1281,6 +1329,7 @@ export def "rest-servicedeskapi-servicedesk list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # The starting index of the returned objects. Base index: 0. See the [Pagination](#pagination) section for more details. (format: int32)
   --limit: int # The maximum number of items to return per page. Default: 50. See the [Pagination](#pagination) section for more details. (format: int32)
 ]: nothing -> record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: table<_links: record, id: string, projectId: string, projectKey: string, projectName: string, projectTypeKey: string>> {
@@ -1290,7 +1339,7 @@ export def "rest-servicedeskapi-servicedesk list" [
   let full_url = (build-url $base "/rest/servicedeskapi/servicedesk" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get service desk by id
@@ -1306,13 +1355,14 @@ export def "rest-servicedeskapi-servicedesk get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_links: record<self: string>, id: string, projectId: string, projectKey: string, projectName: string, projectTypeKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/servicedeskapi/servicedesk/($serviceDeskId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Attach temporary file
@@ -1328,6 +1378,7 @@ export def "rest-servicedeskapi-servicedesk-attach-temporary-file attachTemporar
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -1337,7 +1388,7 @@ export def "rest-servicedeskapi-servicedesk-attach-temporary-file attachTemporar
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Remove customers
@@ -1353,6 +1404,7 @@ export def "rest-servicedeskapi-servicedesk-customer removeCustomers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountIds: list # List of users, specified by account IDs, to add to or remove from a service desk.
   --usernames: list # This property is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details. Use `accountIds` instead.
 ]: any -> any {
@@ -1364,7 +1416,7 @@ export def "rest-servicedeskapi-servicedesk-customer removeCustomers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get customers
@@ -1380,6 +1432,7 @@ export def "rest-servicedeskapi-servicedesk-customer get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # The string used to filter the customer list.
   --start: int # The starting index of the returned objects. Base index: 0. See the [Pagination](#pagination) section for more details. (format: int32)
   --limit: int # The maximum number of users to return per page. Default: 50. See the [Pagination](#pagination) section for more details. (format: int32)
@@ -1390,7 +1443,7 @@ export def "rest-servicedeskapi-servicedesk-customer get" [
   let full_url = (build-url $base $"/rest/servicedeskapi/servicedesk/($serviceDeskId)/customer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add customers
@@ -1406,6 +1459,7 @@ export def "rest-servicedeskapi-servicedesk-customer addCustomers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountIds: list # List of users, specified by account IDs, to add to or remove from a service desk.
   --usernames: list # This property is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details. Use `accountIds` instead.
 ]: any -> any {
@@ -1417,7 +1471,7 @@ export def "rest-servicedeskapi-servicedesk-customer addCustomers" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invite customer
@@ -1433,6 +1487,7 @@ export def "rest-servicedeskapi-servicedesk-customer-invite inviteCustomer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --strictConflictStatusCode: oneof<nothing, bool> # Optional boolean flag to return 409 Conflict status code when a customer with the same email already exists.
   --displayName: string # Customer's name for display in the UI.
   --email: string # Customer's email address.
@@ -1446,7 +1501,7 @@ export def "rest-servicedeskapi-servicedesk-customer-invite inviteCustomer" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get articles
@@ -1462,6 +1517,7 @@ export def "rest-servicedeskapi-servicedesk-knowledgebase-article get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # The string used to filter the articles (required).
   --highlight: oneof<nothing, bool> # If set to true matching query term in the title and excerpt will be highlighted using the `@@@hl@@@term@@@endhl@@@` syntax. Default: false. (default: false)
   --start: int # (Deprecated) The starting index of the returned objects. Base index: 0. (format: int32)
@@ -1475,7 +1531,7 @@ export def "rest-servicedeskapi-servicedesk-knowledgebase-article get" [
   let full_url = (build-url $base $"/rest/servicedeskapi/servicedesk/($serviceDeskId)/knowledgebase/article" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove organization
@@ -1491,6 +1547,7 @@ export def "rest-servicedeskapi-servicedesk-organization removeOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organizationId: int # List of organizations, specified by 'ID' field values, to add to or remove from the service desk. (format: int32)
   --body-serviceDeskId: string # Service desk Id for which, organization needs to be updated
 ]: any -> any {
@@ -1502,7 +1559,7 @@ export def "rest-servicedeskapi-servicedesk-organization removeOrganization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get organizations
@@ -1518,6 +1575,7 @@ export def "rest-servicedeskapi-servicedesk-organization get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # The starting index of the returned objects. Base index: 0. See the [Pagination](#pagination) section for more details. (format: int32)
   --limit: int # The maximum number of items to return per page. Default: 50. See the [Pagination](#pagination) section for more details. (format: int32)
   --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*.
@@ -1528,7 +1586,7 @@ export def "rest-servicedeskapi-servicedesk-organization get" [
   let full_url = (build-url $base $"/rest/servicedeskapi/servicedesk/($serviceDeskId)/organization" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add organization
@@ -1544,6 +1602,7 @@ export def "rest-servicedeskapi-servicedesk-organization addOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organizationId: int # List of organizations, specified by 'ID' field values, to add to or remove from the service desk. (format: int32)
   --body-serviceDeskId: string # Service desk Id for which, organization needs to be updated
 ]: any -> any {
@@ -1555,7 +1614,7 @@ export def "rest-servicedeskapi-servicedesk-organization addOrganization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get queues
@@ -1571,6 +1630,7 @@ export def "rest-servicedeskapi-servicedesk-queue list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeCount: oneof<nothing, bool> # Specifies whether to include each queue's customer request (issue) count in the response. (default: false)
   --start: int # The starting index of the returned objects. Base index: 0. See the [Pagination](#pagination) section for more details. (format: int32)
   --limit: int # The maximum number of items to return per page. Default: 50. See the [Pagination](#pagination) section for more details. (format: int32)
@@ -1581,7 +1641,7 @@ export def "rest-servicedeskapi-servicedesk-queue list" [
   let full_url = (build-url $base $"/rest/servicedeskapi/servicedesk/($serviceDeskId)/queue" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get queue
@@ -1598,6 +1658,7 @@ export def "rest-servicedeskapi-servicedesk-queue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeCount: oneof<nothing, bool> # Specifies whether to include each queue's customer request (issue) count in the response. (default: false)
 ]: nothing -> record<_links: record<self: string>, fields: list<string>, id: string, issueCount: int, jql: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1606,7 +1667,7 @@ export def "rest-servicedeskapi-servicedesk-queue get" [
   let full_url = (build-url $base $"/rest/servicedeskapi/servicedesk/($serviceDeskId)/queue/($queueId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issues in queue
@@ -1623,6 +1684,7 @@ export def "rest-servicedeskapi-servicedesk-queue-issue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # The starting index of the returned objects. Base index: 0. See the [Pagination](#pagination) section for more details. (format: int32)
   --limit: int # The maximum number of items to return per page. Default: 50. See the [Pagination](#pagination) section for more details. (format: int32)
 ]: nothing -> record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: table<changelog: record, editmeta: record, expand: string, fields: record, fieldsToInclude: record, id: string, key: string, names: record, operations: record, properties: record, renderedFields: record, schema: record, self: string, transitions: list, versionedRepresentations: record>> {
@@ -1632,7 +1694,7 @@ export def "rest-servicedeskapi-servicedesk-queue-issue get" [
   let full_url = (build-url $base $"/rest/servicedeskapi/servicedesk/($serviceDeskId)/queue/($queueId)/issue" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get request types
@@ -1648,6 +1710,7 @@ export def "rest-servicedeskapi-servicedesk-requesttype list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --groupId: int # Filters results to those in a customer request type group. (format: int32)
   --expand: list
   --searchQuery: string # The string to be used to filter the results.
@@ -1662,7 +1725,7 @@ export def "rest-servicedeskapi-servicedesk-requesttype list" [
   let full_url = (build-url $base $"/rest/servicedeskapi/servicedesk/($serviceDeskId)/requesttype" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create request type
@@ -1678,6 +1741,7 @@ export def "rest-servicedeskapi-servicedesk-requesttype createRequestType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # Description of the request type on the service desk.
   --helpText: string # Help text for the request type on the service desk.
   --issueTypeId: string # ID of the request type to add to the service desk.
@@ -1691,7 +1755,7 @@ export def "rest-servicedeskapi-servicedesk-requesttype createRequestType" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check request type permissions
@@ -1707,6 +1771,7 @@ export def "rest-servicedeskapi-servicedesk-requesttype-permissions-check checkR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: string # The account ID of a user.
   --permissions: list # List of requested permissions.
   --requestTypeIds: list # List of request type IDs.
@@ -1719,7 +1784,7 @@ export def "rest-servicedeskapi-servicedesk-requesttype-permissions-check checkR
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete request type
@@ -1736,13 +1801,14 @@ export def "rest-servicedeskapi-servicedesk-requesttype delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/servicedeskapi/servicedesk/($serviceDeskId)/requesttype/($requestTypeId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get request type by id
@@ -1759,6 +1825,7 @@ export def "rest-servicedeskapi-servicedesk-requesttype get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list
 ]: nothing -> record<_expands: list<string>, _links: record<self: string>, canCreateRequest: bool, description: string, fields: record<canAddRequestParticipants: bool, canRaiseOnBehalfOf: bool, requestTypeFields: list<record>>, groupIds: list<string>, helpText: string, icon: record<_links: record<iconUrls: record>, id: string>, id: string, issueTypeId: string, name: string, portalId: string, practice: string, restrictionStatus: string, serviceDeskId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1767,7 +1834,7 @@ export def "rest-servicedeskapi-servicedesk-requesttype get" [
   let full_url = (build-url $base $"/rest/servicedeskapi/servicedesk/($serviceDeskId)/requesttype/($requestTypeId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get request type fields
@@ -1784,6 +1851,7 @@ export def "rest-servicedeskapi-servicedesk-requesttype-field get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Use [expand](#expansion) to include additional information in the response. This parameter accepts `hiddenFields` that returns hidden fields associated with the request type.
 ]: nothing -> record<canAddRequestParticipants: bool, canRaiseOnBehalfOf: bool, requestTypeFields: table<defaultValues: list, description: string, fieldId: string, jiraSchema: record, name: string, presetValues: list, required: bool, validValues: list, visible: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1792,7 +1860,7 @@ export def "rest-servicedeskapi-servicedesk-requesttype-field get" [
   let full_url = (build-url $base $"/rest/servicedeskapi/servicedesk/($serviceDeskId)/requesttype/($requestTypeId)/field" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get properties keys
@@ -1809,13 +1877,14 @@ export def "rest-servicedeskapi-servicedesk-requesttype-property list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/servicedeskapi/servicedesk/($serviceDeskId)/requesttype/($requestTypeId)/property")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete property
@@ -1833,13 +1902,14 @@ export def "rest-servicedeskapi-servicedesk-requesttype-property delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/servicedeskapi/servicedesk/($serviceDeskId)/requesttype/($requestTypeId)/property/($propertyKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get property
@@ -1857,13 +1927,14 @@ export def "rest-servicedeskapi-servicedesk-requesttype-property get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/servicedeskapi/servicedesk/($serviceDeskId)/requesttype/($requestTypeId)/property/($propertyKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set property
@@ -1881,13 +1952,14 @@ export def "rest-servicedeskapi-servicedesk-requesttype-property setProperty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/rest/servicedeskapi/servicedesk/($serviceDeskId)/requesttype/($requestTypeId)/property/($propertyKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get request type groups
@@ -1903,6 +1975,7 @@ export def "rest-servicedeskapi-servicedesk-requesttypegroup get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # The starting index of the returned objects. Base index: 0. See the [Pagination](#pagination) section for more details. (format: int32)
   --limit: int # The maximum number of items to return per page. Default: 50. See the [Pagination](#pagination) section for more details. (format: int32)
 ]: nothing -> record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: table<id: string, name: string>> {
@@ -1912,5 +1985,5 @@ export def "rest-servicedeskapi-servicedesk-requesttypegroup get" [
   let full_url = (build-url $base $"/rest/servicedeskapi/servicedesk/($serviceDeskId)/requesttypegroup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

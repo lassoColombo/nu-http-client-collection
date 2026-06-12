@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -90,7 +91,7 @@ def templateType-completer [] { ["page"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "wiki-rest-audit get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -123,6 +124,7 @@ export def "wiki-rest-audit get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startDate: string # Filters the results to the records on or after the `startDate`. The `startDate` must be specified as [epoch time](https://www.epochconverter.com/) in milliseconds.
   --endDate: string # Filters the results to the records on or before the `endDate`. The `endDate` must be specified as [epoch time](https://www.epochconverter.com/) in milliseconds.
   --searchString: string # Filters the results to records that have string property values matching the `searchString`.
@@ -135,7 +137,7 @@ export def "wiki-rest-audit get" [
   let full_url = (build-url $base "/wiki/rest/api/audit" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create audit record
@@ -154,6 +156,7 @@ export def "wiki-rest-audit createAuditRecord" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --author: record # The user that actioned the event. If `author` is not specified, then all `author` properties will be set to null/empty, except for `type` which will be set to 'user'. — shape: {type: "user", displayName?: string, operations?: list, username?: string, userKey?: string}
   remoteAddress: string # The IP address of the computer where the event was initiated from.
   --creationDate: int # The creation date-time of the audit record, as a timestamp. This is converted to a date-time display in the Confluence UI. If the `creationDate` is not specified, then it will be set to the timestamp for the current date-time. (format: int64)
@@ -173,7 +176,7 @@ export def "wiki-rest-audit createAuditRecord" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Export audit records
@@ -188,6 +191,7 @@ export def "wiki-rest-audit-export exportAuditRecords" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --startDate: string # Filters the exported results to the records on or after the `startDate`. The `startDate` must be specified as [epoch time](https://www.epochconverter.com/) in milliseconds.
   --endDate: string # Filters the exported results to the records on or before the `endDate`. The `endDate` must be specified as [epoch time](https://www.epochconverter.com/) in milliseconds.
@@ -200,7 +204,7 @@ export def "wiki-rest-audit-export exportAuditRecords" [
   let full_url = (build-url $base "/wiki/rest/api/audit/export" $qp)
   let accept_val = ($accept | default "application/zip")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get retention period
@@ -215,13 +219,14 @@ export def "wiki-rest-audit-retention get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<number: int, units: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wiki/rest/api/audit/retention")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set retention period
@@ -236,6 +241,7 @@ export def "wiki-rest-audit-retention setRetentionPeriod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   number: int # The number of units for the retention period. (format: int32)
   units: string@units-completer # The unit of time that the retention period is measured in.
 ]: any -> record<number: int, units: string> {
@@ -247,7 +253,7 @@ export def "wiki-rest-audit-retention setRetentionPeriod" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get audit records for time period
@@ -262,6 +268,7 @@ export def "wiki-rest-audit-since get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --number: int # The number of units for the time period. (format: int64, default: 3)
   --units: string@units-completer-1 # The unit of time that the time period is measured in. (default: MONTHS)
   --searchString: string # Filters the results to records that have string property values matching the `searchString`.
@@ -274,7 +281,7 @@ export def "wiki-rest-audit-since get" [
   let full_url = (build-url $base "/wiki/rest/api/audit/since" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Archive pages
@@ -290,6 +297,7 @@ export def "wiki-rest-content-archive archivePages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --pages: list # item shape: {id: int}
 ]: any -> record<ari: string, id: string, links: record<status: string>> {
   let input = $in
@@ -300,7 +308,7 @@ export def "wiki-rest-content-archive archivePages" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Publish shared draft
@@ -319,6 +327,7 @@ export def "wiki-rest-content-blueprint-instance publishSharedDraft" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # The status of the content to be updated, i.e. the draft. This is set to 'draft' by default, so you shouldn't need to specify it. (default: draft)
   --expand: list # A multi-value parameter indicating which properties of the content to expand.  - `childTypes.all` returns whether the content has attachments, comments, or child pages/whiteboards. Use this if you only need to check whether the content has children of a particular type. - `childTypes.attachment` returns whether the content has attachments. - `childTypes.comment` returns whether the content has comments. - `childTypes.page` returns whether the content has child pages. - `childTypes.whiteboard` returns whether the content has child whiteboards. - `childTypes.database` returns whether the content has child databases. - `childTypes.embed` returns whether the content has child embeds (smartlinks). - `childTypes.folder` returns whether the content has child folders. - `container` returns the space that the content is in. This is the same as the information returned by [Get space](#api-space-spaceKey-get). - `metadata.currentuser` returns information about the current user in relation to the content, including when they last viewed it, modified it, contributed to it, or added it as a favorite. - `metadata.properties` returns content properties that have been set via the Confluence REST API. - `metadata.labels` returns the labels that have been added to the content. - `metadata.frontend` this property is only used by Atlassian. - `operations` returns the operations for the content, which are used when setting permissions. - `children.page` returns pages that are descendants at the level immediately below the content. - `children.whiteboard` returns whiteboards that are descendants at the level immediately below the content. - `children.database` returns databases that are descendants at the level immediately below the content. - `children.embed` returns embeds (smartlinks) that are descendants at the level immediately below the content. - `children.folder` returns folders that are descendants at the level immediately below the content. - `children.attachment` returns all attachments for the content. - `children.comment` returns all comments on the content. - `restrictions.read.restrictions.user` returns the users that have permission to read the content. - `restrictions.read.restrictions.group` returns the groups that have permission to read the content. Note that this may return deleted groups, because deleting a group doesn't remove associated restrictions. - `restrictions.update.restrictions.user` returns the users that have permission to update the content. - `restrictions.update.restrictions.group` returns the groups that have permission to update the content. Note that this may return deleted groups because deleting a group doesn't remove associated restrictions. - `history` returns the history of the content, including the date it was created. - `history.lastUpdated` returns information about the most recent update of the content, including who updated it and when it was updated. - `history.previousVersion` returns information about the update prior to the current content update. - `history.contributors` returns all of the users who have contributed to the content. - `history.nextVersion` returns information about the update after to the current content update. - `ancestors` returns the parent content, if the content is a page or whiteboard. - `body` returns the body of the content in different formats, including the editor format, view format, and export format. - `body.storage` returns the body of content in storage format. - `body.view` returns the body of content in view format. - `version` returns information about the most recent update of the content, including who updated it and when it was updated. - `descendants.page` returns pages that are descendants at any level below the content. - `descendants.whiteboard` returns whiteboards that are descendants at any level below the content. - `descendants.database` returns databases that are descendants at any level below the content. - `descendants.embed` returns embeds (smartlinks) that are descendants at any level below the content. - `descendants.folder` returns folders that are descendants at any level below the content. - `descendants.attachment` returns all attachments for the content, same as `children.attachment`. - `descendants.comment` returns all comments on the content, same as `children.comment`. - `space` returns the space that the content is in. This is the same as the information returned by [Get space](#api-space-spaceKey-get).  In addition, the following comment-specific expansions can be used: - `extensions.inlineProperties` returns inline comment-specific properties. - `extensions.resolution` returns the resolution status of each comment.
   version: record # The version for the new content. — shape: {number: int}
@@ -337,7 +346,7 @@ export def "wiki-rest-content-blueprint-instance publishSharedDraft" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Publish legacy draft
@@ -356,6 +365,7 @@ export def "wiki-rest-content-blueprint-instance publishLegacyDraft" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string # The status of the content to be updated, i.e. the draft. This is set to 'draft' by default, so you shouldn't need to specify it. (default: draft)
   --expand: list # A multi-value parameter indicating which properties of the content to expand.  - `childTypes.all` returns whether the content has attachments, comments, or child pages/whiteboards. Use this if you only need to check whether the content has children of a particular type. - `childTypes.attachment` returns whether the content has attachments. - `childTypes.comment` returns whether the content has comments. - `childTypes.page` returns whether the content has child pages. - `childTypes.whiteboard` returns whether the content has child whiteboards. - `childTypes.database` returns whether the content has child databases. - `childTypes.embed` returns whether the content has child embeds (smartlinks). - `childTypes.folder` returns whether the content has child folders. - `container` returns the space that the content is in. This is the same as the information returned by [Get space](#api-space-spaceKey-get). - `metadata.currentuser` returns information about the current user in relation to the content, including when they last viewed it, modified it, contributed to it, or added it as a favorite. - `metadata.properties` returns content properties that have been set via the Confluence REST API. - `metadata.labels` returns the labels that have been added to the content. - `metadata.frontend` this property is only used by Atlassian. - `operations` returns the operations for the content, which are used when setting permissions. - `children.page` returns pages that are descendants at the level immediately below the content. - `children.whiteboard` returns whiteboards that are descendants at the level immediately below the content. - `children.database` returns databases that are descendants at the level immediately below the content. - `children.embed` returns embeds (smartlinks) that are descendants at the level immediately below the content. - `children.folder` returns folders that are descendants at the level immediately below the content. - `children.attachment` returns all attachments for the content. - `children.comment` returns all comments on the content. - `restrictions.read.restrictions.user` returns the users that have permission to read the content. - `restrictions.read.restrictions.group` returns the groups that have permission to read the content. Note that this may return deleted groups, because deleting a group doesn't remove associated restrictions. - `restrictions.update.restrictions.user` returns the users that have permission to update the content. - `restrictions.update.restrictions.group` returns the groups that have permission to update the content. Note that this may return deleted groups because deleting a group doesn't remove associated restrictions. - `history` returns the history of the content, including the date it was created. - `history.lastUpdated` returns information about the most recent update of the content, including who updated it and when it was updated. - `history.previousVersion` returns information about the update prior to the current content update. - `history.contributors` returns all of the users who have contributed to the content. - `history.nextVersion` returns information about the update after to the current content update. - `ancestors` returns the parent content, if the content is a page or whiteboard. - `body` returns the body of the content in different formats, including the editor format, view format, and export format. - `body.storage` returns the body of content in storage format. - `body.view` returns the body of content in view format. - `version` returns information about the most recent update of the content, including who updated it and when it was updated. - `descendants.page` returns pages that are descendants at any level below the content. - `descendants.whiteboard` returns whiteboards that are descendants at any level below the content. - `descendants.database` returns databases that are descendants at any level below the content. - `descendants.embed` returns embeds (smartlinks) that are descendants at any level below the content. - `descendants.folder` returns folders that are descendants at any level below the content. - `descendants.attachment` returns all attachments for the content, same as `children.attachment`. - `descendants.comment` returns all comments on the content, same as `children.comment`. - `space` returns the space that the content is in. This is the same as the information returned by [Get space](#api-space-spaceKey-get).  In addition, the following comment-specific expansions can be used: - `extensions.inlineProperties` returns inline comment-specific properties. - `extensions.resolution` returns the resolution status of each comment.
   version: record # The version for the new content. — shape: {number: int}
@@ -374,7 +384,7 @@ export def "wiki-rest-content-blueprint-instance publishLegacyDraft" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search content by CQL
@@ -389,6 +399,7 @@ export def "wiki-rest-content-search searchContentByCQL" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cql: string # The CQL string that is used to find the requested content.
   --cqlcontext: string # The space, content, and content status to execute the search against. Specify this as an object with the following properties:  - `spaceKey` Key of the space to search against. Optional. - `contentId` ID of the content to search against. Optional. Must be in the space spacified by `spaceKey`. - `contentStatuses` Content statuses to search against. Optional.
   --expand: list # A multi-value parameter indicating which properties of the content to expand.  - `childTypes.all` returns whether the content has attachments, comments, or child pages/whiteboards. Use this if you only need to check whether the content has children of a particular type. - `childTypes.attachment` returns whether the content has attachments. - `childTypes.comment` returns whether the content has comments. - `childTypes.page` returns whether the content has child pages. - `childTypes.whiteboard` returns whether the content has child whiteboards. - `childTypes.database` returns whether the content has child databases. - `childTypes.embed` returns whether the content has child embeds (smartlinks). - `childTypes.folder` returns whether the content has child folders. - `container` returns the space that the content is in. This is the same as the information returned by [Get space](#api-space-spaceKey-get). - `metadata.currentuser` returns information about the current user in relation to the content, including when they last viewed it, modified it, contributed to it, or added it as a favorite. - `metadata.properties` returns content properties that have been set via the Confluence REST API. - `metadata.labels` returns the labels that have been added to the content. - `metadata.frontend` this property is only used by Atlassian. - `operations` returns the operations for the content, which are used when setting permissions. - `children.page` returns pages that are descendants at the level immediately below the content. - `children.whiteboard` returns whiteboards that are descendants at the level immediately below the content. - `children.database` returns databases that are descendants at the level immediately below the content. - `children.embed` returns embeds (smartlinks) that are descendants at the level immediately below the content. - `children.folder` returns folders that are descendants at the level immediately below the content. - `children.attachment` returns all attachments for the content. - `children.comment` returns all comments on the content. - `restrictions.read.restrictions.user` returns the users that have permission to read the content. - `restrictions.read.restrictions.group` returns the groups that have permission to read the content. Note that this may return deleted groups, because deleting a group doesn't remove associated restrictions. - `restrictions.update.restrictions.user` returns the users that have permission to update the content. - `restrictions.update.restrictions.group` returns the groups that have permission to update the content. Note that this may return deleted groups because deleting a group doesn't remove associated restrictions. - `history` returns the history of the content, including the date it was created. - `history.lastUpdated` returns information about the most recent update of the content, including who updated it and when it was updated. - `history.previousVersion` returns information about the update prior to the current content update. - `history.contributors` returns all of the users who have contributed to the content. - `history.nextVersion` returns information about the update after to the current content update. - `ancestors` returns the parent content, if the content is a page or whiteboard. - `body` returns the body of the content in different formats, including the editor format, view format, and export format. - `body.storage` returns the body of content in storage format. - `body.view` returns the body of content in view format. - `version` returns information about the most recent update of the content, including who updated it and when it was updated. - `descendants.page` returns pages that are descendants at any level below the content. - `descendants.whiteboard` returns whiteboards that are descendants at any level below the content. - `descendants.database` returns databases that are descendants at any level below the content. - `descendants.embed` returns embeds (smartlinks) that are descendants at any level below the content. - `descendants.folder` returns folders that are descendants at any level below the content. - `descendants.attachment` returns all attachments for the content, same as `children.attachment`. - `descendants.comment` returns all comments on the content, same as `children.comment`. - `space` returns the space that the content is in. This is the same as the information returned by [Get space](#api-space-spaceKey-get).  In addition, the following comment-specific expansions can be used: - `extensions.inlineProperties` returns inline comment-specific properties. - `extensions.resolution` returns the resolution status of each comment.
@@ -401,7 +412,7 @@ export def "wiki-rest-content-search searchContentByCQL" [
   let full_url = (build-url $base "/wiki/rest/api/content/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete page tree
@@ -417,13 +428,14 @@ export def "wiki-rest-content-page-tree delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ari: string, id: string, links: record<status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/pageTree")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Move a page to a new location relative to a target page
@@ -441,13 +453,14 @@ export def "wiki-rest-content-move movePage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<pageId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wiki/rest/api/content/($pageId)/move/($position)/($targetId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update attachment
@@ -463,6 +476,7 @@ export def "wiki-rest-content-child-attachment createOrUpdateAttachments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-1 # The status of the content that the attachment is being added to. This should always be set to 'current'. (default: current)
   file: string # The relative location and name of the attachment to be added to the content. (format: binary)
   --comment: string # The comment for the attachment that is being added. If you specify a comment, then every file must have a comment and the comments must be in the same order as the files. Alternatively, don't specify any comments. (format: binary)
@@ -477,7 +491,7 @@ export def "wiki-rest-content-child-attachment createOrUpdateAttachments" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Create attachment
@@ -493,6 +507,7 @@ export def "wiki-rest-content-child-attachment createAttachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-1 # The status of the content that the attachment is being added to. (default: current)
   file: string # The relative location and name of the attachment to be added to the content. (format: binary)
   --comment: string # The comment for the attachment that is being added. If you specify a comment, then every file must have a comment and the comments must be in the same order as the files. Alternatively, don't specify any comments. (format: binary)
@@ -507,7 +522,7 @@ export def "wiki-rest-content-child-attachment createAttachment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Update attachment properties
@@ -526,6 +541,7 @@ export def "wiki-rest-content-child-attachment updateAttachmentProperties" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-id: string
   type: string # Set this to "attachment"
   --status: string
@@ -543,7 +559,7 @@ export def "wiki-rest-content-child-attachment updateAttachmentProperties" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update attachment data
@@ -560,6 +576,7 @@ export def "wiki-rest-content-child-attachment-data updateAttachmentData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   file: string # The relative location and name of the attachment to be added to the content. (format: binary)
   --comment: string # The comment for the attachment that is being added. If you specify a comment, then every file must have a comment and the comments must be in the same order as the files. Alternatively, don't specify any comments. (format: binary)
   minorEdit: string # If `minorEdits` is set to 'true', no notification email or activity stream will be generated when the attachment is added to the content. (format: binary)
@@ -572,7 +589,7 @@ export def "wiki-rest-content-child-attachment-data updateAttachmentData" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get URI to download attachment
@@ -589,6 +606,7 @@ export def "wiki-rest-content-child-attachment-download downloadAttatchment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: int # The version of the attachment. If this parameter is absent, the redirect URI will download the latest version of the attachment.
   --status: list # The statuses allowed on the retrieved attachment. If this parameter is absent, it will default to `current`.
 ]: nothing -> any {
@@ -598,7 +616,7 @@ export def "wiki-rest-content-child-attachment-download downloadAttatchment" [
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/child/attachment/($attachmentId)/download" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get content descendants
@@ -616,6 +634,7 @@ export def "wiki-rest-content-descendant list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # A multi-value parameter indicating which properties of the children to expand, where:  - `attachment` returns all attachments for the content. - `comments` returns all comments for the content. - `page` returns all child pages of the content. - `whiteboard` returns all child whiteboards of the content. - `database` returns all child databases of the content. - `embed` returns all child embeds of the content. - `folder` returns all child folders of the content.
 ]: nothing -> record<attachment: record<results: list<record>, start: int, limit: int, size: int, _links: record>, comment: record<results: list<record>, start: int, limit: int, size: int, _links: record>, page: record<results: list<record>, start: int, limit: int, size: int, _links: record>, whiteboard: record<results: list<record>, start: int, limit: int, size: int, _links: record>, database: record<results: list<record>, start: int, limit: int, size: int, _links: record>, embed: record<results: list<record>, start: int, limit: int, size: int, _links: record>, folder: record<results: list<record>, start: int, limit: int, size: int, _links: record>, _expandable: record<attachment: string, comment: string, page: string, whiteboard: string, database: string, embed: string, folder: string>, _links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -624,7 +643,7 @@ export def "wiki-rest-content-descendant list" [
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/descendant" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get content descendants by type
@@ -643,6 +662,7 @@ export def "wiki-rest-content-descendant get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --depth: string@depth-completer # Filter the results to descendants upto a desired level of the content. Note, the maximum value supported is 100. root level of the content means immediate (level 1) descendants of the type requested. all represents returning all descendants of the type requested. (default: all)
   --expand: list # A multi-value parameter indicating which properties of the content to expand.  - `childTypes.all` returns whether the content has attachments, comments, or child pages/whiteboards. Use this if you only need to check whether the content has children of a particular type. - `childTypes.attachment` returns whether the content has attachments. - `childTypes.comment` returns whether the content has comments. - `childTypes.page` returns whether the content has child pages. - `childTypes.whiteboard` returns whether the content has child whiteboards. - `childTypes.database` returns whether the content has child databases. - `childTypes.embed` returns whether the content has child embeds (smartlinks). - `childTypes.folder` returns whether the content has child folders. - `container` returns the space that the content is in. This is the same as the information returned by [Get space](#api-space-spaceKey-get). - `metadata.currentuser` returns information about the current user in relation to the content, including when they last viewed it, modified it, contributed to it, or added it as a favorite. - `metadata.properties` returns content properties that have been set via the Confluence REST API. - `metadata.labels` returns the labels that have been added to the content. - `metadata.frontend` this property is only used by Atlassian. - `operations` returns the operations for the content, which are used when setting permissions. - `children.page` returns pages that are descendants at the level immediately below the content. - `children.whiteboard` returns whiteboards that are descendants at the level immediately below the content. - `children.database` returns databases that are descendants at the level immediately below the content. - `children.embed` returns embeds (smartlinks) that are descendants at the level immediately below the content. - `children.folder` returns folders that are descendants at the level immediately below the content. - `children.attachment` returns all attachments for the content. - `children.comment` returns all comments on the content. - `restrictions.read.restrictions.user` returns the users that have permission to read the content. - `restrictions.read.restrictions.group` returns the groups that have permission to read the content. Note that this may return deleted groups, because deleting a group doesn't remove associated restrictions. - `restrictions.update.restrictions.user` returns the users that have permission to update the content. - `restrictions.update.restrictions.group` returns the groups that have permission to update the content. Note that this may return deleted groups because deleting a group doesn't remove associated restrictions. - `history` returns the history of the content, including the date it was created. - `history.lastUpdated` returns information about the most recent update of the content, including who updated it and when it was updated. - `history.previousVersion` returns information about the update prior to the current content update. - `history.contributors` returns all of the users who have contributed to the content. - `history.nextVersion` returns information about the update after to the current content update. - `ancestors` returns the parent content, if the content is a page or whiteboard. - `body` returns the body of the content in different formats, including the editor format, view format, and export format. - `body.storage` returns the body of content in storage format. - `body.view` returns the body of content in view format. - `version` returns information about the most recent update of the content, including who updated it and when it was updated. - `descendants.page` returns pages that are descendants at any level below the content. - `descendants.whiteboard` returns whiteboards that are descendants at any level below the content. - `descendants.database` returns databases that are descendants at any level below the content. - `descendants.embed` returns embeds (smartlinks) that are descendants at any level below the content. - `descendants.folder` returns folders that are descendants at any level below the content. - `descendants.attachment` returns all attachments for the content, same as `children.attachment`. - `descendants.comment` returns all comments on the content, same as `children.comment`. - `space` returns the space that the content is in. This is the same as the information returned by [Get space](#api-space-spaceKey-get).  In addition, the following comment-specific expansions can be used: - `extensions.inlineProperties` returns inline comment-specific properties. - `extensions.resolution` returns the resolution status of each comment.
   --start: int # The starting index of the returned content. (format: int32, default: 0)
@@ -654,7 +674,7 @@ export def "wiki-rest-content-descendant get" [
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/descendant/($type)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get macro body by macro ID
@@ -672,13 +692,14 @@ export def "wiki-rest-content-history-macro-id get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, body: string, parameters: record, _links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/history/($version)/macro/id/($macroId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get macro body by macro ID and convert the representation synchronously
@@ -697,6 +718,7 @@ export def "wiki-rest-content-history-macro-id-convert get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # A multi-value parameter indicating which properties of the content to expand and populate. Expands are dependent on the `to` conversion format and may be irrelevant for certain conversions (e.g. `macroRenderedOutput` is redundant when converting to `view` format).   If rendering to `view` format, and the body content being converted includes arbitrary nested content (such as macros); then it is  necessary to include webresource expands in the request. Webresources for content body are the batched JS and CSS dependencies for any nested dynamic content (i.e. macros).  - `embeddedContent` returns metadata for nested content (e.g. page included using page include macro) - `mediaToken` returns JWT token for retrieving attachment data from Media API - `macroRenderedOutput` additionally converts body to view format - `webresource.superbatch.uris.js` returns all common JS dependencies as static URLs - `webresource.superbatch.uris.css` returns all common CSS dependencies as static URLs - `webresource.superbatch.uris.all` returns all common dependencies as static URLs - `webresource.superbatch.tags.all` returns all common JS dependencies as html `<script>` tags - `webresource.superbatch.tags.css` returns all common CSS dependencies as html `<style>` tags - `webresource.superbatch.tags.js` returns all common dependencies as html `<script>` and `<style>` tags - `webresource.uris.js` returns JS dependencies specific to conversion - `webresource.uris.css` returns CSS dependencies specific to conversion - `webresource.uris.all` returns all dependencies specific to conversion      - `webresource.tags.all` returns common JS dependencies as html `<script>` tags - `webresource.tags.css` returns common CSS dependencies as html `<style>` tags - `webresource.tags.js` returns common dependencies as html `<script>` and `<style>` tags
   --spaceKeyContext: string # The space key used for resolving embedded content (page includes, files, and links) in the content body. For example, if the source content contains the link `<ac:link><ri:page ri:content-title="Example page" /><ac:link>` and the `spaceKeyContext=TEST` parameter is provided, then the link will be converted to a link to the "Example page" page in the "TEST" space.
   --embeddedContentRender: string@embeddedContentRender-completer # Mode used for rendering embedded content, like attachments.  - `current` renders the embedded content using the latest version. - `version-at-save` renders the embedded content using the version at the time of save. (default: current)
@@ -707,7 +729,7 @@ export def "wiki-rest-content-history-macro-id-convert get" [
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/history/($version)/macro/id/($macroId)/convert/($to)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get macro body by macro ID and convert representation Asynchronously
@@ -726,6 +748,7 @@ export def "wiki-rest-content-history-macro-id-convert-async get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # A multi-value parameter indicating which properties of the content to expand and populate. Expands are dependent on the `to` conversion format and may be irrelevant for certain conversions (e.g. `macroRenderedOutput` is redundant when converting to `view` format).   If rendering to `view` format, and the body content being converted includes arbitrary nested content (such as macros); then it is  necessary to include webresource expands in the request. Webresources for content body are the batched JS and CSS dependencies for any nested dynamic content (i.e. macros).  - `embeddedContent` returns metadata for nested content (e.g. page included using page include macro) - `mediaToken` returns JWT token for retrieving attachment data from Media API - `macroRenderedOutput` additionally converts body to view format - `webresource.superbatch.uris.js` returns all common JS dependencies as static URLs - `webresource.superbatch.uris.css` returns all common CSS dependencies as static URLs - `webresource.superbatch.uris.all` returns all common dependencies as static URLs - `webresource.superbatch.tags.all` returns all common JS dependencies as html `<script>` tags - `webresource.superbatch.tags.css` returns all common CSS dependencies as html `<style>` tags - `webresource.superbatch.tags.js` returns all common dependencies as html `<script>` and `<style>` tags - `webresource.uris.js` returns JS dependencies specific to conversion - `webresource.uris.css` returns CSS dependencies specific to conversion - `webresource.uris.all` returns all dependencies specific to conversion      - `webresource.tags.all` returns common JS dependencies as html `<script>` tags - `webresource.tags.css` returns common CSS dependencies as html `<style>` tags - `webresource.tags.js` returns common dependencies as html `<script>` and `<style>` tags
   --allowCache: oneof<nothing, bool> # Controls whether conversion results are cached and reused for identical requests.  - `false`: Each request creates a new conversion task, even if an identical request was made previously. - `true`: Enables caching behavior for identical requests from the same user.   - If no cached result exists, a new conversion task is created   - If a cached result exists, the existing task is marked as RERUNNING and will complete with status COMPLETED   - Returns the same task ID for identical requests, allowing you to retrieve the cached result  For large macros that are slow to convert and for which it is acceptable to show cached data, set this field to `true`. (default: false)
   --spaceKeyContext: string # The space key used for resolving embedded content (page includes, files, and links) in the content body. For example, if the source content contains the link `<ac:link><ri:page ri:content-title="Example page" /><ac:link>` and the `spaceKeyContext=TEST` parameter is provided, then the link will be converted to a link to the "Example page" page in the "TEST" space.
@@ -737,7 +760,7 @@ export def "wiki-rest-content-history-macro-id-convert-async get" [
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/history/($version)/macro/id/($macroId)/convert/async/($to)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add labels to content
@@ -753,6 +776,7 @@ export def "wiki-rest-content-label addLabelsToContent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --prefix: string # The prefix for the label. `global`, `my` `team`, etc.
   --name: string # The name of the label, which will be shown in the UI.
 ]: any -> record<results: table<prefix: string, name: string, id: string, label: string>, start: int, limit: int, size: int, _links: record> {
@@ -764,7 +788,7 @@ export def "wiki-rest-content-label addLabelsToContent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove label from content using query parameter
@@ -780,6 +804,7 @@ export def "wiki-rest-content-label removeLabelFromContentUsingQueryParameter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the label to be removed.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -788,7 +813,7 @@ export def "wiki-rest-content-label removeLabelFromContentUsingQueryParameter" [
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/label" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove label from content
@@ -805,13 +830,14 @@ export def "wiki-rest-content-label removeLabelFromContent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/label/($label)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get watches for page
@@ -827,6 +853,7 @@ export def "wiki-rest-content-notification-child-created get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # The starting index of the returned watches. (format: int32, default: 0)
   --limit: int # The maximum number of watches to return per page. Note, this may be restricted by fixed system limits. (format: int32, default: 200)
 ]: nothing -> record<results: table<type: string, watcher: record, contentId: int>, start: int, limit: int, size: int, _links: record> {
@@ -836,7 +863,7 @@ export def "wiki-rest-content-notification-child-created get" [
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/notification/child-created" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get watches for space
@@ -852,6 +879,7 @@ export def "wiki-rest-content-notification-created get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # The starting index of the returned watches. (format: int32, default: 0)
   --limit: int # The maximum number of watches to return per page. Note, this may be restricted by fixed system limits. (format: int32, default: 200)
 ]: nothing -> record<results: table<type: string, watcher: record, spaceKey: string, labelName: string, prefix: string>, start: int, limit: int, size: int, _links: record> {
@@ -861,7 +889,7 @@ export def "wiki-rest-content-notification-created get" [
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/notification/created" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Copy page hierarchy
@@ -878,6 +906,7 @@ export def "wiki-rest-content-pagehierarchy-copy copyPageHierarchy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --copyAttachments: oneof<nothing, bool> # If set to `true`, attachments are copied to the destination page. (default: false)
   --copyPermissions: oneof<nothing, bool> # If set to `true`, page permissions are copied to the destination page. (default: false)
   --copyProperties: oneof<nothing, bool> # If set to `true`, content properties are copied to the destination page. (default: false)
@@ -895,7 +924,7 @@ export def "wiki-rest-content-pagehierarchy-copy copyPageHierarchy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Copy single page
@@ -913,6 +942,7 @@ export def "wiki-rest-content-copy copyPage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # A multi-value parameter indicating which properties of the content to expand. Maximum sub-expansions allowed is `8`.  - `childTypes.all` returns whether the content has attachments, comments, or child pages/whiteboards. Use this if you only need to check whether the content has children of a particular type. - `childTypes.attachment` returns whether the content has attachments. - `childTypes.comment` returns whether the content has comments. - `childTypes.page` returns whether the content has child pages. - `childTypes.whiteboard` returns whether the content has child whiteboards. - `childTypes.database` returns whether the content has child databases. - `childTypes.embed` returns whether the content has child embeds (smartlinks). - `childTypes.folder` returns whether the content has child folder. - `container` returns the space that the content is in. This is the same as the information returned by [Get space](#api-space-spaceKey-get). - `metadata.currentuser` returns information about the current user in relation to the content, including when they last viewed it, modified it, contributed to it, or added it as a favorite. - `metadata.properties` returns content properties that have been set via the Confluence REST API. - `metadata.labels` returns the labels that have been added to the content. - `metadata.frontend` this property is only used by Atlassian. - `operations` returns the operations for the content, which are used when setting permissions. - `children.page` returns pages that are descendants at the level immediately below the content. - `children.whiteboard` returns whiteboards that are descendants at the level immediately below the content. - `children.database` returns databases that are descendants at the level immediately below the content. - `children.embed` returns embeds (smartlinks) that are descendants at the level immediately below the content. - `children.folder` returns folders that are descendants at the level immediately below the content. - `children.attachment` returns all attachments for the content. - `children.comment` returns all comments on the content. - `restrictions.read.restrictions.user` returns the users that have permission to read the content. - `restrictions.read.restrictions.group` returns the groups that have permission to read the content. Note that this may return deleted groups, because deleting a group doesn't remove associated restrictions. - `restrictions.update.restrictions.user` returns the users that have permission to update the content. - `restrictions.update.restrictions.group` returns the groups that have permission to update the content. Note that this may return deleted groups because deleting a group doesn't remove associated restrictions. - `history` returns the history of the content, including the date it was created. - `history.lastUpdated` returns information about the most recent update of the content, including who updated it and when it was updated. - `history.previousVersion` returns information about the update prior to the current content update. - `history.contributors` returns all of the users who have contributed to the content. - `history.nextVersion` returns information about the update after to the current content update. - `ancestors` returns the parent content, if the content is a page or whiteboard. - `body` returns the body of the content in different formats, including the editor format, view format, and export format. - `body.storage` returns the body of content in storage format. - `body.view` returns the body of content in view format. - `version` returns information about the most recent update of the content, including who updated it and when it was updated. - `descendants.page` returns pages that are descendants at any level below the content. - `descendants.whiteboard` returns whiteboards that are descendants at any level below the content. - `descendants.database` returns databases that are descendants at any level below the content. - `descendants.embed` returns embeds (smartlinks) that are descendants at any level below the content. - `descendants.folder` returns folders that are descendants at any level below the content. - `descendants.attachment` returns all attachments for the content, same as `children.attachment`. - `descendants.comment` returns all comments on the content, same as `children.comment`. - `space` returns the space that the content is in. This is the same as the information returned by [Get space](#api-space-spaceKey-get).  In addition, the following comment-specific expansions can be used: - `extensions.inlineProperties` returns inline comment-specific properties. - `extensions.resolution` returns the resolution status of each comment.
   --copyAttachments: oneof<nothing, bool> # If set to `true`, attachments are copied to the destination page. (default: false)
   --copyPermissions: oneof<nothing, bool> # If set to `true`, page permissions are copied to the destination page. (default: false)
@@ -932,7 +962,7 @@ export def "wiki-rest-content-copy copyPage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check content permissions
@@ -949,6 +979,7 @@ export def "wiki-rest-content-permission-check checkContentPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   subject: record # The user or group that the permission applies to. — shape: {type: "user"|"group", identifier: string}
   operation: string@operation-completer # The content permission operation to check.
 ]: any -> record<hasPermission: bool, errors: table<translation: string, args: list>, _links: record> {
@@ -960,7 +991,7 @@ export def "wiki-rest-content-permission-check checkContentPermission" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get restrictions
@@ -976,6 +1007,7 @@ export def "wiki-rest-content-restriction get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # A multi-value parameter indicating which properties of the content restrictions to expand. By default, the following objects are expanded: `restrictions.user`, `restrictions.group`.  - `restrictions.user` returns the piece of content that the restrictions are applied to. - `restrictions.group` returns the piece of content that the restrictions are applied to. - `content` returns the piece of content that the restrictions are applied to.
   --start: int # The starting index of the users and groups in the returned restrictions. (format: int32, default: 0)
   --limit: int # The maximum number of users and the maximum number of groups, in the returned restrictions, to return per page. Note, this may be restricted by fixed system limits. (format: int32, default: 100)
@@ -986,7 +1018,7 @@ export def "wiki-rest-content-restriction get" [
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/restriction" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update restrictions
@@ -1003,6 +1035,7 @@ export def "wiki-rest-content-restriction updateRestrictions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # A multi-value parameter indicating which properties of the content restrictions (returned in response) to expand.  - `restrictions.user` returns the piece of content that the restrictions are applied to. Expanded by default. - `restrictions.group` returns the piece of content that the restrictions are applied to. Expanded by default. - `content` returns the piece of content that the restrictions are applied to.
   --results: list # item shape: {operation: "administer"|"copy"|"create"|"delete"|"export"|"move"|"purge"|"purge_version"|"read"|"restore"|"update"|"use", restrictions: record, content?: record}
   --start: int # format: int32
@@ -1020,7 +1053,7 @@ export def "wiki-rest-content-restriction updateRestrictions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add restrictions
@@ -1037,6 +1070,7 @@ export def "wiki-rest-content-restriction addRestrictions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # A multi-value parameter indicating which properties of the content restrictions (returned in response) to expand.  - `restrictions.user` returns the piece of content that the restrictions are applied to. Expanded by default. - `restrictions.group` returns the piece of content that the restrictions are applied to. Expanded by default. - `content` returns the piece of content that the restrictions are applied to.
   --results: list # item shape: {operation: "administer"|"copy"|"create"|"delete"|"export"|"move"|"purge"|"purge_version"|"read"|"restore"|"update"|"use", restrictions: record, content?: record}
   --start: int # format: int32
@@ -1054,7 +1088,7 @@ export def "wiki-rest-content-restriction addRestrictions" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete restrictions
@@ -1070,6 +1104,7 @@ export def "wiki-rest-content-restriction delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # A multi-value parameter indicating which properties of the content restrictions (returned in response) to expand.  - `restrictions.user` returns the piece of content that the restrictions are applied to. Expanded by default. - `restrictions.group` returns the piece of content that the restrictions are applied to. Expanded by default. - `content` returns the piece of content that the restrictions are applied to.
 ]: nothing -> record<results: table<operation: string, restrictions: record, content: record, _expandable: record, _links: record>, start: int, limit: int, size: int, restrictionsHash: string, _links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1078,7 +1113,7 @@ export def "wiki-rest-content-restriction delete" [
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/restriction" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get restrictions by operation
@@ -1094,6 +1129,7 @@ export def "wiki-rest-content-restriction-by-operation list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # A multi-value parameter indicating which properties of the content restrictions to expand.  - `restrictions.user` returns the piece of content that the restrictions are applied to. Expanded by default. - `restrictions.group` returns the piece of content that the restrictions are applied to. Expanded by default. - `content` returns the piece of content that the restrictions are applied to.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1102,7 +1138,7 @@ export def "wiki-rest-content-restriction-by-operation list" [
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/restriction/byOperation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get restrictions for operation
@@ -1119,6 +1155,7 @@ export def "wiki-rest-content-restriction-by-operation get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # A multi-value parameter indicating which properties of the content restrictions to expand.  - `restrictions.user` returns the piece of content that the restrictions are applied to. Expanded by default. - `restrictions.group` returns the piece of content that the restrictions are applied to. Expanded by default. - `content` returns the piece of content that the restrictions are applied to.
   --start: int # The starting index of the users and groups in the returned restrictions. (format: int32, default: 0)
   --limit: int # The maximum number of users and the maximum number of groups, in the returned restrictions, to return per page. Note, this may be restricted by fixed system limits. (format: int32, default: 100)
@@ -1129,7 +1166,7 @@ export def "wiki-rest-content-restriction-by-operation get" [
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/restriction/byOperation/($operationKey)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get content restriction status for group
@@ -1147,13 +1184,14 @@ export def "wiki-rest-content-restriction-by-operation-by-group-id get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/restriction/byOperation/($operationKey)/byGroupId/($groupId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add group to content restriction
@@ -1171,13 +1209,14 @@ export def "wiki-rest-content-restriction-by-operation-by-group-id addGroupToCon
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/restriction/byOperation/($operationKey)/byGroupId/($groupId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove group from content restriction
@@ -1195,13 +1234,14 @@ export def "wiki-rest-content-restriction-by-operation-by-group-id removeGroupFr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/restriction/byOperation/($operationKey)/byGroupId/($groupId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get content restriction status for user
@@ -1220,6 +1260,7 @@ export def "wiki-rest-content-restriction-by-operation-user get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --username: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --accountId: string # The account ID of the user. The accountId uniquely identifies the user across all Atlassian products. For example, `384093:32b4d9w0-f6a5-3535-11a3-9c8c88d10192`.
@@ -1230,7 +1271,7 @@ export def "wiki-rest-content-restriction-by-operation-user get" [
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/restriction/byOperation/($operationKey)/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add user to content restriction
@@ -1249,6 +1290,7 @@ export def "wiki-rest-content-restriction-by-operation-user addUserToContentRest
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --username: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --accountId: string # The account ID of the user. The accountId uniquely identifies the user across all Atlassian products. For example, `384093:32b4d9w0-f6a5-3535-11a3-9c8c88d10192`.
@@ -1259,7 +1301,7 @@ export def "wiki-rest-content-restriction-by-operation-user addUserToContentRest
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/restriction/byOperation/($operationKey)/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove user from content restriction
@@ -1278,6 +1320,7 @@ export def "wiki-rest-content-restriction-by-operation-user removeUserFromConten
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --username: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --accountId: string # The account ID of the user. The accountId uniquely identifies the user across all Atlassian products. For example, `384093:32b4d9w0-f6a5-3535-11a3-9c8c88d10192`.
@@ -1288,7 +1331,7 @@ export def "wiki-rest-content-restriction-by-operation-user removeUserFromConten
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/restriction/byOperation/($operationKey)/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get content state
@@ -1304,6 +1347,7 @@ export def "wiki-rest-content-state get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-2 # Set status to one of [current,draft,archived]. Default value is current. (default: current)
 ]: nothing -> record<contentState: record<id: int, name: string, color: string>, lastUpdated: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1312,7 +1356,7 @@ export def "wiki-rest-content-state get" [
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/state" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set the content state of a content and publishes a new version of the content.
@@ -1328,6 +1372,7 @@ export def "wiki-rest-content-state setContentState" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-1 # Status of content onto which state will be placed. If draft, then draft state will change. If current, state will be placed onto a new version of the content with same body as previous version.
   --name: string # Name of content state. Maximum 20 characters.
   --color: string # Color of state. Must be in 6 digit hex form (#FFFFFF). The default colors offered in the UI are:  #ff7452 (red),  #2684ff (blue),  #ffc400 (yellow),  #57d9a3 (green), and  #8777d9 (purple)
@@ -1342,7 +1387,7 @@ export def "wiki-rest-content-state setContentState" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Removes the content state of a content and publishes a new version.
@@ -1358,6 +1403,7 @@ export def "wiki-rest-content-state removeContentState" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-1 # status of content state from which to delete state. Can be draft or archived
 ]: nothing -> record<contentState: record<id: int, name: string, color: string>, lastUpdated: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1366,7 +1412,7 @@ export def "wiki-rest-content-state removeContentState" [
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/state" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets available content states for content.
@@ -1382,13 +1428,14 @@ export def "wiki-rest-content-state-available get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<spaceContentStates: table<id: int, name: string, color: string>, customContentStates: table<id: int, name: string, color: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/state/available")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Restore content version
@@ -1405,6 +1452,7 @@ export def "wiki-rest-content-version restoreContentVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # A multi-value parameter indicating which properties of the content to expand. By default, the `content` object is expanded.  - `collaborators` returns the users that collaborated on the version. - `content` returns the content for the version.
   operationKey: string@operationKey-completer # Set to 'restore'.
   params: record # shape: {versionNumber: int, message: string, restoreTitle?: bool}
@@ -1418,7 +1466,7 @@ export def "wiki-rest-content-version restoreContentVersion" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete content version
@@ -1435,13 +1483,14 @@ export def "wiki-rest-content-version delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wiki/rest/api/content/($id)/version/($versionNumber)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Custom Content States
@@ -1456,13 +1505,14 @@ export def "wiki-rest-content-states get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: int, name: string, color: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wiki/rest/api/content-states")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Asynchronously convert content body
@@ -1478,6 +1528,7 @@ export def "wiki-rest-contentbody-convert-async asyncConvertContentBodyRequest" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # A multi-value parameter indicating which properties of the content to expand and populate. Expands are dependent on the `to` conversion format and may be irrelevant for certain conversions (e.g. `macroRenderedOutput` is redundant when converting to `view` format).   If rendering to `view` format, and the body content being converted includes arbitrary nested content (such as macros); then it is  necessary to include webresource expands in the request. Webresources for content body are the batched JS and CSS dependencies for any nested dynamic content (i.e. macros).  - `embeddedContent` returns metadata for nested content (e.g. page included using page include macro) - `mediaToken` returns JWT token for retrieving attachment data from Media API - `macroRenderedOutput` additionally converts body to view format - `webresource.superbatch.uris.js` returns all common JS dependencies as static URLs - `webresource.superbatch.uris.css` returns all common CSS dependencies as static URLs - `webresource.superbatch.uris.all` returns all common dependencies as static URLs - `webresource.superbatch.tags.all` returns all common JS dependencies as html `<script>` tags - `webresource.superbatch.tags.css` returns all common CSS dependencies as html `<style>` tags - `webresource.superbatch.tags.js` returns all common dependencies as html `<script>` and `<style>` tags - `webresource.uris.js` returns JS dependencies specific to conversion - `webresource.uris.css` returns CSS dependencies specific to conversion - `webresource.uris.all` returns all dependencies specific to conversion      - `webresource.tags.all` returns common JS dependencies as html `<script>` tags - `webresource.tags.css` returns common CSS dependencies as html `<style>` tags - `webresource.tags.js` returns common dependencies as html `<script>` and `<style>` tags
   --spaceKeyContext: string # The space key used for resolving embedded content (page includes, files, and links) in the content body. For example, if the source content contains the link `<ac:link><ri:page ri:content-title="Example page" /><ac:link>` and the `spaceKeyContext=TEST` parameter is provided, then the link will be converted to a link to the "Example page" page in the "TEST" space.
   --contentIdContext: string # The content ID used to find the space for resolving embedded content (page includes, files, and links) in the content body. For example, if the source content contains the link `<ac:link><ri:page ri:content-title="Example page" /><ac:link>` and the `contentIdContext=123` parameter is provided, then the link will be converted to a link to the "Example page" page in the same space that has the content with ID=123. Note, `spaceKeyContext` will be ignored if this parameter is provided.
@@ -1495,7 +1546,7 @@ export def "wiki-rest-contentbody-convert-async asyncConvertContentBodyRequest" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get asynchronously converted content body from the id or the current status of the task.
@@ -1511,13 +1562,14 @@ export def "wiki-rest-contentbody-convert-async asyncConvertContentBodyResponse"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<value: string, representation: string, renderTaskId: string, error: string, status: string, embeddedContent: table<entityId: int, entityType: string, entity: record>, webresource: record<_expandable: record<uris: any>, keys: list<string>, contexts: list<string>, uris: record<all: any, css: any, js: any, _expandable: record>, tags: record<all: string, css: string, data: string, js: string, _expandable: record>, superbatch: record<uris: record, tags: record, metatags: string, _expandable: record>>, mediaToken: record<collectionIds: list<string>, contentId: string, expiryDateTime: string, fileIds: list<string>, token: string>, _expandable: record<content: string, embeddedContent: string, webresource: string, mediaToken: string>, _links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wiki/rest/api/contentbody/convert/async/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create asynchronous content body conversion tasks in bulk
@@ -1533,6 +1585,7 @@ export def "wiki-rest-contentbody-convert-async-bulk-tasks bulkAsyncConvertConte
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --conversionInputs: list # item shape: {to: string, allowCache?: bool, spaceKeyContext?: string, contentIdContext?: string, embeddedContentRender?: "current"|"version-at-save", expand?: list, body: record}
 ]: any -> table<asyncId: string> {
   let input = $in
@@ -1543,7 +1596,7 @@ export def "wiki-rest-contentbody-convert-async-bulk-tasks bulkAsyncConvertConte
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get asynchronous content body conversion task result in bulk
@@ -1558,6 +1611,7 @@ export def "wiki-rest-contentbody-convert-async-bulk-tasks bulkAsyncConvertConte
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list # The asyncIds of the conversion tasks.
 ]: nothing -> table<value: string, representation: string, renderTaskId: string, error: string, status: string, embeddedContent: list<record>, webresource: record<_expandable: record, keys: list, contexts: list, uris: record, tags: record, superbatch: record>, mediaToken: record<collectionIds: list, contentId: string, expiryDateTime: string, fileIds: list, token: string>, _expandable: record<content: string, embeddedContent: string, webresource: string, mediaToken: string>, _links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1566,7 +1620,7 @@ export def "wiki-rest-contentbody-convert-async-bulk-tasks bulkAsyncConvertConte
   let full_url = (build-url $base "/wiki/rest/api/contentbody/convert/async/bulk/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get label information
@@ -1581,6 +1635,7 @@ export def "wiki-rest-label get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the label to query.
   --type: string@type-completer-1 # The type of contents that are to be returned.
   --start: int # The starting offset for the results. (format: int32, default: 0)
@@ -1592,7 +1647,7 @@ export def "wiki-rest-label get" [
   let full_url = (build-url $base "/wiki/rest/api/label" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get groups
@@ -1607,6 +1662,7 @@ export def "wiki-rest-group get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # The starting index of the returned groups. (format: int32, default: 0)
   --limit: int # The maximum number of groups to return per page. Note, this may be restricted by fixed system limits. (format: int32, default: 200)
   --accessType: string@accessType-completer # The group permission level for which to filter results.
@@ -1617,7 +1673,7 @@ export def "wiki-rest-group get" [
   let full_url = (build-url $base "/wiki/rest/api/group" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new user group
@@ -1632,6 +1688,7 @@ export def "wiki-rest-group createGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string
 ]: any -> record<type: string, name: string, id: string, usageType: string, managedBy: string, _links: record> {
   let input = $in
@@ -1642,7 +1699,7 @@ export def "wiki-rest-group createGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get group
@@ -1657,6 +1714,7 @@ export def "wiki-rest-group-by-id get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The id of the group.
 ]: nothing -> record<type: string, name: string, id: string, usageType: string, managedBy: string, _links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1665,7 +1723,7 @@ export def "wiki-rest-group-by-id get" [
   let full_url = (build-url $base "/wiki/rest/api/group/by-id" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete user group
@@ -1680,6 +1738,7 @@ export def "wiki-rest-group-by-id removeGroupById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Id of the group to delete.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1688,7 +1747,7 @@ export def "wiki-rest-group-by-id removeGroupById" [
   let full_url = (build-url $base "/wiki/rest/api/group/by-id" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search groups by partial query
@@ -1703,6 +1762,7 @@ export def "wiki-rest-group-picker searchGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # the search term used to query results.
   --start: int # The starting index of the returned groups. (format: int32, default: 0)
   --limit: int # The maximum number of groups to return per page. Note, this is restricted to a maximum limit of 200 groups. (format: int32, default: 200)
@@ -1714,7 +1774,7 @@ export def "wiki-rest-group-picker searchGroups" [
   let full_url = (build-url $base "/wiki/rest/api/group/picker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get group members
@@ -1730,6 +1790,7 @@ export def "wiki-rest-group-members-by-group-id get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # The starting index of the returned users. (format: int32, default: 0)
   --limit: int # The maximum number of users to return per page. Note, this may be restricted by fixed system limits. (format: int32, default: 200)
   --shouldReturnTotalSize: oneof<nothing, bool> # Whether to include total size parameter in the results. Note, fetching total size property is an expensive operation; use it if your use case needs this value. (default: false)
@@ -1741,7 +1802,7 @@ export def "wiki-rest-group-members-by-group-id get" [
   let full_url = (build-url $base $"/wiki/rest/api/group/($groupId)/membersByGroupId" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add member to group by groupId
@@ -1756,6 +1817,7 @@ export def "wiki-rest-group-user-by-group-id addUserToGroupByGroupId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --groupId: string # GroupId of the group whose membership is updated
   accountId: string
 ]: any -> any {
@@ -1768,7 +1830,7 @@ export def "wiki-rest-group-user-by-group-id addUserToGroupByGroupId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove member from group using group id
@@ -1785,6 +1847,7 @@ export def "wiki-rest-group-user-by-group-id removeMemberFromGroupByGroupId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --groupId: string # Id of the group whose membership is updated.
   --accountId: string # The account ID of the user. The accountId uniquely identifies the user across all Atlassian products. For example, `384093:32b4d9w0-f6a5-3535-11a3-9c8c88d10192`.
   --key: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
@@ -1796,7 +1859,7 @@ export def "wiki-rest-group-user-by-group-id removeMemberFromGroupByGroupId" [
   let full_url = (build-url $base "/wiki/rest/api/group/userByGroupId" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get long-running tasks
@@ -1811,6 +1874,7 @@ export def "wiki-rest-longtask list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # The key of the tasks.
   --start: int # The starting index of the returned tasks. (format: int32, default: 0)
   --limit: int # The maximum number of tasks to return per page. Note, this may be restricted by fixed system limits. (format: int32, default: 100)
@@ -1821,7 +1885,7 @@ export def "wiki-rest-longtask list" [
   let full_url = (build-url $base "/wiki/rest/api/longtask" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get long-running task
@@ -1837,13 +1901,14 @@ export def "wiki-rest-longtask get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ari: string, id: string, name: record<key: string, args: list<record>>, elapsedTime: int, percentageComplete: int, successful: bool, finished: bool, messages: table<translation: string, args: list>, _links: record, status: string, errors: table<translation: string, args: list>, additionalDetails: record<destinationId: string, destinationUrl: string, totalPageNeedToCopy: int, additionalProperties: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wiki/rest/api/longtask/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find target entities related to a source entity
@@ -1862,6 +1927,7 @@ export def "wiki-rest-relation-from-to findTargetFromSource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sourceStatus: string # The status of the source. This parameter is only used when the `sourceType` is 'content'.
   --targetStatus: string # The status of the target. This parameter is only used when the `targetType` is 'content'.
   --sourceVersion: int # The version of the source. This parameter is only used when the `sourceType` is 'content' and the `sourceStatus` is 'historical'. (format: int32)
@@ -1876,7 +1942,7 @@ export def "wiki-rest-relation-from-to findTargetFromSource" [
   let full_url = (build-url $base $"/wiki/rest/api/relation/($relationName)/from/($sourceType)/($sourceKey)/to/($targetType)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find relationship from source to target
@@ -1896,6 +1962,7 @@ export def "wiki-rest-relation-from-to get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sourceStatus: string # The status of the source. This parameter is only used when the `sourceType` is 'content'.
   --targetStatus: string # The status of the target. This parameter is only used when the `targetType` is 'content'.
   --sourceVersion: int # The version of the source. This parameter is only used when the `sourceType` is 'content' and the `sourceStatus` is 'historical'. (format: int32)
@@ -1908,7 +1975,7 @@ export def "wiki-rest-relation-from-to get" [
   let full_url = (build-url $base $"/wiki/rest/api/relation/($relationName)/from/($sourceType)/($sourceKey)/to/($targetType)/($targetKey)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create relationship
@@ -1928,6 +1995,7 @@ export def "wiki-rest-relation-from-to createRelationship" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sourceStatus: string # The status of the source. This parameter is only used when the `sourceType` is 'content'.
   --targetStatus: string # The status of the target. This parameter is only used when the `targetType` is 'content'.
   --sourceVersion: int # The version of the source. This parameter is only used when the `sourceType` is 'content' and the `sourceStatus` is 'historical'. (format: int32)
@@ -1939,7 +2007,7 @@ export def "wiki-rest-relation-from-to createRelationship" [
   let full_url = (build-url $base $"/wiki/rest/api/relation/($relationName)/from/($sourceType)/($sourceKey)/to/($targetType)/($targetKey)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete relationship
@@ -1959,6 +2027,7 @@ export def "wiki-rest-relation-from-to delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sourceStatus: string # The status of the source. This parameter is only used when the `sourceType` is 'content'.
   --targetStatus: string # The status of the target. This parameter is only used when the `targetType` is 'content'.
   --sourceVersion: int # The version of the source. This parameter is only used when the `sourceType` is 'content' and the `sourceStatus` is 'historical'. (format: int32)
@@ -1970,7 +2039,7 @@ export def "wiki-rest-relation-from-to delete" [
   let full_url = (build-url $base $"/wiki/rest/api/relation/($relationName)/from/($sourceType)/($sourceKey)/to/($targetType)/($targetKey)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find source entities related to a target entity
@@ -1989,6 +2058,7 @@ export def "wiki-rest-relation-to-from findSourcesForTarget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sourceStatus: string # The status of the source. This parameter is only used when the `sourceType` is 'content'.
   --targetStatus: string # The status of the target. This parameter is only used when the `targetType` is 'content'.
   --sourceVersion: int # The version of the source. This parameter is only used when the `sourceType` is 'content' and the `sourceStatus` is 'historical'. (format: int32)
@@ -2003,7 +2073,7 @@ export def "wiki-rest-relation-to-from findSourcesForTarget" [
   let full_url = (build-url $base $"/wiki/rest/api/relation/($relationName)/to/($targetType)/($targetKey)/from/($sourceType)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search content
@@ -2018,6 +2088,7 @@ export def "wiki-rest-search searchByCQL" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cql: string # The CQL query to be used for the search. See [Advanced Searching using CQL](https://developer.atlassian.com/cloud/confluence/advanced-searching-using-cql/) for instructions on how to build a CQL query.
   --cqlcontext: string # The space, content, and content status to execute the search against.  - `spaceKey` Key of the space to search against. Optional. - `contentId` ID of the content to search against. Optional. Must be in the space specified by `spaceKey`. - `contentStatuses` Content statuses to search against. Optional.  Specify these values in an object. For example, `cqlcontext={%22spaceKey%22:%22TEST%22, %22contentId%22:%22123%22}`
   --cursor: string # Pointer to a set of search results, returned as part of the `next` or `prev` URL from the previous search call.
@@ -2038,7 +2109,7 @@ export def "wiki-rest-search searchByCQL" [
   let full_url = (build-url $base "/wiki/rest/api/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search users
@@ -2053,6 +2124,7 @@ export def "wiki-rest-search-user searchUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cql: string # The CQL query to be used for the search. See [Advanced Searching using CQL](https://developer.atlassian.com/cloud/confluence/advanced-searching-using-cql/) for instructions on how to build a CQL query.  Example queries:           cql=type=user will return up to 10k users           cql=user="1234" will return user with accountId "1234"           You can also use IN, NOT IN, != operators           cql=user IN ("12", "34") will return users with accountids "12" and "34"           cql=user.fullname~jo will return users with nickname/full name starting with "jo"           cql=user.accountid="123" will return user with accountId "123"
   --start: int # The starting index of the returned users. (format: int32, default: 0)
   --limit: int # The maximum number of user objects to return per page. Note, this may be restricted by fixed system limits. (format: int32, default: 25)
@@ -2065,7 +2137,7 @@ export def "wiki-rest-search-user searchUser" [
   let full_url = (build-url $base "/wiki/rest/api/search/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get look and feel settings
@@ -2080,6 +2152,7 @@ export def "wiki-rest-settings-lookandfeel get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --spaceKey: string # The key of the space for which the look and feel settings will be returned. If this is not set, only the global look and feel settings are returned.
 ]: nothing -> record<selected: string, global: record<headings: record<color: string>, links: record<color: string>, menus: record<hoverOrFocus: record, color: string>, header: record<backgroundColor: string, button: record, primaryNavigation: record, secondaryNavigation: record, search: record>, horizontalHeader: record<backgroundColor: string, button: record, primaryNavigation: record, secondaryNavigation: record, search: record>, content: record<screen: record, container: record, header: record, body: record>, bordersAndDividers: record<color: string>, spaceReference: record>, theme: record<headings: record<color: string>, links: record<color: string>, menus: record<hoverOrFocus: record, color: string>, header: record<backgroundColor: string, button: record, primaryNavigation: record, secondaryNavigation: record, search: record>, horizontalHeader: record<backgroundColor: string, button: record, primaryNavigation: record, secondaryNavigation: record, search: record>, content: record<screen: record, container: record, header: record, body: record>, bordersAndDividers: record<color: string>, spaceReference: record>, custom: record<headings: record<color: string>, links: record<color: string>, menus: record<hoverOrFocus: record, color: string>, header: record<backgroundColor: string, button: record, primaryNavigation: record, secondaryNavigation: record, search: record>, horizontalHeader: record<backgroundColor: string, button: record, primaryNavigation: record, secondaryNavigation: record, search: record>, content: record<screen: record, container: record, header: record, body: record>, bordersAndDividers: record<color: string>, spaceReference: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2088,7 +2161,7 @@ export def "wiki-rest-settings-lookandfeel get" [
   let full_url = (build-url $base "/wiki/rest/api/settings/lookandfeel" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Select look and feel settings
@@ -2103,6 +2176,7 @@ export def "wiki-rest-settings-lookandfeel updateLookAndFeel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   spaceKey: string # The key of the space for which the look and feel settings will be set.
   lookAndFeelType: string@lookAndFeelType-completer
 ]: any -> record<spaceKey: string, lookAndFeelType: string> {
@@ -2114,7 +2188,7 @@ export def "wiki-rest-settings-lookandfeel updateLookAndFeel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update look and feel settings
@@ -2136,6 +2210,7 @@ export def "wiki-rest-settings-lookandfeel-custom updateLookAndFeelSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --spaceKey: string # The key of the space for which the look and feel settings will be updated. If this is not set, the global look and feel settings will be updated.
   headings: record # shape: {color: string}
   links: record # shape: {color: string}
@@ -2155,7 +2230,7 @@ export def "wiki-rest-settings-lookandfeel-custom updateLookAndFeelSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reset look and feel settings
@@ -2170,6 +2245,7 @@ export def "wiki-rest-settings-lookandfeel-custom resetLookAndFeelSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --spaceKey: string # The key of the space for which the look and feel settings will be reset. If this is not set, the global look and feel settings will be reset.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2178,7 +2254,7 @@ export def "wiki-rest-settings-lookandfeel-custom resetLookAndFeelSettings" [
   let full_url = (build-url $base "/wiki/rest/api/settings/lookandfeel/custom" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get system info
@@ -2193,13 +2269,14 @@ export def "wiki-rest-settings-system-info get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<cloudId: string, commitHash: string, baseUrl: string, fallbackBaseUrl: string, edition: string, siteTitle: string, defaultLocale: string, defaultTimeZone: string, microsPerimeter: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wiki/rest/api/settings/systemInfo")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get themes
@@ -2214,6 +2291,7 @@ export def "wiki-rest-settings-theme list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # The starting index of the returned themes. (format: int32, default: 0)
   --limit: int # The maximum number of themes to return per page. Note, this may be restricted by fixed system limits. (format: int32, default: 100)
 ]: nothing -> record<results: table<themeKey: string, name: string, description: string, icon: record>, start: int, limit: int, size: int, _links: record> {
@@ -2223,7 +2301,7 @@ export def "wiki-rest-settings-theme list" [
   let full_url = (build-url $base "/wiki/rest/api/settings/theme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get global theme
@@ -2238,13 +2316,14 @@ export def "wiki-rest-settings-theme-selected get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<themeKey: string, name: string, description: string, icon: record<path: string, width: int, height: int, isDefault: bool>, _links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wiki/rest/api/settings/theme/selected")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get theme
@@ -2260,13 +2339,14 @@ export def "wiki-rest-settings-theme get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<themeKey: string, name: string, description: string, icon: record<path: string, width: int, height: int, isDefault: bool>, _links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wiki/rest/api/settings/theme/($themeKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create space
@@ -2283,6 +2363,7 @@ export def "wiki-rest-space createSpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the new space.
   --key: string # The key for the new space. Format: See [Space keys](https://confluence.atlassian.com/x/lqNMMQ). If `alias` is not provided, this is required.
   --alias: string # This field will be used as the new identifier for the space in confluence page URLs. If the property is not provided the alias will be the provided key. This property is experimental and may be changed or removed in the future.
@@ -2297,7 +2378,7 @@ export def "wiki-rest-space createSpace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create private space
@@ -2314,6 +2395,7 @@ export def "wiki-rest-space-private createPrivateSpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the new space.
   --key: string # The key for the new space. Format: See [Space keys](https://confluence.atlassian.com/x/lqNMMQ). If `alias` is not provided, this is required.
   --alias: string # This field will be used as the new identifier for the space in confluence page URLs. If the property is not provided the alias will be the provided key. This property is experimental and may be changed or removed in the future.
@@ -2328,7 +2410,7 @@ export def "wiki-rest-space-private createPrivateSpace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update space
@@ -2345,6 +2427,7 @@ export def "wiki-rest-space updateSpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The updated name of the space. (nullable)
   --description: record # The description of the new/updated space. Note, only the 'plain' representation can be used for the description when creating or updating a space. (nullable) — shape: {plain: record}
   --homepage: record # The updated homepage for this space (nullable)
@@ -2359,7 +2442,7 @@ export def "wiki-rest-space updateSpace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete space
@@ -2375,13 +2458,14 @@ export def "wiki-rest-space delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ari: string, id: string, links: record<status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wiki/rest/api/space/($spaceKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add new permission to space
@@ -2399,6 +2483,7 @@ export def "wiki-rest-space-permission addPermissionToSpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   subject: record # The user or group that the permission applies to. — shape: {type: "user"|"group", identifier: string}
   operation: record # shape: {key: "administer"|"archive"|"copy"|"create"|"delete"|"export"|"move"|"purge"|"purge_version"|"read"|"restore"|"restrict_content"|"update"|"use", target: "page"|"blogpost"|"comment"|"attachment"|"space"}
   --links: record
@@ -2411,7 +2496,7 @@ export def "wiki-rest-space-permission addPermissionToSpace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add new custom content permission to space
@@ -2429,6 +2514,7 @@ export def "wiki-rest-space-permission-custom-content addCustomContentPermission
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   subject: record # The user or group that the permission applies to. — shape: {type: "user"|"group", identifier: string}
   operations: list # item shape: {key: "read"|"create"|"delete", target: string, access: bool}
 ]: any -> any {
@@ -2440,7 +2526,7 @@ export def "wiki-rest-space-permission-custom-content addCustomContentPermission
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a space permission
@@ -2457,13 +2543,14 @@ export def "wiki-rest-space-permission removePermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wiki/rest/api/space/($spaceKey)/permission/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get space settings
@@ -2479,13 +2566,14 @@ export def "wiki-rest-space-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<routeOverrideEnabled: bool, editor: record<page: string, blogpost: string, default: string>, contentMode: string, spaceKey: string, _links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wiki/rest/api/space/($spaceKey)/settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update space settings
@@ -2501,6 +2589,7 @@ export def "wiki-rest-space-settings updateSpaceSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --routeOverrideEnabled: oneof<nothing, bool> # Defines whether an override for the space home should be used. This is used in conjunction with a space theme provided by an app. For example, if this property is set to true, a theme can display a page other than the space homepage when users visit the root URL for a space. This property allows apps to provide content-only theming without overriding the space home.
   --contentMode: string@contentMode-completer # The content rendering mode for the space. Controls spacing and typography in the editor and renderer. Valid values are "standard" and "compact". When set to "compact", content is rendered more densely with smaller spacing and typography. (nullable)
 ]: any -> record<routeOverrideEnabled: bool, editor: record<page: string, blogpost: string, default: string>, contentMode: string, spaceKey: string, _links: record> {
@@ -2512,7 +2601,7 @@ export def "wiki-rest-space-settings updateSpaceSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get space suggested content states
@@ -2528,13 +2617,14 @@ export def "wiki-rest-space-state get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: int, name: string, color: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wiki/rest/api/space/($spaceKey)/state")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get content state settings for space
@@ -2550,13 +2640,14 @@ export def "wiki-rest-space-state-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<contentStatesAllowed: bool, customContentStatesAllowed: bool, spaceContentStatesAllowed: bool, spaceContentStates: table<id: int, name: string, color: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wiki/rest/api/space/($spaceKey)/state/settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get content in space with given content state
@@ -2572,6 +2663,7 @@ export def "wiki-rest-space-state-content get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state-id: int # The id of the content state to filter content by (format: int32)
   --expand: list # A multi-value parameter indicating which properties of the content to expand. Options include: space, version, history, children, etc.  Ex: space,version
   --limit: int # Maximum number of results to return (format: int32, default: 25)
@@ -2583,7 +2675,7 @@ export def "wiki-rest-space-state-content get" [
   let full_url = (build-url $base $"/wiki/rest/api/space/($spaceKey)/state/content" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get space theme
@@ -2599,13 +2691,14 @@ export def "wiki-rest-space-theme get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<themeKey: string, name: string, description: string, icon: record<path: string, width: int, height: int, isDefault: bool>, _links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wiki/rest/api/space/($spaceKey)/theme")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set space theme
@@ -2621,6 +2714,7 @@ export def "wiki-rest-space-theme setSpaceTheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   themeKey: string # The key of the theme to be set as the space theme.
 ]: any -> record<themeKey: string, name: string, description: string, icon: record<path: string, width: int, height: int, isDefault: bool>, _links: record> {
   let input = $in
@@ -2631,7 +2725,7 @@ export def "wiki-rest-space-theme setSpaceTheme" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reset space theme
@@ -2647,13 +2741,14 @@ export def "wiki-rest-space-theme resetSpaceTheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wiki/rest/api/space/($spaceKey)/theme")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get space watchers
@@ -2669,6 +2764,7 @@ export def "wiki-rest-space-watch get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # The start point of the collection to return.
   --limit: string # The limit of the number of items to return, this may be restricted by fixed system limits.
 ]: nothing -> record<results: table<type: string, watcher: record, spaceKey: string, labelName: string, prefix: string>, start: int, limit: int, size: int, _links: record> {
@@ -2678,7 +2774,7 @@ export def "wiki-rest-space-watch get" [
   let full_url = (build-url $base $"/wiki/rest/api/space/($spaceKey)/watch" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Space Labels
@@ -2694,6 +2790,7 @@ export def "wiki-rest-space-label get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --prefix: string@prefix-completer # Filters the results to labels with the specified prefix. If this parameter is not specified, then labels with any prefix will be returned.  - `global` prefix is used by labels that are on content within the provided space. - `my` prefix can be explicitly added by a user when adding a label via the UI, e.g. 'my:example-label'. - `team` prefix is used for labels applied to the space.
   --start: int # The starting index of the returned labels. (format: int32, default: 0)
   --limit: int # The maximum number of labels to return per page. Note, this may be restricted by fixed system limits. (format: int32, default: 200)
@@ -2704,7 +2801,7 @@ export def "wiki-rest-space-label get" [
   let full_url = (build-url $base $"/wiki/rest/api/space/($spaceKey)/label" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add labels to a space
@@ -2720,6 +2817,7 @@ export def "wiki-rest-space-label addLabelsToSpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> record<results: table<prefix: string, name: string, id: string, label: string>, start: int, limit: int, size: int, _links: record> {
   let input = $in
@@ -2729,7 +2827,7 @@ export def "wiki-rest-space-label addLabelsToSpace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove label from a space
@@ -2745,6 +2843,7 @@ export def "wiki-rest-space-label delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the label to remove
   --prefix: string # The prefix of the label to remove. If not provided defaults to global.
 ]: nothing -> any {
@@ -2754,7 +2853,7 @@ export def "wiki-rest-space-label delete" [
   let full_url = (build-url $base $"/wiki/rest/api/space/($spaceKey)/label" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update content template
@@ -2772,6 +2871,7 @@ export def "wiki-rest-template updateContentTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   templateId: string # The ID of the template being updated.
   name: string # The name of the template. Set to the current `name` if this field is not being updated.
   templateType: string@templateType-completer # The type of the template. Set to `page`.
@@ -2788,7 +2888,7 @@ export def "wiki-rest-template updateContentTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create content template
@@ -2806,6 +2906,7 @@ export def "wiki-rest-template createContentTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the new template.
   templateType: string # The type of the new template. Set to `page`.
   --body-body: record # The body of the new content. Does not apply to attachments. Only one body format should be specified as the property for this object, e.g. `storage`.  Note, `editor2` format is used by Atlassian only. `anonymous_export_view` is the same as `export_view` format but only content viewable by an anonymous user is included. — shape: {view?: record, export_view?: record, styled_view?: record, storage?: record, editor?: record, editor2?: record, wiki?: record, atlas_doc_format?: record, anonymous_export_view?: record}
@@ -2821,7 +2922,7 @@ export def "wiki-rest-template createContentTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get blueprint templates
@@ -2836,6 +2937,7 @@ export def "wiki-rest-template-blueprint get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --spaceKey: string # The key of the space to be queried for templates. If the `spaceKey` is not specified, global blueprint templates will be returned.
   --start: int # The starting index of the returned templates. (format: int32, default: 0)
   --limit: int # The maximum number of templates to return per page. Note, this may be restricted by fixed system limits. (format: int32, default: 25)
@@ -2847,7 +2949,7 @@ export def "wiki-rest-template-blueprint get" [
   let full_url = (build-url $base "/wiki/rest/api/template/blueprint" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get content templates
@@ -2862,6 +2964,7 @@ export def "wiki-rest-template-page get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --spaceKey: string # The key of the space to be queried for templates. If the `spaceKey` is not specified, global templates will be returned.
   --start: int # The starting index of the returned templates. (format: int32, default: 0)
   --limit: int # The maximum number of templates to return per page. Note, this may be restricted by fixed system limits. (format: int32, default: 25)
@@ -2873,7 +2976,7 @@ export def "wiki-rest-template-page get" [
   let full_url = (build-url $base "/wiki/rest/api/template/page" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get content template
@@ -2889,6 +2992,7 @@ export def "wiki-rest-template get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # A multi-value parameter indicating which properties of the template to expand.  - `body` or `body.storage` returns the content of the template in storage format.
 ]: nothing -> record<templateId: string, originalTemplate: record<pluginKey: string, moduleKey: string>, referencingBlueprint: string, name: string, description: string, space: record, labels: table<prefix: string, name: string, id: string, label: string>, templateType: string, editorVersion: string, body: record<view: record<value: string, representation: string, embeddedContent: list, webresource: record, mediaToken: record, _expandable: record, _links: record>, export_view: record<value: string, representation: string, embeddedContent: list, webresource: record, mediaToken: record, _expandable: record, _links: record>, styled_view: record<value: string, representation: string, embeddedContent: list, webresource: record, mediaToken: record, _expandable: record, _links: record>, storage: record<value: string, representation: string, embeddedContent: list, webresource: record, mediaToken: record, _expandable: record, _links: record>, editor: record<value: string, representation: string, embeddedContent: list, webresource: record, mediaToken: record, _expandable: record, _links: record>, editor2: record<value: string, representation: string, embeddedContent: list, webresource: record, mediaToken: record, _expandable: record, _links: record>, wiki: record<value: string, representation: string, embeddedContent: list, webresource: record, mediaToken: record, _expandable: record, _links: record>, atlas_doc_format: record<value: string, representation: string, embeddedContent: list, webresource: record, mediaToken: record, _expandable: record, _links: record>, anonymous_export_view: record<value: string, representation: string, embeddedContent: list, webresource: record, mediaToken: record, _expandable: record, _links: record>>, _expandable: record<body: string>, _links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2897,7 +3001,7 @@ export def "wiki-rest-template get" [
   let full_url = (build-url $base $"/wiki/rest/api/template/($contentTemplateId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove template
@@ -2913,13 +3017,14 @@ export def "wiki-rest-template removeTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wiki/rest/api/template/($contentTemplateId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user
@@ -2934,6 +3039,7 @@ export def "wiki-rest-user get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: string # The account ID of the user. The accountId uniquely identifies the user across all Atlassian products. For example, `384093:32b4d9w0-f6a5-3535-11a3-9c8c88d10192`.
   --expand: list # A multi-value parameter indicating which properties of the user to expand.    - `operations` returns the operations that the user is allowed to do.   - `personalSpace` returns the user's personal space, if it exists.   - `isExternalCollaborator`(@deprecated) see `isGuest` in response to find out whether the user is a guest.
 ]: nothing -> record<type: string, username: string, userKey: string, accountId: string, accountType: string, email: string, publicName: string, profilePicture: record<path: string, width: int, height: int, isDefault: bool>, displayName: string, timeZone: string, externalCollaborator: bool, isExternalCollaborator: bool, isGuest: bool, operations: table<operation: string, targetType: string>, details: record<business: record<position: string, department: string, location: string>, personal: record<phone: string, im: string, website: string, email: string>>, personalSpace: record<id: int, key: string, alias: string, name: string, icon: record<path: string, width: int, height: int, isDefault: bool>, description: record<plain: record, view: record, _expandable: record>, homepage: record<id: string, type: string, status: string, title: string, space: any, history: record, version: record, ancestors: list, operations: list, children: record, childTypes: record, descendants: record, container: record, body: record, restrictions: record, metadata: record, macroRenderedOutput: record, extensions: record, _expandable: record, _links: record>, type: string, metadata: record<labels: record, _expandable: record>, operations: list<record>, permissions: list<record>, status: string, settings: record<routeOverrideEnabled: bool, editor: record, contentMode: string, spaceKey: string, _links: record>, theme: record<themeKey: string, name: string, description: string, icon: record, _links: record>, lookAndFeel: record<headings: record, links: record, menus: record, header: record, horizontalHeader: record, content: record, bordersAndDividers: record, spaceReference: record>, history: record<createdDate: string, createdBy: any>, _expandable: record<settings: string, metadata: string, operations: string, lookAndFeel: string, permissions: string, icon: string, description: string, theme: string, history: string, homepage: string, identifiers: string>, _links: record>, _expandable: record<operations: string, details: string, personalSpace: string>, _links: record> {
@@ -2943,7 +3049,7 @@ export def "wiki-rest-user get" [
   let full_url = (build-url $base "/wiki/rest/api/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get anonymous user
@@ -2958,6 +3064,7 @@ export def "wiki-rest-user-anonymous get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # A multi-value parameter indicating which properties of the user to expand.    - `operations` returns the operations that the user is allowed to do.
 ]: nothing -> record<type: string, profilePicture: record<path: string, width: int, height: int, isDefault: bool>, displayName: string, operations: table<operation: string, targetType: string>, _expandable: record<operations: string>, _links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2966,7 +3073,7 @@ export def "wiki-rest-user-anonymous get" [
   let full_url = (build-url $base "/wiki/rest/api/user/anonymous" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get current user
@@ -2981,6 +3088,7 @@ export def "wiki-rest-user-current get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # A multi-value parameter indicating which properties of the user to expand.    - `operations` returns the operations that the user is allowed to do.   - `personalSpace` returns the user's personal space, if it exists.   - `isExternalCollaborator`(@deprecated) see `isGuest` in response to find out whether the user is a guest.
 ]: nothing -> record<type: string, username: string, userKey: string, accountId: string, accountType: string, email: string, publicName: string, profilePicture: record<path: string, width: int, height: int, isDefault: bool>, displayName: string, timeZone: string, externalCollaborator: bool, isExternalCollaborator: bool, isGuest: bool, operations: table<operation: string, targetType: string>, details: record<business: record<position: string, department: string, location: string>, personal: record<phone: string, im: string, website: string, email: string>>, personalSpace: record<id: int, key: string, alias: string, name: string, icon: record<path: string, width: int, height: int, isDefault: bool>, description: record<plain: record, view: record, _expandable: record>, homepage: record<id: string, type: string, status: string, title: string, space: any, history: record, version: record, ancestors: list, operations: list, children: record, childTypes: record, descendants: record, container: record, body: record, restrictions: record, metadata: record, macroRenderedOutput: record, extensions: record, _expandable: record, _links: record>, type: string, metadata: record<labels: record, _expandable: record>, operations: list<record>, permissions: list<record>, status: string, settings: record<routeOverrideEnabled: bool, editor: record, contentMode: string, spaceKey: string, _links: record>, theme: record<themeKey: string, name: string, description: string, icon: record, _links: record>, lookAndFeel: record<headings: record, links: record, menus: record, header: record, horizontalHeader: record, content: record, bordersAndDividers: record, spaceReference: record>, history: record<createdDate: string, createdBy: any>, _expandable: record<settings: string, metadata: string, operations: string, lookAndFeel: string, permissions: string, icon: string, description: string, theme: string, history: string, homepage: string, identifiers: string>, _links: record>, _expandable: record<operations: string, details: string, personalSpace: string>, _links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2989,7 +3097,7 @@ export def "wiki-rest-user-current get" [
   let full_url = (build-url $base "/wiki/rest/api/user/current" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get group memberships for user
@@ -3004,6 +3112,7 @@ export def "wiki-rest-user-memberof get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: string # The account ID of the user. The accountId uniquely identifies the user across all Atlassian products. For example, `384093:32b4d9w0-f6a5-3535-11a3-9c8c88d10192`.
   --start: int # The starting index of the returned groups. (format: int32, default: 0)
   --limit: int # The maximum number of groups to return per page. Note, this may be restricted by fixed system limits. (format: int32, default: 200)
@@ -3014,7 +3123,7 @@ export def "wiki-rest-user-memberof get" [
   let full_url = (build-url $base "/wiki/rest/api/user/memberof" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get multiple users using ids
@@ -3029,6 +3138,7 @@ export def "wiki-rest-user-bulk get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: string # A list of accountId's of users to be returned.
   --expand: list # A multi-value parameter indicating which properties of the user to expand.    - `operations` returns the operations that the user is allowed to do.   - `personalSpace` returns the user's personal space, if it exists.   - `isExternalCollaborator`(@deprecated) use `isGuest` instead to return whether the user is a guest.
 ]: nothing -> record<results: table<type: string, username: string, userKey: string, accountId: string, accountType: string, email: string, publicName: string, profilePicture: record, displayName: string, timeZone: string, isExternalCollaborator: bool, isGuest: bool, operations: list, details: record, personalSpace: record, _expandable: record, _links: record>, start: int, limit: int, size: int, _links: record> {
@@ -3038,7 +3148,7 @@ export def "wiki-rest-user-bulk get" [
   let full_url = (build-url $base "/wiki/rest/api/user/bulk" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get content watch status
@@ -3056,6 +3166,7 @@ export def "wiki-rest-user-watch-content get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --username: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --accountId: string # The account ID of the user. The accountId uniquely identifies the user across all Atlassian products. For example, `384093:32b4d9w0-f6a5-3535-11a3-9c8c88d10192`.
@@ -3066,7 +3177,7 @@ export def "wiki-rest-user-watch-content get" [
   let full_url = (build-url $base $"/wiki/rest/api/user/watch/content/($contentId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add content watcher
@@ -3084,6 +3195,7 @@ export def "wiki-rest-user-watch-content addContentWatcher" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --username: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --accountId: string # The account ID of the user. The accountId uniquely identifies the user across all Atlassian products. For example, `384093:32b4d9w0-f6a5-3535-11a3-9c8c88d10192`.
@@ -3094,7 +3206,7 @@ export def "wiki-rest-user-watch-content addContentWatcher" [
   let full_url = (build-url $base $"/wiki/rest/api/user/watch/content/($contentId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove content watcher
@@ -3112,6 +3224,7 @@ export def "wiki-rest-user-watch-content removeContentWatcher" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --username: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --accountId: string # The account ID of the user. The accountId uniquely identifies the user across all Atlassian products. For example, `384093:32b4d9w0-f6a5-3535-11a3-9c8c88d10192`.
@@ -3125,7 +3238,7 @@ export def "wiki-rest-user-watch-content removeContentWatcher" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get label watch status
@@ -3143,6 +3256,7 @@ export def "wiki-rest-user-watch-label isWatchingLabel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --username: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --accountId: string # The account ID of the user. The accountId uniquely identifies the user across all Atlassian products. For example, `384093:32b4d9w0-f6a5-3535-11a3-9c8c88d10192`.
@@ -3153,7 +3267,7 @@ export def "wiki-rest-user-watch-label isWatchingLabel" [
   let full_url = (build-url $base $"/wiki/rest/api/user/watch/label/($labelName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add label watcher
@@ -3171,6 +3285,7 @@ export def "wiki-rest-user-watch-label addLabelWatcher" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --username: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --accountId: string # The account ID of the user. The accountId uniquely identifies the user across all Atlassian products. For example, `384093:32b4d9w0-f6a5-3535-11a3-9c8c88d10192`.
@@ -3184,7 +3299,7 @@ export def "wiki-rest-user-watch-label addLabelWatcher" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove label watcher
@@ -3202,6 +3317,7 @@ export def "wiki-rest-user-watch-label removeLabelWatcher" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --username: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --accountId: string # The account ID of the user. The accountId uniquely identifies the user across all Atlassian products. For example, `384093:32b4d9w0-f6a5-3535-11a3-9c8c88d10192`.
@@ -3212,7 +3328,7 @@ export def "wiki-rest-user-watch-label removeLabelWatcher" [
   let full_url = (build-url $base $"/wiki/rest/api/user/watch/label/($labelName)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get space watch status
@@ -3230,6 +3346,7 @@ export def "wiki-rest-user-watch-space isWatchingSpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --username: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --accountId: string # The account ID of the user. The accountId uniquely identifies the user across all Atlassian products. For example, `384093:32b4d9w0-f6a5-3535-11a3-9c8c88d10192`.
@@ -3240,7 +3357,7 @@ export def "wiki-rest-user-watch-space isWatchingSpace" [
   let full_url = (build-url $base $"/wiki/rest/api/user/watch/space/($spaceKey)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add space watcher
@@ -3258,6 +3375,7 @@ export def "wiki-rest-user-watch-space addSpaceWatcher" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --username: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --accountId: string # The account ID of the user. The accountId uniquely identifies the user across all Atlassian products. For example, `384093:32b4d9w0-f6a5-3535-11a3-9c8c88d10192`.
@@ -3271,7 +3389,7 @@ export def "wiki-rest-user-watch-space addSpaceWatcher" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove space watch
@@ -3289,6 +3407,7 @@ export def "wiki-rest-user-watch-space removeSpaceWatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --username: string # This parameter is no longer available and will be removed from the documentation soon. Use `accountId` instead. See the [deprecation notice](/cloud/confluence/deprecation-notice-user-privacy-api-migration-guide/) for details. (DEPRECATED)
   --accountId: string # The account ID of the user. The accountId uniquely identifies the user across all Atlassian products. For example, `384093:32b4d9w0-f6a5-3535-11a3-9c8c88d10192`.
@@ -3299,7 +3418,7 @@ export def "wiki-rest-user-watch-space removeSpaceWatch" [
   let full_url = (build-url $base $"/wiki/rest/api/user/watch/space/($spaceKey)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user email address
@@ -3314,6 +3433,7 @@ export def "wiki-rest-user-email get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, `384093:32b4d9w0-f6a5-3535-11a3-9c8c88d10192`. Required.
 ]: nothing -> record<accountId: string, email: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3322,7 +3442,7 @@ export def "wiki-rest-user-email get" [
   let full_url = (build-url $base "/wiki/rest/api/user/email" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user email addresses in batch
@@ -3337,6 +3457,7 @@ export def "wiki-rest-user-email-bulk get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accountId: list # The account IDs of the users.
 ]: nothing -> table<accountId: string, email: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3345,7 +3466,7 @@ export def "wiki-rest-user-email-bulk get" [
   let full_url = (build-url $base "/wiki/rest/api/user/email/bulk" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get modules
@@ -3360,13 +3481,14 @@ export def "wiki-rest-atlassian-connect-1-app-module-dynamic get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wiki/rest/atlassian-connect/1/app/module/dynamic")
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Register modules
@@ -3381,6 +3503,7 @@ export def "wiki-rest-atlassian-connect-1-app-module-dynamic registerModules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -3390,7 +3513,7 @@ export def "wiki-rest-atlassian-connect-1-app-module-dynamic registerModules" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Remove modules
@@ -3405,6 +3528,7 @@ export def "wiki-rest-atlassian-connect-1-app-module-dynamic removeModules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --moduleKey: list # The key of the module to remove. To include multiple module keys, provide multiple copies of this parameter. For example, `moduleKey=dynamic-attachment-entity-property&moduleKey=dynamic-select-field`. Nonexistent keys are ignored.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3413,7 +3537,7 @@ export def "wiki-rest-atlassian-connect-1-app-module-dynamic removeModules" [
   let full_url = (build-url $base "/wiki/rest/atlassian-connect/1/app/module/dynamic" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get views
@@ -3429,6 +3553,7 @@ export def "wiki-rest-analytics-content-views get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromDate: string # The number of views for the content since the date. (e.g. 2021-03-21T00:00:00.000Z)
 ]: nothing -> record<id: int, count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3437,7 +3562,7 @@ export def "wiki-rest-analytics-content-views get" [
   let full_url = (build-url $base $"/wiki/rest/api/analytics/content/($contentId)/views" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get viewers
@@ -3453,6 +3578,7 @@ export def "wiki-rest-analytics-content-viewers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromDate: string # The number of views for the content since the date. (e.g. 2021-03-21T00:00:00.000Z)
 ]: nothing -> record<id: int, count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3461,7 +3587,7 @@ export def "wiki-rest-analytics-content-viewers get" [
   let full_url = (build-url $base $"/wiki/rest/api/analytics/content/($contentId)/viewers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user properties
@@ -3477,6 +3603,7 @@ export def "wiki-rest-user-property list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # The starting index of the returned properties. (format: int32, default: 0)
   --limit: int # The maximum number of properties to return per page. Note, this may be restricted by fixed system limits. (format: int32, default: 5)
 ]: nothing -> record<results: table<key: string>, start: int, limit: int, size: int, _links: record> {
@@ -3486,7 +3613,7 @@ export def "wiki-rest-user-property list" [
   let full_url = (build-url $base $"/wiki/rest/api/user/($userId)/property" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user property
@@ -3503,13 +3630,14 @@ export def "wiki-rest-user-property get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, value: record, id: string, lastModifiedDate: string, createdDate: string, _links: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wiki/rest/api/user/($userId)/property/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update user property
@@ -3526,6 +3654,7 @@ export def "wiki-rest-user-property updateUserProperty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   value: record # The value of the user property.
 ]: any -> any {
   let input = $in
@@ -3536,7 +3665,7 @@ export def "wiki-rest-user-property updateUserProperty" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create user property by key
@@ -3553,6 +3682,7 @@ export def "wiki-rest-user-property createUserProperty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   value: record # The value of the user property.
 ]: any -> any {
   let input = $in
@@ -3563,7 +3693,7 @@ export def "wiki-rest-user-property createUserProperty" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete user property
@@ -3580,11 +3710,12 @@ export def "wiki-rest-user-property delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/wiki/rest/api/user/($userId)/property/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

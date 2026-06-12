@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -69,7 +70,7 @@ def accept-completer [] { ["application/json" "text/event-stream"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "files files" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -103,6 +104,7 @@ export def "files files" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Optional JSON-encoded metadata filter for files. (format: json, e.g. {"genre":{"$eq":"comedy"}})
   --limit: int # Limit on the number of files to return. (e.g. 100)
   --pagination-token: string # Pagination token to continue a previous listing operation. (e.g. dXNlcl9pZD11c2VyXzE=)
@@ -116,7 +118,7 @@ export def "files files" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload a file
@@ -132,6 +134,7 @@ export def "files file-by-assistant_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --multimodal: string # Optional flag to opt in to multimodal file processing (PDFs only). Can be either `true` or `false`. Default is `false`.
   --X-Pinecone-Api-Version: string # Required date-based version header
   file: string # The file to upload. (format: binary)
@@ -148,7 +151,7 @@ export def "files file-by-assistant_name" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Describe a file
@@ -165,6 +168,7 @@ export def "files file-by-assistant_name-assistant_file_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-url: string # Include the signed URL of the file in the response.
   --X-Pinecone-Api-Version: string # Required date-based version header
 ]: nothing -> record<name: string, id: string, size: int, metadata: record, created_on: string, updated_on: string, status: string, signed_url: string, multimodal: bool> {
@@ -176,7 +180,7 @@ export def "files file-by-assistant_name-assistant_file_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upsert a file
@@ -193,6 +197,7 @@ export def "files file-by-assistant_name-assistant_file_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --multimodal: string # Optional flag to opt in to multimodal file processing (PDFs only). Can be either `true` or `false`. Default is `false`.
   --X-Pinecone-Api-Version: string # Required date-based version header
   file: string # The file to upload. (format: binary)
@@ -209,7 +214,7 @@ export def "files file-by-assistant_name-assistant_file_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Delete a file
@@ -226,6 +231,7 @@ export def "files file-by-assistant_name-assistant_file_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
 ]: nothing -> record<id: string, operation_type: string, file_id: string, status: string, created_on: string, completed_on: string, percent_complete: int, error_message: string, ingestion_units: float> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -235,7 +241,7 @@ export def "files file-by-assistant_name-assistant_file_id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List operations
@@ -251,6 +257,7 @@ export def "operations operations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --operation-type: string # Filter operations by type. (e.g. upload_file)
   --status: string # Filter operations by status. (e.g. Processing)
   --limit: int # Limit on the number of operations to return. (e.g. 100)
@@ -265,7 +272,7 @@ export def "operations operations" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Describe an operation
@@ -282,6 +289,7 @@ export def "operations operation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
 ]: nothing -> record<id: string, operation_type: string, file_id: string, status: string, created_on: string, completed_on: string, percent_complete: int, error_message: string, ingestion_units: float> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -291,7 +299,7 @@ export def "operations operation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Chat through an OpenAI-compatible interface
@@ -308,6 +316,7 @@ export def "chat-chat-completions assistant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --X-Pinecone-Api-Version: string # Required date-based version header
   messages: list # The list of messages sent to the assistant, used for context retrieval and generating response with the LLM. — item shape: {role?: string, content?: string}
@@ -326,7 +335,7 @@ export def "chat-chat-completions assistant" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Chat with an assistant
@@ -344,6 +353,7 @@ export def "chat assistant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --X-Pinecone-Api-Version: string # Required date-based version header
   messages: list # The list of messages sent to the assistant, used for context retrieval and generating response with the LLM. — item shape: {role?: string, content?: string}
@@ -365,7 +375,7 @@ export def "chat assistant" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve context from an assistant
@@ -382,6 +392,7 @@ export def "chat-context assistant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Pinecone-Api-Version: string # Required date-based version header
   --body-query: string # The query that is used to generate the context. Exactly one of query or messages should be provided.
   --filter: record # Optionally filter which documents can be retrieved using the following metadata fields. (e.g. {genre: {$ne: documentary}})
@@ -401,5 +412,5 @@ export def "chat-context assistant" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

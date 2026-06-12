@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -71,7 +72,7 @@ def size-completer [] { ["A0" "A1" "A2" "A3" "A4" "A5" "A6" "Ledger" "Legal" "Le
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "templates list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -104,6 +105,7 @@ export def "templates list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Filter templates based on the name partial match.
   --slug: string # Filter templates by unique slug. (e.g. opaKWh8WWTAcVG)
   --external-id: string # The unique application-specific identifier provided for the template via API or Embedded template form builder. It allows you to receive only templates with your specified external ID.
@@ -119,7 +121,7 @@ export def "templates list" [
   let full_url = (build-url $base "/templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a template
@@ -135,13 +137,14 @@ export def "templates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, slug: string, name: string, preferences: record, schema: table<attachment_uuid: string, name: string>, fields: table<uuid: string, submitter_uuid: string, name: string, type: string, required: bool, preferences: record, areas: list>, submitters: table<name: string, uuid: string>, author_id: int, archived_at: string, created_at: string, updated_at: string, source: string, external_id: string, folder_id: int, folder_name: string, shared_link: bool, author: record<id: int, first_name: string, last_name: string, email: string>, documents: table<id: int, uuid: string, url: string, preview_image_url: string, filename: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/templates/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Archive a template
@@ -157,13 +160,14 @@ export def "templates archiveTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, archived_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/templates/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a template
@@ -179,6 +183,7 @@ export def "templates updateTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the template. (e.g. New Document Name)
   --folder-name: string # The folder's name to which the template should be moved. (e.g. New Folder)
   --roles: list # An array of submitter role names to update the template with. (e.g. [Agent, Customer])
@@ -192,7 +197,7 @@ export def "templates updateTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all submissions
@@ -207,6 +212,7 @@ export def "submissions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --template-id: int # The template ID allows you to receive only the submissions created from that specific template.
   --status: string@status-completer # Filter submissions by status.
   --q: string # Filter submissions based on submitter's name, email or phone partial match.
@@ -223,7 +229,7 @@ export def "submissions list" [
   let full_url = (build-url $base "/submissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a submission
@@ -240,6 +246,7 @@ export def "submissions createSubmission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   template_id: int # The unique identifier of the template. Document template forms can be created via the Web UI, <a href="https://www.docuseal.com/guides/use-embedded-text-field-tags-in-the-pdf-to-create-a-fillable-form" class="link">PDF and DOCX API</a>, or <a href="https://www.docuseal.com/guides/create-pdf-document-fillable-form-with-html-api" class="link">HTML API</a>. (e.g. 1000001)
   --send-email: oneof<nothing, bool> # Set `false` to disable signature request emails sending. (default: true)
   --send-sms: oneof<nothing, bool> # Set `true` to send signature request via phone number and SMS. (default: false)
@@ -260,7 +267,7 @@ export def "submissions createSubmission" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a submission
@@ -276,13 +283,14 @@ export def "submissions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string, slug: string, source: string, submitters_order: string, audit_log_url: string, combined_document_url: string, created_at: string, updated_at: string, archived_at: string, submitters: table<id: int, submission_id: int, uuid: string, email: string, slug: string, sent_at: string, opened_at: string, completed_at: string, declined_at: string, created_at: string, updated_at: string, name: string, phone: string, external_id: string, status: string, values: list, documents: list, role: string>, template: record<id: int, name: string, external_id: string, folder_name: string, created_at: string, updated_at: string>, created_by_user: record<id: int, first_name: string, last_name: string, email: string>, submission_events: table<id: int, submitter_id: int, event_type: string, event_timestamp: string, data: record>, documents: table<name: string, url: string>, status: string, metadata: record, completed_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/submissions/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Archive a submission
@@ -298,13 +306,14 @@ export def "submissions archiveSubmission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, archived_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/submissions/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get submission documents
@@ -320,6 +329,7 @@ export def "submissions-documents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --merge: oneof<nothing, bool> # When `true`, merges all documents into a single PDF. (default: false, e.g. false)
 ]: nothing -> record<id: int, documents: table<name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
@@ -328,7 +338,7 @@ export def "submissions-documents get" [
   let full_url = (build-url $base $"/submissions/($id)/documents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create submissions from emails
@@ -344,6 +354,7 @@ export def "submissions-emails createSubmissionsFromEmails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   template_id: int # The unique identifier of the template. (e.g. 1000001)
   emails: string # A comma-separated list of email addresses to send the submission to. (e.g. {{emails}})
   --send-email: oneof<nothing, bool> # Set `false` to disable signature request emails sending. (default: true)
@@ -357,7 +368,7 @@ export def "submissions-emails createSubmissionsFromEmails" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a submission from PDF
@@ -375,6 +386,7 @@ export def "submissions-pdf createSubmissionFromPdf" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the document submission. (e.g. Test Submission Document)
   --send-email: oneof<nothing, bool> # Set `false` to disable signature request emails sending. (default: true)
   --send-sms: oneof<nothing, bool> # Set `true` to send signature request via phone number and SMS. (default: false)
@@ -399,7 +411,7 @@ export def "submissions-pdf createSubmissionFromPdf" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a submission from DOCX
@@ -417,6 +429,7 @@ export def "submissions-docx createSubmissionFromDocx" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the document submission. (e.g. Test Submission Document)
   --send-email: oneof<nothing, bool> # Set `false` to disable signature request emails sending. (default: true)
   --send-sms: oneof<nothing, bool> # Set `true` to send signature request via phone number and SMS. (default: false)
@@ -441,7 +454,7 @@ export def "submissions-docx createSubmissionFromDocx" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a submission from HTML
@@ -459,6 +472,7 @@ export def "submissions-html createSubmissionFromHtml" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the document submission. (e.g. Test Submission Document)
   --send-email: oneof<nothing, bool> # Set `false` to disable signature request emails sending. (default: true)
   --send-sms: oneof<nothing, bool> # Set `true` to send signature request via phone number and SMS. (default: false)
@@ -481,7 +495,7 @@ export def "submissions-html createSubmissionFromHtml" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get a submitter
@@ -497,13 +511,14 @@ export def "submitters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, submission_id: int, uuid: string, email: string, slug: string, sent_at: string, opened_at: string, completed_at: string, declined_at: string, created_at: string, updated_at: string, name: string, phone: string, status: string, external_id: string, metadata: record, preferences: record, template: record<id: int, name: string, created_at: string, updated_at: string>, submission_events: table<id: int, submitter_id: int, event_type: string, event_timestamp: string, data: record>, values: table<field: string, value: any>, documents: table<name: string, url: string>, role: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/submitters/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a submitter
@@ -521,6 +536,7 @@ export def "submitters updateSubmitter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the submitter.
   --email: string # The email address of the submitter. (format: email, e.g. john.doe@example.com)
   --phone: string # The phone number of the submitter, formatted according to the E.164 standard. (e.g. +1234567890)
@@ -545,7 +561,7 @@ export def "submitters updateSubmitter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all submitters
@@ -560,6 +576,7 @@ export def "submitters list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --submission-id: int # The submission ID allows you to receive only the submitters related to that specific submission.
   --q: string # Filter submitters on name, email or phone partial match.
   --slug: string # Filter submitters by unique slug. (e.g. zAyL9fH36Havvm)
@@ -576,7 +593,7 @@ export def "submitters list" [
   let full_url = (build-url $base "/submitters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update template documents
@@ -593,6 +610,7 @@ export def "templates-documents addDocumentToTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --documents: list # The list of documents to add or replace in the template. — item shape: {name?: string, file?: string, html?: string, position?: int, replace?: bool, remove?: bool}
   --merge: oneof<nothing, bool> # Set to `true` to merge all existing and new documents into a single PDF document in the template. (default: false)
 ]: any -> record<id: int, slug: string, name: string, preferences: record, schema: table<attachment_uuid: string, name: string>, fields: table<uuid: string, submitter_uuid: string, name: string, type: string, required: bool, preferences: record, areas: list>, submitters: table<name: string, uuid: string>, author_id: int, archived_at: string, created_at: string, updated_at: string, source: string, external_id: string, folder_id: int, folder_name: string, shared_link: bool, author: record<id: int, first_name: string, last_name: string, email: string>, documents: table<id: int, uuid: string, url: string, preview_image_url: string, filename: string>> {
@@ -604,7 +622,7 @@ export def "templates-documents addDocumentToTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Clone a template
@@ -620,6 +638,7 @@ export def "templates-clone cloneTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Template name. Existing name with (Clone) suffix will be used if not specified. (e.g. Cloned Template)
   --folder-name: string # The folder's name to which the template should be cloned.
   --external-id: string # Your application-specific unique string key to identify this template within your app.
@@ -632,7 +651,7 @@ export def "templates-clone cloneTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a template from HTML
@@ -648,6 +667,7 @@ export def "templates-html createTemplateFromHtml" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   html: string # HTML template with field tags. (e.g. <p>Lorem Ipsum is simply dummy text of the <text-field   name="Industry"   role="First Party"   required="false"   style="width: 80px; height: 16px; display: inline-block; margin-bottom: -4px"> </text-field> and typesetting industry</p> )
   --html-header: string # HTML template of the header to be displayed on every page.
   --html-footer: string # HTML template of the footer to be displayed on every page.
@@ -666,7 +686,7 @@ export def "templates-html createTemplateFromHtml" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a template from Word DOCX
@@ -682,6 +702,7 @@ export def "templates-docx createTemplateFromDocx" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the template. (e.g. Test DOCX)
   --external-id: string # Your application-specific unique string key to identify this template within your app. Existing template with specified `external_id` will be updated with a new document. (e.g. unique-key)
   --folder-name: string # The folder's name in which the template should be created.
@@ -696,7 +717,7 @@ export def "templates-docx createTemplateFromDocx" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a template from PDF
@@ -712,6 +733,7 @@ export def "templates-pdf createTemplateFromPdf" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the template. (e.g. Test PDF)
   --folder-name: string # The folder's name in which the template should be created.
   --external-id: string # Your application-specific unique string key to identify this template within your app. Existing template with specified `external_id` will be updated with a new PDF. (e.g. unique-key)
@@ -728,7 +750,7 @@ export def "templates-pdf createTemplateFromPdf" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Merge templates
@@ -743,6 +765,7 @@ export def "templates-merge mergeTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   template_ids: list # An array of template ids to merge into a new template. (e.g. [321, 432])
   --name: string # Template name. Existing name with (Merged) suffix will be used if not specified. (e.g. Merged Template)
   --folder-name: string # The name of the folder in which the merged template should be placed.
@@ -758,5 +781,5 @@ export def "templates-merge mergeTemplate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

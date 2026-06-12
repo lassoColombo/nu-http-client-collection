@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -95,7 +96,7 @@ def accept-completer-1 [] { ["application/json" "application/vnd.api+json"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "custom-base-images list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -128,6 +129,7 @@ export def "custom-base-images list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -147,7 +149,7 @@ export def "custom-base-images list" [
   let full_url = (build-url $base "/custom_base_images" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Custom Base Image from an existing container project
@@ -162,6 +164,7 @@ export def "custom-base-images createCustomBaseImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -173,7 +176,7 @@ export def "custom-base-images createCustomBaseImage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete a custom base image
@@ -189,6 +192,7 @@ export def "custom-base-images delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -197,7 +201,7 @@ export def "custom-base-images delete" [
   let full_url = (build-url $base $"/custom_base_images/($custombaseimage_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a custom base image
@@ -213,6 +217,7 @@ export def "custom-base-images get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -221,7 +226,7 @@ export def "custom-base-images get" [
   let full_url = (build-url $base $"/custom_base_images/($custombaseimage_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a custom base image
@@ -237,6 +242,7 @@ export def "custom-base-images updateCustomBaseImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -248,7 +254,7 @@ export def "custom-base-images updateCustomBaseImage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get all groups (Early Access)
@@ -263,6 +269,7 @@ export def "groups listGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --limit: int # Number of results to return per page (format: int32, default: 10, e.g. 10)
@@ -274,7 +281,7 @@ export def "groups listGroups" [
   let full_url = (build-url $base "/groups" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Group (Early Access)
@@ -290,6 +297,7 @@ export def "groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -298,7 +306,7 @@ export def "groups get" [
   let full_url = (build-url $base $"/groups/($group_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of Snyk Apps installed for a Group
@@ -314,6 +322,7 @@ export def "groups-apps-installs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Expand relationships.
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
@@ -326,7 +335,7 @@ export def "groups-apps-installs get" [
   let full_url = (build-url $base $"/groups/($group_id)/apps/installs" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Install a Snyk App for a Group
@@ -342,6 +351,7 @@ export def "groups-apps-installs createGroupAppInstall" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -353,7 +363,7 @@ export def "groups-apps-installs createGroupAppInstall" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Revoke app authorization for a Snyk group with install ID
@@ -370,6 +380,7 @@ export def "groups-apps-installs delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -378,7 +389,7 @@ export def "groups-apps-installs delete" [
   let full_url = (build-url $base $"/groups/($group_id)/apps/installs/($install_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Manage client secret for non-interactive Snyk App installations
@@ -395,6 +406,7 @@ export def "groups-apps-installs-secrets updateGroupAppInstallSecret" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -406,7 +418,7 @@ export def "groups-apps-installs-secrets updateGroupAppInstallSecret" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # List Assets with filters (Early Access)
@@ -423,6 +435,7 @@ export def "groups-assets-search listAssets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body-query: record # shape: {attributes: record}
 ]: any -> any {
@@ -435,7 +448,7 @@ export def "groups-assets-search listAssets" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an Asset by its ID (Early Access)
@@ -452,6 +465,7 @@ export def "groups-assets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -460,7 +474,7 @@ export def "groups-assets get" [
   let full_url = (build-url $base $"/groups/($group_id)/assets/($asset_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List related assets with pagination (Early Access)
@@ -477,6 +491,7 @@ export def "groups-assets-relationships-assets listRelatedAssets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --starting-after: string # Return records after the record identified by cursor position starting_after
   --ending-before: string # Return records before the record identified by cursor position ending_before
   --limit: float # Number of records to return (default: 10)
@@ -489,7 +504,7 @@ export def "groups-assets-relationships-assets listRelatedAssets" [
   let full_url = (build-url $base $"/groups/($group_id)/assets/($asset_id)/relationships/assets" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List asset projects with pagination (Early Access)
@@ -506,6 +521,7 @@ export def "groups-assets-relationships-projects listAssetProjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --starting-after: string # Return records after the record identified by cursor position starting_after
   --ending-before: string # Return records before the record identified by cursor position ending_before
   --limit: float # Number of records to return (default: 10)
@@ -517,7 +533,7 @@ export def "groups-assets-relationships-projects listAssetProjects" [
   let full_url = (build-url $base $"/groups/($group_id)/assets/($asset_id)/relationships/projects" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search Group audit logs.
@@ -533,6 +549,7 @@ export def "groups-audit-logs-search listGroupAuditLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --cursor: string # The ID for the next page of results.
   --qp-from: string # The start date (inclusive) of the audit logs search. If not specified, the start of yesterday is used. Dates should be formatted as RFC3339, e.g. 2024-01-02T16:30:00Z.  (format: date-time)
@@ -550,7 +567,7 @@ export def "groups-audit-logs-search listGroupAuditLogs" [
   let full_url = (build-url $base $"/groups/($group_id)/audit_logs/search" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start an export
@@ -566,6 +583,7 @@ export def "groups-export createGroupExport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --include-deleted: string # Optional parameter to include deleted issues in results
   --include-deactivated: string # Optional parameter to include disabled issues in results
@@ -579,7 +597,7 @@ export def "groups-export createGroupExport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get export results
@@ -596,6 +614,7 @@ export def "groups-export get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -604,7 +623,7 @@ export def "groups-export get" [
   let full_url = (build-url $base $"/groups/($group_id)/export/($export_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List or search all assets (synchronous) - Group scope (Early Access)
@@ -620,6 +639,7 @@ export def "groups-inventory-assets listAssetsGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --filter: string # RSQL filter expression for filtering results. See schema for full documentation. (e.g. type==container_images;created_at>2024-01-01)
   --qp-sort: string # Comma-separated sort fields. Prefix with `-` for descending order. (e.g. -created_at)
@@ -635,7 +655,7 @@ export def "groups-inventory-assets listAssetsGroup" [
   let full_url = (build-url $base $"/groups/($group_id)/inventory/assets" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk update asset attributes - Group scope (Early Access)
@@ -651,6 +671,7 @@ export def "groups-inventory-assets updateAssetsBulkGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -662,7 +683,7 @@ export def "groups-inventory-assets updateAssetsBulkGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get available filter fields - Group scope (Early Access)
@@ -678,6 +699,7 @@ export def "groups-inventory-assets-filters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --asset-types: string # Comma-separated list of asset types to filter the available filter fields (e.g. container_images)
   --limit: int # Number of results to return (default: 10)
@@ -690,7 +712,7 @@ export def "groups-inventory-assets-filters get" [
   let full_url = (build-url $base $"/groups/($group_id)/inventory/assets/filters" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get filter value suggestions (autocomplete) - Group scope (Early Access)
@@ -707,6 +729,7 @@ export def "groups-inventory-assets-filters-values get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --q: string # Full text search term to filter the list of values. If keys_only is true, this will filter the keys of the object filter values. If key is provided, this will filter the value for the specific key of the object filter values. (e.g. prod)
   --limit: int # Number of results to return (default: 10)
@@ -721,7 +744,7 @@ export def "groups-inventory-assets-filters-values get" [
   let full_url = (build-url $base $"/groups/($group_id)/inventory/assets/filters/($filter_id)/values" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get available group fields - Group scope (Early Access)
@@ -737,6 +760,7 @@ export def "groups-inventory-assets-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --asset-types: string # Comma-separated list of asset types to filter group fields
   --limit: int # Maximum number of results to return (default: 10)
@@ -749,7 +773,7 @@ export def "groups-inventory-assets-groups get" [
   let full_url = (build-url $base $"/groups/($group_id)/inventory/assets/groups" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get group value aggregation - Group scope (Early Access)
@@ -766,6 +790,7 @@ export def "groups-inventory-assets-groups-values get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --asset-types: string # Comma-separated list of asset types to filter the aggregation (e.g. container_images)
   --filter: string # RSQL filter expression for filtering which assets are included in aggregation. Supports the same syntax as the main search filter including full text search with the `q` field. See the RsqlFilterString schema for complete documentation.  (e.g. type==container_images;created_at>2024-01-01)
@@ -782,7 +807,7 @@ export def "groups-inventory-assets-groups-values get" [
   let full_url = (build-url $base $"/groups/($group_id)/inventory/assets/groups/($group_field_id)/values" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an asset search (asynchronous) - Group scope (Early Access)
@@ -798,6 +823,7 @@ export def "groups-inventory-assets-searches createAssetSearchGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -809,7 +835,7 @@ export def "groups-inventory-assets-searches createAssetSearchGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Retrieve asset search results (asynchronous) - Group scope (Early Access)
@@ -826,6 +852,7 @@ export def "groups-inventory-assets-searches-results get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --qp-sort: string # Sort order for results (e.g., -created_at for descending)
   --limit: int # Maximum number of results to return (default: 10)
@@ -839,7 +866,7 @@ export def "groups-inventory-assets-searches-results get" [
   let full_url = (build-url $base $"/groups/($group_id)/inventory/assets/searches/($search_id)/results" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a single asset by ID - Group scope (Early Access)
@@ -856,6 +883,7 @@ export def "groups-inventory-assets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --qp-fields: record # Sparse fieldsets allow clients to request only specific fields for a given resource type. Use the format `fields[<type>]=field1,field2` where `<type>` is the JSON:API resource type.  **Container image fields** (use with `fields[container_images]`): - `class` - Classification of the asset - `registry` - Container registry hostname - `repository` - Repository path - `config_digest` - Image config digest - `distribution_digests` - Distribution digests (manifest/index pairs) - `image_tags` - Distinct image tags across all discovery sources - `built_at` - When the image was built - `size_bytes` - Size of the image in bytes - `author` - Image author - `architecture` - CPU architecture - `os` - Operating system - `variant` - CPU architecture variant - `os_version` - Operating system version - `os_features` - OS features - `config` - Image runtime configuration (OCI config) - `root_fs` - Root filesystem information - `history` - Image build history - `inferred_base_images` - Inferred base images - `teams` - Teams associated with the asset - `labels` - Labels associated with the asset - `tags` - Key-value tags for the asset - `risk_score` - Risk score for the asset - `test_surfaces` - Test surfaces for the asset - `issues` - Issue counts by severity - `created_at` - When the asset was created - `updated_at` - When the asset was last updated - `last_scan` - When the asset was last scanned - `scan_engines` - Scan engines applied to the asset  Note: `type` and `id` are always included regardless of field selection.  (e.g. {container_images: registry,repository,config_digest})
 ]: nothing -> any {
@@ -865,7 +893,7 @@ export def "groups-inventory-assets get" [
   let full_url = (build-url $base $"/groups/($group_id)/inventory/assets/($asset_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update asset attributes - Group scope (Early Access)
@@ -882,6 +910,7 @@ export def "groups-inventory-assets updateAssetGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -893,7 +922,7 @@ export def "groups-inventory-assets updateAssetGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # List projects for an asset (group scope) (Early Access)
@@ -910,6 +939,7 @@ export def "groups-inventory-assets-relationships-projects listAssetProjectsGrou
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --starting-after: string # Cursor for fetching the next page of results
   --ending-before: string # Cursor for fetching the previous page of results
@@ -924,7 +954,7 @@ export def "groups-inventory-assets-relationships-projects listAssetProjectsGrou
   let full_url = (build-url $base $"/groups/($group_id)/inventory/assets/($asset_id)/relationships/projects" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List targets for an asset (group scope) (Early Access)
@@ -941,6 +971,7 @@ export def "groups-inventory-assets-relationships-targets listAssetTargetsGroup"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --starting-after: string # Cursor for fetching the next page of results
   --ending-before: string # Cursor for fetching the previous page of results
@@ -952,7 +983,7 @@ export def "groups-inventory-assets-relationships-targets listAssetTargetsGroup"
   let full_url = (build-url $base $"/groups/($group_id)/inventory/assets/($asset_id)/relationships/targets" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issues by group ID
@@ -968,6 +999,7 @@ export def "groups-issues listGroupIssues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -989,7 +1021,7 @@ export def "groups-issues listGroupIssues" [
   let full_url = (build-url $base $"/groups/($group_id)/issues" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an issue
@@ -1006,6 +1038,7 @@ export def "groups-issues get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1014,7 +1047,7 @@ export def "groups-issues get" [
   let full_url = (build-url $base $"/groups/($group_id)/issues/($issue_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get export status
@@ -1031,6 +1064,7 @@ export def "groups-jobs-export get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1039,7 +1073,7 @@ export def "groups-jobs-export get" [
   let full_url = (build-url $base $"/groups/($group_id)/jobs/export/($export_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all memberships of the group
@@ -1055,6 +1089,7 @@ export def "groups-memberships listGroupMemberships" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --limit: int # Number of results to return per page (format: int32, default: 10, e.g. 10)
@@ -1073,7 +1108,7 @@ export def "groups-memberships listGroupMemberships" [
   let full_url = (build-url $base $"/groups/($group_id)/memberships" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a group membership for a user with role
@@ -1089,6 +1124,7 @@ export def "groups-memberships createGroupMembership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -1100,7 +1136,7 @@ export def "groups-memberships createGroupMembership" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete a membership from a group
@@ -1117,6 +1153,7 @@ export def "groups-memberships delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cascade: oneof<nothing, bool> # indicates whether to delete the child org memberships of the group membership.
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
@@ -1126,7 +1163,7 @@ export def "groups-memberships delete" [
   let full_url = (build-url $base $"/groups/($group_id)/memberships/($membership_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a role from a group membership
@@ -1143,6 +1180,7 @@ export def "groups-memberships updateGroupUserMembership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -1154,7 +1192,7 @@ export def "groups-memberships updateGroupUserMembership" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get list of org memberships of a group user
@@ -1170,6 +1208,7 @@ export def "groups-org-memberships listGroupUserOrgMemberships" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # The ID of the User (format: uuid)
   --org-name: string # The Name of the org (e.g. Org name)
   --role-name: string # Filter the response for results only with the specified role.
@@ -1184,7 +1223,7 @@ export def "groups-org-memberships listGroupUserOrgMemberships" [
   let full_url = (build-url $base $"/groups/($group_id)/org_memberships" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all organizations in group
@@ -1200,6 +1239,7 @@ export def "groups-orgs listOrgsInGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -1214,7 +1254,7 @@ export def "groups-orgs listOrgsInGroup" [
   let full_url = (build-url $base $"/groups/($group_id)/orgs" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get group level policies (Early Access)
@@ -1230,6 +1270,7 @@ export def "groups-policies listGroupPolicies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -1241,7 +1282,7 @@ export def "groups-policies listGroupPolicies" [
   let full_url = (build-url $base $"/groups/($group_id)/policies" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new group level policy (Early Access)
@@ -1257,6 +1298,7 @@ export def "groups-policies createGroupPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -1268,7 +1310,7 @@ export def "groups-policies createGroupPolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete an group-level policy (Early Access)
@@ -1285,6 +1327,7 @@ export def "groups-policies delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1293,7 +1336,7 @@ export def "groups-policies delete" [
   let full_url = (build-url $base $"/groups/($group_id)/policies/($policy_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a group-level policy (Early Access)
@@ -1310,6 +1353,7 @@ export def "groups-policies updateGroupPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -1321,7 +1365,7 @@ export def "groups-policies updateGroupPolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get a list of group service accounts.
@@ -1337,6 +1381,7 @@ export def "groups-service-accounts list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --limit: int # Number of results to return per page (format: int32, default: 10, e.g. 10)
@@ -1348,7 +1393,7 @@ export def "groups-service-accounts list" [
   let full_url = (build-url $base $"/groups/($group_id)/service_accounts" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a service account for a group.
@@ -1364,6 +1409,7 @@ export def "groups-service-accounts createGroupServiceAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -1375,7 +1421,7 @@ export def "groups-service-accounts createGroupServiceAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete a group service account.
@@ -1392,6 +1438,7 @@ export def "groups-service-accounts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1400,7 +1447,7 @@ export def "groups-service-accounts delete" [
   let full_url = (build-url $base $"/groups/($group_id)/service_accounts/($serviceaccount_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a group service account.
@@ -1417,6 +1464,7 @@ export def "groups-service-accounts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1425,7 +1473,7 @@ export def "groups-service-accounts get" [
   let full_url = (build-url $base $"/groups/($group_id)/service_accounts/($serviceaccount_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a group service account.
@@ -1442,6 +1490,7 @@ export def "groups-service-accounts updateGroupServiceAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -1453,7 +1502,7 @@ export def "groups-service-accounts updateGroupServiceAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Manage a group service account's client secret.
@@ -1470,6 +1519,7 @@ export def "groups-service-accounts-secrets updateServiceAccountSecret" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -1481,7 +1531,7 @@ export def "groups-service-accounts-secrets updateServiceAccountSecret" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get the Infrastructure as Code Settings for a group
@@ -1497,6 +1547,7 @@ export def "groups-settings-iac get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1505,7 +1556,7 @@ export def "groups-settings-iac get" [
   let full_url = (build-url $base $"/groups/($group_id)/settings/iac" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the Infrastructure as Code Settings for a group
@@ -1521,6 +1572,7 @@ export def "groups-settings-iac updateIacSettingsForGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -1532,7 +1584,7 @@ export def "groups-settings-iac updateIacSettingsForGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete opensource broker setting for group
@@ -1548,6 +1600,7 @@ export def "groups-settings-opensource-broker delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1556,7 +1609,7 @@ export def "groups-settings-opensource-broker delete" [
   let full_url = (build-url $base $"/groups/($group_id)/settings/opensource/broker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get opensource broker setting for group
@@ -1572,6 +1625,7 @@ export def "groups-settings-opensource-broker get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1580,7 +1634,7 @@ export def "groups-settings-opensource-broker get" [
   let full_url = (build-url $base $"/groups/($group_id)/settings/opensource/broker" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable opensource broker for group
@@ -1596,6 +1650,7 @@ export def "groups-settings-opensource-broker enableOpensourceBrokerForGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -1607,7 +1662,7 @@ export def "groups-settings-opensource-broker enableOpensourceBrokerForGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete pull request template for group
@@ -1623,6 +1678,7 @@ export def "groups-settings-pull-request-template delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1631,7 +1687,7 @@ export def "groups-settings-pull-request-template delete" [
   let full_url = (build-url $base $"/groups/($group_id)/settings/pull_request_template" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pull request template for group
@@ -1647,6 +1703,7 @@ export def "groups-settings-pull-request-template get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -1658,7 +1715,7 @@ export def "groups-settings-pull-request-template get" [
   let full_url = (build-url $base $"/groups/($group_id)/settings/pull_request_template" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update pull request template for group
@@ -1674,6 +1731,7 @@ export def "groups-settings-pull-request-template createOrUpdatePullRequestTempl
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -1685,7 +1743,7 @@ export def "groups-settings-pull-request-template createOrUpdatePullRequestTempl
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get all SSO connections for a group (Early Access)
@@ -1701,6 +1759,7 @@ export def "groups-sso-connections listGroupSsoConnections" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --limit: int # Number of results to return per page (format: int32, default: 10, e.g. 10)
@@ -1712,7 +1771,7 @@ export def "groups-sso-connections listGroupSsoConnections" [
   let full_url = (build-url $base $"/groups/($group_id)/sso_connections" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all users using a given SSO connection (Early Access)
@@ -1729,6 +1788,7 @@ export def "groups-sso-connections-users listGroupSsoConnectionUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --limit: int # Number of results to return per page (format: int32, default: 10, e.g. 10)
@@ -1740,7 +1800,7 @@ export def "groups-sso-connections-users listGroupSsoConnectionUsers" [
   let full_url = (build-url $base $"/groups/($group_id)/sso_connections/($sso_id)/users" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a user from a Group SSO connection (Early Access)
@@ -1758,6 +1818,7 @@ export def "groups-sso-connections-users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1766,7 +1827,7 @@ export def "groups-sso-connections-users delete" [
   let full_url = (build-url $base $"/groups/($group_id)/sso_connections/($sso_id)/users/($user_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user's role in a group (Early Access)
@@ -1783,6 +1844,7 @@ export def "groups-users updateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -1794,7 +1856,7 @@ export def "groups-users updateUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # List Snyk Learn's resources (Early Access)
@@ -1809,6 +1871,7 @@ export def "learn-catalog listLearnCatalog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (default: 2025-11-05, e.g. 2025-11-05)
   --content-source: string@content-source-completer # The source of educational resources
   --qp-source: string # Optional caller-attribution string for Snyk-internal telemetry. When the value is on Snyk's internal allowlist, it is echoed back into each returned resource URL as `?source=<value>`; otherwise the value is silently dropped. Third-party consumers can omit this parameter.
@@ -1822,7 +1885,7 @@ export def "learn-catalog listLearnCatalog" [
   let full_url = (build-url $base "/learn/catalog" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List available versions of OpenAPI specification
@@ -1837,13 +1900,14 @@ export def "openapi listAPIVersions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/openapi")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get OpenAPI specification effective at version.
@@ -1859,13 +1923,14 @@ export def "openapi get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/openapi/($version)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List accessible organizations
@@ -1880,6 +1945,7 @@ export def "orgs listOrgs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -1896,7 +1962,7 @@ export def "orgs listOrgs" [
   let full_url = (build-url $base "/orgs" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get organization
@@ -1912,6 +1978,7 @@ export def "orgs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --expand: list # Expand the specified related resources in the response to include their attributes.
 ]: nothing -> any {
@@ -1921,7 +1988,7 @@ export def "orgs get" [
   let full_url = (build-url $base $"/orgs/($org_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update organization
@@ -1937,6 +2004,7 @@ export def "orgs updateOrg" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -1948,7 +2016,7 @@ export def "orgs updateOrg" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get an AI-BOM job status (Early Access)
@@ -1965,6 +2033,7 @@ export def "orgs-ai-bom-jobs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1973,7 +2042,7 @@ export def "orgs-ai-bom-jobs get" [
   let full_url = (build-url $base $"/orgs/($org_id)/ai_bom_jobs/($job_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new AI-BOM (Early Access)
@@ -1989,6 +2058,7 @@ export def "orgs-ai-boms createAiBom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -2000,7 +2070,7 @@ export def "orgs-ai-boms createAiBom" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Create and upload an AI-BOM (Early Access)
@@ -2016,6 +2086,7 @@ export def "orgs-ai-boms-upload createAndUploadAiBom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -2027,7 +2098,7 @@ export def "orgs-ai-boms-upload createAndUploadAiBom" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get an AI-BOM. (Early Access)
@@ -2044,6 +2115,7 @@ export def "orgs-ai-boms get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2052,7 +2124,7 @@ export def "orgs-ai-boms get" [
   let full_url = (build-url $base $"/orgs/($org_id)/ai_boms/($ai_bom_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of app bots authorized to an organization.
@@ -2070,6 +2142,7 @@ export def "orgs-app-bots get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Expand relationships.
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
@@ -2082,7 +2155,7 @@ export def "orgs-app-bots get" [
   let full_url = (build-url $base $"/orgs/($org_id)/app_bots" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke app bot authorization
@@ -2101,6 +2174,7 @@ export def "orgs-app-bots delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2109,7 +2183,7 @@ export def "orgs-app-bots delete" [
   let full_url = (build-url $base $"/orgs/($org_id)/app_bots/($bot_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of Snyk Apps created by an Organization
@@ -2127,6 +2201,7 @@ export def "orgs-apps list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -2138,7 +2213,7 @@ export def "orgs-apps list" [
   let full_url = (build-url $base $"/orgs/($org_id)/apps" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new app for an organization.
@@ -2156,6 +2231,7 @@ export def "orgs-apps createApp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -2167,7 +2243,7 @@ export def "orgs-apps createApp" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get a list of Snyk Apps created by an Organization
@@ -2183,6 +2259,7 @@ export def "orgs-apps-creations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -2194,7 +2271,7 @@ export def "orgs-apps-creations list" [
   let full_url = (build-url $base $"/orgs/($org_id)/apps/creations" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new Snyk App for an organization
@@ -2210,6 +2287,7 @@ export def "orgs-apps-creations createOrgApp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -2221,7 +2299,7 @@ export def "orgs-apps-creations createOrgApp" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete a Snyk App by app ID
@@ -2238,6 +2316,7 @@ export def "orgs-apps-creations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2246,7 +2325,7 @@ export def "orgs-apps-creations delete" [
   let full_url = (build-url $base $"/orgs/($org_id)/apps/creations/($app_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Snyk App by app ID
@@ -2263,6 +2342,7 @@ export def "orgs-apps-creations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2271,7 +2351,7 @@ export def "orgs-apps-creations get" [
   let full_url = (build-url $base $"/orgs/($org_id)/apps/creations/($app_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update app creation attributes such as name, redirect URIs, and access token time to live using the App ID
@@ -2288,6 +2368,7 @@ export def "orgs-apps-creations updateAppCreationByID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -2299,7 +2380,7 @@ export def "orgs-apps-creations updateAppCreationByID" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Manage client secret for a Snyk App
@@ -2316,6 +2397,7 @@ export def "orgs-apps-creations-secrets manageAppCreationSecret" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -2327,7 +2409,7 @@ export def "orgs-apps-creations-secrets manageAppCreationSecret" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get a list of Snyk Apps installed for an Organization
@@ -2343,6 +2425,7 @@ export def "orgs-apps-installs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Expand relationships.
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
@@ -2355,7 +2438,7 @@ export def "orgs-apps-installs get" [
   let full_url = (build-url $base $"/orgs/($org_id)/apps/installs" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Install a Snyk App for an Organization
@@ -2371,6 +2454,7 @@ export def "orgs-apps-installs createOrgAppInstall" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -2382,7 +2466,7 @@ export def "orgs-apps-installs createOrgAppInstall" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Revoke app authorization for a Snyk organization with install ID
@@ -2399,6 +2483,7 @@ export def "orgs-apps-installs delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2407,7 +2492,7 @@ export def "orgs-apps-installs delete" [
   let full_url = (build-url $base $"/orgs/($org_id)/apps/installs/($install_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Manage client secret for non-interactive Snyk App installations
@@ -2424,6 +2509,7 @@ export def "orgs-apps-installs-secrets updateOrgAppInstallSecret" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -2435,7 +2521,7 @@ export def "orgs-apps-installs-secrets updateOrgAppInstallSecret" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete an app
@@ -2454,6 +2540,7 @@ export def "orgs-apps delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2462,7 +2549,7 @@ export def "orgs-apps delete" [
   let full_url = (build-url $base $"/orgs/($org_id)/apps/($client_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an app by client id
@@ -2481,6 +2568,7 @@ export def "orgs-apps get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2489,7 +2577,7 @@ export def "orgs-apps get" [
   let full_url = (build-url $base $"/orgs/($org_id)/apps/($client_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update app attributes that are name, redirect URIs, and access token time to live
@@ -2508,6 +2596,7 @@ export def "orgs-apps updateApp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -2519,7 +2608,7 @@ export def "orgs-apps updateApp" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Manage client secrets for an app.
@@ -2538,6 +2627,7 @@ export def "orgs-apps-secrets manageSecrets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -2549,7 +2639,7 @@ export def "orgs-apps-secrets manageSecrets" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Search Organization audit logs.
@@ -2565,6 +2655,7 @@ export def "orgs-audit-logs-search listOrgAuditLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --cursor: string # The ID for the next page of results.
   --qp-from: string # The start date (inclusive) of the audit logs search. If not specified, the start of yesterday is used. Dates should be formatted as RFC3339, e.g. 2024-01-02T16:30:00Z.  (format: date-time)
@@ -2582,7 +2673,7 @@ export def "orgs-audit-logs-search listOrgAuditLogs" [
   let full_url = (build-url $base $"/orgs/($org_id)/audit_logs/search" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Broker connections for a given organization
@@ -2598,6 +2689,7 @@ export def "orgs-brokers-connections listBrokerConnectionsForOrg" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --limit: int # Number of results to return per page (format: int32, default: 10, e.g. 10)
@@ -2609,7 +2701,7 @@ export def "orgs-brokers-connections listBrokerConnectionsForOrg" [
   let full_url = (build-url $base $"/orgs/($org_id)/brokers/connections" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Environments (Early Access)
@@ -2625,6 +2717,7 @@ export def "orgs-cloud-environments listEnvironments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --created-after: string # Return environments created after this date (format: date-time, e.g. 2022-05-06T12:25:15-04:00)
   --created-before: string # Return environments created before this date (format: date-time, e.g. 2022-05-06T12:25:15-04:00)
@@ -2645,7 +2738,7 @@ export def "orgs-cloud-environments listEnvironments" [
   let full_url = (build-url $base $"/orgs/($org_id)/cloud/environments" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create New Environment (Early Access)
@@ -2661,6 +2754,7 @@ export def "orgs-cloud-environments createEnvironment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -2672,7 +2766,7 @@ export def "orgs-cloud-environments createEnvironment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete Environment (Early Access)
@@ -2689,6 +2783,7 @@ export def "orgs-cloud-environments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2697,7 +2792,7 @@ export def "orgs-cloud-environments delete" [
   let full_url = (build-url $base $"/orgs/($org_id)/cloud/environments/($environment_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Environment (Early Access)
@@ -2714,6 +2809,7 @@ export def "orgs-cloud-environments updateEnvironment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -2725,7 +2821,7 @@ export def "orgs-cloud-environments updateEnvironment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Generate Cloud Provider Permissions (Early Access)
@@ -2741,6 +2837,7 @@ export def "orgs-cloud-permissions post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -2752,7 +2849,7 @@ export def "orgs-cloud-permissions post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # List Resources (Early Access)
@@ -2768,6 +2865,7 @@ export def "orgs-cloud-resources listResources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --environment-id: string # Filter resources by environment ID (multi-value, comma-separated) (format: uuid, e.g. 052781a7-17f6-494d-0000-25c8b509abcd)
   --resource-type: string # Filter resources by resource type (multi-value, comma-separated) (e.g. aws_s3_bucket)
   --resource-id: string # Filter resources by resource ID (multi-value, comma-separated) (e.g. example-bucket)
@@ -2789,7 +2887,7 @@ export def "orgs-cloud-resources listResources" [
   let full_url = (build-url $base $"/orgs/($org_id)/cloud/resources" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Scans (Early Access)
@@ -2805,6 +2903,7 @@ export def "orgs-cloud-scans listScan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -2816,7 +2915,7 @@ export def "orgs-cloud-scans listScan" [
   let full_url = (build-url $base $"/orgs/($org_id)/cloud/scans" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Scan (Early Access)
@@ -2832,6 +2931,7 @@ export def "orgs-cloud-scans createScan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -2843,7 +2943,7 @@ export def "orgs-cloud-scans createScan" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get scan (Early Access)
@@ -2860,6 +2960,7 @@ export def "orgs-cloud-scans get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2868,7 +2969,7 @@ export def "orgs-cloud-scans get" [
   let full_url = (build-url $base $"/orgs/($org_id)/cloud/scans/($scan_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get collections
@@ -2884,6 +2985,7 @@ export def "orgs-collections list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -2899,7 +3001,7 @@ export def "orgs-collections list" [
   let full_url = (build-url $base $"/orgs/($org_id)/collections" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a collection
@@ -2915,6 +3017,7 @@ export def "orgs-collections createCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -2926,7 +3029,7 @@ export def "orgs-collections createCollection" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete a collection
@@ -2943,6 +3046,7 @@ export def "orgs-collections delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2951,7 +3055,7 @@ export def "orgs-collections delete" [
   let full_url = (build-url $base $"/orgs/($org_id)/collections/($collection_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a collection
@@ -2968,6 +3072,7 @@ export def "orgs-collections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2976,7 +3081,7 @@ export def "orgs-collections get" [
   let full_url = (build-url $base $"/orgs/($org_id)/collections/($collection_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit a collection
@@ -2993,6 +3098,7 @@ export def "orgs-collections updateCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -3004,7 +3110,7 @@ export def "orgs-collections updateCollection" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Remove projects from a collection
@@ -3021,6 +3127,7 @@ export def "orgs-collections-relationships-projects delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -3032,7 +3139,7 @@ export def "orgs-collections-relationships-projects delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get projects from the specified collection
@@ -3049,6 +3156,7 @@ export def "orgs-collections-relationships-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -3065,7 +3173,7 @@ export def "orgs-collections-relationships-projects get" [
   let full_url = (build-url $base $"/orgs/($org_id)/collections/($collection_id)/relationships/projects" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add projects to a collection
@@ -3082,6 +3190,7 @@ export def "orgs-collections-relationships-projects updateCollectionWithProjects
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -3093,7 +3202,7 @@ export def "orgs-collections-relationships-projects updateCollectionWithProjects
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # List instances of container image
@@ -3109,6 +3218,7 @@ export def "orgs-container-images listContainerImage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --image-ids: list # A comma-separated list of Image IDs (e.g. [sha256:b26f21f90920dba8401e30b89ad803587f81cce9bd1f92750f963556da2f930f, sha256:28984a62eb713aa5fff922ba06e8689f20e4b2f07de30f3d753b868389c0904f])
   --platform: string@platform-completer # The image Operating System and processor architecture (e.g. linux/amd64)
   --names: list # The container registry names (e.g. [gcr.io/snyk/redis:5])
@@ -3123,7 +3233,7 @@ export def "orgs-container-images listContainerImage" [
   let full_url = (build-url $base $"/orgs/($org_id)/container_images" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get instance of container image
@@ -3140,6 +3250,7 @@ export def "orgs-container-images get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3148,7 +3259,7 @@ export def "orgs-container-images get" [
   let full_url = (build-url $base $"/orgs/($org_id)/container_images/($image_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List instances of image target references for a container image
@@ -3165,6 +3276,7 @@ export def "orgs-container-images-relationships-image-target-refs listImageTarge
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --limit: int # Number of results to return per page (format: int32, default: 10, e.g. 10)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
@@ -3176,7 +3288,7 @@ export def "orgs-container-images-relationships-image-target-refs listImageTarge
   let full_url = (build-url $base $"/orgs/($org_id)/container_images/($image_id)/relationships/image_target_refs" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Dry run a container registry import policy (Early Access)
@@ -3193,6 +3305,7 @@ export def "orgs-container-import-policy-dry-run createContainerRegistryImportPo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -3204,7 +3317,7 @@ export def "orgs-container-import-policy-dry-run createContainerRegistryImportPo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get a package (Early Access)
@@ -3222,6 +3335,7 @@ export def "orgs-ecosystems-packages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3230,7 +3344,7 @@ export def "orgs-ecosystems-packages get" [
   let full_url = (build-url $base $"/orgs/($org_id)/ecosystems/($ecosystem)/packages/($package_name)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a package version (Early Access)
@@ -3249,6 +3363,7 @@ export def "orgs-ecosystems-packages-versions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3257,7 +3372,7 @@ export def "orgs-ecosystems-packages-versions get" [
   let full_url = (build-url $base $"/orgs/($org_id)/ecosystems/($ecosystem)/packages/($package_name)/versions/($package_version)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start an export
@@ -3273,6 +3388,7 @@ export def "orgs-export createExport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --include-deleted: string # Optional parameter to include deleted issues in results
   --include-deactivated: string # Optional parameter to include disabled issues in results
@@ -3286,7 +3402,7 @@ export def "orgs-export createExport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get export results
@@ -3303,6 +3419,7 @@ export def "orgs-export get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3311,7 +3428,7 @@ export def "orgs-export get" [
   let full_url = (build-url $base $"/orgs/($org_id)/export/($export_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List or search all assets (synchronous) - Org scope (Early Access)
@@ -3327,6 +3444,7 @@ export def "orgs-inventory-assets listAssetsOrg" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --filter: string # RSQL filter expression for filtering results. See schema for full documentation. (e.g. type==container_images;created_at>2024-01-01)
   --qp-sort: string # Comma-separated sort fields. Prefix with `-` for descending order. (e.g. -created_at)
@@ -3342,7 +3460,7 @@ export def "orgs-inventory-assets listAssetsOrg" [
   let full_url = (build-url $base $"/orgs/($org_id)/inventory/assets" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk update asset attributes - Org scope (Early Access)
@@ -3358,6 +3476,7 @@ export def "orgs-inventory-assets updateAssetsBulkOrg" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -3369,7 +3488,7 @@ export def "orgs-inventory-assets updateAssetsBulkOrg" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get available filter fields - Org scope (Early Access)
@@ -3385,6 +3504,7 @@ export def "orgs-inventory-assets-filters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --asset-types: string # Comma-separated list of asset types to filter the available filter fields (e.g. container_images)
   --limit: int # Number of results to return (default: 10)
@@ -3397,7 +3517,7 @@ export def "orgs-inventory-assets-filters get" [
   let full_url = (build-url $base $"/orgs/($org_id)/inventory/assets/filters" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get filter value suggestions (autocomplete) - Org scope (Early Access)
@@ -3414,6 +3534,7 @@ export def "orgs-inventory-assets-filters-values get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --q: string # Full text search term to filter the list of values. If keys_only is true, this will filter the keys of the object filter values. If key is provided, this will filter the value for the specific key of the object filter values. (e.g. prod)
   --limit: int # Number of results to return (default: 10)
@@ -3428,7 +3549,7 @@ export def "orgs-inventory-assets-filters-values get" [
   let full_url = (build-url $base $"/orgs/($org_id)/inventory/assets/filters/($filter_id)/values" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get available group fields - Org scope (Early Access)
@@ -3444,6 +3565,7 @@ export def "orgs-inventory-assets-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --asset-types: string # Comma-separated list of asset types to filter group fields
   --limit: int # Maximum number of results to return (default: 10)
@@ -3456,7 +3578,7 @@ export def "orgs-inventory-assets-groups get" [
   let full_url = (build-url $base $"/orgs/($org_id)/inventory/assets/groups" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get group value aggregation - Org scope (Early Access)
@@ -3473,6 +3595,7 @@ export def "orgs-inventory-assets-groups-values get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --asset-types: string # Comma-separated list of asset types to filter the aggregation (e.g. container_images)
   --filter: string # RSQL filter expression for filtering which assets are included in aggregation. Supports the same syntax as the main search filter including full text search with the `q` field. See the RsqlFilterString schema for complete documentation.  (e.g. type==container_images;created_at>2024-01-01)
@@ -3489,7 +3612,7 @@ export def "orgs-inventory-assets-groups-values get" [
   let full_url = (build-url $base $"/orgs/($org_id)/inventory/assets/groups/($group_field_id)/values" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an asset search (asynchronous) - Org scope (Early Access)
@@ -3505,6 +3628,7 @@ export def "orgs-inventory-assets-searches createAssetSearchOrg" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -3516,7 +3640,7 @@ export def "orgs-inventory-assets-searches createAssetSearchOrg" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Retrieve asset search results (asynchronous) - Org scope (Early Access)
@@ -3533,6 +3657,7 @@ export def "orgs-inventory-assets-searches-results get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --qp-sort: string # Sort order for results (e.g., -created_at for descending)
   --limit: int # Maximum number of results to return (default: 10)
@@ -3546,7 +3671,7 @@ export def "orgs-inventory-assets-searches-results get" [
   let full_url = (build-url $base $"/orgs/($org_id)/inventory/assets/searches/($search_id)/results" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a single asset by ID - Org scope (Early Access)
@@ -3563,6 +3688,7 @@ export def "orgs-inventory-assets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --qp-fields: record # Sparse fieldsets allow clients to request only specific fields for a given resource type. Use the format `fields[<type>]=field1,field2` where `<type>` is the JSON:API resource type.  **Container image fields** (use with `fields[container_images]`): - `class` - Classification of the asset - `registry` - Container registry hostname - `repository` - Repository path - `config_digest` - Image config digest - `distribution_digests` - Distribution digests (manifest/index pairs) - `image_tags` - Distinct image tags across all discovery sources - `built_at` - When the image was built - `size_bytes` - Size of the image in bytes - `author` - Image author - `architecture` - CPU architecture - `os` - Operating system - `variant` - CPU architecture variant - `os_version` - Operating system version - `os_features` - OS features - `config` - Image runtime configuration (OCI config) - `root_fs` - Root filesystem information - `history` - Image build history - `inferred_base_images` - Inferred base images - `teams` - Teams associated with the asset - `labels` - Labels associated with the asset - `tags` - Key-value tags for the asset - `risk_score` - Risk score for the asset - `test_surfaces` - Test surfaces for the asset - `issues` - Issue counts by severity - `created_at` - When the asset was created - `updated_at` - When the asset was last updated - `last_scan` - When the asset was last scanned - `scan_engines` - Scan engines applied to the asset  Note: `type` and `id` are always included regardless of field selection.  (e.g. {container_images: registry,repository,config_digest})
 ]: nothing -> any {
@@ -3572,7 +3698,7 @@ export def "orgs-inventory-assets get" [
   let full_url = (build-url $base $"/orgs/($org_id)/inventory/assets/($asset_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update asset attributes - Org scope (Early Access)
@@ -3589,6 +3715,7 @@ export def "orgs-inventory-assets updateAssetOrg" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -3600,7 +3727,7 @@ export def "orgs-inventory-assets updateAssetOrg" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # List projects for an asset (org scope) (Early Access)
@@ -3617,6 +3744,7 @@ export def "orgs-inventory-assets-relationships-projects listAssetProjectsOrg" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --starting-after: string # Cursor for fetching the next page of results
   --ending-before: string # Cursor for fetching the previous page of results
@@ -3631,7 +3759,7 @@ export def "orgs-inventory-assets-relationships-projects listAssetProjectsOrg" [
   let full_url = (build-url $base $"/orgs/($org_id)/inventory/assets/($asset_id)/relationships/projects" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List targets for an asset (org scope) (Early Access)
@@ -3648,6 +3776,7 @@ export def "orgs-inventory-assets-relationships-targets listAssetTargetsOrg" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --starting-after: string # Cursor for fetching the next page of results
   --ending-before: string # Cursor for fetching the previous page of results
@@ -3659,7 +3788,7 @@ export def "orgs-inventory-assets-relationships-targets listAssetTargetsOrg" [
   let full_url = (build-url $base $"/orgs/($org_id)/inventory/assets/($asset_id)/relationships/targets" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List pending user invitations to an organization.
@@ -3675,6 +3804,7 @@ export def "orgs-invites listOrgInvitation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -3686,7 +3816,7 @@ export def "orgs-invites listOrgInvitation" [
   let full_url = (build-url $base $"/orgs/($org_id)/invites" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invite a user to an organization
@@ -3702,6 +3832,7 @@ export def "orgs-invites createOrgInvitation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -3713,7 +3844,7 @@ export def "orgs-invites createOrgInvitation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Cancel a pending user invitations to an organization.
@@ -3730,6 +3861,7 @@ export def "orgs-invites delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3738,7 +3870,7 @@ export def "orgs-invites delete" [
   let full_url = (build-url $base $"/orgs/($org_id)/invites/($invite_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issues by org ID
@@ -3754,6 +3886,7 @@ export def "orgs-issues listOrgIssues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -3775,7 +3908,7 @@ export def "orgs-issues listOrgIssues" [
   let full_url = (build-url $base $"/orgs/($org_id)/issues" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an issue
@@ -3792,6 +3925,7 @@ export def "orgs-issues get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3800,7 +3934,7 @@ export def "orgs-issues get" [
   let full_url = (build-url $base $"/orgs/($org_id)/issues/($issue_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get export status
@@ -3817,6 +3951,7 @@ export def "orgs-jobs-export get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3825,7 +3960,7 @@ export def "orgs-jobs-export get" [
   let full_url = (build-url $base $"/orgs/($org_id)/jobs/export/($export_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk deletion of assignments in an organization (Early Access)
@@ -3843,6 +3978,7 @@ export def "orgs-learn-assignments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (default: 2025-11-05, e.g. 2025-11-05)
   --body: record
 ]: any -> any {
@@ -3854,7 +3990,7 @@ export def "orgs-learn-assignments delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Retrieve a list of assignments for an organization (Early Access)
@@ -3870,6 +4006,7 @@ export def "orgs-learn-assignments listOrgAssignments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (default: 2025-11-05, e.g. 2025-11-05)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -3881,7 +4018,7 @@ export def "orgs-learn-assignments listOrgAssignments" [
   let full_url = (build-url $base $"/orgs/($org_id)/learn/assignments" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update due date for assignments in an organization. (Early Access)
@@ -3897,6 +4034,7 @@ export def "orgs-learn-assignments updateOrgAssignments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (default: 2025-11-05, e.g. 2025-11-05)
   --body: record
 ]: any -> any {
@@ -3908,7 +4046,7 @@ export def "orgs-learn-assignments updateOrgAssignments" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Bulk creation of assignments for users in an organization. (Early Access)
@@ -3924,6 +4062,7 @@ export def "orgs-learn-assignments createOrgAssignments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (default: 2025-11-05, e.g. 2025-11-05)
   --body: record
 ]: any -> any {
@@ -3935,7 +4074,7 @@ export def "orgs-learn-assignments createOrgAssignments" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Bulk deletion of assignments in an organization (Early Access)
@@ -3951,6 +4090,7 @@ export def "orgs-learn-assignments-bulk-delete post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (default: 2025-11-05, e.g. 2025-11-05)
   --body: record
 ]: any -> any {
@@ -3962,7 +4102,7 @@ export def "orgs-learn-assignments-bulk-delete post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get collective learning progress (Early Access)
@@ -3979,6 +4119,7 @@ export def "orgs-learn-progress-catalog get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (default: 2025-11-05, e.g. 2025-11-05)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -3994,7 +4135,7 @@ export def "orgs-learn-progress-catalog get" [
   let full_url = (build-url $base $"/orgs/($org_id)/learn/progress/catalog" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get individual user learning progress (Early Access)
@@ -4011,6 +4152,7 @@ export def "orgs-learn-progress-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (default: 2025-11-05, e.g. 2025-11-05)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -4028,7 +4170,7 @@ export def "orgs-learn-progress-users get" [
   let full_url = (build-url $base $"/orgs/($org_id)/learn/progress/users" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all memberships of the org
@@ -4044,6 +4186,7 @@ export def "orgs-memberships listOrgMemberships" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --limit: int # Number of results to return per page (format: int32, default: 10, e.g. 10)
@@ -4061,7 +4204,7 @@ export def "orgs-memberships listOrgMemberships" [
   let full_url = (build-url $base $"/orgs/($org_id)/memberships" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a org membership for a user with role
@@ -4077,6 +4220,7 @@ export def "orgs-memberships createOrgMembership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -4088,7 +4232,7 @@ export def "orgs-memberships createOrgMembership" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Remove user's org membership
@@ -4105,6 +4249,7 @@ export def "orgs-memberships delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4113,7 +4258,7 @@ export def "orgs-memberships delete" [
   let full_url = (build-url $base $"/orgs/($org_id)/memberships/($membership_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a org membership for a user with role
@@ -4130,6 +4275,7 @@ export def "orgs-memberships updateOrgMembership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -4141,7 +4287,7 @@ export def "orgs-memberships updateOrgMembership" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # List issues for a given set of packages  (Currently not available to all customers)
@@ -4157,6 +4303,7 @@ export def "orgs-packages-issues listIssuesForManyPurls" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -4168,7 +4315,7 @@ export def "orgs-packages-issues listIssuesForManyPurls" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # List issues for a package
@@ -4185,6 +4332,7 @@ export def "orgs-packages-issues fetchIssuesPerPurl" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --offset: float # Specify the number of results to skip before returning results. Must be greater than or equal to 0. Default is 0.
   --limit: float # Specify the number of results to return. Must be greater than 0 and less than 1000. Default is 1000.
@@ -4195,7 +4343,7 @@ export def "orgs-packages-issues fetchIssuesPerPurl" [
   let full_url = (build-url $base $"/orgs/($org_id)/packages/($purl)/issues" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get org-level policies
@@ -4211,6 +4359,7 @@ export def "orgs-policies list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -4229,7 +4378,7 @@ export def "orgs-policies list" [
   let full_url = (build-url $base $"/orgs/($org_id)/policies" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new org-level policy
@@ -4245,6 +4394,7 @@ export def "orgs-policies createOrgPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -4256,7 +4406,7 @@ export def "orgs-policies createOrgPolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete an org-level policy
@@ -4273,6 +4423,7 @@ export def "orgs-policies delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4281,7 +4432,7 @@ export def "orgs-policies delete" [
   let full_url = (build-url $base $"/orgs/($org_id)/policies/($policy_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an org-level policy
@@ -4298,6 +4449,7 @@ export def "orgs-policies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4306,7 +4458,7 @@ export def "orgs-policies get" [
   let full_url = (build-url $base $"/orgs/($org_id)/policies/($policy_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an org-level policy
@@ -4323,6 +4475,7 @@ export def "orgs-policies updateOrgPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -4334,7 +4487,7 @@ export def "orgs-policies updateOrgPolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # List org policy events (Early Access)
@@ -4351,6 +4504,7 @@ export def "orgs-policies-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -4362,7 +4516,7 @@ export def "orgs-policies-events get" [
   let full_url = (build-url $base $"/orgs/($org_id)/policies/($policy_id)/events" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all Projects for an Org with the given Org ID.
@@ -4378,6 +4532,7 @@ export def "orgs-projects listOrgProjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --target-id: list # Return projects that belong to the provided targets
   --target-reference: string # Return projects that match the provided target reference
   --target-file: string # Return projects that match the provided target file
@@ -4409,7 +4564,7 @@ export def "orgs-projects listOrgProjects" [
   let full_url = (build-url $base $"/orgs/($org_id)/projects" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete project by project ID.
@@ -4426,6 +4581,7 @@ export def "orgs-projects delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4434,7 +4590,7 @@ export def "orgs-projects delete" [
   let full_url = (build-url $base $"/orgs/($org_id)/projects/($project_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project by project ID.
@@ -4451,6 +4607,7 @@ export def "orgs-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Expand relationships.
   --metalatest-issue-counts: oneof<nothing, bool> # Include a summary count for the issues found in the most recent scan of this project
   --metalatest-dependency-total: oneof<nothing, bool> # Include the total number of dependencies found in the most recent scan of this project
@@ -4462,7 +4619,7 @@ export def "orgs-projects get" [
   let full_url = (build-url $base $"/orgs/($org_id)/projects/($project_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates project by project ID.
@@ -4479,6 +4636,7 @@ export def "orgs-projects updateOrgProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --expand: list # Expand relationships.
   --body: record
@@ -4491,7 +4649,7 @@ export def "orgs-projects updateOrgProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get a project’s SBOM document
@@ -4508,6 +4666,7 @@ export def "orgs-projects-sbom get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --format: string@format-completer # The desired SBOM format of the response. (e.g. cyclonedx1.6+json)
@@ -4520,7 +4679,7 @@ export def "orgs-projects-sbom get" [
   let full_url = (build-url $base $"/orgs/($org_id)/projects/($project_id)/sbom" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an SBOM test run (Early Access)
@@ -4536,6 +4695,7 @@ export def "orgs-sbom-tests createSbomTestRun" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -4547,7 +4707,7 @@ export def "orgs-sbom-tests createSbomTestRun" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Gets an SBOM test run status (Early Access)
@@ -4564,6 +4724,7 @@ export def "orgs-sbom-tests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4572,7 +4733,7 @@ export def "orgs-sbom-tests get" [
   let full_url = (build-url $base $"/orgs/($org_id)/sbom_tests/($job_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets an SBOM test run result (Early Access)
@@ -4589,6 +4750,7 @@ export def "orgs-sbom-tests-results get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
@@ -4604,7 +4766,7 @@ export def "orgs-sbom-tests-results get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of organization service accounts.
@@ -4620,6 +4782,7 @@ export def "orgs-service-accounts list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --limit: int # Number of results to return per page (format: int32, default: 10, e.g. 10)
@@ -4631,7 +4794,7 @@ export def "orgs-service-accounts list" [
   let full_url = (build-url $base $"/orgs/($org_id)/service_accounts" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a service account for an organization.
@@ -4647,6 +4810,7 @@ export def "orgs-service-accounts createOrgServiceAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -4658,7 +4822,7 @@ export def "orgs-service-accounts createOrgServiceAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete a service account in an organization.
@@ -4675,6 +4839,7 @@ export def "orgs-service-accounts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4683,7 +4848,7 @@ export def "orgs-service-accounts delete" [
   let full_url = (build-url $base $"/orgs/($org_id)/service_accounts/($serviceaccount_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an organization service account.
@@ -4700,6 +4865,7 @@ export def "orgs-service-accounts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4708,7 +4874,7 @@ export def "orgs-service-accounts get" [
   let full_url = (build-url $base $"/orgs/($org_id)/service_accounts/($serviceaccount_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an organization service account.
@@ -4725,6 +4891,7 @@ export def "orgs-service-accounts updateOrgServiceAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -4736,7 +4903,7 @@ export def "orgs-service-accounts updateOrgServiceAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Manage an organization service account's client secret.
@@ -4753,6 +4920,7 @@ export def "orgs-service-accounts-secrets updateOrgServiceAccountSecret" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -4764,7 +4932,7 @@ export def "orgs-service-accounts-secrets updateOrgServiceAccountSecret" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get the Infrastructure as Code Settings for an org.
@@ -4780,6 +4948,7 @@ export def "orgs-settings-iac get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4788,7 +4957,7 @@ export def "orgs-settings-iac get" [
   let full_url = (build-url $base $"/orgs/($org_id)/settings/iac" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the Infrastructure as Code Settings for an org
@@ -4804,6 +4973,7 @@ export def "orgs-settings-iac updateIacSettingsForOrg" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -4815,7 +4985,7 @@ export def "orgs-settings-iac updateIacSettingsForOrg" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get language settings for an organization (Early Access)
@@ -4831,6 +5001,7 @@ export def "orgs-settings-open-source-languages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
@@ -4842,7 +5013,7 @@ export def "orgs-settings-open-source-languages get" [
   let full_url = (build-url $base $"/orgs/($org_id)/settings/open_source/languages" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update language settings for an organization (Early Access)
@@ -4859,6 +5030,7 @@ export def "orgs-settings-open-source-languages updateOrgLanguagesSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -4870,7 +5042,7 @@ export def "orgs-settings-open-source-languages updateOrgLanguagesSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get the Open Source Settings for an Org. (Early Access)
@@ -4886,6 +5058,7 @@ export def "orgs-settings-opensource get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4894,7 +5067,7 @@ export def "orgs-settings-opensource get" [
   let full_url = (build-url $base $"/orgs/($org_id)/settings/opensource" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete opensource broker setting for organization
@@ -4910,6 +5083,7 @@ export def "orgs-settings-opensource-broker delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4918,7 +5092,7 @@ export def "orgs-settings-opensource-broker delete" [
   let full_url = (build-url $base $"/orgs/($org_id)/settings/opensource/broker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get opensource broker setting for organization
@@ -4934,6 +5108,7 @@ export def "orgs-settings-opensource-broker list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4942,7 +5117,7 @@ export def "orgs-settings-opensource-broker list" [
   let full_url = (build-url $base $"/orgs/($org_id)/settings/opensource/broker" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable opensource broker for organization
@@ -4958,6 +5133,7 @@ export def "orgs-settings-opensource-broker enableOpensourceBrokerForOrg" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -4969,7 +5145,7 @@ export def "orgs-settings-opensource-broker enableOpensourceBrokerForOrg" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get opensource broker settings of ecosystem for organization
@@ -4986,6 +5162,7 @@ export def "orgs-settings-opensource-broker get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4994,7 +5171,7 @@ export def "orgs-settings-opensource-broker get" [
   let full_url = (build-url $base $"/orgs/($org_id)/settings/opensource/($ecosystem)/broker" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update opensource broker settings of ecosystem for organization
@@ -5011,6 +5188,7 @@ export def "orgs-settings-opensource-broker updateOpensourceBrokerEcosystemSetti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -5022,7 +5200,7 @@ export def "orgs-settings-opensource-broker updateOpensourceBrokerEcosystemSetti
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get opensource private registry settings of ecosystem for organization
@@ -5039,6 +5217,7 @@ export def "orgs-settings-opensource-private-registries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5047,7 +5226,7 @@ export def "orgs-settings-opensource-private-registries get" [
   let full_url = (build-url $base $"/orgs/($org_id)/settings/opensource/($ecosystem)/private-registries" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update opensource private registry settings of ecosystem for organization
@@ -5064,6 +5243,7 @@ export def "orgs-settings-opensource-private-registries updateOpensourcePrivateR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -5075,7 +5255,7 @@ export def "orgs-settings-opensource-private-registries updateOpensourcePrivateR
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Retrieves the SAST settings for an org
@@ -5091,6 +5271,7 @@ export def "orgs-settings-sast get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5099,7 +5280,7 @@ export def "orgs-settings-sast get" [
   let full_url = (build-url $base $"/orgs/($org_id)/settings/sast" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable/Disable the Snyk Code settings for an org
@@ -5115,6 +5296,7 @@ export def "orgs-settings-sast updateOrgSastSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -5126,7 +5308,7 @@ export def "orgs-settings-sast updateOrgSastSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Retrieves the Secrets settings for an org (Early Access)
@@ -5142,6 +5324,7 @@ export def "orgs-settings-secrets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5150,7 +5333,7 @@ export def "orgs-settings-secrets get" [
   let full_url = (build-url $base $"/orgs/($org_id)/settings/secrets" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the Secrets settings for an org (Early Access)
@@ -5166,6 +5349,7 @@ export def "orgs-settings-secrets updateOrgSecretsSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -5177,7 +5361,7 @@ export def "orgs-settings-secrets updateOrgSecretsSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Remove the given Slack App integration
@@ -5194,6 +5378,7 @@ export def "orgs-slack-app delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5202,7 +5387,7 @@ export def "orgs-slack-app delete" [
   let full_url = (build-url $base $"/orgs/($org_id)/slack_app/($bot_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Slack integration default notification settings.
@@ -5219,6 +5404,7 @@ export def "orgs-slack-app get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5227,7 +5413,7 @@ export def "orgs-slack-app get" [
   let full_url = (build-url $base $"/orgs/($org_id)/slack_app/($bot_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create new Slack notification default settings.
@@ -5244,6 +5430,7 @@ export def "orgs-slack-app createSlackDefaultNotificationSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -5255,7 +5442,7 @@ export def "orgs-slack-app createSlackDefaultNotificationSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Slack notification settings overrides for projects
@@ -5272,6 +5459,7 @@ export def "orgs-slack-app-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -5283,7 +5471,7 @@ export def "orgs-slack-app-projects get" [
   let full_url = (build-url $base $"/orgs/($org_id)/slack_app/($bot_id)/projects" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove Slack settings override for a project.
@@ -5301,6 +5489,7 @@ export def "orgs-slack-app-projects delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5309,7 +5498,7 @@ export def "orgs-slack-app-projects delete" [
   let full_url = (build-url $base $"/orgs/($org_id)/slack_app/($bot_id)/projects/($project_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Slack notification settings for a project.
@@ -5327,6 +5516,7 @@ export def "orgs-slack-app-projects updateSlackProjectNotificationSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -5338,7 +5528,7 @@ export def "orgs-slack-app-projects updateSlackProjectNotificationSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Create a new Slack settings override for a given project.
@@ -5356,6 +5546,7 @@ export def "orgs-slack-app-projects createSlackProjectNotificationSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -5367,7 +5558,7 @@ export def "orgs-slack-app-projects createSlackProjectNotificationSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get a list of Slack channels
@@ -5384,6 +5575,7 @@ export def "orgs-slack-app-channels listChannels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --limit: int # Number of results to return per page (format: int32, default: 1000, e.g. 100)
@@ -5395,7 +5587,7 @@ export def "orgs-slack-app-channels listChannels" [
   let full_url = (build-url $base $"/orgs/($org_id)/slack_app/($tenant_id)/channels" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Slack Channel name by Slack Channel ID.
@@ -5413,6 +5605,7 @@ export def "orgs-slack-app-channels get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5421,7 +5614,7 @@ export def "orgs-slack-app-channels get" [
   let full_url = (build-url $base $"/orgs/($org_id)/slack_app/($tenant_id)/channels/($channel_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get targets by org ID
@@ -5437,6 +5630,7 @@ export def "orgs-targets list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -5455,7 +5649,7 @@ export def "orgs-targets list" [
   let full_url = (build-url $base $"/orgs/($org_id)/targets" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete target by target ID
@@ -5472,6 +5666,7 @@ export def "orgs-targets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5480,7 +5675,7 @@ export def "orgs-targets delete" [
   let full_url = (build-url $base $"/orgs/($org_id)/targets/($target_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get target by target ID
@@ -5497,6 +5692,7 @@ export def "orgs-targets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5505,7 +5701,7 @@ export def "orgs-targets get" [
   let full_url = (build-url $base $"/orgs/($org_id)/targets/($target_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a test job. (Early Access)
@@ -5522,6 +5718,7 @@ export def "orgs-test-jobs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The API version requested.
   --snyk-request-id: string # A unique ID assigned to each API request, for tracing and troubleshooting.  Snyk clients can optionally provide this ID.
   --snyk-interaction-id: string # Identifies the Snyk client interaction in which this API request occurs.  The identifier is an opaque string. though at the time of writing it may either be a uuid or a urn containing a uuid and some metadata.
@@ -5534,7 +5731,7 @@ export def "orgs-test-jobs get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new test. (Early Access)
@@ -5550,6 +5747,7 @@ export def "orgs-tests createTest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The API version requested.
   --snyk-request-id: string # A unique ID assigned to each API request, for tracing and troubleshooting.  Snyk clients can optionally provide this ID.
   --snyk-interaction-id: string # Identifies the Snyk client interaction in which this API request occurs.  The identifier is an opaque string. though at the time of writing it may either be a uuid or a urn containing a uuid and some metadata.
@@ -5565,7 +5763,7 @@ export def "orgs-tests createTest" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get a test. (Early Access)
@@ -5582,6 +5780,7 @@ export def "orgs-tests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The API version requested.
   --snyk-request-id: string # A unique ID assigned to each API request, for tracing and troubleshooting.  Snyk clients can optionally provide this ID.
   --snyk-interaction-id: string # Identifies the Snyk client interaction in which this API request occurs.  The identifier is an opaque string. though at the time of writing it may either be a uuid or a urn containing a uuid and some metadata.
@@ -5594,7 +5793,7 @@ export def "orgs-tests get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List findings for a test. (Early Access)
@@ -5611,6 +5810,7 @@ export def "orgs-tests-findings listFindings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The API version requested.
   --starting-after: string # Opaque pagination cursor for forward traversal.
   --ending-before: string # Opaque pagination cursor for reverse traversal.
@@ -5626,7 +5826,7 @@ export def "orgs-tests-findings listFindings" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user by ID (Early Access)
@@ -5643,6 +5843,7 @@ export def "orgs-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5651,7 +5852,7 @@ export def "orgs-users get" [
   let full_url = (build-url $base $"/orgs/($org_id)/users/($id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # My User Details
@@ -5666,6 +5867,7 @@ export def "self get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5674,7 +5876,7 @@ export def "self get" [
   let full_url = (build-url $base "/self" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get access requests (Early Access)
@@ -5689,6 +5891,7 @@ export def "self-access-requests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -5701,7 +5904,7 @@ export def "self-access-requests get" [
   let full_url = (build-url $base "/self/access_requests" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of Snyk Apps that can act on your behalf
@@ -5716,6 +5919,7 @@ export def "self-apps get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -5727,7 +5931,7 @@ export def "self-apps get" [
   let full_url = (build-url $base "/self/apps" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of Snyk Apps installed for a user
@@ -5742,6 +5946,7 @@ export def "self-apps-installs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Expand relationships.
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
@@ -5754,7 +5959,7 @@ export def "self-apps-installs get" [
   let full_url = (build-url $base "/self/apps/installs" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke a Snyk App by install ID
@@ -5770,6 +5975,7 @@ export def "self-apps-installs delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5778,7 +5984,7 @@ export def "self-apps-installs delete" [
   let full_url = (build-url $base $"/self/apps/installs/($install_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke a Snyk App by app ID
@@ -5794,6 +6000,7 @@ export def "self-apps revokeUserInstalledApp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5802,7 +6009,7 @@ export def "self-apps revokeUserInstalledApp" [
   let full_url = (build-url $base $"/self/apps/($app_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of active OAuth sessions by app ID
@@ -5818,6 +6025,7 @@ export def "self-apps-sessions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -5829,7 +6037,7 @@ export def "self-apps-sessions get" [
   let full_url = (build-url $base $"/self/apps/($app_id)/sessions" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke the Snyk App session of an active user
@@ -5846,6 +6054,7 @@ export def "self-apps-sessions revokeUserAppSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5854,7 +6063,7 @@ export def "self-apps-sessions revokeUserAppSession" [
   let full_url = (build-url $base $"/self/apps/($app_id)/sessions/($session_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List personal access tokens
@@ -5869,6 +6078,7 @@ export def "self-personal-access-tokens listPersonalAccessToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --limit: int # Number of results to return per page (format: int32, default: 10, e.g. 10)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
@@ -5880,7 +6090,7 @@ export def "self-personal-access-tokens listPersonalAccessToken" [
   let full_url = (build-url $base "/self/personal_access_tokens" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a personal access token
@@ -5896,6 +6106,7 @@ export def "self-personal-access-tokens delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5904,7 +6115,7 @@ export def "self-personal-access-tokens delete" [
   let full_url = (build-url $base $"/self/personal_access_tokens/($personal_access_token_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of all accessible Tenants
@@ -5919,6 +6130,7 @@ export def "tenants listTenants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -5931,7 +6143,7 @@ export def "tenants listTenants" [
   let full_url = (build-url $base "/tenants" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a single Tenant by ID
@@ -5947,6 +6159,7 @@ export def "tenants get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5955,7 +6168,7 @@ export def "tenants get" [
   let full_url = (build-url $base $"/tenants/($tenant_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update tenant
@@ -5971,6 +6184,7 @@ export def "tenants updateTenant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -5982,7 +6196,7 @@ export def "tenants updateTenant" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get Integrations using the current Broker connection
@@ -5999,6 +6213,7 @@ export def "tenants-brokers-connections-integrations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2021-06-04)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
@@ -6010,7 +6225,7 @@ export def "tenants-brokers-connections-integrations get" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/brokers/connections/($connection_id)/integrations" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates Broker connection Integration Configuration
@@ -6028,6 +6243,7 @@ export def "tenants-brokers-connections-orgs-integration createBrokerConnectionI
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2021-06-04)
   --body: record
 ]: any -> any {
@@ -6039,7 +6255,7 @@ export def "tenants-brokers-connections-orgs-integration createBrokerConnectionI
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Deletes an Integration for a Broker connection
@@ -6058,6 +6274,7 @@ export def "tenants-brokers-connections-orgs-integrations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2021-06-04)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6066,7 +6283,7 @@ export def "tenants-brokers-connections-orgs-integrations delete" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/brokers/connections/($connection_id)/orgs/($org_id)/integrations/($integration_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Broker deployments for tenant
@@ -6082,6 +6299,7 @@ export def "tenants-brokers-deployments listBrokerDeploymentsForTenant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --limit: int # Number of results to return per page (format: int32, default: 10, e.g. 10)
@@ -6093,7 +6311,7 @@ export def "tenants-brokers-deployments listBrokerDeploymentsForTenant" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/brokers/deployments" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Connection contexts
@@ -6111,6 +6329,7 @@ export def "tenants-brokers-installs-connections-contexts listConnectionContexts
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --limit: int # Number of results to return per page (format: int32, default: 10, e.g. 10)
@@ -6122,7 +6341,7 @@ export def "tenants-brokers-installs-connections-contexts listConnectionContexts
   let full_url = (build-url $base $"/tenants/($tenant_id)/brokers/installs/($install_id)/connections/($connection_id)/contexts" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes broker context
@@ -6140,6 +6359,7 @@ export def "tenants-brokers-installs-contexts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2021-06-04)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6148,7 +6368,7 @@ export def "tenants-brokers-installs-contexts delete" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/brokers/installs/($install_id)/contexts/($context_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Connection context
@@ -6166,6 +6386,7 @@ export def "tenants-brokers-installs-contexts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --limit: int # Number of results to return per page (format: int32, default: 10, e.g. 10)
@@ -6177,7 +6398,7 @@ export def "tenants-brokers-installs-contexts get" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/brokers/installs/($install_id)/contexts/($context_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates Broker Context
@@ -6195,6 +6416,7 @@ export def "tenants-brokers-installs-contexts updateBrokerContext" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2021-06-04)
   --body: record
 ]: any -> any {
@@ -6206,7 +6428,7 @@ export def "tenants-brokers-installs-contexts updateBrokerContext" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Updates an integration to be associated with a Broker context
@@ -6224,6 +6446,7 @@ export def "tenants-brokers-installs-contexts-integration updateBrokerContextInt
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2021-06-04)
   --body: record
 ]: any -> any {
@@ -6235,7 +6458,7 @@ export def "tenants-brokers-installs-contexts-integration updateBrokerContextInt
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Deletes the Broker context association with an Integration
@@ -6254,6 +6477,7 @@ export def "tenants-brokers-installs-contexts-integrations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2021-06-04)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6262,7 +6486,7 @@ export def "tenants-brokers-installs-contexts-integrations delete" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/brokers/installs/($install_id)/contexts/($context_id)/integrations/($integration_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Broker deployments
@@ -6279,6 +6503,7 @@ export def "tenants-brokers-installs-deployments listBrokerDeployments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --limit: int # Number of results to return per page (format: int32, default: 10, e.g. 10)
@@ -6290,7 +6515,7 @@ export def "tenants-brokers-installs-deployments listBrokerDeployments" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/brokers/installs/($install_id)/deployments" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates Broker Deployment
@@ -6307,6 +6532,7 @@ export def "tenants-brokers-installs-deployments createBrokerDeployment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2021-06-04)
   --body: record
 ]: any -> any {
@@ -6318,7 +6544,7 @@ export def "tenants-brokers-installs-deployments createBrokerDeployment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Deletes Broker deployment
@@ -6336,6 +6562,7 @@ export def "tenants-brokers-installs-deployments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2021-06-04)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6344,7 +6571,7 @@ export def "tenants-brokers-installs-deployments delete" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/brokers/installs/($install_id)/deployments/($deployment_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates Broker deployment
@@ -6362,6 +6589,7 @@ export def "tenants-brokers-installs-deployments updateBrokerDeployment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2021-06-04)
   --body: record
 ]: any -> any {
@@ -6373,7 +6601,7 @@ export def "tenants-brokers-installs-deployments updateBrokerDeployment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Deletes Broker connections
@@ -6391,6 +6619,7 @@ export def "tenants-brokers-installs-deployments-connections delete-by-tenant_id
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2021-06-04)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6399,7 +6628,7 @@ export def "tenants-brokers-installs-deployments-connections delete-by-tenant_id
   let full_url = (build-url $base $"/tenants/($tenant_id)/brokers/installs/($install_id)/deployments/($deployment_id)/connections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Broker connections
@@ -6417,6 +6646,7 @@ export def "tenants-brokers-installs-deployments-connections listBrokerConnectio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --limit: int # Number of results to return per page (format: int32, default: 10, e.g. 10)
@@ -6428,7 +6658,7 @@ export def "tenants-brokers-installs-deployments-connections listBrokerConnectio
   let full_url = (build-url $base $"/tenants/($tenant_id)/brokers/installs/($install_id)/deployments/($deployment_id)/connections" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates Broker connection
@@ -6446,6 +6676,7 @@ export def "tenants-brokers-installs-deployments-connections createBrokerConnect
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2021-06-04)
   --body: record
 ]: any -> any {
@@ -6457,7 +6688,7 @@ export def "tenants-brokers-installs-deployments-connections createBrokerConnect
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Deletes Broker connection
@@ -6476,6 +6707,7 @@ export def "tenants-brokers-installs-deployments-connections delete-by-tenant_id
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2021-06-04)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6484,7 +6716,7 @@ export def "tenants-brokers-installs-deployments-connections delete-by-tenant_id
   let full_url = (build-url $base $"/tenants/($tenant_id)/brokers/installs/($install_id)/deployments/($deployment_id)/connections/($connection_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Broker connection
@@ -6503,6 +6735,7 @@ export def "tenants-brokers-installs-deployments-connections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2021-06-04)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
@@ -6514,7 +6747,7 @@ export def "tenants-brokers-installs-deployments-connections get" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/brokers/installs/($install_id)/deployments/($deployment_id)/connections/($connection_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates Broker connection
@@ -6533,6 +6766,7 @@ export def "tenants-brokers-installs-deployments-connections updateBrokerConnect
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2021-06-04)
   --body: record
 ]: any -> any {
@@ -6544,7 +6778,7 @@ export def "tenants-brokers-installs-deployments-connections updateBrokerConnect
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # List organizations for bulk migration
@@ -6563,6 +6797,7 @@ export def "tenants-brokers-installs-deployments-connections-bulk-migration list
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2021-06-04)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
@@ -6574,7 +6809,7 @@ export def "tenants-brokers-installs-deployments-connections-bulk-migration list
   let full_url = (build-url $base $"/tenants/($tenant_id)/brokers/installs/($install_id)/deployments/($deployment_id)/connections/($connection_id)/bulk_migration" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Performs bulk migration integrations to universal broker
@@ -6593,6 +6828,7 @@ export def "tenants-brokers-installs-deployments-connections-bulk-migration crea
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2021-06-04)
   --body: record
 ]: any -> any {
@@ -6604,7 +6840,7 @@ export def "tenants-brokers-installs-deployments-connections-bulk-migration crea
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # List Deployment contexts
@@ -6622,6 +6858,7 @@ export def "tenants-brokers-installs-deployments-contexts listDeploymentContexts
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --limit: int # Number of results to return per page (format: int32, default: 10, e.g. 10)
@@ -6633,7 +6870,7 @@ export def "tenants-brokers-installs-deployments-contexts listDeploymentContexts
   let full_url = (build-url $base $"/tenants/($tenant_id)/brokers/installs/($install_id)/deployments/($deployment_id)/contexts" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create broker Context
@@ -6651,6 +6888,7 @@ export def "tenants-brokers-installs-deployments-contexts createBrokerContext" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2021-06-04)
   --body: record
 ]: any -> any {
@@ -6662,7 +6900,7 @@ export def "tenants-brokers-installs-deployments-contexts createBrokerContext" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # List Deployment credentials
@@ -6680,6 +6918,7 @@ export def "tenants-brokers-installs-deployments-credentials listDeploymentCrede
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --limit: int # Number of results to return per page (format: int32, default: 10, e.g. 10)
@@ -6691,7 +6930,7 @@ export def "tenants-brokers-installs-deployments-credentials listDeploymentCrede
   let full_url = (build-url $base $"/tenants/($tenant_id)/brokers/installs/($install_id)/deployments/($deployment_id)/credentials" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create deployment credential
@@ -6709,6 +6948,7 @@ export def "tenants-brokers-installs-deployments-credentials createDeploymentCre
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2021-06-04)
   --body: record
 ]: any -> any {
@@ -6720,7 +6960,7 @@ export def "tenants-brokers-installs-deployments-credentials createDeploymentCre
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Deletes Deployment credential
@@ -6739,6 +6979,7 @@ export def "tenants-brokers-installs-deployments-credentials delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2021-06-04)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6747,7 +6988,7 @@ export def "tenants-brokers-installs-deployments-credentials delete" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/brokers/installs/($install_id)/deployments/($deployment_id)/credentials/($credential_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Deployment credential
@@ -6766,6 +7007,7 @@ export def "tenants-brokers-installs-deployments-credentials get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2021-06-04)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
@@ -6777,7 +7019,7 @@ export def "tenants-brokers-installs-deployments-credentials get" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/brokers/installs/($install_id)/deployments/($deployment_id)/credentials/($credential_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates Deployment credential
@@ -6796,6 +7038,7 @@ export def "tenants-brokers-installs-deployments-credentials updateDeploymentCre
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2021-06-04)
   --body: record
 ]: any -> any {
@@ -6807,7 +7050,7 @@ export def "tenants-brokers-installs-deployments-credentials updateDeploymentCre
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # List or search all assets (synchronous) (Early Access)
@@ -6823,6 +7066,7 @@ export def "tenants-inventory-assets listAssetsTenant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --filter: string # RSQL filter expression for filtering results. See schema for full documentation. (e.g. type==container_images;created_at>2024-01-01)
   --qp-sort: string # Comma-separated sort fields. Prefix with `-` for descending order.  **Supported fields:** - `created_at` - Asset creation timestamp - `updated_at` - Asset last update timestamp - `type` - Asset type (container_images) - `class` - Asset class - `risk_score` - Asset risk score (max across project sources) - `issues` - Issue counts by severity (critical, high, medium, low) - `built_at` - Image build timestamp (container images only) - `last_scan` - Last scan timestamp  (e.g. -created_at)
@@ -6838,7 +7082,7 @@ export def "tenants-inventory-assets listAssetsTenant" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/inventory/assets" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk update asset attributes (Early Access)
@@ -6854,6 +7098,7 @@ export def "tenants-inventory-assets updateAssetsBulkTenant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -6865,7 +7110,7 @@ export def "tenants-inventory-assets updateAssetsBulkTenant" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Get available filter fields (Early Access)
@@ -6881,6 +7126,7 @@ export def "tenants-inventory-assets-filters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --asset-types: string # Comma-separated list of asset types to filter the available filter fields (e.g. container_images)
   --limit: int # Number of results to return (default: 10)
@@ -6893,7 +7139,7 @@ export def "tenants-inventory-assets-filters get" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/inventory/assets/filters" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get filter value suggestions (autocomplete) (Early Access)
@@ -6910,6 +7156,7 @@ export def "tenants-inventory-assets-filters-values get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --q: string # Full text search term to filter the list of values. If keys_only is true, this will filter the keys of the object filter values. If key is provided, this will filter the value for the specific key of the object filter values. (e.g. prod)
   --limit: int # Number of results to return (default: 10)
@@ -6924,7 +7171,7 @@ export def "tenants-inventory-assets-filters-values get" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/inventory/assets/filters/($filter_id)/values" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get available group fields (Early Access)
@@ -6940,6 +7187,7 @@ export def "tenants-inventory-assets-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --asset-types: string # Comma-separated list of asset types to filter the available group fields (e.g. container_images)
   --limit: int # Number of results to return (default: 10)
@@ -6952,7 +7200,7 @@ export def "tenants-inventory-assets-groups get" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/inventory/assets/groups" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get group value aggregation (Early Access)
@@ -6969,6 +7217,7 @@ export def "tenants-inventory-assets-groups-values get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --asset-types: string # Comma-separated list of asset types to filter the aggregation (e.g. container_images)
   --filter: string # RSQL filter expression for filtering which assets are included in aggregation. Supports the same syntax as the main search filter including full text search with the `q` field. See the RsqlFilterString schema for complete documentation.  (e.g. type==container_images;created_at>2024-01-01)
@@ -6985,7 +7234,7 @@ export def "tenants-inventory-assets-groups-values get" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/inventory/assets/groups/($group_field_id)/values" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an asset search (asynchronous) (Early Access)
@@ -7001,6 +7250,7 @@ export def "tenants-inventory-assets-searches createAssetSearchTenant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -7012,7 +7262,7 @@ export def "tenants-inventory-assets-searches createAssetSearchTenant" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Retrieve asset search results (asynchronous) (Early Access)
@@ -7029,6 +7279,7 @@ export def "tenants-inventory-assets-searches-results get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --qp-sort: string # Comma-separated sort fields. Prefix with `-` for descending order.  **Supported fields:** - `created_at` - Asset creation timestamp - `updated_at` - Asset last update timestamp - `type` - Asset type (container_images) - `class` - Asset class - `risk_score` - Asset risk score (max across project sources) - `issues` - Issue counts by severity (critical, high, medium, low) - `built_at` - Image build timestamp (container images only) - `last_scan` - Last scan timestamp  (e.g. -created_at)
   --limit: int # Number of results to return (default: 10)
@@ -7042,7 +7293,7 @@ export def "tenants-inventory-assets-searches-results get" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/inventory/assets/searches/($search_id)/results" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a single asset by ID (Early Access)
@@ -7059,6 +7310,7 @@ export def "tenants-inventory-assets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --qp-fields: record # Sparse fieldsets allow clients to request only specific fields for a given resource type. Use the format `fields[<type>]=field1,field2` where `<type>` is the JSON:API resource type.  **Container image fields** (use with `fields[container_images]`): - `class` - Classification of the asset - `registry` - Container registry hostname - `repository` - Repository path - `config_digest` - Image config digest - `distribution_digests` - Distribution digests (manifest/index pairs) - `image_tags` - Distinct image tags across all discovery sources - `built_at` - When the image was built - `size_bytes` - Size of the image in bytes - `author` - Image author - `architecture` - CPU architecture - `os` - Operating system - `variant` - CPU architecture variant - `os_version` - Operating system version - `os_features` - OS features - `config` - Image runtime configuration (OCI config) - `root_fs` - Root filesystem information - `history` - Image build history - `inferred_base_images` - Inferred base images - `teams` - Teams associated with the asset - `labels` - Labels associated with the asset - `tags` - Key-value tags for the asset - `risk_score` - Risk score for the asset - `test_surfaces` - Test surfaces for the asset - `issues` - Issue counts by severity - `created_at` - When the asset was created - `updated_at` - When the asset was last updated - `last_scan` - When the asset was last scanned - `scan_engines` - Scan engines applied to the asset  Note: `type` and `id` are always included regardless of field selection.  (e.g. {container_images: registry,repository,config_digest})
 ]: nothing -> any {
@@ -7068,7 +7320,7 @@ export def "tenants-inventory-assets get" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/inventory/assets/($asset_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update asset attributes (Early Access)
@@ -7085,6 +7337,7 @@ export def "tenants-inventory-assets updateAssetTenant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -7096,7 +7349,7 @@ export def "tenants-inventory-assets updateAssetTenant" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # List projects for an asset (Early Access)
@@ -7113,6 +7366,7 @@ export def "tenants-inventory-assets-relationships-projects listAssetProjectsTen
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --starting-after: string # Cursor for fetching the next page of results
   --ending-before: string # Cursor for fetching the previous page of results
@@ -7127,7 +7381,7 @@ export def "tenants-inventory-assets-relationships-projects listAssetProjectsTen
   let full_url = (build-url $base $"/tenants/($tenant_id)/inventory/assets/($asset_id)/relationships/projects" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List targets for an asset (Early Access)
@@ -7144,6 +7398,7 @@ export def "tenants-inventory-assets-relationships-targets listAssetTargetsTenan
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested API version (e.g. 2024-10-15)
   --starting-after: string # Cursor for fetching the next page of results
   --ending-before: string # Cursor for fetching the previous page of results
@@ -7155,7 +7410,7 @@ export def "tenants-inventory-assets-relationships-targets listAssetTargetsTenan
   let full_url = (build-url $base $"/tenants/($tenant_id)/inventory/assets/($asset_id)/relationships/targets" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all memberships of the tenant (Early Access)
@@ -7171,6 +7426,7 @@ export def "tenants-memberships get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -7190,7 +7446,7 @@ export def "tenants-memberships get" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/memberships" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an individual tenant membership for a single user. (Early Access)
@@ -7207,6 +7463,7 @@ export def "tenants-memberships delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7215,7 +7472,7 @@ export def "tenants-memberships delete" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/memberships/($membership_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update tenant membership (Early Access)
@@ -7232,6 +7489,7 @@ export def "tenants-memberships updateTenantMembership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -7243,7 +7501,7 @@ export def "tenants-memberships updateTenantMembership" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # List all available roles for a given tenant (Early Access)
@@ -7259,6 +7517,7 @@ export def "tenants-roles listTenantRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --name: string # Role name filter. (e.g. examplename)
   --custom: oneof<nothing, bool> # Whether role is custom or not. (e.g. false)
@@ -7274,7 +7533,7 @@ export def "tenants-roles listTenantRoles" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/roles" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a custom tenant role for a given tenant (Early Access)
@@ -7290,6 +7549,7 @@ export def "tenants-roles createTenantRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --body: record
 ]: any -> any {
@@ -7301,7 +7561,7 @@ export def "tenants-roles createTenantRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }
 
 # Delete a specific tenant role by its id and its tenant id. (Early Access)
@@ -7318,6 +7578,7 @@ export def "tenants-roles delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7326,7 +7587,7 @@ export def "tenants-roles delete" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/roles/($role_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a specific role by its id and its tenant id. (Early Access)
@@ -7343,6 +7604,7 @@ export def "tenants-roles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --has-users-assigned: oneof<nothing, bool> # returns current memberships of the role in the meta relationships section (default: false)
 ]: nothing -> any {
@@ -7352,7 +7614,7 @@ export def "tenants-roles get" [
   let full_url = (build-url $base $"/tenants/($tenant_id)/roles/($role_id)" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a specific tenant role by its id and its tenant id. (Early Access)
@@ -7369,6 +7631,7 @@ export def "tenants-roles updateTenantRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --force: oneof<nothing, bool> # flag to force the update of a role, required if users are assigned to the role (e.g. false)
   --body: record
@@ -7381,5 +7644,5 @@ export def "tenants-roles updateTenantRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.api+json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.api+json" $body
 }

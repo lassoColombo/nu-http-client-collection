@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -72,7 +73,7 @@ def zeroAdjustments-completer [] { ["true"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "individuals-self-assessment-adjustable-summary get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -106,6 +107,7 @@ export def "individuals-self-assessment-adjustable-summary get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --typeOfBusiness: string@typeOfBusiness-completer # The type of business the summary calculation is for.  Limited to the following possible values for tax years 2024-25 and before:  - foreign-property-fhl-eea - foreign-property - uk-property - uk-property-fhl - self-employment  Limited to the following possible values for tax year 2025-26 onwards:  - foreign-property - uk-property - self-employment  (e.g. foreign-property)
   --businessId: string # An identifier for the business, unique to the customer. (e.g. XBIS12345678901)
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used.
@@ -120,7 +122,7 @@ export def "individuals-self-assessment-adjustable-summary get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Trigger a Business Source Adjustable Summary
@@ -136,6 +138,7 @@ export def "individuals-self-assessment-adjustable-summary-trigger post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used.
   --Content-Type: string@Content-Type-completer # Specifies the format of the request body, which must be JSON.
   --Authorization: string # An OAuth 2.0 Bearer Token with the *write:self-assessment* scope.  (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
@@ -154,7 +157,7 @@ export def "individuals-self-assessment-adjustable-summary-trigger post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a Self-Employment Business Source Adjustable Summary
@@ -171,6 +174,7 @@ export def "individuals-self-assessment-adjustable-summary-self-employment get" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used.
   --Authorization: string # An OAuth 2.0 Bearer Token with the *read:self-assessment* scope.  (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
   --Gov-Test-Scenario: string # Only in sandbox environment. See Test Data table for all header values.  (e.g. -)
@@ -182,7 +186,7 @@ export def "individuals-self-assessment-adjustable-summary-self-employment get" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Submit Self-Employment Accounting Adjustments
@@ -202,6 +206,7 @@ export def "individuals-self-assessment-adjustable-summary-self-employment-adjus
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used.
   --Content-Type: string@Content-Type-completer # Specifies the format of the request body, which must be JSON.
   --Authorization: string # An OAuth 2.0 Bearer Token with the *write:self-assessment* scope.  (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
@@ -221,7 +226,7 @@ export def "individuals-self-assessment-adjustable-summary-self-employment-adjus
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a UK Property Business Source Adjustable Summary
@@ -238,6 +243,7 @@ export def "individuals-self-assessment-adjustable-summary-uk-property get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used.
   --Authorization: string # An OAuth 2.0 Bearer Token with the *read:self-assessment* scope.  (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
   --Gov-Test-Scenario: string # Only in sandbox environment. See Test Data table for all header values.  (e.g. -)
@@ -249,7 +255,7 @@ export def "individuals-self-assessment-adjustable-summary-uk-property get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Submit UK Property Accounting Adjustments
@@ -268,6 +274,7 @@ export def "individuals-self-assessment-adjustable-summary-uk-property-adjust po
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used.
   --Content-Type: string@Content-Type-completer # Specifies the format of the request body, which must be JSON.
   --Authorization: string # An OAuth 2.0 Bearer Token with the *write:self-assessment* scope.  (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
@@ -285,7 +292,7 @@ export def "individuals-self-assessment-adjustable-summary-uk-property-adjust po
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a Foreign Property Business Source Adjustable Summary
@@ -302,6 +309,7 @@ export def "individuals-self-assessment-adjustable-summary-foreign-property get"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used.
   --Authorization: string # An OAuth 2.0 Bearer Token with the *read:self-assessment* scope.  (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
   --Gov-Test-Scenario: string # Only in sandbox environment. See Test Data table for all header values.  (e.g. -)
@@ -313,7 +321,7 @@ export def "individuals-self-assessment-adjustable-summary-foreign-property get"
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Submit Foreign Property Accounting Adjustments
@@ -332,6 +340,7 @@ export def "individuals-self-assessment-adjustable-summary-foreign-property-adju
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used.
   --Content-Type: string@Content-Type-completer # Specifies the format of the request body, which must be JSON.
   --Authorization: string # An OAuth 2.0 Bearer Token with the *write:self-assessment* scope.  (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
@@ -349,5 +358,5 @@ export def "individuals-self-assessment-adjustable-summary-foreign-property-adju
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

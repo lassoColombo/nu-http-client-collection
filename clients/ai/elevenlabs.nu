@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -70,7 +71,7 @@ def apply-text-normalization-completer [] { ["auto" "off" "on"] }
 def model-id-completer [] { ["eleven_multilingual_ttv_v2" "eleven_ttv_v3"] }
 def quality-preset-completer [] { ["high" "standard" "ultra" "ultra_lossless"] }
 def duration-scale-completer [] { ["default" "long" "short"] }
-def model-id-completer-1 [] { ["music_v1"] }
+def model-id-completer-1 [] { ["music_v1" "music_v2"] }
 def render-type-completer [] { ["aac" "aaf" "clips_zip" "mp3" "mp4" "tracks_zip" "wav" "zip"] }
 def dubbing-status-completer [] { ["dubbed" "dubbing" "failed"] }
 def filter-by-creator-completer [] { ["all" "others" "personal"] }
@@ -80,6 +81,7 @@ def accept-completer [] { ["audio/mpeg" "video/mp4"] }
 def format-type-completer [] { ["json" "srt" "webvtt"] }
 def accept-completer-1 [] { ["application/json" "text/plain"] }
 def category-completer [] { ["famous" "high_quality" "professional"] }
+def sort-completer [] { ["cloned_by_count" "created_date" "trending" "usage_character_count_1y"] }
 def breakdown-type-completer [] { ["all_api_keys" "api_keys" "groups" "has_api_key" "model" "none" "product_type" "region" "reporting_workspace_id" "request_queue" "request_source" "resource" "subresource_id" "user" "voice" "voice_multiplier"] }
 def aggregation-interval-completer [] { ["cumulative" "day" "hour" "month" "week"] }
 def metric-completer [] { ["concurrency" "concurrency_average" "credits" "fiat_units_spent" "minutes_used" "request_count" "ttfb_avg" "ttfb_p95" "tts_characters"] }
@@ -105,13 +107,15 @@ def embedding-model-completer [] { ["e5_mistral_7b_instruct" "multilingual_e5_la
 def default-livekit-stack-completer [] { ["standard" "static"] }
 def approval-policy-completer [] { ["auto_approve_all" "require_approval_all" "require_approval_per_tool"] }
 def approval-policy-completer-1 [] { ["auto_approved" "requires_approval"] }
+def scope-completer [] { ["agent" "conversation"] }
 def type-completer [] { ["auth_connection" "secret" "string"] }
 def model-style-prefix-completer [] { ["music" "sfx"] }
+def extract-composition-plan-completer [] { ["false" "music_v1" "music_v2" "true"] }
 def stem-variation-id-completer [] { ["six_stems_v1" "two_stems_v1"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "history history" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -144,6 +148,7 @@ export def "history history" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # How many history items to return at maximum. Can not exceed 1000, defaults to 100. (default: 100)
   --start-after-history-item-id: string # After which ID to start fetching, use this parameter to paginate across a large collection of history items. In case this parameter is not provided history items will be fetched starting from the most recently created one ordered descending by their creation date.
   --voice-id: string # Voice ID to be filtered for, you can use GET https://api.elevenlabs.io/v1/voices to receive a list of voices and their IDs.
@@ -163,7 +168,7 @@ export def "history history" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get History Item
@@ -179,6 +184,7 @@ export def "history id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<history_item_id: string, request_id: any, voice_id: any, model_id: any, voice_name: any, voice_category: any, text: any, date_unix: int, character_count_change_from: int, character_count_change_to: int, content_type: string, state: string, settings: any, feedback: any, share_link_id: any, source: any, alignments: any, dialogue: any, output_format: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -188,7 +194,7 @@ export def "history id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete History Item
@@ -204,6 +210,7 @@ export def "history item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -213,7 +220,7 @@ export def "history item" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Audio From History Item
@@ -229,6 +236,7 @@ export def "history-audio item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -238,7 +246,7 @@ export def "history-audio item" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "audio/mpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download History Items
@@ -253,6 +261,7 @@ export def "history-download items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   history_item_ids: list # A list of history items to download, you can get IDs of history items and other metadata using the GET https://api.elevenlabs.io/v1/history endpoint.
   --output-format: any # Output format to transcode the audio file, can be wav or default.
@@ -267,7 +276,7 @@ export def "history-download items" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Sound Generation
@@ -282,6 +291,7 @@ export def "sound-generation generation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   text: string # The text that will get converted into a sound effect.
@@ -301,7 +311,7 @@ export def "sound-generation generation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "audio/mpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Audio Isolation
@@ -316,6 +326,7 @@ export def "audio-isolation isolation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   audio: string # The audio file from which vocals/speech will be isolated from. (format: binary)
   --file-format: any # The format of input audio. Options are 'pcm_s16le_16' or 'other' For `pcm_s16le_16`, the input audio must be 16-bit PCM at a 16kHz sample rate, single channel (mono), and little-endian byte order. Latency will be lower than with passing an encoded waveform. (default: other)
@@ -331,7 +342,7 @@ export def "audio-isolation isolation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "audio/mpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get Audio Isolation History
@@ -346,6 +357,7 @@ export def "audio-isolation-history history" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # How many history items to return at maximum. Defaults to 100. (default: 100)
   --page: int # Page number for search pagination (1-based). Only used when search is provided. (default: 1)
   --search: string # Optional search term used for filtering audio isolation history (title/text).
@@ -359,7 +371,7 @@ export def "audio-isolation-history history" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Audio Isolation History Item
@@ -375,6 +387,7 @@ export def "audio-isolation-history item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -384,7 +397,7 @@ export def "audio-isolation-history item" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Audio Isolation Stream
@@ -399,6 +412,7 @@ export def "audio-isolation-stream stream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   audio: string # The audio file from which vocals/speech will be isolated from. (format: binary)
   --file-format: any # The format of input audio. Options are 'pcm_s16le_16' or 'other' For `pcm_s16le_16`, the input audio must be 16-bit PCM at a 16kHz sample rate, single channel (mono), and little-endian byte order. Latency will be lower than with passing an encoded waveform. (default: other)
@@ -413,7 +427,7 @@ export def "audio-isolation-stream stream" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "audio/mpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Delete Sample
@@ -430,6 +444,7 @@ export def "voices-samples sample" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -439,7 +454,7 @@ export def "voices-samples sample" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Audio From Sample
@@ -456,6 +471,7 @@ export def "voices-samples-audio sample" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -465,7 +481,7 @@ export def "voices-samples-audio sample" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Text To Speech
@@ -483,6 +499,7 @@ export def "text-to-speech full" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enable-logging: oneof<nothing, bool> # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
   --optimize-streaming-latency: string # You can turn on latency optimizations at some cost of quality. The best possible final latency varies by model. Possible values: 0 - default mode (no latency optimizations) 1 - normal latency optimizations (about 50% of possible latency improvement of option 3) 2 - strong latency optimizations (about 75% of possible latency improvement of option 3) 3 - max latency optimizations 4 - max latency optimizations, but also with text normalizer turned off for even more latency savings (best latency, but can mispronounce eg numbers and dates).  Defaults to None.  (DEPRECATED)
   --output-format: string@output-format-completer-1 # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM and WAV formats with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
@@ -512,7 +529,7 @@ export def "text-to-speech full" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "audio/mpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Text To Speech With Timestamps
@@ -531,6 +548,7 @@ export def "text-to-speech-with-timestamps timestamps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enable-logging: oneof<nothing, bool> # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
   --optimize-streaming-latency: string # You can turn on latency optimizations at some cost of quality. The best possible final latency varies by model. Possible values: 0 - default mode (no latency optimizations) 1 - normal latency optimizations (about 50% of possible latency improvement of option 3) 2 - strong latency optimizations (about 75% of possible latency improvement of option 3) 3 - max latency optimizations 4 - max latency optimizations, but also with text normalizer turned off for even more latency savings (best latency, but can mispronounce eg numbers and dates).  Defaults to None.  (DEPRECATED)
   --output-format: string@output-format-completer-1 # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM and WAV formats with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
@@ -560,7 +578,7 @@ export def "text-to-speech-with-timestamps timestamps" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Text To Speech Streaming
@@ -578,6 +596,7 @@ export def "text-to-speech-stream stream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enable-logging: oneof<nothing, bool> # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
   --optimize-streaming-latency: string # You can turn on latency optimizations at some cost of quality. The best possible final latency varies by model. Possible values: 0 - default mode (no latency optimizations) 1 - normal latency optimizations (about 50% of possible latency improvement of option 3) 2 - strong latency optimizations (about 75% of possible latency improvement of option 3) 3 - max latency optimizations 4 - max latency optimizations, but also with text normalizer turned off for even more latency savings (best latency, but can mispronounce eg numbers and dates).  Defaults to None.  (DEPRECATED)
   --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
@@ -607,7 +626,7 @@ export def "text-to-speech-stream stream" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "audio/mpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Text To Speech Streaming With Timestamps
@@ -625,6 +644,7 @@ export def "text-to-speech-stream-with-timestamps timestamps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enable-logging: oneof<nothing, bool> # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
   --optimize-streaming-latency: string # You can turn on latency optimizations at some cost of quality. The best possible final latency varies by model. Possible values: 0 - default mode (no latency optimizations) 1 - normal latency optimizations (about 50% of possible latency improvement of option 3) 2 - strong latency optimizations (about 75% of possible latency improvement of option 3) 3 - max latency optimizations 4 - max latency optimizations, but also with text normalizer turned off for even more latency savings (best latency, but can mispronounce eg numbers and dates).  Defaults to None.  (DEPRECATED)
   --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
@@ -654,7 +674,7 @@ export def "text-to-speech-stream-with-timestamps timestamps" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Text To Dialogue (Multi-Voice)
@@ -670,6 +690,7 @@ export def "text-to-dialogue dialogue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --output-format: string@output-format-completer-1 # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM and WAV formats with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
   --enable-logging: oneof<nothing, bool> # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -692,7 +713,7 @@ export def "text-to-dialogue dialogue" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "audio/mpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Text To Dialogue (Multi-Voice) Streaming
@@ -708,6 +729,7 @@ export def "text-to-dialogue-stream stream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --enable-logging: oneof<nothing, bool> # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -730,7 +752,7 @@ export def "text-to-dialogue-stream stream" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "audio/mpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Text To Dialogue Streaming With Timestamps
@@ -746,6 +768,7 @@ export def "text-to-dialogue-stream-with-timestamps timestamps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --enable-logging: oneof<nothing, bool> # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -768,7 +791,7 @@ export def "text-to-dialogue-stream-with-timestamps timestamps" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Text To Dialogue With Timestamps
@@ -784,6 +807,7 @@ export def "text-to-dialogue-with-timestamps timestamps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --output-format: string@output-format-completer-1 # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM and WAV formats with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
   --enable-logging: oneof<nothing, bool> # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -806,7 +830,7 @@ export def "text-to-dialogue-with-timestamps timestamps" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Speech To Speech
@@ -823,6 +847,7 @@ export def "speech-to-speech full" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enable-logging: oneof<nothing, bool> # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
   --optimize-streaming-latency: string # You can turn on latency optimizations at some cost of quality. The best possible final latency varies by model. Possible values: 0 - default mode (no latency optimizations) 1 - normal latency optimizations (about 50% of possible latency improvement of option 3) 2 - strong latency optimizations (about 75% of possible latency improvement of option 3) 3 - max latency optimizations 4 - max latency optimizations, but also with text normalizer turned off for even more latency savings (best latency, but can mispronounce eg numbers and dates).  Defaults to None.  (DEPRECATED)
   --output-format: string@output-format-completer-1 # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM and WAV formats with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
@@ -845,7 +870,7 @@ export def "speech-to-speech full" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "audio/mpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Speech To Speech Streaming
@@ -862,6 +887,7 @@ export def "speech-to-speech-stream stream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enable-logging: oneof<nothing, bool> # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
   --optimize-streaming-latency: string # You can turn on latency optimizations at some cost of quality. The best possible final latency varies by model. Possible values: 0 - default mode (no latency optimizations) 1 - normal latency optimizations (about 50% of possible latency improvement of option 3) 2 - strong latency optimizations (about 75% of possible latency improvement of option 3) 3 - max latency optimizations 4 - max latency optimizations, but also with text normalizer turned off for even more latency savings (best latency, but can mispronounce eg numbers and dates).  Defaults to None.  (DEPRECATED)
   --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
@@ -884,7 +910,7 @@ export def "speech-to-speech-stream stream" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "audio/mpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # [Deprecated] Generate A Voice Preview From Description
@@ -901,6 +927,7 @@ export def "text-to-voice-create-previews voice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   voice_description: string # Description to use for the created voice.
@@ -923,7 +950,7 @@ export def "text-to-voice-create-previews voice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create A New Voice From Voice Preview
@@ -938,6 +965,7 @@ export def "text-to-voice voice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   voice_name: string # Name to use for the created voice.
   voice_description: string # Description to use for the created voice.
@@ -955,7 +983,7 @@ export def "text-to-voice voice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Design A Voice.
@@ -970,6 +998,7 @@ export def "text-to-voice-design design" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   voice_description: string # Description to use for the created voice.
@@ -998,7 +1027,7 @@ export def "text-to-voice-design design" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remix A Voice.
@@ -1014,6 +1043,7 @@ export def "text-to-voice-remix remix" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   voice_description: string # Description of the changes to make to the voice.
@@ -1038,7 +1068,7 @@ export def "text-to-voice-remix remix" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Text To Voice Preview Streaming
@@ -1054,6 +1084,7 @@ export def "text-to-voice-stream stream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1063,7 +1094,7 @@ export def "text-to-voice-stream stream" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "audio/mpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get User Info
@@ -1078,6 +1109,7 @@ export def "user info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<user_id: string, subscription: record<tier: string, character_count: int, character_limit: int, max_character_limit_extension: any, max_credit_limit_extension: any, can_extend_character_limit: bool, allowed_to_extend_character_limit: bool, next_character_count_reset_unix: any, voice_slots_used: int, professional_voice_slots_used: int, voice_limit: int, max_voice_add_edits: any, voice_add_edit_counter: int, professional_voice_limit: int, can_extend_voice_limit: bool, can_use_instant_voice_cloning: bool, can_use_professional_voice_cloning: bool, currency: any, current_overage: record<amount: string, currency: string>, status: string, billing_period: any, character_refresh_period: any>, is_new_user: bool, xi_api_key: any, can_use_delayed_payment_methods: bool, is_onboarding_completed: bool, is_onboarding_checklist_completed: bool, show_compliance_terms: bool, first_name: any, is_api_key_hashed: bool, xi_api_key_preview: any, referral_link_code: any, partnerstack_partner_default_link: any, created_at: int, seat_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1087,7 +1119,7 @@ export def "user info" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get User Subscription Info
@@ -1102,6 +1134,7 @@ export def "user-subscription info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<tier: string, character_count: int, character_limit: int, max_character_limit_extension: any, max_credit_limit_extension: any, can_extend_character_limit: bool, allowed_to_extend_character_limit: bool, next_character_count_reset_unix: any, voice_slots_used: int, professional_voice_slots_used: int, voice_limit: int, max_voice_add_edits: any, voice_add_edit_counter: int, professional_voice_limit: int, can_extend_voice_limit: bool, can_use_instant_voice_cloning: bool, can_use_professional_voice_cloning: bool, currency: any, current_overage: record<amount: string, currency: string>, status: string, billing_period: any, character_refresh_period: any, next_invoice: any, open_invoices: table<amount_due_cents: int, subtotal_cents: any, tax_cents: any, discount_percent_off: any, discount_amount_off: any, discounts: list, next_payment_attempt_unix: int, payment_intent_status: any, payment_intent_statusses: list>, has_open_invoices: bool, pending_change: any, has_used_starter_coupon_on_account: bool, has_used_creator_coupon_on_account: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1111,7 +1144,7 @@ export def "user-subscription info" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Default Voice Settings.
@@ -1126,13 +1159,14 @@ export def "voices-settings-default default" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<stability: any, use_speaker_boost: any, similarity_boost: any, style: any, speed: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/voices/settings/default")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Voice Settings
@@ -1148,6 +1182,7 @@ export def "voices-settings settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<stability: any, use_speaker_boost: any, similarity_boost: any, style: any, speed: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1157,7 +1192,7 @@ export def "voices-settings settings" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit Voice Settings
@@ -1173,6 +1208,7 @@ export def "voices-settings-edit settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --stability: any # Determines how stable the voice is and the randomness between each generation. Lower values introduce broader emotional range for the voice. Higher values can result in a monotonous voice with limited emotion. (default: 0.5)
   --use-speaker-boost: any # This setting boosts the similarity to the original speaker. Using this setting requires a slightly higher computational load, which in turn increases latency. (default: true)
@@ -1190,7 +1226,7 @@ export def "voices-settings-edit settings" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Voice
@@ -1207,6 +1243,7 @@ export def "voices id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --with-settings: oneof<nothing, bool> # This parameter is now deprecated. It is ignored and will be removed in a future version. (DEPRECATED, default: true)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<voice_id: string, name: string, samples: any, category: string, fine_tuning: any, labels: record, description: any, preview_url: any, available_for_tiers: list<string>, settings: any, sharing: any, high_quality_base_model_ids: list<string>, verified_languages: any, collection_ids: any, safety_control: any, voice_verification: any, permission_on_resource: any, is_owner: any, is_legacy: bool, is_mixed: bool, favorited_at_unix: any, created_at_unix: any, is_bookmarked: any, recording_quality: any, labelling_status: any, recording_quality_reason: any> {
@@ -1218,7 +1255,7 @@ export def "voices id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Voice
@@ -1234,6 +1271,7 @@ export def "voices voice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1243,7 +1281,7 @@ export def "voices voice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Voices
@@ -1258,6 +1296,7 @@ export def "voices voices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --show-legacy: string # If set to true, legacy premade voices will be included in responses from /v1/voices (default: false)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<voices: table<voice_id: string, name: string, samples: any, category: string, fine_tuning: any, labels: record, description: any, preview_url: any, available_for_tiers: list, settings: any, sharing: any, high_quality_base_model_ids: list, verified_languages: any, collection_ids: any, safety_control: any, voice_verification: any, permission_on_resource: any, is_owner: any, is_legacy: bool, is_mixed: bool, favorited_at_unix: any, created_at_unix: any, is_bookmarked: any, recording_quality: any, labelling_status: any, recording_quality_reason: any>> {
@@ -1269,7 +1308,7 @@ export def "voices voices" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Voices V2
@@ -1284,6 +1323,7 @@ export def "voices v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --next-page-token: string # The next page token to use for pagination. Returned from the previous request. Use this in combination with the has_more flag for reliable pagination.
   --page-size: int # How many voices to return at maximum. Can not exceed 100, defaults to 10. Page 0 may include more voices due to default voices being included. (default: 10)
   --search: string # Search term to filter voices by. Searches in name, description, labels, category.
@@ -1305,7 +1345,7 @@ export def "voices v2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Voice
@@ -1320,6 +1360,7 @@ export def "voices-add voice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   name: string # The name that identifies this voice. This will be displayed in the dropdown of the website.
   files: list # A list of file paths to audio recordings intended for voice cloning.
@@ -1337,7 +1378,7 @@ export def "voices-add voice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Edit Voice
@@ -1353,6 +1394,7 @@ export def "voices-edit voice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   name: string # The name that identifies this voice. This will be displayed in the dropdown of the website.
   --files: list # Audio files to add to the voice
@@ -1371,7 +1413,7 @@ export def "voices-edit voice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Add Shared Voice
@@ -1388,6 +1430,7 @@ export def "voices-add voice-by-public_user_id-voice_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   new_name: string # The name that identifies this voice. This will be displayed in the dropdown of the website.
   --bookmarked: oneof<nothing, bool> # default: true
@@ -1402,7 +1445,7 @@ export def "voices-add voice-by-public_user_id-voice_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Podcast
@@ -1417,6 +1460,7 @@ export def "studio-podcasts podcast" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --safety-identifier: string # Used for moderation. Your workspace must be allowlisted to use this feature.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   model_id: string # The ID of the model to be used for this Studio project, you can query GET /v1/models to list all available models.
@@ -1442,7 +1486,7 @@ export def "studio-podcasts podcast" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Video To Music
@@ -1457,6 +1501,7 @@ export def "music-video-to-music music" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   videos: list #              One or more video files sent via FormData array (multipart/form-data). They will be combined into one codec in order.             A maximum of 10 videos is allowed, where the total size of the combined video is limited to 200MB.             In total, the video can be up to 600 seconds long. Note that combining multiple videos may increase the request duration significantly. If possible, combine the videos beforehand.             
@@ -1476,7 +1521,7 @@ export def "music-video-to-music music" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Create Pronunciation Dictionaries
@@ -1493,6 +1538,7 @@ export def "studio-projects-pronunciation-dictionaries dictionaries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   pronunciation_dictionary_locators: list # A list of pronunciation dictionary locators (pronunciation_dictionary_id, version_id) encoded as a list of JSON strings for pronunciation dictionaries to be applied to the text. A list of json encoded strings is required as adding projects may occur through formData as opposed to jsonBody. To specify multiple dictionaries use multiple --form lines in your curl, such as --form 'pronunciation_dictionary_locators="{\"pronunciation_dictionary_id\":\"Vmd4Zor6fplcA7WrINey\",\"version_id\":\"hRPaxjlTdR7wFMhV4w0b\"}"' --form 'pronunciation_dictionary_locators="{\"pronunciation_dictionary_id\":\"JzWtcGQMJ6bnlWwyMo7e\",\"version_id\":\"lbmwxiLu4q6txYxgdZqn\"}"'. — item shape: {pronunciation_dictionary_id: string, version_id: any}
   --invalidate-affected-text: oneof<nothing, bool> # This will automatically mark text in this project for reconversion when the new dictionary applies or the old one no longer does. (default: true)
@@ -1507,7 +1553,7 @@ export def "studio-projects-pronunciation-dictionaries dictionaries" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Studio Projects
@@ -1522,6 +1568,7 @@ export def "studio-projects projects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<projects: table<project_id: string, name: string, create_date_unix: int, created_by_user_id: any, default_title_voice_ref_id: string, default_paragraph_voice_ref_id: string, default_model_id: string, last_conversion_date_unix: any, can_be_downloaded: bool, title: any, author: any, description: any, genres: any, cover_image_url: any, target_audience: any, language: any, content_type: any, original_publication_date: any, mature_content: any, isbn_number: any, volume_normalization: bool, state: string, access_level: string, fiction: any, quality_check_on: bool, quality_check_on_when_bulk_convert: bool, creation_meta: any, source_type: any, chapters_enabled: any, captions_enabled: any, caption_style: any, caption_style_template_overrides: any, public_share_id: any, aspect_ratio: any, agent_settings: any, default_title_voice_id: string, default_paragraph_voice_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1531,7 +1578,7 @@ export def "studio-projects projects" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Studio Project
@@ -1546,6 +1593,7 @@ export def "studio-projects project" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   name: string # The name of the Studio project, used for identification only.
   --default-title-voice-id: any # The voice_id that corresponds to the default voice used for new titles.
@@ -1587,7 +1635,7 @@ export def "studio-projects project" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Update Studio Project
@@ -1603,6 +1651,7 @@ export def "studio-projects project-by-project_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   name: string # The name of the Studio project, used for identification only.
   default_title_voice_id: string # The voice_id that corresponds to the default voice used for new titles.
@@ -1622,7 +1671,7 @@ export def "studio-projects project-by-project_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Studio Project
@@ -1638,6 +1687,7 @@ export def "studio-projects id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --share-id: string # The share ID of the project
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<project_id: string, name: string, create_date_unix: int, created_by_user_id: any, default_title_voice_ref_id: string, default_paragraph_voice_ref_id: string, default_model_id: string, last_conversion_date_unix: any, can_be_downloaded: bool, title: any, author: any, description: any, genres: any, cover_image_url: any, target_audience: any, language: any, content_type: any, original_publication_date: any, mature_content: any, isbn_number: any, volume_normalization: bool, state: string, access_level: string, fiction: any, quality_check_on: bool, quality_check_on_when_bulk_convert: bool, creation_meta: any, source_type: any, chapters_enabled: any, captions_enabled: any, caption_style: any, caption_style_template_overrides: any, public_share_id: any, aspect_ratio: any, agent_settings: any, quality_preset: string, chapters: table<chapter_id: string, name: string, last_conversion_date_unix: any, conversion_progress: any, can_be_downloaded: bool, state: string, has_video: any, has_visual_content: any, voice_ids: any, statistics: any, last_conversion_error: any>, pronunciation_dictionary_versions: table<version_id: string, version_rules_num: int, pronunciation_dictionary_id: string, dictionary_name: string, version_name: string, permission_on_resource: any, created_by: string, creation_time_unix: int, archived_time_unix: any>, pronunciation_dictionary_locators: table<pronunciation_dictionary_id: string, version_id: any>, apply_text_normalization: string, experimental: record, assets: list<any>, voices: table<project_voice_ref_id: string, voice_id: string, alias: string, stability: float, similarity_boost: float, style: float, is_pinned: bool, use_speaker_boost: bool, volume_gain: float, speed: float>, base_voices: any, publishing_read: any, default_title_voice_id: string, default_paragraph_voice_id: string> {
@@ -1649,7 +1699,7 @@ export def "studio-projects id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Studio Project
@@ -1665,6 +1715,7 @@ export def "studio-projects project-by-project_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1674,7 +1725,7 @@ export def "studio-projects project-by-project_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Studio Project Content
@@ -1690,6 +1741,7 @@ export def "studio-projects-content content" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --from-url: any # An optional URL from which we will extract content to initialize the Studio project. If this is set, 'from_url' and 'from_content' must be null. If neither 'from_url', 'from_document', 'from_content' are provided we will initialize the Studio project as blank.
   --from-document: any # An optional .epub, .pdf, .txt or similar file can be provided. If provided, we will initialize the Studio project with its content. If this is set, 'from_url' and 'from_content' must be null. If neither 'from_url', 'from_document', 'from_content' are provided we will initialize the Studio project as blank.
@@ -1706,7 +1758,7 @@ export def "studio-projects-content content" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Convert Studio Project
@@ -1722,6 +1774,7 @@ export def "studio-projects-convert endpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1731,7 +1784,7 @@ export def "studio-projects-convert endpoint" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Studio Project Snapshots
@@ -1747,6 +1800,7 @@ export def "studio-projects-snapshots snapshots" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<snapshots: table<project_snapshot_id: string, project_id: string, created_at_unix: int, name: string, audio_upload: any, zip_upload: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1756,7 +1810,7 @@ export def "studio-projects-snapshots snapshots" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Project Snapshot
@@ -1773,6 +1827,7 @@ export def "studio-projects-snapshots endpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<project_snapshot_id: string, project_id: string, created_at_unix: int, name: string, audio_upload: any, zip_upload: any, character_alignments: table<characters: list, character_start_times_seconds: list, character_end_times_seconds: list>, audio_duration_secs: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1782,7 +1837,7 @@ export def "studio-projects-snapshots endpoint" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stream Studio Project Audio
@@ -1799,6 +1854,7 @@ export def "studio-projects-snapshots-stream endpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --convert-to-mpeg: oneof<nothing, bool> # Whether to convert the audio to mpeg format. (default: false)
 ]: any -> any {
@@ -1812,7 +1868,7 @@ export def "studio-projects-snapshots-stream endpoint" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Stream Archive With Studio Project Audio
@@ -1829,6 +1885,7 @@ export def "studio-projects-snapshots-archive endpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1838,7 +1895,7 @@ export def "studio-projects-snapshots-archive endpoint" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/x-zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Chapters
@@ -1854,6 +1911,7 @@ export def "studio-projects-chapters chapters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<chapters: table<chapter_id: string, name: string, last_conversion_date_unix: any, conversion_progress: any, can_be_downloaded: bool, state: string, has_video: any, has_visual_content: any, voice_ids: any, statistics: any, last_conversion_error: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1863,7 +1921,7 @@ export def "studio-projects-chapters chapters" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Chapter
@@ -1879,6 +1937,7 @@ export def "studio-projects-chapters chapter-by-project_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   name: string # The name of the chapter, used for identification only.
   --from-url: any # An optional URL from which we will extract content to initialize the Studio project. If this is set, 'from_url' and 'from_content' must be null. If neither 'from_url', 'from_document', 'from_content' are provided we will initialize the Studio project as blank.
@@ -1893,7 +1952,7 @@ export def "studio-projects-chapters chapter-by-project_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Chapter
@@ -1910,6 +1969,7 @@ export def "studio-projects-chapters endpoint-by-project_id-chapter_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<chapter_id: string, name: string, last_conversion_date_unix: any, conversion_progress: any, can_be_downloaded: bool, state: string, has_video: any, has_visual_content: any, voice_ids: any, statistics: any, last_conversion_error: any, content: record<blocks: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1919,7 +1979,7 @@ export def "studio-projects-chapters endpoint-by-project_id-chapter_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Chapter
@@ -1936,6 +1996,7 @@ export def "studio-projects-chapters chapter-by-project_id-chapter_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --name: any # The name of the chapter, used for identification only.
   --content: any # The chapter content to use.
@@ -1950,7 +2011,7 @@ export def "studio-projects-chapters chapter-by-project_id-chapter_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Chapter
@@ -1967,6 +2028,7 @@ export def "studio-projects-chapters endpoint-by-project_id-chapter_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1976,7 +2038,7 @@ export def "studio-projects-chapters endpoint-by-project_id-chapter_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Convert Chapter
@@ -1993,6 +2055,7 @@ export def "studio-projects-chapters-convert endpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2002,7 +2065,7 @@ export def "studio-projects-chapters-convert endpoint" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Chapter Snapshots
@@ -2019,6 +2082,7 @@ export def "studio-projects-chapters-snapshots snapshots" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<snapshots: table<chapter_snapshot_id: string, project_id: string, chapter_id: string, created_at_unix: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2028,7 +2092,7 @@ export def "studio-projects-chapters-snapshots snapshots" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Chapter Snapshot
@@ -2046,6 +2110,7 @@ export def "studio-projects-chapters-snapshots endpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<chapter_snapshot_id: string, project_id: string, chapter_id: string, created_at_unix: int, name: string, character_alignments: table<characters: list, character_start_times_seconds: list, character_end_times_seconds: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2055,7 +2120,7 @@ export def "studio-projects-chapters-snapshots endpoint" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stream Chapter Audio
@@ -2073,6 +2138,7 @@ export def "studio-projects-chapters-snapshots-stream audio" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --convert-to-mpeg: oneof<nothing, bool> # Whether to convert the audio to mpeg format. (default: false)
 ]: any -> any {
@@ -2086,7 +2152,7 @@ export def "studio-projects-chapters-snapshots-stream audio" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "audio/mpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Project Muted Tracks
@@ -2102,6 +2168,7 @@ export def "studio-projects-muted-tracks endpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<chapter_ids: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2111,7 +2178,7 @@ export def "studio-projects-muted-tracks endpoint" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get The Dubbing Resource For An Id.
@@ -2129,6 +2196,7 @@ export def "dubbing-resource resource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<id: string, version: int, source_language: string, target_languages: list<string>, input: record<src: string, content_type: string, bucket_name: string, random_path_slug: string, duration_secs: float, is_audio: bool, url: string>, background: any, foreground: any, speaker_tracks: record, speaker_segments: record, renders: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2138,7 +2206,7 @@ export def "dubbing-resource resource" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add A Language To The Resource
@@ -2156,6 +2224,7 @@ export def "dubbing-resource-language language" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   language: any # The Target language.
 ]: any -> record<version: int> {
@@ -2169,7 +2238,7 @@ export def "dubbing-resource-language language" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create A Segment For The Speaker
@@ -2188,6 +2257,7 @@ export def "dubbing-resource-speaker-segment clip" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   start_time: float
   end_time: float
@@ -2204,7 +2274,7 @@ export def "dubbing-resource-speaker-segment clip" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Modify A Single Segment
@@ -2224,6 +2294,7 @@ export def "dubbing-resource-segment language" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --start-time: any
   --end-time: any
@@ -2239,7 +2310,7 @@ export def "dubbing-resource-segment language" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Move Segments Between Speakers
@@ -2257,6 +2328,7 @@ export def "dubbing-resource-migrate-segments segments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   segment_ids: list
   speaker_id: string
@@ -2271,7 +2343,7 @@ export def "dubbing-resource-migrate-segments segments" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes A Single Segment
@@ -2290,6 +2362,7 @@ export def "dubbing-resource-segment segment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2299,7 +2372,7 @@ export def "dubbing-resource-segment segment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Transcribes Segments
@@ -2317,6 +2390,7 @@ export def "dubbing-resource-transcribe transcribe" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   segments: list # Transcribe this specific list of segments.
 ]: any -> record<version: int> {
@@ -2330,7 +2404,7 @@ export def "dubbing-resource-transcribe transcribe" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Translates All Or Some Segments And Languages
@@ -2348,6 +2422,7 @@ export def "dubbing-resource-translate translate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   segments: list # Translate only this list of segments.
   languages: any # Translate only these languages for each segment.
@@ -2362,7 +2437,7 @@ export def "dubbing-resource-translate translate" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Dubs All Or Some Segments And Languages
@@ -2380,6 +2455,7 @@ export def "dubbing-resource-dub dub" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   segments: list # Dub only this list of segments.
   languages: any # Dub only these languages for each segment.
@@ -2394,7 +2470,7 @@ export def "dubbing-resource-dub dub" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Metadata For A Speaker
@@ -2413,6 +2489,7 @@ export def "dubbing-resource-speaker speaker-by-dubbing_id-speaker_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --speaker-name: any # Name to attribute to this speaker.
   --voice-id: any # Either the identifier of a voice from the ElevenLabs voice library, or one of ['track-clone', 'clip-clone'].
@@ -2431,7 +2508,7 @@ export def "dubbing-resource-speaker speaker-by-dubbing_id-speaker_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create A New Speaker
@@ -2449,6 +2526,7 @@ export def "dubbing-resource-speaker speaker-by-dubbing_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --speaker-name: any # Name to attribute to this speaker.
   --voice-id: any # Either the identifier of a voice from the ElevenLabs voice library, or one of ['track-clone', 'clip-clone'].
@@ -2466,7 +2544,7 @@ export def "dubbing-resource-speaker speaker-by-dubbing_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search The Elevenlabs Library For Voices Similar To A Speaker.
@@ -2485,6 +2563,7 @@ export def "dubbing-resource-speaker-similar-voices speaker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<voices: table<voice_id: string, name: string, category: string, description: any, preview_url: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2494,7 +2573,7 @@ export def "dubbing-resource-speaker-similar-voices speaker" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Render Audio Or Video For The Given Language
@@ -2513,6 +2592,7 @@ export def "dubbing-resource-render render" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   render_type: string@render-type-completer
   --normalize-volume: any # Whether to normalize the volume of the rendered audio. (default: false)
@@ -2527,7 +2607,7 @@ export def "dubbing-resource-render render" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Dubs
@@ -2542,6 +2622,7 @@ export def "dubbing dubs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for fetching next page. Cursor is returned in the response.
   --page-size: int # How many dubs to return at maximum. Can not exceed 200, defaults to 100. (default: 100)
   --dubbing-status: string@dubbing-status-completer # What state the dub is currently in.
@@ -2558,7 +2639,7 @@ export def "dubbing dubs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Dub A Video Or An Audio File
@@ -2573,6 +2654,7 @@ export def "dubbing dubbing" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --file: any # A list of file paths to audio recordings intended for voice cloning
   --csv-file: any # CSV file containing transcription/translation metadata
@@ -2605,7 +2687,7 @@ export def "dubbing dubbing" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get Dubbing
@@ -2621,6 +2703,7 @@ export def "dubbing metadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<dubbing_id: string, name: string, status: string, source_language: any, target_languages: list<string>, editable: bool, created_at: string, media_metadata: any, error: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2630,7 +2713,7 @@ export def "dubbing metadata" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Dubbing
@@ -2646,6 +2729,7 @@ export def "dubbing dubbing-by-dubbing_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2655,7 +2739,7 @@ export def "dubbing dubbing-by-dubbing_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Dubbed File
@@ -2672,6 +2756,7 @@ export def "dubbing-audio file" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
@@ -2682,7 +2767,7 @@ export def "dubbing-audio file" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "audio/mpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Dubbed Transcript
@@ -2701,6 +2786,7 @@ export def "dubbing-transcript file" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --format-type: string@format-type-completer # Format to return transcript in. For subtitles use either 'srt' or 'webvtt', and for a full transcript use 'json'. The 'json' format is not yet supported for Dubbing Studio. (default: srt)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -2713,7 +2799,7 @@ export def "dubbing-transcript file" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve A Transcript
@@ -2731,6 +2817,7 @@ export def "dubbing-transcripts-format transcripts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<transcript_format: string, srt: any, webvtt: any, json: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2740,7 +2827,7 @@ export def "dubbing-transcripts-format transcripts" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Models
@@ -2755,6 +2842,7 @@ export def "models models" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> table<model_id: string, name: string, can_be_finetuned: bool, can_do_text_to_speech: bool, can_do_voice_conversion: bool, can_use_style: bool, can_use_speaker_boost: bool, serves_pro_voices: bool, token_cost_factor: float, description: string, requires_alpha_access: bool, max_characters_request_free_user: int, max_characters_request_subscribed_user: int, maximum_text_length_per_request: int, languages: list<record>, model_rates: record<character_cost_multiplier: float, cost_discount_multiplier: float>, concurrency_group: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2764,7 +2852,7 @@ export def "models models" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates Audio Native Enabled Project.
@@ -2782,6 +2870,7 @@ export def "audio-native project" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   name: string # Project name.
   --image: any # (Deprecated) Image URL used in the player. If not provided, default image set in the Player settings is used. (DEPRECATED)
@@ -2808,7 +2897,7 @@ export def "audio-native project" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get Audio Native Project Settings
@@ -2824,6 +2913,7 @@ export def "audio-native-settings endpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<enabled: bool, snapshot_id: any, settings: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2833,7 +2923,7 @@ export def "audio-native-settings endpoint" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Audio-Native Project Content
@@ -2849,6 +2939,7 @@ export def "audio-native-content endpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --file: string # Either txt or HTML input file containing the article content. HTML should be formatted as follows '&lt;html&gt;&lt;body&gt;&lt;div&gt;&lt;p&gt;Your content&lt;/p&gt;&lt;h5&gt;More of your content&lt;/h5&gt;&lt;p&gt;Some more of your content&lt;/p&gt;&lt;/div&gt;&lt;/body&gt;&lt;/html&gt;' (format: binary)
   --auto-convert: oneof<nothing, bool> # Whether to auto convert the project to audio or not. (default: false)
@@ -2864,7 +2955,7 @@ export def "audio-native-content endpoint" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Update Audio-Native Content From Url
@@ -2879,6 +2970,7 @@ export def "audio-native-content url" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --body-url: string # URL of the page to extract content from.
   --author: any # Author used in the player and inserted at the start of the uploaded article. If not provided, the default author set in the Player settings is used.
@@ -2894,7 +2986,7 @@ export def "audio-native-content url" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Voices
@@ -2909,6 +3001,7 @@ export def "shared-voices voices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # How many shared voices to return at maximum. Can not exceed 100, defaults to 30. (default: 30)
   --category: string@category-completer # Voice category used for filtering
   --gender: string # Gender used for filtering
@@ -2925,7 +3018,7 @@ export def "shared-voices voices" [
   --include-live-moderated: string # Include/exclude voices that are live moderated
   --reader-app-enabled: oneof<nothing, bool> # Filter voices that are enabled for the reader app (default: false)
   --owner-id: string # Filter voices by public owner ID
-  --qp-sort: string # Sort criteria
+  --qp-sort: string@sort-completer # Sort criteria. Must be one of: created_date, usage_character_count_1y, trending, cloned_by_count. (default: created_date)
   --page: int # default: 0
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<voices: table<public_owner_id: string, voice_id: string, date_unix: int, name: string, accent: string, gender: string, age: string, descriptive: string, use_case: string, category: string, language: any, locale: any, description: any, preview_url: any, usage_character_count_1y: int, usage_character_count_7d: int, play_api_usage_character_count_1y: int, cloned_by_count: int, rate: any, fiat_rate: any, free_users_allowed: bool, live_moderation_enabled: bool, featured: bool, verified_languages: any, notice_period: any, instagram_username: any, twitter_username: any, youtube_username: any, tiktok_username: any, image_url: any, is_added_by_user: any, is_bookmarked: any>, has_more: bool, total_count: int, last_sort_id: any> {
@@ -2937,7 +3030,7 @@ export def "shared-voices voices" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Similar Library Voices
@@ -2952,6 +3045,7 @@ export def "similar-voices voices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --audio-file: string # format: binary
   --similarity-threshold: any # Threshold for voice similarity between provided sample and library voices. Values range from 0 to 2. The smaller the value the more similar voices will be returned.
@@ -2967,7 +3061,7 @@ export def "similar-voices voices" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get Characters Usage Metrics (Deprecated)
@@ -2984,6 +3078,7 @@ export def "usage-character-stats characters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start-unix: int # UTC Unix timestamp for the start of the usage window, in milliseconds. To include the first day of the window, the timestamp should be at 00:00:00 of that day.
   --end-unix: int # UTC Unix timestamp for the end of the usage window, in milliseconds. To include the last day of the window, the timestamp should be at 23:59:59 of that day.
   --include-workspace-metrics: oneof<nothing, bool> # Whether or not to include the statistics of the entire workspace. (default: false)
@@ -3001,7 +3096,7 @@ export def "usage-character-stats characters" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add A Pronunciation Dictionary
@@ -3016,6 +3111,7 @@ export def "pronunciation-dictionaries-add-from-file file" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   name: string # The name of the pronunciation dictionary, used for identification only.
   --file: any # A lexicon .pls file which we will use to initialize the project with.
@@ -3032,7 +3128,7 @@ export def "pronunciation-dictionaries-add-from-file file" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Add A Pronunciation Dictionary
@@ -3047,6 +3143,7 @@ export def "pronunciation-dictionaries-add-from-rules rules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   rules: list # List of pronunciation rules. Rule can be either:     an alias rule: {'string_to_replace': 'a', 'type': 'alias', 'alias': 'b', }     or a phoneme rule: {'string_to_replace': 'a', 'type': 'phoneme', 'phoneme': 'b', 'alphabet': 'ipa' }
   name: string # The name of the pronunciation dictionary, used for identification only.
@@ -3063,7 +3160,7 @@ export def "pronunciation-dictionaries-add-from-rules rules" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Pronunciation Dictionary
@@ -3079,6 +3176,7 @@ export def "pronunciation-dictionaries dictionary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --archived: oneof<nothing, bool> # Whether to archive the pronunciation dictionary.
   --name: string # The name of the pronunciation dictionary, used for identification only.
@@ -3093,7 +3191,7 @@ export def "pronunciation-dictionaries dictionary" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Metadata For A Pronunciation Dictionary
@@ -3109,6 +3207,7 @@ export def "pronunciation-dictionaries metadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<id: string, latest_version_id: string, latest_version_rules_num: int, name: string, permission_on_resource: any, created_by: string, creation_time_unix: int, archived_time_unix: any, description: any, rules: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3118,7 +3217,7 @@ export def "pronunciation-dictionaries metadata" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set Rules On The Pronunciation Dictionary
@@ -3134,6 +3233,7 @@ export def "pronunciation-dictionaries-set-rules rules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   rules: list # List of pronunciation rules. Rule can be either:     an alias rule: {'string_to_replace': 'a', 'type': 'alias', 'alias': 'b', }     or a phoneme rule: {'string_to_replace': 'a', 'type': 'phoneme', 'phoneme': 'b', 'alphabet': 'ipa' }
 ]: any -> record<id: string, version_id: string, version_rules_num: int> {
@@ -3147,7 +3247,7 @@ export def "pronunciation-dictionaries-set-rules rules" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add Rules To The Pronunciation Dictionary
@@ -3163,6 +3263,7 @@ export def "pronunciation-dictionaries-add-rules rules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   rules: list # List of pronunciation rules. Rule can be either:     an alias rule: {'string_to_replace': 'a', 'type': 'alias', 'alias': 'b', }     or a phoneme rule: {'string_to_replace': 'a', 'type': 'phoneme', 'phoneme': 'b', 'alphabet': 'ipa' }
 ]: any -> record<id: string, version_id: string, version_rules_num: int> {
@@ -3176,7 +3277,7 @@ export def "pronunciation-dictionaries-add-rules rules" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove Rules From The Pronunciation Dictionary
@@ -3192,6 +3293,7 @@ export def "pronunciation-dictionaries-remove-rules rules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   rule_strings: list # List of strings to remove from the pronunciation dictionary.
 ]: any -> record<id: string, version_id: string, version_rules_num: int> {
@@ -3205,7 +3307,7 @@ export def "pronunciation-dictionaries-remove-rules rules" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get A Pls File With A Pronunciation Dictionary Version Rules
@@ -3222,6 +3324,7 @@ export def "pronunciation-dictionaries-download pls" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3231,7 +3334,7 @@ export def "pronunciation-dictionaries-download pls" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Pronunciation Dictionaries
@@ -3246,6 +3349,7 @@ export def "pronunciation-dictionaries list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for fetching next page. Cursor is returned in the response.
   --page-size: int # How many pronunciation dictionaries to return at maximum. Can not exceed 100, defaults to 30. (default: 30)
   --qp-sort: string # Which field to sort by, one of 'created_at_unix' or 'name'. (default: creation_time_unix)
@@ -3260,7 +3364,7 @@ export def "pronunciation-dictionaries list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disable Api Key
@@ -3275,6 +3379,7 @@ export def "workspaces-api-keys-disable disable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --api-key-name: string # Must be set to `self` to disable the API key used to authenticate this request. Required as an explicit confirmation to avoid accidentally disabling the wrong key.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
@@ -3286,7 +3391,7 @@ export def "workspaces-api-keys-disable disable" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Service Account Api Keys Route
@@ -3302,6 +3407,7 @@ export def "service-accounts-api-keys route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<api_keys: table<name: string, hint: string, key_id: string, service_account_user_id: string, created_at_unix: any, is_disabled: bool, permissions: any, character_limit: any, character_count: any, hashed_xi_api_key: string, allowed_ips: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3311,7 +3417,7 @@ export def "service-accounts-api-keys route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Service Account Api Key
@@ -3327,6 +3433,7 @@ export def "service-accounts-api-keys key-by-service_account_user_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   name: string
   permissions: any # The permissions of the XI API.
@@ -3343,7 +3450,7 @@ export def "service-accounts-api-keys key-by-service_account_user_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Edit Service Account Api Key
@@ -3360,6 +3467,7 @@ export def "service-accounts-api-keys key-by-service_account_user_id-api_key_id"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --is-enabled: any # Whether to enable or disable the API key. (default: no_update)
   --name: any # The name of the XI API key to use (used for identification purposes only).
@@ -3377,7 +3485,7 @@ export def "service-accounts-api-keys key-by-service_account_user_id-api_key_id"
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Service Account Api Key
@@ -3394,6 +3502,7 @@ export def "service-accounts-api-keys key-by-service_account_user_id-api_key_id-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3403,7 +3512,7 @@ export def "service-accounts-api-keys key-by-service_account_user_id-api_key_id-
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Workspace Audit Logs
@@ -3418,6 +3527,7 @@ export def "workspace-audit-logs logs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of entries per page (default: 50)
   --cursor: string # Cursor for the next page (from previous response)
   --time-from-unix-ms: string # Only include entries at or after this time (ms since epoch)
@@ -3435,7 +3545,7 @@ export def "workspace-audit-logs logs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Workspace Auth Connection
@@ -3451,6 +3561,7 @@ export def "workspace-auth-connections connection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --name: string
   --auth-type: string # default: oauth2_client_credentials
@@ -3489,7 +3600,7 @@ export def "workspace-auth-connections connection" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Workspace Auth Connections
@@ -3504,6 +3615,7 @@ export def "workspace-auth-connections connections" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<auth_connections: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3513,7 +3625,7 @@ export def "workspace-auth-connections connections" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Workspace Auth Connection
@@ -3530,6 +3642,7 @@ export def "workspace-auth-connections connection-by-auth_connection_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --auth-type: string # default: oauth2_client_credentials
   --provider: any
@@ -3560,7 +3673,7 @@ export def "workspace-auth-connections connection-by-auth_connection_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Workspace Auth Connection
@@ -3576,6 +3689,7 @@ export def "workspace-auth-connections connection-by-auth_connection_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3585,7 +3699,7 @@ export def "workspace-auth-connections connection-by-auth_connection_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Workspace Service Accounts
@@ -3600,6 +3714,7 @@ export def "service-accounts accounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<service_accounts: table<service_account_user_id: string, name: string, created_at_unix: any, api_keys: list, default_sharing_groups: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3609,7 +3724,7 @@ export def "service-accounts accounts" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get All Groups
@@ -3624,6 +3739,7 @@ export def "workspace-groups endpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3633,7 +3749,7 @@ export def "workspace-groups endpoint" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search User Groups
@@ -3648,6 +3764,7 @@ export def "workspace-groups-search groups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the target group.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> table<name: string, id: string, members_emails: list<string>> {
@@ -3659,7 +3776,7 @@ export def "workspace-groups-search groups" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Member From User Group
@@ -3675,6 +3792,7 @@ export def "workspace-groups-members-remove member" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   email: string # The email of the target workspace member.
 ]: any -> record<status: string> {
@@ -3688,7 +3806,7 @@ export def "workspace-groups-members-remove member" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add Member To User Group
@@ -3704,6 +3822,7 @@ export def "workspace-groups-members member" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   email: string # The email of the target workspace member.
 ]: any -> record<status: string> {
@@ -3717,7 +3836,7 @@ export def "workspace-groups-members member" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invite User
@@ -3733,6 +3852,7 @@ export def "workspace-invites-add user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   email: string # The email of the customer
   --workspace-permission: any # The workspace permission of the user. This is deprecated, use `seat_type` instead. (DEPRECATED)
@@ -3749,7 +3869,7 @@ export def "workspace-invites-add user" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invite Multiple Users
@@ -3764,6 +3884,7 @@ export def "workspace-invites-add-bulk bulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   emails: list # The email of the customer
   --seat-type: any # The seat type of the user
@@ -3779,7 +3900,7 @@ export def "workspace-invites-add-bulk bulk" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Existing Invitation
@@ -3794,6 +3915,7 @@ export def "workspace-invites invite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   email: string # The email of the customer
 ]: any -> record<status: string> {
@@ -3807,7 +3929,7 @@ export def "workspace-invites invite" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Member
@@ -3823,6 +3945,7 @@ export def "workspace-members member" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   email: string # Email of the target user.
   --is-locked: any # Whether to lock or unlock the user account.
@@ -3839,7 +3962,7 @@ export def "workspace-members member" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Resource
@@ -3855,6 +3978,7 @@ export def "workspace-resources metadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --resource-type: string@resource-type-completer # Resource type of the target resource.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<resource_id: string, resource_name: any, resource_type: string, creator_user_id: any, anonymous_access_level_override: any, role_to_group_ids: record, share_options: table<name: string, id: string, type: string>> {
@@ -3866,7 +3990,7 @@ export def "workspace-resources metadata" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Share Workspace Resource
@@ -3882,6 +4006,7 @@ export def "workspace-resources-share endpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   role: string@role-completer # Role to grant to the target: one of 'admin', 'editor', 'commenter', or 'viewer'.
   resource_type: string@resource-type-completer # Resource types that can be shared in the workspace. The name always need to match the collection names
@@ -3899,7 +4024,7 @@ export def "workspace-resources-share endpoint" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unshare Workspace Resource
@@ -3915,6 +4040,7 @@ export def "workspace-resources-unshare endpoint" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   resource_type: string@resource-type-completer # Resource types that can be shared in the workspace. The name always need to match the collection names
   --user-email: any # The email of the user or service account.
@@ -3931,7 +4057,7 @@ export def "workspace-resources-unshare endpoint" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Workspace Webhooks
@@ -3946,6 +4072,7 @@ export def "workspace-webhooks route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-usages: oneof<nothing, bool> # Whether to include active usages of the webhook, only usable by admins (default: false)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<webhooks: table<name: string, webhook_id: string, webhook_url: string, is_disabled: bool, is_auto_disabled: bool, created_at_unix: int, auth_type: string, usage: any, most_recent_failure_error_code: any, most_recent_failure_timestamp: any>> {
@@ -3957,7 +4084,7 @@ export def "workspace-webhooks route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Workspace Webhook
@@ -3973,6 +4100,7 @@ export def "workspace-webhooks route-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   settings: record # Settings for creating an HMAC-authenticated webhook — shape: {auth_type: string, name: string, webhook_url: string, request_headers?: any}
 ]: any -> record<webhook_id: string, webhook_secret: any> {
@@ -3986,7 +4114,7 @@ export def "workspace-webhooks route-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Workspace Webhook
@@ -4002,6 +4130,7 @@ export def "workspace-webhooks route-by-webhook_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --is-disabled: oneof<nothing, bool> # Whether to disable or enable the webhook
   name: string # The display name of the webhook (used for display purposes only).
@@ -4018,7 +4147,7 @@ export def "workspace-webhooks route-by-webhook_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Workspace Webhook
@@ -4034,6 +4163,7 @@ export def "workspace-webhooks route-by-webhook_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4043,7 +4173,7 @@ export def "workspace-webhooks route-by-webhook_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Speech To Text
@@ -4059,6 +4189,7 @@ export def "speech-to-text text" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enable-logging: oneof<nothing, bool> # When enable_logging is set to false zero retention mode will be used for the request. This will mean log and transcript storage features are unavailable for this request. Zero retention mode may only be used by enterprise customers. (default: true)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   model_id: string@model-id-completer-2 # The ID of the model to use for transcription.
@@ -4081,6 +4212,7 @@ export def "speech-to-text text" [
   --webhook-metadata: any # Optional metadata to be included in the webhook response. This should be a JSON string representing an object with a maximum depth of 2 levels and maximum size of 16KB. Useful for tracking internal IDs, job references, or other contextual information.
   --entity-detection: any # Detect entities in the transcript. Can be 'all' to detect all entities, a single entity type or category string, or a list of entity types/categories. Categories include 'pii', 'phi', 'pci', 'other', 'offensive_language'. When enabled, detected entities will be returned in the 'entities' field with their text, type, and character positions. Usage of this parameter will incur an additional 30% surcharge on the base transcription cost.
   --no-verbatim: oneof<nothing, bool> # If true, the transcription will not have any filler words, false starts and non-speech sounds. Only supported with scribe_v2 model. (default: false)
+  --use-speaker-library: oneof<nothing, bool> # Whether to use the speaker library for identifying known speakers during diarization. When enabled and diarize is true, detected speakers will be matched against registered speakers in the workspace's speaker library. (default: false)
   --detect-speaker-roles: oneof<nothing, bool> # Whether to detect speaker roles (agent vs customer). Requires diarize=true. Cannot be used with use_multi_channel=true. When enabled, speaker_id values will be 'agent' and 'customer' instead of 'speaker_0', 'speaker_1', etc. Usage incurs an additional 10% surcharge on base transcription cost. (default: false)
   --entity-redaction: any # Redact entities from the transcript text. Accepts the same format as entity_detection: 'all', a category ('pii', 'phi'), or specific entity types. Must be a subset of entity_detection. When redaction is enabled, the entities field will not be returned. Usage of this parameter will incur an additional 30% surcharge on the base transcription cost.
   --entity-redaction-mode: string # How to format redacted entities. 'redacted' replaces with {REDACTED}, 'entity_type' replaces with {ENTITY_TYPE}, 'enumerated_entity_type' replaces with {ENTITY_TYPE_N} where N enumerates each occurrence. Only used when entity_redaction is set. (default: enumerated_entity_type)
@@ -4091,13 +4223,13 @@ export def "speech-to-text text" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "enable_logging" $enable_logging "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/speech-to-text" $qp)
-  let body = {model_id: $model_id, file: $file, language_code: $language_code, tag_audio_events: $tag_audio_events, num_speakers: $num_speakers, timestamps_granularity: $timestamps_granularity, diarize: $diarize, diarization_threshold: $diarization_threshold, additional_formats: $additional_formats, file_format: $file_format, cloud_storage_url: $cloud_storage_url, source_url: $source_url, webhook: $webhook, webhook_id: $webhook_id, temperature: $temperature, seed: $seed, use_multi_channel: $use_multi_channel, webhook_metadata: $webhook_metadata, entity_detection: $entity_detection, no_verbatim: $no_verbatim, detect_speaker_roles: $detect_speaker_roles, entity_redaction: $entity_redaction, entity_redaction_mode: $entity_redaction_mode, keyterms: $keyterms} | compact
+  let body = {model_id: $model_id, file: $file, language_code: $language_code, tag_audio_events: $tag_audio_events, num_speakers: $num_speakers, timestamps_granularity: $timestamps_granularity, diarize: $diarize, diarization_threshold: $diarization_threshold, additional_formats: $additional_formats, file_format: $file_format, cloud_storage_url: $cloud_storage_url, source_url: $source_url, webhook: $webhook, webhook_id: $webhook_id, temperature: $temperature, seed: $seed, use_multi_channel: $use_multi_channel, webhook_metadata: $webhook_metadata, entity_detection: $entity_detection, no_verbatim: $no_verbatim, use_speaker_library: $use_speaker_library, detect_speaker_roles: $detect_speaker_roles, entity_redaction: $entity_redaction, entity_redaction_mode: $entity_redaction_mode, keyterms: $keyterms} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get Transcript By Id
@@ -4113,6 +4245,7 @@ export def "speech-to-text-transcripts id-by-transcription_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4122,7 +4255,7 @@ export def "speech-to-text-transcripts id-by-transcription_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Transcript By Id
@@ -4138,6 +4271,7 @@ export def "speech-to-text-transcripts id-by-transcription_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4147,7 +4281,7 @@ export def "speech-to-text-transcripts id-by-transcription_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Single Use Token
@@ -4163,6 +4297,7 @@ export def "single-use-token token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4172,7 +4307,7 @@ export def "single-use-token token" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Forced Alignment
@@ -4187,6 +4322,7 @@ export def "forced-alignment alignment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   file: string # The file to align. All major audio formats are supported. The file size must be less than 1GB. (format: binary)
   text: string # The text to align with the audio. The input text can be in any format, however diarization is not supported at this time.
@@ -4201,7 +4337,7 @@ export def "forced-alignment alignment" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get Signed Url
@@ -4216,6 +4352,7 @@ export def "convai-conversation-get-signed-url link" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --agent-id: string # Agent id (agent_…) or speech engine external id (seng_), resolved to the same underlying resource.
   --include-conversation-id: oneof<nothing, bool> # Whether to include a conversation_id with the response. If included, the conversation_signature cannot be used again. (default: false)
   --branch-id: string # The ID of the branch to use
@@ -4230,7 +4367,7 @@ export def "convai-conversation-get-signed-url link" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Signed Url
@@ -4247,6 +4384,7 @@ export def "convai-conversation-get-signed-url deprecated" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --agent-id: string # Agent id (agent_…) or speech engine external id (seng_), resolved to the same underlying resource.
   --include-conversation-id: oneof<nothing, bool> # Whether to include a conversation_id with the response. If included, the conversation_signature cannot be used again. (default: false)
   --branch-id: string # The ID of the branch to use
@@ -4261,7 +4399,7 @@ export def "convai-conversation-get-signed-url deprecated" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Webrtc Token
@@ -4276,6 +4414,7 @@ export def "convai-conversation-token token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --agent-id: string # Agent id (agent_…) or speech engine external id (seng_), resolved to the same underlying resource.
   --participant-name: string # Optional custom participant name. If not provided, user ID will be used
   --branch-id: string # The ID of the branch to use
@@ -4290,7 +4429,7 @@ export def "convai-conversation-token token" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Handle An Outbound Call Via Twilio
@@ -4306,6 +4445,7 @@ export def "convai-twilio-outbound-call call" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   agent_id: string
   agent_phone_number_id: string
@@ -4324,7 +4464,7 @@ export def "convai-twilio-outbound-call call" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Register A Twilio Call And Return Twiml
@@ -4339,6 +4479,7 @@ export def "convai-twilio-register-call call" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   agent_id: string
   from_number: string
@@ -4356,7 +4497,7 @@ export def "convai-twilio-register-call call" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Handle An Outbound Call Via Exotel
@@ -4372,6 +4513,7 @@ export def "convai-exotel-outbound-call call" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   agent_id: string
   agent_phone_number_id: string
@@ -4389,7 +4531,7 @@ export def "convai-exotel-outbound-call call" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Make An Outbound Call Via Whatsapp
@@ -4404,6 +4546,7 @@ export def "convai-whatsapp-outbound-call call" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   whatsapp_phone_number_id: string
   whatsapp_user_id: string
@@ -4422,7 +4565,7 @@ export def "convai-whatsapp-outbound-call call" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Send An Outbound Message Via Whatsapp
@@ -4437,6 +4580,7 @@ export def "convai-whatsapp-outbound-message message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   whatsapp_phone_number_id: string
   whatsapp_user_id: string
@@ -4456,7 +4600,7 @@ export def "convai-whatsapp-outbound-message message" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Agent
@@ -4474,6 +4618,7 @@ export def "convai-agents-create route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enable-versioning: oneof<nothing, bool> # Deprecated: all agents are versioned. This parameter is ignored. (DEPRECATED, default: true)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   conversation_config: record # shape: {asr?: record, turn?: record, tts?: record, conversation?: record, language_presets?: record, vad?: record, agent?: record}
@@ -4493,7 +4638,7 @@ export def "convai-agents-create route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Agent Summaries
@@ -4508,6 +4653,7 @@ export def "convai-agents-summaries route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --agent-ids: list # List of agent IDs to fetch summaries for
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record {
@@ -4519,7 +4665,7 @@ export def "convai-agents-summaries route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Agent
@@ -4535,10 +4681,11 @@ export def "convai-agents route-by-agent_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version-id: string # The ID of the agent version to use
   --branch-id: string # The ID of the branch to use
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
-]: nothing -> record<agent_id: string, name: string, conversation_config: record<asr: record<quality: string, provider: string, user_input_audio_format: string, keywords: list>, turn: record<turn_timeout: float, initial_wait_time: any, silence_end_call_timeout: float, mode: string, turn_eagerness: string, spelling_patience: string, speculative_turn: bool, retranscribe_on_turn_timeout: bool, turn_model: string, soft_timeout_config: record>, tts: record<model_id: string, voice_id: string, supported_voices: list, expressive_mode: bool, suggested_audio_tags: list, agent_output_audio_format: string, optimize_streaming_latency: int, stability: float, speed: float, similarity_boost: float, text_normalisation_type: string, pronunciation_dictionary_locators: list>, conversation: record<text_only: bool, max_duration_seconds: int, client_events: list, file_input: record, monitoring_enabled: bool, monitoring_events: list, source_attribution: bool>, language_presets: record, vad: record<background_voice_detection: bool>, agent: record<first_message: string, language: string, hinglish_mode: bool, dynamic_variables: record, disable_first_message_interruptions: bool, max_conversation_duration_message: string, text_behavior_overrides: any, prompt: record>>, metadata: record<created_at_unix_secs: int, updated_at_unix_secs: int>, platform_settings: record<evaluation: record<criteria: list>, widget: record<variant: string, placement: string, expandable: string, avatar: any, feedback_mode: string, end_feedback: any, bg_color: string, text_color: string, btn_color: string, btn_text_color: string, border_color: string, focus_color: string, border_radius: any, btn_radius: any, action_text: any, start_call_text: any, end_call_text: any, expand_text: any, listening_text: any, speaking_text: any, shareable_page_text: any, shareable_page_show_terms: bool, terms_text: any, terms_html: any, terms_key: any, show_avatar_when_collapsed: any, disable_banner: bool, override_link: any, markdown_link_allowed_hosts: list, markdown_link_include_www: bool, markdown_link_allow_http: bool, mic_muting_enabled: bool, transcript_enabled: bool, text_input_enabled: bool, conversation_mode_toggle_enabled: bool, default_expanded: bool, always_expanded: bool, dismissible: bool, show_agent_status: bool, show_conversation_id: bool, strip_audio_tags: bool, syntax_highlight_theme: any, text_contents: record, styles: record, language_selector: bool, supports_text_only: bool, custom_avatar_path: any, language_presets: record>, data_collection: record, data_collection_scopes: record, overrides: record<conversation_config_override: record, custom_llm_extra_body: bool, enable_conversation_initiation_client_data_from_webhook: bool, enable_starting_workflow_node_id_from_client: bool>, workspace_overrides: record<conversation_initiation_client_data_webhook: any, webhooks: record>, testing: record<attached_tests: list>, archived: bool, guardrails: record<version: string, focus: record, prompt_injection: record, content: record, moderation: any, custom: record>, summary_language: any, auth: record<enable_auth: bool, allowlist: list, require_origin_header: bool, shareable_token: any>, call_limits: record<agent_concurrency_limit: int, daily_limit: int, bursting_enabled: bool>, privacy: record<record_voice: bool, retention_days: int, delete_transcript_and_pii: bool, delete_audio: bool, apply_to_existing_conversations: bool, zero_retention_mode: bool, conversation_history_redaction: record>, trust_context: string, analysis_llm: string, safety: record<is_blocked_ivc: bool, is_blocked_non_ivc: bool, ignore_safety_evaluation: bool>>, phone_numbers: list<any>, whatsapp_accounts: table<business_account_id: string, phone_number_id: string, business_account_name: string, phone_number_name: string, phone_number: string, assigned_agent_id: any, enable_messaging: bool, enable_audio_message_response: bool, assigned_agent_name: any, is_token_expired: bool>, workflow: record<edges: record, nodes: record, prevent_subagent_loops: bool>, access_info: any, tags: list<string>, version_id: any, branch_id: any, main_branch_id: any> {
+]: nothing -> record<agent_id: string, name: string, conversation_config: record<asr: record<quality: string, provider: string, user_input_audio_format: string, keywords: list>, turn: record<turn_timeout: float, initial_wait_time: any, silence_end_call_timeout: float, mode: string, turn_eagerness: string, spelling_patience: string, speculative_turn: bool, retranscribe_on_turn_timeout: bool, turn_model: string, soft_timeout_config: record>, tts: record<model_id: string, voice_id: string, supported_voices: list, expressive_mode: bool, suggested_audio_tags: list, agent_output_audio_format: string, optimize_streaming_latency: int, stability: float, speed: float, similarity_boost: float, text_normalisation_type: string, pronunciation_dictionary_locators: list, enable_phoneme_tags: bool>, conversation: record<text_only: bool, max_duration_seconds: int, client_events: list, file_input: record, monitoring_enabled: bool, monitoring_events: list, source_attribution: bool>, language_presets: record, vad: record<background_voice_detection: bool>, agent: record<first_message: string, language: string, hinglish_mode: bool, dynamic_variables: record, disable_first_message_interruptions: bool, max_conversation_duration_message: string, text_behavior_overrides: any, prompt: record>>, metadata: record<created_at_unix_secs: int, updated_at_unix_secs: int>, platform_settings: record<evaluation: record<criteria: list>, widget: record<variant: string, placement: string, expandable: string, avatar: any, feedback_mode: string, end_feedback: any, bg_color: string, text_color: string, btn_color: string, btn_text_color: string, border_color: string, focus_color: string, border_radius: any, btn_radius: any, action_text: any, start_call_text: any, end_call_text: any, expand_text: any, listening_text: any, speaking_text: any, shareable_page_text: any, shareable_page_show_terms: bool, terms_text: any, terms_html: any, terms_key: any, show_avatar_when_collapsed: any, disable_banner: bool, override_link: any, markdown_link_allowed_hosts: list, markdown_link_include_www: bool, markdown_link_allow_http: bool, mic_muting_enabled: bool, transcript_enabled: bool, text_input_enabled: bool, conversation_mode_toggle_enabled: bool, default_expanded: bool, always_expanded: bool, dismissible: bool, show_agent_status: bool, show_conversation_id: bool, strip_audio_tags: bool, syntax_highlight_theme: any, text_contents: record, styles: record, language_selector: bool, supports_text_only: bool, custom_avatar_path: any, language_presets: record>, data_collection: record, data_collection_scopes: record, overrides: record<conversation_config_override: record, custom_llm_extra_body: bool, enable_conversation_initiation_client_data_from_webhook: bool, enable_starting_workflow_node_id_from_client: bool>, workspace_overrides: record<conversation_initiation_client_data_webhook: any, webhooks: record>, testing: record<attached_tests: list>, archived: bool, guardrails: record<version: string, focus: record, prompt_injection: record, content: record, moderation: any, custom: record>, summary_language: any, auth: record<enable_auth: bool, allowlist: list, require_origin_header: bool, shareable_token: any>, call_limits: record<agent_concurrency_limit: int, daily_limit: int, bursting_enabled: bool>, privacy: record<record_voice: bool, retention_days: int, delete_transcript_and_pii: bool, delete_audio: bool, apply_to_existing_conversations: bool, zero_retention_mode: bool, conversation_history_redaction: record>, trust_context: string, analysis_llm: string, safety: record<is_blocked_ivc: bool, is_blocked_non_ivc: bool, ignore_safety_evaluation: bool>>, phone_numbers: list<any>, whatsapp_accounts: table<business_account_id: string, phone_number_id: string, business_account_name: string, phone_number_name: string, phone_number: string, assigned_agent_id: any, enable_messaging: bool, enable_audio_message_response: bool, assigned_agent_name: any, is_token_expired: bool>, workflow: record<edges: record, nodes: record, prevent_subagent_loops: bool>, access_info: any, tags: list<string>, version_id: any, branch_id: any, main_branch_id: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version_id" $version_id "scalar") (serialize-qp "branch_id" $branch_id "scalar")] | flatten | str join "&"
@@ -4547,7 +4694,7 @@ export def "convai-agents route-by-agent_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Patches An Agent Settings
@@ -4565,6 +4712,7 @@ export def "convai-agents route-by-agent_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enable-versioning-if-not-enabled: oneof<nothing, bool> # Deprecated: all agents are versioned. This parameter is ignored. (DEPRECATED, default: true)
   --branch-id: string # The ID of the branch to use
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -4574,7 +4722,7 @@ export def "convai-agents route-by-agent_id-1" [
   --name: any # A name to make the agent easier to find
   --tags: any # Tags to help classify and filter the agent
   --version-description: any # Description for this version when publishing changes (only applicable for versioned agents)
-]: any -> record<agent_id: string, name: string, conversation_config: record<asr: record<quality: string, provider: string, user_input_audio_format: string, keywords: list>, turn: record<turn_timeout: float, initial_wait_time: any, silence_end_call_timeout: float, mode: string, turn_eagerness: string, spelling_patience: string, speculative_turn: bool, retranscribe_on_turn_timeout: bool, turn_model: string, soft_timeout_config: record>, tts: record<model_id: string, voice_id: string, supported_voices: list, expressive_mode: bool, suggested_audio_tags: list, agent_output_audio_format: string, optimize_streaming_latency: int, stability: float, speed: float, similarity_boost: float, text_normalisation_type: string, pronunciation_dictionary_locators: list>, conversation: record<text_only: bool, max_duration_seconds: int, client_events: list, file_input: record, monitoring_enabled: bool, monitoring_events: list, source_attribution: bool>, language_presets: record, vad: record<background_voice_detection: bool>, agent: record<first_message: string, language: string, hinglish_mode: bool, dynamic_variables: record, disable_first_message_interruptions: bool, max_conversation_duration_message: string, text_behavior_overrides: any, prompt: record>>, metadata: record<created_at_unix_secs: int, updated_at_unix_secs: int>, platform_settings: record<evaluation: record<criteria: list>, widget: record<variant: string, placement: string, expandable: string, avatar: any, feedback_mode: string, end_feedback: any, bg_color: string, text_color: string, btn_color: string, btn_text_color: string, border_color: string, focus_color: string, border_radius: any, btn_radius: any, action_text: any, start_call_text: any, end_call_text: any, expand_text: any, listening_text: any, speaking_text: any, shareable_page_text: any, shareable_page_show_terms: bool, terms_text: any, terms_html: any, terms_key: any, show_avatar_when_collapsed: any, disable_banner: bool, override_link: any, markdown_link_allowed_hosts: list, markdown_link_include_www: bool, markdown_link_allow_http: bool, mic_muting_enabled: bool, transcript_enabled: bool, text_input_enabled: bool, conversation_mode_toggle_enabled: bool, default_expanded: bool, always_expanded: bool, dismissible: bool, show_agent_status: bool, show_conversation_id: bool, strip_audio_tags: bool, syntax_highlight_theme: any, text_contents: record, styles: record, language_selector: bool, supports_text_only: bool, custom_avatar_path: any, language_presets: record>, data_collection: record, data_collection_scopes: record, overrides: record<conversation_config_override: record, custom_llm_extra_body: bool, enable_conversation_initiation_client_data_from_webhook: bool, enable_starting_workflow_node_id_from_client: bool>, workspace_overrides: record<conversation_initiation_client_data_webhook: any, webhooks: record>, testing: record<attached_tests: list>, archived: bool, guardrails: record<version: string, focus: record, prompt_injection: record, content: record, moderation: any, custom: record>, summary_language: any, auth: record<enable_auth: bool, allowlist: list, require_origin_header: bool, shareable_token: any>, call_limits: record<agent_concurrency_limit: int, daily_limit: int, bursting_enabled: bool>, privacy: record<record_voice: bool, retention_days: int, delete_transcript_and_pii: bool, delete_audio: bool, apply_to_existing_conversations: bool, zero_retention_mode: bool, conversation_history_redaction: record>, trust_context: string, analysis_llm: string, safety: record<is_blocked_ivc: bool, is_blocked_non_ivc: bool, ignore_safety_evaluation: bool>>, phone_numbers: list<any>, whatsapp_accounts: table<business_account_id: string, phone_number_id: string, business_account_name: string, phone_number_name: string, phone_number: string, assigned_agent_id: any, enable_messaging: bool, enable_audio_message_response: bool, assigned_agent_name: any, is_token_expired: bool>, workflow: record<edges: record, nodes: record, prevent_subagent_loops: bool>, access_info: any, tags: list<string>, version_id: any, branch_id: any, main_branch_id: any> {
+]: any -> record<agent_id: string, name: string, conversation_config: record<asr: record<quality: string, provider: string, user_input_audio_format: string, keywords: list>, turn: record<turn_timeout: float, initial_wait_time: any, silence_end_call_timeout: float, mode: string, turn_eagerness: string, spelling_patience: string, speculative_turn: bool, retranscribe_on_turn_timeout: bool, turn_model: string, soft_timeout_config: record>, tts: record<model_id: string, voice_id: string, supported_voices: list, expressive_mode: bool, suggested_audio_tags: list, agent_output_audio_format: string, optimize_streaming_latency: int, stability: float, speed: float, similarity_boost: float, text_normalisation_type: string, pronunciation_dictionary_locators: list, enable_phoneme_tags: bool>, conversation: record<text_only: bool, max_duration_seconds: int, client_events: list, file_input: record, monitoring_enabled: bool, monitoring_events: list, source_attribution: bool>, language_presets: record, vad: record<background_voice_detection: bool>, agent: record<first_message: string, language: string, hinglish_mode: bool, dynamic_variables: record, disable_first_message_interruptions: bool, max_conversation_duration_message: string, text_behavior_overrides: any, prompt: record>>, metadata: record<created_at_unix_secs: int, updated_at_unix_secs: int>, platform_settings: record<evaluation: record<criteria: list>, widget: record<variant: string, placement: string, expandable: string, avatar: any, feedback_mode: string, end_feedback: any, bg_color: string, text_color: string, btn_color: string, btn_text_color: string, border_color: string, focus_color: string, border_radius: any, btn_radius: any, action_text: any, start_call_text: any, end_call_text: any, expand_text: any, listening_text: any, speaking_text: any, shareable_page_text: any, shareable_page_show_terms: bool, terms_text: any, terms_html: any, terms_key: any, show_avatar_when_collapsed: any, disable_banner: bool, override_link: any, markdown_link_allowed_hosts: list, markdown_link_include_www: bool, markdown_link_allow_http: bool, mic_muting_enabled: bool, transcript_enabled: bool, text_input_enabled: bool, conversation_mode_toggle_enabled: bool, default_expanded: bool, always_expanded: bool, dismissible: bool, show_agent_status: bool, show_conversation_id: bool, strip_audio_tags: bool, syntax_highlight_theme: any, text_contents: record, styles: record, language_selector: bool, supports_text_only: bool, custom_avatar_path: any, language_presets: record>, data_collection: record, data_collection_scopes: record, overrides: record<conversation_config_override: record, custom_llm_extra_body: bool, enable_conversation_initiation_client_data_from_webhook: bool, enable_starting_workflow_node_id_from_client: bool>, workspace_overrides: record<conversation_initiation_client_data_webhook: any, webhooks: record>, testing: record<attached_tests: list>, archived: bool, guardrails: record<version: string, focus: record, prompt_injection: record, content: record, moderation: any, custom: record>, summary_language: any, auth: record<enable_auth: bool, allowlist: list, require_origin_header: bool, shareable_token: any>, call_limits: record<agent_concurrency_limit: int, daily_limit: int, bursting_enabled: bool>, privacy: record<record_voice: bool, retention_days: int, delete_transcript_and_pii: bool, delete_audio: bool, apply_to_existing_conversations: bool, zero_retention_mode: bool, conversation_history_redaction: record>, trust_context: string, analysis_llm: string, safety: record<is_blocked_ivc: bool, is_blocked_non_ivc: bool, ignore_safety_evaluation: bool>>, phone_numbers: list<any>, whatsapp_accounts: table<business_account_id: string, phone_number_id: string, business_account_name: string, phone_number_name: string, phone_number: string, assigned_agent_id: any, enable_messaging: bool, enable_audio_message_response: bool, assigned_agent_name: any, is_token_expired: bool>, workflow: record<edges: record, nodes: record, prevent_subagent_loops: bool>, access_info: any, tags: list<string>, version_id: any, branch_id: any, main_branch_id: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4586,7 +4734,7 @@ export def "convai-agents route-by-agent_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Agent
@@ -4602,6 +4750,7 @@ export def "convai-agents route-by-agent_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4611,7 +4760,7 @@ export def "convai-agents route-by-agent_id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Agent Widget Config
@@ -4627,6 +4776,7 @@ export def "convai-agents-widget route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --conversation-signature: string # An expiring token that enables a websocket conversation to start. These can be generated for an agent using the /v1/convai/conversation/get-signed-url endpoint
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<agent_id: string, widget_config: record<variant: string, placement: string, expandable: string, avatar: any, feedback_mode: string, end_feedback: any, bg_color: string, text_color: string, btn_color: string, btn_text_color: string, border_color: string, focus_color: string, border_radius: any, btn_radius: any, action_text: any, start_call_text: any, end_call_text: any, expand_text: any, listening_text: any, speaking_text: any, shareable_page_text: any, shareable_page_show_terms: bool, terms_text: any, terms_html: any, terms_key: any, show_avatar_when_collapsed: any, disable_banner: bool, override_link: any, markdown_link_allowed_hosts: list<record>, markdown_link_include_www: bool, markdown_link_allow_http: bool, mic_muting_enabled: bool, transcript_enabled: bool, text_input_enabled: bool, conversation_mode_toggle_enabled: bool, default_expanded: bool, always_expanded: bool, dismissible: bool, show_agent_status: bool, show_conversation_id: bool, strip_audio_tags: bool, syntax_highlight_theme: any, text_contents: record<main_label: any, start_call: any, start_chat: any, new_call: any, end_call: any, mute_microphone: any, change_language: any, collapse: any, expand: any, copied: any, accept_terms: any, dismiss_terms: any, listening_status: any, speaking_status: any, connecting_status: any, chatting_status: any, input_label: any, input_placeholder: any, input_placeholder_text_only: any, input_placeholder_new_conversation: any, user_ended_conversation: any, agent_ended_conversation: any, conversation_id: any, error_occurred: any, copy_id: any, initiate_feedback: any, request_follow_up_feedback: any, thanks_for_feedback: any, thanks_for_feedback_details: any, follow_up_feedback_placeholder: any, submit: any, go_back: any, send_message: any, text_mode: any, voice_mode: any, switched_to_text_mode: any, switched_to_voice_mode: any, copy: any, download: any, wrap: any, agent_working: any, agent_done: any, agent_error: any>, styles: record<base: any, base_hover: any, base_active: any, base_border: any, base_subtle: any, base_primary: any, base_error: any, accent: any, accent_hover: any, accent_active: any, accent_border: any, accent_subtle: any, accent_primary: any, overlay_padding: any, button_radius: any, input_radius: any, bubble_radius: any, sheet_radius: any, compact_sheet_radius: any, dropdown_sheet_radius: any>, language: string, supported_language_overrides: any, language_presets: record, text_only: bool, supports_text_only: bool, first_message: any, use_rtc: any, file_input_config: record<enabled: bool, max_files_per_conversation: int>>> {
@@ -4638,7 +4788,7 @@ export def "convai-agents-widget route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Shareable Agent Link
@@ -4654,6 +4804,7 @@ export def "convai-agents-link route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<agent_id: string, token: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4663,7 +4814,7 @@ export def "convai-agents-link route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Post Agent Avatar
@@ -4679,6 +4830,7 @@ export def "convai-agents-avatar route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   avatar_file: string # An image file to be used as the agent's avatar. (format: binary)
 ]: any -> record<agent_id: string, avatar_url: any> {
@@ -4692,7 +4844,7 @@ export def "convai-agents-avatar route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # List Agents
@@ -4708,6 +4860,7 @@ export def "convai-agents route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # How many Agents to return at maximum. Can not exceed 100, defaults to 30. (default: 30)
   --search: string # Search by agents name.
   --archived: string # Filter agents by archived status (default: false)
@@ -4726,7 +4879,7 @@ export def "convai-agents route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns The Size Of The Agent'S Knowledge Base
@@ -4742,6 +4895,7 @@ export def "convai-agent-knowledge-base-size size" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<number_of_pages: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4751,7 +4905,7 @@ export def "convai-agent-knowledge-base-size size" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Calculate Expected Llm Usage For An Agent
@@ -4767,6 +4921,7 @@ export def "convai-agent-llm-usage-calculate calculation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --prompt-length: any # Length of the prompt in characters.
   --number-of-pages: any # Pages of content in pdf documents OR urls in agent's Knowledge Base.
@@ -4782,7 +4937,7 @@ export def "convai-agent-llm-usage-calculate calculation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Duplicate Agent
@@ -4798,6 +4953,7 @@ export def "convai-agents-duplicate route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --name: any # A name to make the agent easier to find
 ]: any -> record<agent_id: string> {
@@ -4811,7 +4967,7 @@ export def "convai-agents-duplicate route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Simulates A Conversation
@@ -4828,6 +4984,7 @@ export def "convai-agents-simulate-conversation route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   simulation_specification: record # A specification that will be used to simulate a conversation between an agent and an AI user. — shape: {simulated_user_config: record, tool_mock_config?: record, partial_conversation_history?: list, dynamic_variables?: record}
   --extra-evaluation-criteria: any # A list of evaluation criteria to test
@@ -4843,7 +5000,7 @@ export def "convai-agents-simulate-conversation route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Simulates A Conversation (Stream)
@@ -4860,6 +5017,7 @@ export def "convai-agents-simulate-conversation-stream stream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   simulation_specification: record # A specification that will be used to simulate a conversation between an agent and an AI user. — shape: {simulated_user_config: record, tool_mock_config?: record, partial_conversation_history?: list, dynamic_variables?: record}
   --extra-evaluation-criteria: any # A list of evaluation criteria to test
@@ -4875,7 +5033,7 @@ export def "convai-agents-simulate-conversation-stream stream" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Agent Response Test
@@ -4894,6 +5052,7 @@ export def "convai-agent-testing-create route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --from-conversation-metadata: any # Metadata of a conversation this test was created from (if applicable).
   --dynamic-variables: record # Dynamic variables to replace in the agent config during testing
@@ -4924,7 +5083,7 @@ export def "convai-agent-testing-create route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Agent Test Folder
@@ -4939,6 +5098,7 @@ export def "convai-agent-testing-folders route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   name: string # The name of the folder to create
   --parent-folder-id: any # The ID of the parent folder. If not provided, the folder will be created at the root level.
@@ -4953,7 +5113,7 @@ export def "convai-agent-testing-folders route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Agent Test Folder By Id
@@ -4969,6 +5129,7 @@ export def "convai-agent-testing-folders route-by-folder_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<id: string, name: string, folder_path: table<id: string, name: string>, children_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4978,7 +5139,7 @@ export def "convai-agent-testing-folders route-by-folder_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Agent Test Folder
@@ -4994,6 +5155,7 @@ export def "convai-agent-testing-folders route-by-folder_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   name: string # The new name for the folder
 ]: any -> record<id: string, name: string, folder_path: table<id: string, name: string>, children_count: int> {
@@ -5007,7 +5169,7 @@ export def "convai-agent-testing-folders route-by-folder_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Agent Test Folder
@@ -5023,6 +5185,7 @@ export def "convai-agent-testing-folders route-by-folder_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --force: oneof<nothing, bool> # Force delete. Required for deleting non-empty folders. (default: false)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
@@ -5034,7 +5197,7 @@ export def "convai-agent-testing-folders route-by-folder_id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk Move Tests To Folder
@@ -5049,6 +5212,7 @@ export def "convai-agent-testing-bulk-move route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   entity_ids: list # The IDs of tests or folders to move.
   --move-to: any # The folder to move the entities to. If not set, the entities will be moved to the root folder.
@@ -5063,7 +5227,7 @@ export def "convai-agent-testing-bulk-move route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Agent Response Test By Id
@@ -5080,6 +5244,7 @@ export def "convai-agent-testing route-by-test_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5089,7 +5254,7 @@ export def "convai-agent-testing route-by-test_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Agent Response Test
@@ -5110,6 +5275,7 @@ export def "convai-agent-testing route-by-test_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --from-conversation-metadata: any # Metadata of a conversation this test was created from (if applicable).
   --dynamic-variables: record # Dynamic variables to replace in the agent config during testing
@@ -5140,7 +5306,7 @@ export def "convai-agent-testing route-by-test_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Agent Response Test
@@ -5156,6 +5322,7 @@ export def "convai-agent-testing route-by-test_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5165,7 +5332,7 @@ export def "convai-agent-testing route-by-test_id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Agent Response Test Summaries By Ids
@@ -5180,6 +5347,7 @@ export def "convai-agent-testing-summaries route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   test_ids: list # List of test IDs to fetch. No duplicates allowed.
 ]: any -> record<tests: record> {
@@ -5193,7 +5361,7 @@ export def "convai-agent-testing-summaries route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Agent Response Tests
@@ -5209,6 +5377,7 @@ export def "convai-agent-testing route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for fetching next page. Cursor is returned in the response.
   --page-size: int # How many Tests to return at maximum. Can not exceed 100, defaults to 30. (default: 30)
   --search: string # Search query to filter tests by name.
@@ -5227,7 +5396,7 @@ export def "convai-agent-testing route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Test Invocations
@@ -5242,6 +5411,7 @@ export def "convai-test-invocations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --agent-id: string # Filter by agent ID
   --page-size: int # How many Tests to return at maximum. Can not exceed 100, defaults to 30. (default: 30)
   --cursor: string # Used for fetching next page. Cursor is returned in the response.
@@ -5255,7 +5425,7 @@ export def "convai-test-invocations list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Run Tests On The Agent
@@ -5272,6 +5442,7 @@ export def "convai-agents-run-tests route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   tests: list # List of tests to run on the agent — item shape: {test_id: string, workflow_node_id?: any, root_folder_id?: any, root_folder_name?: any}
   --agent-config-override: any # Configuration overrides to use for testing. If not provided, the agent's default configuration will be used.
@@ -5288,7 +5459,7 @@ export def "convai-agents-run-tests route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Test Invocation
@@ -5304,6 +5475,7 @@ export def "convai-test-invocations route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<id: string, agent_id: any, branch_id: any, created_at: int, folder_id: any, repeat_count: int, bucketing_status: any, result_groups: table<test_id: string, test_name: string, workflow_node_id: any, buckets: list>, test_runs: table<test_run_id: string, test_info: any, test_invocation_id: string, agent_id: string, branch_id: any, workflow_node_id: any, status: string, agent_responses: any, test_id: string, test_name: string, condition_result: any, last_updated_at_unix: int, metadata: any, root_folder_id: any, root_folder_name: any, environment: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5313,7 +5485,7 @@ export def "convai-test-invocations route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resubmit Tests
@@ -5329,6 +5501,7 @@ export def "convai-test-invocations-resubmit route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   test_run_ids: list # List of test run IDs to resubmit
   --agent-config-override: any # Configuration overrides to use for testing. If not provided, the agent's default configuration will be used.
@@ -5345,7 +5518,7 @@ export def "convai-test-invocations-resubmit route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Conversations
@@ -5361,6 +5534,7 @@ export def "convai-conversations route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for fetching next page. Cursor is returned in the response.
   --agent-id: string # Agent id (agent_…) or speech engine external id (seng_), resolved to the same underlying resource.
   --call-successful: string # The result of the success evaluation
@@ -5398,7 +5572,7 @@ export def "convai-conversations route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Conversation Users
@@ -5413,6 +5587,7 @@ export def "convai-users route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --agent-id: string # Agent id (agent_…) or speech engine external id (seng_), resolved to the same underlying resource.
   --branch-id: string # Filter conversations by branch ID.
   --call-start-before-unix: string # Unix timestamp (in seconds) to filter conversations up to this start date.
@@ -5431,7 +5606,7 @@ export def "convai-users route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Conversation Details
@@ -5447,6 +5622,7 @@ export def "convai-conversations route-by-conversation_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer # Response format. Defaults to 'json'. Set to 'opentelemetry' for an OTLP-compatible trace payload using the same structure as the post-call webhook. (default: json)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<agent_id: string, agent_name: any, conversation_product: string, status: string, user_id: any, branch_id: any, version_id: any, metadata: record<start_time_unix_secs: int, accepted_time_unix_secs: any, call_duration_secs: int, cost: any, deletion_settings: record<deletion_time_unix_secs: any, deleted_logs_at_time_unix_secs: any, deleted_audio_at_time_unix_secs: any, deleted_transcript_at_time_unix_secs: any, delete_transcript_and_pii: bool, delete_audio: bool>, feedback: record<type: any, overall_score: any, likes: int, dislikes: int, rating: any, comment: any>, authorization_method: string, charging: record<dev_discount: bool, is_burst: bool, tier: any, llm_usage: record, llm_price: any, llm_charge: any, call_charge: any, free_minutes_consumed: float, free_llm_dollars_consumed: float, tts_usage: any, asr_usage: any>, phone_call: any, batch_call: any, termination_reason: string, error: any, warnings: list<string>, main_language: any, rag_usage: any, text_only: bool, features_usage: record<language_detection: record, transfer_to_agent: record, transfer_to_number: record, multivoice: record, dtmf_tones: record, external_mcp_servers: record, pii_zrm_workspace: bool, pii_zrm_agent: bool, tool_dynamic_variable_updates: record, is_livekit: bool, voicemail_detection: record, dtmf_input: record, workflow: record, agent_testing: record, versioning: record, file_input: record>, eleven_assistant: record<is_eleven_assistant: bool>, initiator_id: any, conversation_initiation_source: string, conversation_initiation_source_version: any, timezone: any, async_metadata: any, whatsapp: any, sms: any, agent_created_from: string, agent_last_updated_from: string, voice_rewards: list<record>>, analysis: any, visited_agents: table<agent_id: string, branch_id: any>, conversation_initiation_client_data: record<conversation_config_override: record<asr: any, turn: any, tts: any, conversation: any, agent: any>, custom_llm_extra_body: record, user_id: any, source_info: record<source: any, version: any>, branch_id: any, environment: any, starting_workflow_node_id: any, dynamic_variables: record>, environment: string, conversation_id: string, has_audio: bool, has_user_audio: bool, has_response_audio: bool, transcript: table<role: string, agent_metadata: any, message: any, multivoice_message: any, tool_calls: list, tool_results: list, feedback: any, llm_override: any, time_in_call_secs: int, conversation_turn_metrics: any, rag_retrieval_info: any, llm_usage: any, interrupted: bool, original_message: any, source_medium: any, source_event_id: any, used_static_kb_document_ids: list, file_input: any, contextual_update_info: any>, tag_ids: list<string>, otlp_traces: any> {
@@ -5458,7 +5634,7 @@ export def "convai-conversations route-by-conversation_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Conversation
@@ -5474,6 +5650,7 @@ export def "convai-conversations route-by-conversation_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5483,7 +5660,7 @@ export def "convai-conversations route-by-conversation_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Sip Messages For A Conversation
@@ -5499,6 +5676,7 @@ export def "convai-conversations-sip-messages messages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # default: 20
   --cursor: string # Used for fetching next page. Cursor is returned in the response.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -5511,7 +5689,7 @@ export def "convai-conversations-sip-messages messages" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Conversation Audio
@@ -5527,6 +5705,7 @@ export def "convai-conversations-audio route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5536,7 +5715,7 @@ export def "convai-conversations-audio route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "audio/mpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send Conversation Feedback
@@ -5552,6 +5731,7 @@ export def "convai-conversations-feedback route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --feedback: any # Either 'like' or 'dislike' to indicate the feedback for the conversation.
 ]: any -> any {
   let input = $in
@@ -5562,7 +5742,7 @@ export def "convai-conversations-feedback route" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Text Search Conversation Messages
@@ -5577,6 +5757,7 @@ export def "convai-conversations-messages-text-search route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --text-query: string # The search query text for full-text and fuzzy matching
   --agent-id: string # Agent id (agent_…) or speech engine external id (seng_), resolved to the same underlying resource.
   --call-successful: string # The result of the success evaluation
@@ -5612,7 +5793,7 @@ export def "convai-conversations-messages-text-search route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Smart Search Conversation Messages
@@ -5627,6 +5808,7 @@ export def "convai-conversations-messages-smart-search route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --text-query: string # The search query text for semantic similarity matching
   --agent-id: string # Agent id (agent_…) or speech engine external id (seng_), resolved to the same underlying resource.
   --page-size: int # Number of results per page. Max 50. (default: 20)
@@ -5641,7 +5823,7 @@ export def "convai-conversations-messages-smart-search route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign Conversation Tags
@@ -5657,6 +5839,7 @@ export def "convai-conversations-tags route-by-conversation_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   tag_ids: list # Tag IDs to add to the conversation. Re-assigning an existing tag is a no-op.
 ]: any -> any {
@@ -5670,7 +5853,7 @@ export def "convai-conversations-tags route-by-conversation_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unassign Conversation Tag
@@ -5687,6 +5870,7 @@ export def "convai-conversations-tags route-by-conversation_id-tag_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5696,7 +5880,7 @@ export def "convai-conversations-tags route-by-conversation_id-tag_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Conversation Tags
@@ -5711,6 +5895,7 @@ export def "convai-tags route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # How many conversation tags to return. Can not exceed 100. (default: 100)
   --cursor: string # Used for fetching next page. Cursor is returned in the response.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -5723,7 +5908,7 @@ export def "convai-tags route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Conversation Tag
@@ -5738,6 +5923,7 @@ export def "convai-tags route-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   title: string # Display title of the tag.
   --description: any # Optional free-text description.
@@ -5752,7 +5938,7 @@ export def "convai-tags route-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Conversation Tag
@@ -5768,6 +5954,7 @@ export def "convai-tags route-by-tag_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<tag_id: string, workspace_id: string, owner_user_id: string, title: string, description: any, created_at_unix_secs: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5777,7 +5964,7 @@ export def "convai-tags route-by-tag_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Conversation Tag
@@ -5793,6 +5980,7 @@ export def "convai-tags route-by-tag_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --title: any # If provided, replaces the tag title. Omit to leave unchanged.
   --description: any # If provided, replaces the tag description. Omit to leave unchanged.
@@ -5807,7 +5995,7 @@ export def "convai-tags route-by-tag_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Conversation Tag
@@ -5823,6 +6011,7 @@ export def "convai-tags route-by-tag_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5832,7 +6021,7 @@ export def "convai-tags route-by-tag_id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Import Phone Number
@@ -5849,6 +6038,7 @@ export def "convai-phone-numbers route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --phone-number: string # Phone number
   --label: string # Label for the phone number
@@ -5877,7 +6067,7 @@ export def "convai-phone-numbers route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Phone Numbers
@@ -5892,6 +6082,7 @@ export def "convai-phone-numbers route-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --provider: string # Filter by telephony provider
   --agent-id: string # Filter by assigned agent ID
   --branch-id: string # Filter by assigned branch ID
@@ -5905,7 +6096,7 @@ export def "convai-phone-numbers route-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Phone Number
@@ -5922,6 +6113,7 @@ export def "convai-phone-numbers route-by-phone_number_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5931,7 +6123,7 @@ export def "convai-phone-numbers route-by-phone_number_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Phone Number
@@ -5947,6 +6139,7 @@ export def "convai-phone-numbers route-by-phone_number_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5956,7 +6149,7 @@ export def "convai-phone-numbers route-by-phone_number_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Phone Number
@@ -5973,6 +6166,7 @@ export def "convai-phone-numbers route-by-phone_number_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --agent-id: any
   --label: any
@@ -5993,7 +6187,7 @@ export def "convai-phone-numbers route-by-phone_number_id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Sip Messages For A Phone Number
@@ -6009,6 +6203,7 @@ export def "convai-phone-numbers-sip-messages messages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # default: 20
   --cursor: string # Used for fetching next page. Cursor is returned in the response.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -6021,7 +6216,7 @@ export def "convai-phone-numbers-sip-messages messages" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Calculate Expected Llm Usage
@@ -6036,6 +6231,7 @@ export def "convai-llm-usage-calculate calculation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   prompt_length: int # Length of the prompt in characters.
   number_of_pages: int # Pages of content in PDF documents or URLs in the agent's knowledge base.
   --rag-enabled: oneof<nothing, bool> # Whether RAG is enabled.
@@ -6048,7 +6244,7 @@ export def "convai-llm-usage-calculate calculation" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Available Llms
@@ -6063,6 +6259,7 @@ export def "convai-llm-list llms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<llms: table<llm: string, is_checkpoint: bool, max_tokens_limit: int, max_context_limit: int, supports_image_input: bool, supports_document_input: bool, supports_parallel_tool_calls: bool, available_reasoning_efforts: any, deprecation_info: any, regional_processing_surcharge: any>, default_deprecation_config: record<warning_start_days: int, fallback_start_days: int, fallback_complete_days: int, fallback_start_percentage: int, fallback_complete_percentage: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6072,7 +6269,7 @@ export def "convai-llm-list llms" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload File
@@ -6088,6 +6285,7 @@ export def "convai-conversations-files route-by-conversation_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   file: string # Image or PDF file to upload (format: binary)
 ]: any -> record<file_id: string> {
@@ -6101,7 +6299,7 @@ export def "convai-conversations-files route-by-conversation_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Delete File Upload
@@ -6118,6 +6316,7 @@ export def "convai-conversations-files route-by-file_id-conversation_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<file_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6127,7 +6326,7 @@ export def "convai-conversations-files route-by-file_id-conversation_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Live Count
@@ -6142,6 +6341,7 @@ export def "convai-analytics-live-count count" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --agent-id: string # The id of an agent to restrict the analytics to.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<count: int> {
@@ -6153,7 +6353,7 @@ export def "convai-analytics-live-count count" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Knowledge Base Summaries By Ids
@@ -6168,6 +6368,7 @@ export def "convai-knowledge-base-summaries route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --document-ids: list # The ids of knowledge base documents.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record {
@@ -6179,7 +6380,7 @@ export def "convai-knowledge-base-summaries route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add To Knowledge Base
@@ -6196,6 +6397,7 @@ export def "convai-knowledge-base base" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --agent-id: string # default: 
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --name: any # A custom, human-readable name for the document.
@@ -6213,7 +6415,7 @@ export def "convai-knowledge-base base" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get Knowledge Base List
@@ -6229,6 +6431,7 @@ export def "convai-knowledge-base route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # How many documents to return at maximum. Can not exceed 100, defaults to 30. (default: 30)
   --search: string # If specified, the endpoint returns only such knowledge base documents whose names start with this string.
   --show-only-owned-documents: oneof<nothing, bool> # If set to true, the endpoint will return only documents owned by you (and not shared from somebody else). Deprecated: use created_by_user_id instead. (DEPRECATED, default: false)
@@ -6250,7 +6453,7 @@ export def "convai-knowledge-base route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Url Document
@@ -6265,6 +6468,7 @@ export def "convai-knowledge-base-url route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --body-url: string # URL to a page of documentation that the agent will have access to in order to interact with users.
   --name: any # A custom, human-readable name for the document.
@@ -6282,7 +6486,7 @@ export def "convai-knowledge-base-url route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create File Document
@@ -6297,6 +6501,7 @@ export def "convai-knowledge-base-file route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   file: string # Documentation that the agent will have access to in order to interact with users. (format: binary)
   --name: any # A custom, human-readable name for the document.
@@ -6312,7 +6517,7 @@ export def "convai-knowledge-base-file route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Create Text Document
@@ -6327,6 +6532,7 @@ export def "convai-knowledge-base-text route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   text: string # Text content to be added to the knowledge base.
   --name: any # A custom, human-readable name for the document.
@@ -6342,7 +6548,7 @@ export def "convai-knowledge-base-text route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Folder
@@ -6357,6 +6563,7 @@ export def "convai-knowledge-base-folder route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   name: string # A custom, human-readable name for the document.
   --parent-folder-id: any # If set, the created document or folder will be placed inside the given folder.
@@ -6373,7 +6580,7 @@ export def "convai-knowledge-base-folder route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update Document
@@ -6390,6 +6597,7 @@ export def "convai-knowledge-base route-by-documentation_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --name: any # A custom, human-readable name for the document.
   --content: any # Updated content for the document. Only supported for text documents, URL documents with auto-sync disabled, and file documents.
@@ -6404,7 +6612,7 @@ export def "convai-knowledge-base route-by-documentation_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Documentation From Knowledge Base
@@ -6421,6 +6629,7 @@ export def "convai-knowledge-base base-by-documentation_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --agent-id: string # default: 
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
@@ -6432,7 +6641,7 @@ export def "convai-knowledge-base base-by-documentation_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Knowledge Base Document Or Folder
@@ -6448,6 +6657,7 @@ export def "convai-knowledge-base document" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --force: oneof<nothing, bool> # If set to true, the document or folder will be deleted regardless of whether it is used by any agents and it will be removed from the dependent agents. For non-empty folders, this will also delete all child documents and folders. (default: false)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
@@ -6459,7 +6669,7 @@ export def "convai-knowledge-base document" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update File Document
@@ -6476,6 +6686,7 @@ export def "convai-knowledge-base-update-file route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   file: string # Documentation that the agent will have access to in order to interact with users. (format: binary)
 ]: any -> any {
@@ -6489,7 +6700,7 @@ export def "convai-knowledge-base-update-file route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Compute Rag Indexes In Batch
@@ -6505,6 +6716,7 @@ export def "convai-knowledge-base-rag-index indexes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   items: list # List of requested RAG indexes. Minimum 1, maximum 100 items. — item shape: {document_id: string, create_if_missing: bool, model: "e5_mistral_7b_instruct"|"multilingual_e5_large_instruct"}
 ]: any -> record {
@@ -6518,7 +6730,7 @@ export def "convai-knowledge-base-rag-index indexes" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Rag Index Overview.
@@ -6533,6 +6745,7 @@ export def "convai-knowledge-base-rag-index overview" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<total_used_bytes: int, total_max_bytes: int, models: table<model: string, used_bytes: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6542,7 +6755,7 @@ export def "convai-knowledge-base-rag-index overview" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Refresh Url Document Content
@@ -6559,6 +6772,7 @@ export def "convai-knowledge-base-refresh route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6568,7 +6782,7 @@ export def "convai-knowledge-base-refresh route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Compute Rag Index.
@@ -6584,6 +6798,7 @@ export def "convai-knowledge-base-rag-index status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   model: string@model-completer # default: e5_mistral_7b_instruct
 ]: any -> record<id: string, model: string, status: string, progress_percentage: float, document_model_index_usage: record<used_bytes: int>> {
@@ -6597,7 +6812,7 @@ export def "convai-knowledge-base-rag-index status" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Rag Indexes Of The Specified Knowledgebase Document.
@@ -6613,6 +6828,7 @@ export def "convai-knowledge-base-rag-index indexes-by-documentation_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<indexes: table<id: string, model: string, status: string, progress_percentage: float, document_model_index_usage: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6622,7 +6838,7 @@ export def "convai-knowledge-base-rag-index indexes-by-documentation_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Rag Index.
@@ -6639,6 +6855,7 @@ export def "convai-knowledge-base-rag-index index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<id: string, model: string, status: string, progress_percentage: float, document_model_index_usage: record<used_bytes: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6648,7 +6865,7 @@ export def "convai-knowledge-base-rag-index index" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search Knowledge Base Content
@@ -6663,6 +6880,7 @@ export def "convai-knowledge-base-search route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # The search query text
   --page-size: int # How many documents to return at maximum. Can not exceed 100, defaults to 30. (default: 30)
   --types: string # If present, the endpoint will return only documents of the given types.
@@ -6677,7 +6895,7 @@ export def "convai-knowledge-base-search route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Dependent Agents List
@@ -6693,6 +6911,7 @@ export def "convai-knowledge-base-dependent-agents agents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dependent-type: string@dependent-type-completer # Type of dependent agents to return.
   --page-size: int # How many documents to return at maximum. Can not exceed 100, defaults to 30. (default: 30)
   --cursor: string # Used for fetching next page. Cursor is returned in the response.
@@ -6706,7 +6925,7 @@ export def "convai-knowledge-base-dependent-agents agents" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Document Content
@@ -6722,6 +6941,7 @@ export def "convai-knowledge-base-content content" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6731,7 +6951,7 @@ export def "convai-knowledge-base-content content" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Document Source File Url
@@ -6747,6 +6967,7 @@ export def "convai-knowledge-base-source-file-url url" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<signed_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6756,7 +6977,7 @@ export def "convai-knowledge-base-source-file-url url" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Documentation Chunk From Knowledge Base
@@ -6773,6 +6994,7 @@ export def "convai-knowledge-base-chunk base" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --embedding-model: string # The embedding model used to retrieve the chunk.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<id: string, name: string, content: string> {
@@ -6784,7 +7006,7 @@ export def "convai-knowledge-base-chunk base" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get All Rag Chunks For A Document
@@ -6800,6 +7022,7 @@ export def "convai-knowledge-base-chunks base" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --embedding-model: string@embedding-model-completer # The embedding model used to retrieve the chunk. (default: e5_mistral_7b_instruct)
   --page-size: int # How many documents to return at maximum. Can not exceed 100, defaults to 30. (default: 30)
   --cursor: string # Used for fetching next page. Cursor is returned in the response.
@@ -6813,7 +7036,7 @@ export def "convai-knowledge-base-chunks base" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Move Entity To Folder
@@ -6829,6 +7052,7 @@ export def "convai-knowledge-base-move route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --move-to: any # The folder to move the entities to. If not set, the entities will be moved to the root folder.
 ]: any -> any {
@@ -6842,7 +7066,7 @@ export def "convai-knowledge-base-move route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk Move Entities To Folder
@@ -6857,6 +7081,7 @@ export def "convai-knowledge-base-bulk-move route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   document_ids: list # The ids of documents or folders from the knowledge base.
   --move-to: any # The folder to move the entities to. If not set, the entities will be moved to the root folder.
@@ -6871,7 +7096,7 @@ export def "convai-knowledge-base-bulk-move route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Agent Conversation Topics
@@ -6887,6 +7112,7 @@ export def "convai-agents-topics route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<topics: table<topic_id: string, label: string, description: string, conversation_count: int, parent_topic_id: any, x_2d: any, y_2d: any>, window_start_unix_secs: int, window_end_unix_secs: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6896,7 +7122,7 @@ export def "convai-agents-topics route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Tool
@@ -6911,6 +7137,7 @@ export def "convai-tools route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   tool_config: any # Configuration for the tool
   --response-mocks: any # Mock responses with optional parameter conditions. Evaluated top-to-bottom; first match wins.
@@ -6925,7 +7152,7 @@ export def "convai-tools route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Tools
@@ -6941,6 +7168,7 @@ export def "convai-tools route-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # If specified, the endpoint returns only tools whose names start with this string.
   --page-size: string # How many documents to return at maximum. Can not exceed 100, defaults to 30.
   --show-only-owned-documents: oneof<nothing, bool> # If set to true, the endpoint will return only tools owned by you (and not shared from somebody else). Deprecated: use created_by_user_id instead. (DEPRECATED, default: false)
@@ -6959,7 +7187,7 @@ export def "convai-tools route-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Tool
@@ -6975,6 +7203,7 @@ export def "convai-tools route-by-tool_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<id: string, tool_config: any, access_info: record<is_creator: bool, creator_name: string, creator_email: string, role: string, anonymous_access_level_override: any, access_source: any>, usage_stats: record<total_calls: int, avg_latency_secs: float>, response_mocks: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6984,7 +7213,7 @@ export def "convai-tools route-by-tool_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Tool
@@ -7000,6 +7229,7 @@ export def "convai-tools route-by-tool_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   tool_config: any # Configuration for the tool
   --response-mocks: any # Mock responses with optional parameter conditions. Evaluated top-to-bottom; first match wins.
@@ -7014,7 +7244,7 @@ export def "convai-tools route-by-tool_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Tool
@@ -7030,6 +7260,7 @@ export def "convai-tools route-by-tool_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --force: oneof<nothing, bool> # If set to true, the tool will be deleted regardless of whether it is used by any agents and it will be removed from the dependent agents and branches. (default: false)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
@@ -7041,7 +7272,7 @@ export def "convai-tools route-by-tool_id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Dependent Agents List
@@ -7057,6 +7288,7 @@ export def "convai-tools-dependent-agents route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for fetching next page. Cursor is returned in the response.
   --page-size: int # How many documents to return at maximum. Can not exceed 100, defaults to 30. (default: 30)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -7069,7 +7301,7 @@ export def "convai-tools-dependent-agents route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Tool Executions
@@ -7085,6 +7317,7 @@ export def "convai-tools-executions route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Used for fetching next page. Cursor is returned in the response.
   --page-size: int # How many documents to return at maximum. Can not exceed 100, defaults to 30. (default: 30)
   --is-error: string # Filter by error status. If not provided, returns all executions.
@@ -7102,7 +7335,7 @@ export def "convai-tools-executions route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Convai Settings
@@ -7117,6 +7350,7 @@ export def "convai-settings route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<conversation_initiation_client_data_webhook: any, webhooks: record<post_call_webhook_id: any, events: list<string>, transcript_format: string, send_audio: any>, can_use_mcp_servers: bool, rag_retention_period_days: int, conversation_embedding_retention_days: any, default_livekit_stack: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7126,7 +7360,7 @@ export def "convai-settings route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Convai Settings
@@ -7142,6 +7376,7 @@ export def "convai-settings route-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --conversation-initiation-client-data-webhook: any
   --webhooks: record # shape: {post_call_webhook_id?: any, events?: list, transcript_format?: "json"|"opentelemetry", send_audio?: any}
@@ -7160,7 +7395,7 @@ export def "convai-settings route-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Convai Dashboard Settings
@@ -7175,6 +7410,7 @@ export def "convai-settings-dashboard route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<charts: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7184,7 +7420,7 @@ export def "convai-settings-dashboard route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Convai Dashboard Settings
@@ -7199,6 +7435,7 @@ export def "convai-settings-dashboard route-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --charts: list
 ]: any -> record<charts: list<any>> {
@@ -7212,7 +7449,7 @@ export def "convai-settings-dashboard route-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Convai Workspace Secret
@@ -7227,6 +7464,7 @@ export def "convai-secrets route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   type: string
   name: string
@@ -7242,7 +7480,7 @@ export def "convai-secrets route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Convai Workspace Secrets
@@ -7257,6 +7495,7 @@ export def "convai-secrets route-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: string # How many documents to return at maximum. Can not exceed 100. If not provided, returns all secrets.
   --dependency-limit: string # Maximum number of dependent resources (tools, agents, phone numbers) to return per secret. Can not exceed 100.
   --search: string # If specified, returns only secrets whose names start with this string.
@@ -7271,7 +7510,7 @@ export def "convai-secrets route-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Convai Workspace Secret
@@ -7287,6 +7526,7 @@ export def "convai-secrets route-by-secret_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<type: string, secret_id: string, name: string, used_by: record<tools: list<any>, tools_has_more: bool, agents: list<any>, agents_has_more: bool, phone_numbers: list<record>, phone_numbers_has_more: bool, mcp_servers: list<any>, others: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7296,7 +7536,7 @@ export def "convai-secrets route-by-secret_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Convai Workspace Secret
@@ -7312,6 +7552,7 @@ export def "convai-secrets route-by-secret_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7321,7 +7562,7 @@ export def "convai-secrets route-by-secret_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Convai Workspace Secret
@@ -7337,6 +7578,7 @@ export def "convai-secrets route-by-secret_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   type: string
   name: string
@@ -7352,7 +7594,7 @@ export def "convai-secrets route-by-secret_id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Secret Dependencies By Type
@@ -7369,6 +7611,7 @@ export def "convai-secrets-dependencies route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # How many dependency items to return per page. (default: 20)
   --cursor: string # Used for fetching next page. Cursor is returned in the response.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -7381,7 +7624,7 @@ export def "convai-secrets-dependencies route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Submit A Batch Call Request.
@@ -7398,6 +7641,7 @@ export def "convai-batch-calling-submit call" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   call_name: string
   agent_id: string
@@ -7421,7 +7665,7 @@ export def "convai-batch-calling-submit call" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get All Batch Calls For A Workspace.
@@ -7436,6 +7680,7 @@ export def "convai-batch-calling-workspace calls" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 100
   --last-doc: string
   --agent-id: string # Filter batch calls to a single agent.
@@ -7449,7 +7694,7 @@ export def "convai-batch-calling-workspace calls" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get A Batch Call By Id.
@@ -7465,6 +7710,7 @@ export def "convai-batch-calling call-by-batch_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<id: string, phone_number_id: any, phone_provider: any, whatsapp_params: any, name: string, agent_id: string, branch_id: any, environment: any, created_at_unix: int, scheduled_time_unix: int, timezone: any, total_calls_dispatched: int, total_calls_scheduled: int, total_calls_finished: int, last_updated_at_unix: int, status: string, retry_count: int, telephony_call_config: record<ringing_timeout_secs: int>, target_concurrency_limit: any, agent_name: string, branch_name: any, recipients: table<id: string, phone_number: any, whatsapp_user_id: any, status: string, created_at_unix: int, updated_at_unix: int, conversation_id: any, conversation_initiation_client_data: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7474,7 +7720,7 @@ export def "convai-batch-calling call-by-batch_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete A Batch Call.
@@ -7490,6 +7736,7 @@ export def "convai-batch-calling call-by-batch_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7499,7 +7746,7 @@ export def "convai-batch-calling call-by-batch_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel A Batch Call.
@@ -7515,6 +7762,7 @@ export def "convai-batch-calling-cancel call" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<id: string, phone_number_id: any, phone_provider: any, whatsapp_params: any, name: string, agent_id: string, branch_id: any, environment: any, created_at_unix: int, scheduled_time_unix: int, timezone: any, total_calls_dispatched: int, total_calls_scheduled: int, total_calls_finished: int, last_updated_at_unix: int, status: string, retry_count: int, telephony_call_config: record<ringing_timeout_secs: int>, target_concurrency_limit: any, agent_name: string, branch_name: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7524,7 +7772,7 @@ export def "convai-batch-calling-cancel call" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retry A Batch Call.
@@ -7540,6 +7788,7 @@ export def "convai-batch-calling-retry call" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<id: string, phone_number_id: any, phone_provider: any, whatsapp_params: any, name: string, agent_id: string, branch_id: any, environment: any, created_at_unix: int, scheduled_time_unix: int, timezone: any, total_calls_dispatched: int, total_calls_scheduled: int, total_calls_finished: int, last_updated_at_unix: int, status: string, retry_count: int, telephony_call_config: record<ringing_timeout_secs: int>, target_concurrency_limit: any, agent_name: string, branch_name: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7549,7 +7798,7 @@ export def "convai-batch-calling-retry call" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Handle An Outbound Call Via Sip Trunk
@@ -7565,6 +7814,7 @@ export def "convai-sip-trunk-outbound-call call" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   agent_id: string
   agent_phone_number_id: string
@@ -7582,7 +7832,7 @@ export def "convai-sip-trunk-outbound-call call" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Mcp Server
@@ -7598,6 +7848,7 @@ export def "convai-mcp-servers route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   config: record # shape: {approval_policy?: "auto_approve_all"|"require_approval_all"|"require_approval_per_tool", tool_approval_hashes?: list, transport?: "SSE"|"STREAMABLE_HTTP", url: any, secret_token?: any, request_headers?: record, auth_connection?: any, name: string, description?: string, force_pre_tool_speech?: bool, pre_tool_speech?: "auto"|"force"|"off", disable_interruptions?: bool, tool_call_sound?: any, tool_call_sound_behavior?: "auto"|"always", execution_mode?: "immediate"|"post_tool_speech"|"async", response_timeout_secs?: int, tool_config_overrides?: list, disable_compression?: bool}
 ]: any -> record<id: string, config: record<approval_policy: string, tool_approval_hashes: list<record>, transport: string, url: any, secret_token: any, request_headers: record, auth_connection: any, name: string, description: string, force_pre_tool_speech: bool, pre_tool_speech: string, disable_interruptions: bool, tool_call_sound: any, tool_call_sound_behavior: string, execution_mode: string, response_timeout_secs: int, tool_config_overrides: list<record>, disable_compression: bool>, access_info: any, dependent_agents: list<any>, metadata: record<created_at: int, owner_user_id: any>> {
@@ -7611,7 +7862,7 @@ export def "convai-mcp-servers route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Mcp Servers
@@ -7626,6 +7877,7 @@ export def "convai-mcp-servers route-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<mcp_servers: table<id: string, config: record, access_info: any, dependent_agents: list, metadata: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7635,7 +7887,7 @@ export def "convai-mcp-servers route-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Mcp Server
@@ -7651,6 +7903,7 @@ export def "convai-mcp-servers route-by-mcp_server_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<id: string, config: record<approval_policy: string, tool_approval_hashes: list<record>, transport: string, url: any, secret_token: any, request_headers: record, auth_connection: any, name: string, description: string, force_pre_tool_speech: bool, pre_tool_speech: string, disable_interruptions: bool, tool_call_sound: any, tool_call_sound_behavior: string, execution_mode: string, response_timeout_secs: int, tool_config_overrides: list<record>, disable_compression: bool>, access_info: any, dependent_agents: list<any>, metadata: record<created_at: int, owner_user_id: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7660,7 +7913,7 @@ export def "convai-mcp-servers route-by-mcp_server_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete Mcp Server
@@ -7676,6 +7929,7 @@ export def "convai-mcp-servers route-by-mcp_server_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7685,7 +7939,7 @@ export def "convai-mcp-servers route-by-mcp_server_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Mcp Server Configuration
@@ -7702,6 +7956,7 @@ export def "convai-mcp-servers route-by-mcp_server_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --approval-policy: any # The approval mode to set for the MCP server
   --force-pre-tool-speech: any # DEPRECATED: use `pre_tool_speech` instead. If set, overrides the server's force_pre_tool_speech setting for this tool. (DEPRECATED)
@@ -7726,7 +7981,7 @@ export def "convai-mcp-servers route-by-mcp_server_id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Mcp Server Tools
@@ -7742,6 +7997,7 @@ export def "convai-mcp-servers-tools route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<success: bool, tools: table<name: string, title: any, description: any, inputSchema: record, outputSchema: any, icons: any, annotations: any, _meta: any, execution: any>, error_message: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7751,7 +8007,7 @@ export def "convai-mcp-servers-tools route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Mcp Server Approval Policy
@@ -7769,6 +8025,7 @@ export def "convai-mcp-servers-approval-policy route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   approval_policy: string@approval-policy-completer # Defines the MCP server-level approval policy for tool execution. (default: require_approval_all)
 ]: any -> record<id: string, config: record<approval_policy: string, tool_approval_hashes: list<record>, transport: string, url: any, secret_token: any, request_headers: record, auth_connection: any, name: string, description: string, force_pre_tool_speech: bool, pre_tool_speech: string, disable_interruptions: bool, tool_call_sound: any, tool_call_sound_behavior: string, execution_mode: string, response_timeout_secs: int, tool_config_overrides: list<record>, disable_compression: bool>, access_info: any, dependent_agents: list<any>, metadata: record<created_at: int, owner_user_id: any>> {
@@ -7782,7 +8039,7 @@ export def "convai-mcp-servers-approval-policy route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Mcp Server Tool Approval
@@ -7798,6 +8055,7 @@ export def "convai-mcp-servers-tool-approvals route-by-mcp_server_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   tool_name: string # The name of the MCP tool
   tool_description: string # The description of the MCP tool
@@ -7814,7 +8072,7 @@ export def "convai-mcp-servers-tool-approvals route-by-mcp_server_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Mcp Server Tool Approval
@@ -7831,6 +8089,7 @@ export def "convai-mcp-servers-tool-approvals route-by-mcp_server_id-tool_name" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<id: string, config: record<approval_policy: string, tool_approval_hashes: list<record>, transport: string, url: any, secret_token: any, request_headers: record, auth_connection: any, name: string, description: string, force_pre_tool_speech: bool, pre_tool_speech: string, disable_interruptions: bool, tool_call_sound: any, tool_call_sound_behavior: string, execution_mode: string, response_timeout_secs: int, tool_config_overrides: list<record>, disable_compression: bool>, access_info: any, dependent_agents: list<any>, metadata: record<created_at: int, owner_user_id: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7840,7 +8099,7 @@ export def "convai-mcp-servers-tool-approvals route-by-mcp_server_id-tool_name" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Mcp Tool Configuration Override
@@ -7857,6 +8116,7 @@ export def "convai-mcp-servers-tool-configs route-by-mcp_server_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --force-pre-tool-speech: any # DEPRECATED: use `pre_tool_speech` instead. If set, overrides the server's force_pre_tool_speech setting for this tool. (DEPRECATED)
   --pre-tool-speech: any # If set, overrides the server's pre_tool_speech setting for this tool.
@@ -7880,7 +8140,7 @@ export def "convai-mcp-servers-tool-configs route-by-mcp_server_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Mcp Tool Configuration Override
@@ -7897,6 +8157,7 @@ export def "convai-mcp-servers-tool-configs route-by-mcp_server_id-tool_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<tool_name: string, force_pre_tool_speech: any, pre_tool_speech: any, disable_interruptions: any, tool_call_sound: any, tool_call_sound_behavior: any, execution_mode: any, response_timeout_secs: any, assignments: table<source: string, dynamic_variable: string, value_path: string, sanitize: bool, preserve_native_type: bool>, input_overrides: any, response_mocks: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7906,7 +8167,7 @@ export def "convai-mcp-servers-tool-configs route-by-mcp_server_id-tool_name" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Mcp Tool Configuration Override
@@ -7924,6 +8185,7 @@ export def "convai-mcp-servers-tool-configs route-by-mcp_server_id-tool_name-1" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --force-pre-tool-speech: any # DEPRECATED: use `pre_tool_speech` instead. If set, overrides the server's force_pre_tool_speech setting for this tool. (DEPRECATED)
   --pre-tool-speech: any # If set, overrides the server's pre_tool_speech setting for this tool.
@@ -7946,7 +8208,7 @@ export def "convai-mcp-servers-tool-configs route-by-mcp_server_id-tool_name-1" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Mcp Tool Configuration Override
@@ -7963,6 +8225,7 @@ export def "convai-mcp-servers-tool-configs route-by-mcp_server_id-tool_name-2" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<id: string, config: record<approval_policy: string, tool_approval_hashes: list<record>, transport: string, url: any, secret_token: any, request_headers: record, auth_connection: any, name: string, description: string, force_pre_tool_speech: bool, pre_tool_speech: string, disable_interruptions: bool, tool_call_sound: any, tool_call_sound_behavior: string, execution_mode: string, response_timeout_secs: int, tool_config_overrides: list<record>, disable_compression: bool>, access_info: any, dependent_agents: list<any>, metadata: record<created_at: int, owner_user_id: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7972,7 +8235,7 @@ export def "convai-mcp-servers-tool-configs route-by-mcp_server_id-tool_name-2" 
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Whatsapp Account
@@ -7988,6 +8251,7 @@ export def "convai-whatsapp-accounts account-by-phone_number_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<business_account_id: string, phone_number_id: string, business_account_name: string, phone_number_name: string, phone_number: string, assigned_agent_id: any, enable_messaging: bool, enable_audio_message_response: bool, assigned_agent_name: any, is_token_expired: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7997,7 +8261,7 @@ export def "convai-whatsapp-accounts account-by-phone_number_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Whatsapp Account
@@ -8013,6 +8277,7 @@ export def "convai-whatsapp-accounts account-by-phone_number_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --assigned-agent-id: any
   --enable-messaging: any
@@ -8028,7 +8293,7 @@ export def "convai-whatsapp-accounts account-by-phone_number_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Whatsapp Account
@@ -8044,6 +8309,7 @@ export def "convai-whatsapp-accounts account-by-phone_number_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8053,7 +8319,7 @@ export def "convai-whatsapp-accounts account-by-phone_number_id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Whatsapp Accounts
@@ -8068,16 +8334,19 @@ export def "convai-whatsapp-accounts accounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --agent-id: string # Filter by assigned agent ID
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<items: table<business_account_id: string, phone_number_id: string, business_account_name: string, phone_number_name: string, phone_number: string, assigned_agent_id: any, enable_messaging: bool, enable_audio_message_response: bool, assigned_agent_name: any, is_token_expired: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/v1/convai/whatsapp-accounts")
+  let qp = [(serialize-qp "agent_id" $agent_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/convai/whatsapp-accounts" $qp)
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create A New Branch
@@ -8093,6 +8362,7 @@ export def "convai-agents-branches route-by-agent_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   parent_version_id: string # ID of the version to branch from
   name: string # Name of the branch. It is unique within the agent.
@@ -8111,7 +8381,7 @@ export def "convai-agents-branches route-by-agent_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Agent Branches
@@ -8127,6 +8397,7 @@ export def "convai-agents-branches route-by-agent_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-archived: oneof<nothing, bool> # Whether archived branches should be included (default: false)
   --limit: int # How many results at most should be returned (default: 100)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -8139,7 +8410,7 @@ export def "convai-agents-branches route-by-agent_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Agent Branch
@@ -8156,6 +8427,7 @@ export def "convai-agents-branches route-by-agent_id-branch_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<id: string, name: string, agent_id: string, description: string, created_at: int, last_committed_at: int, is_archived: bool, protection_status: string, access_info: any, current_live_percentage: float, parent_branch: any, most_recent_versions: table<id: string, agent_id: string, branch_id: string, version_description: string, seq_no_in_branch: int, time_committed_secs: int, parents: record, access_info: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8165,7 +8437,7 @@ export def "convai-agents-branches route-by-agent_id-branch_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Agent Branch
@@ -8182,6 +8454,7 @@ export def "convai-agents-branches route-by-agent_id-branch_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --name: any # New name for the branch. Must be unique within the agent.
   --is-archived: any # Whether the branch should be archived
@@ -8197,7 +8470,7 @@ export def "convai-agents-branches route-by-agent_id-branch_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Agent Version Metadata
@@ -8214,6 +8487,7 @@ export def "convai-agents-versions route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<id: string, agent_id: string, branch_id: string, version_description: string, seq_no_in_branch: int, time_committed_secs: int, parents: record<in_branch_parent_id: any, out_of_branch_parent_id: any, merged_into_branch_id: any, merged_from_branch_id: any, merged_from_version_id: any>, access_info: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8223,7 +8497,7 @@ export def "convai-agents-versions route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Merge A Branch Into A Target Branch
@@ -8240,6 +8514,7 @@ export def "convai-agents-branches-merge target" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --target-branch-id: string # The ID of the target branch to merge into.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --archive-source-branch: oneof<nothing, bool> # Whether to archive the source branch after merging (default: true)
@@ -8256,7 +8531,7 @@ export def "convai-agents-branches-merge target" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Or Update Deployments
@@ -8273,6 +8548,7 @@ export def "convai-agents-deployments route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   deployment_request: record # shape: {requests: list}
 ]: any -> record<traffic_percentage_branch_id_map: record> {
@@ -8286,7 +8562,7 @@ export def "convai-agents-deployments route" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create Agent Draft
@@ -8303,6 +8579,7 @@ export def "convai-agents-drafts route-by-agent_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch-id: string # The ID of the agent branch to use
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   conversation_config: record # Conversation config for the draft
@@ -8322,7 +8599,7 @@ export def "convai-agents-drafts route-by-agent_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Agent Draft
@@ -8338,6 +8615,7 @@ export def "convai-agents-drafts route-by-agent_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch-id: string # The ID of the agent branch to use
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
@@ -8349,7 +8627,7 @@ export def "convai-agents-drafts route-by-agent_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Speech Engines
@@ -8364,6 +8642,7 @@ export def "speech-engine engines" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # How many Speech Engines to return at maximum. Can not exceed 100, defaults to 30. (default: 30)
   --search: string # Search term to filter Speech Engines by name
   --sort-direction: string@sort-direction-completer # The direction to sort the results
@@ -8379,7 +8658,7 @@ export def "speech-engine engines" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Speech Engine
@@ -8388,7 +8667,7 @@ export def "speech-engine engines" [
 # operationId: create_speech_engine
 # --speech_engine shape: {ws_url: string, request_headers?: record}
 # --asr shape: {quality?: "high", provider?: "elevenlabs"|"scribe_realtime", user_input_audio_format?: "pcm_8000"|"pcm_16000"|"pcm_22050"|"pcm_24000"|"pcm_44100"|"pcm_48000"|"ulaw_8000", keywords?: list}
-# --tts shape: {model_id?: "eleven_turbo_v2"|"eleven_turbo_v2_5"|"eleven_flash_v2"|"eleven_flash_v2_5"|"eleven_multilingual_v2"|"eleven_v3_conversational", voice_id?: string, supported_voices?: list, expressive_mode?: bool, suggested_audio_tags?: list, agent_output_audio_format?: "pcm_8000"|"pcm_16000"|"pcm_22050"|"pcm_24000"|"pcm_44100"|"pcm_48000"|"ulaw_8000", optimize_streaming_latency?: "0"|"1"|"2"|"3"|"4", stability?: float, speed?: float, similarity_boost?: float, text_normalisation_type?: "system_prompt"|"elevenlabs", pronunciation_dictionary_locators?: list}
+# --tts shape: {model_id?: "eleven_turbo_v2"|"eleven_turbo_v2_5"|"eleven_flash_v2"|"eleven_flash_v2_5"|"eleven_multilingual_v2"|"eleven_v3_conversational", voice_id?: string, supported_voices?: list, expressive_mode?: bool, suggested_audio_tags?: list, agent_output_audio_format?: "pcm_8000"|"pcm_16000"|"pcm_22050"|"pcm_24000"|"pcm_44100"|"pcm_48000"|"ulaw_8000", optimize_streaming_latency?: "0"|"1"|"2"|"3"|"4", stability?: float, speed?: float, similarity_boost?: float, text_normalisation_type?: "system_prompt"|"elevenlabs", pronunciation_dictionary_locators?: list, enable_phoneme_tags?: bool}
 # --turn shape: {turn_timeout?: float, initial_wait_time?: any, silence_end_call_timeout?: float, mode?: "silence"|"turn", turn_eagerness?: "patient"|"normal"|"eager", spelling_patience?: "auto"|"off", speculative_turn?: bool, retranscribe_on_turn_timeout?: bool, turn_model?: "turn_v2"|"turn_v3"}
 # --conversation shape: {text_only?: bool, max_duration_seconds?: int, client_events?: list, file_input?: record, monitoring_enabled?: bool, monitoring_events?: list, source_attribution?: bool}
 # --privacy shape: {record_voice?: bool, retention_days?: int, delete_transcript_and_pii?: bool, delete_audio?: bool, apply_to_existing_conversations?: bool, zero_retention_mode?: bool, conversation_history_redaction?: record}
@@ -8402,11 +8681,12 @@ export def "speech-engine engine" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --name: string # Name of the speech engine (default: Speech Engine)
   speech_engine: record # shape: {ws_url: string, request_headers?: record}
   --asr: record # e.g. {keywords: [hello, world], provider: scribe_realtime, quality: high, user_input_audio_format: pcm_16000} — shape: {quality?: "high", provider?: "elevenlabs"|"scribe_realtime", user_input_audio_format?: "pcm_8000"|"pcm_16000"|"pcm_22050"|"pcm_24000"|"pcm_44100"|"pcm_48000"|"ulaw_8000", keywords?: list}
-  --tts: record # e.g. {agent_output_audio_format: pcm_16000, model_id: eleven_turbo_v2, optimize_streaming_latency: 3, pronunciation_dictionary_locators: [], similarity_boost: 0.8, speed: 1.0, stability: 0.5, voice_id: cjVigY5qzO86Huf0OWal} — shape: {model_id?: "eleven_turbo_v2"|"eleven_turbo_v2_5"|"eleven_flash_v2"|"eleven_flash_v2_5"|"eleven_multilingual_v2"|"eleven_v3_conversational", voice_id?: string, supported_voices?: list, expressive_mode?: bool, suggested_audio_tags?: list, agent_output_audio_format?: "pcm_8000"|"pcm_16000"|"pcm_22050"|"pcm_24000"|"pcm_44100"|"pcm_48000"|"ulaw_8000", optimize_streaming_latency?: "0"|"1"|"2"|"3"|"4", stability?: float, speed?: float, similarity_boost?: float, text_normalisation_type?: "system_prompt"|"elevenlabs", pronunciation_dictionary_locators?: list}
+  --tts: record # e.g. {agent_output_audio_format: pcm_16000, model_id: eleven_turbo_v2, optimize_streaming_latency: 3, pronunciation_dictionary_locators: [], similarity_boost: 0.8, speed: 1.0, stability: 0.5, voice_id: cjVigY5qzO86Huf0OWal} — shape: {model_id?: "eleven_turbo_v2"|"eleven_turbo_v2_5"|"eleven_flash_v2"|"eleven_flash_v2_5"|"eleven_multilingual_v2"|"eleven_v3_conversational", voice_id?: string, supported_voices?: list, expressive_mode?: bool, suggested_audio_tags?: list, agent_output_audio_format?: "pcm_8000"|"pcm_16000"|"pcm_22050"|"pcm_24000"|"pcm_44100"|"pcm_48000"|"ulaw_8000", optimize_streaming_latency?: "0"|"1"|"2"|"3"|"4", stability?: float, speed?: float, similarity_boost?: float, text_normalisation_type?: "system_prompt"|"elevenlabs", pronunciation_dictionary_locators?: list, enable_phoneme_tags?: bool}
   --turn: record # e.g. {interruption_ignore_terms: [], mode: turn, retranscribe_on_turn_timeout: false, silence_end_call_timeout: -1.0, speculative_turn: false, spelling_patience: auto, turn_eagerness: normal, turn_timeout: 7.0} — shape: {turn_timeout?: float, initial_wait_time?: any, silence_end_call_timeout?: float, mode?: "silence"|"turn", turn_eagerness?: "patient"|"normal"|"eager", spelling_patience?: "auto"|"off", speculative_turn?: bool, retranscribe_on_turn_timeout?: bool, turn_model?: "turn_v2"|"turn_v3"}
   --conversation: record # e.g. {client_events: [audio, interruption], max_duration_seconds: 600} — shape: {text_only?: bool, max_duration_seconds?: int, client_events?: list, file_input?: record, monitoring_enabled?: bool, monitoring_events?: list, source_attribution?: bool}
   --privacy: record # e.g. {apply_to_existing_conversations: false, delete_audio: false, delete_transcript_and_pii: false, record_voice: true, retention_days: -1, zero_retention_mode: false} — shape: {record_voice?: bool, retention_days?: int, delete_transcript_and_pii?: bool, delete_audio?: bool, apply_to_existing_conversations?: bool, zero_retention_mode?: bool, conversation_history_redaction?: record}
@@ -8414,7 +8694,7 @@ export def "speech-engine engine" [
   --language: string # Language for the speech engine (default: en)
   --tags: list # Tags for categorization
   --overrides: record # shape: {first_message?: bool}
-]: any -> record<speech_engine_id: string, name: string, speech_engine: record<ws_url: string, request_headers: record>, asr: record<quality: string, provider: string, user_input_audio_format: string, keywords: list<string>>, tts: record<model_id: string, voice_id: string, supported_voices: list<record>, expressive_mode: bool, suggested_audio_tags: list<record>, agent_output_audio_format: string, optimize_streaming_latency: int, stability: float, speed: float, similarity_boost: float, text_normalisation_type: string, pronunciation_dictionary_locators: list<record>>, turn: record<turn_timeout: float, initial_wait_time: any, silence_end_call_timeout: float, mode: string, turn_eagerness: string, spelling_patience: string, speculative_turn: bool, retranscribe_on_turn_timeout: bool, turn_model: string>, conversation: record<text_only: bool, max_duration_seconds: int, client_events: list<string>, file_input: record<enabled: bool, max_files_per_conversation: int>, monitoring_enabled: bool, monitoring_events: list<string>, source_attribution: bool>, privacy: record<record_voice: bool, retention_days: int, delete_transcript_and_pii: bool, delete_audio: bool, apply_to_existing_conversations: bool, zero_retention_mode: bool, conversation_history_redaction: record<enabled: bool, entities: list>>, call_limits: record<agent_concurrency_limit: int, daily_limit: int, bursting_enabled: bool>, language: string, tags: list<string>, overrides: record<first_message: bool>, metadata: record<created_at_unix_secs: int, updated_at_unix_secs: int, created_from: string, last_updated_from: string>, access_info: any> {
+]: any -> record<speech_engine_id: string, name: string, speech_engine: record<ws_url: string, request_headers: record>, asr: record<quality: string, provider: string, user_input_audio_format: string, keywords: list<string>>, tts: record<model_id: string, voice_id: string, supported_voices: list<record>, expressive_mode: bool, suggested_audio_tags: list<record>, agent_output_audio_format: string, optimize_streaming_latency: int, stability: float, speed: float, similarity_boost: float, text_normalisation_type: string, pronunciation_dictionary_locators: list<record>, enable_phoneme_tags: bool>, turn: record<turn_timeout: float, initial_wait_time: any, silence_end_call_timeout: float, mode: string, turn_eagerness: string, spelling_patience: string, speculative_turn: bool, retranscribe_on_turn_timeout: bool, turn_model: string>, conversation: record<text_only: bool, max_duration_seconds: int, client_events: list<string>, file_input: record<enabled: bool, max_files_per_conversation: int>, monitoring_enabled: bool, monitoring_events: list<string>, source_attribution: bool>, privacy: record<record_voice: bool, retention_days: int, delete_transcript_and_pii: bool, delete_audio: bool, apply_to_existing_conversations: bool, zero_retention_mode: bool, conversation_history_redaction: record<enabled: bool, entities: list>>, call_limits: record<agent_concurrency_limit: int, daily_limit: int, bursting_enabled: bool>, language: string, tags: list<string>, overrides: record<first_message: bool>, metadata: record<created_at_unix_secs: int, updated_at_unix_secs: int, created_from: string, last_updated_from: string>, access_info: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8425,7 +8705,7 @@ export def "speech-engine engine" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Speech Engine
@@ -8441,8 +8721,9 @@ export def "speech-engine engine-by-speech_engine_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
-]: nothing -> record<speech_engine_id: string, name: string, speech_engine: record<ws_url: string, request_headers: record>, asr: record<quality: string, provider: string, user_input_audio_format: string, keywords: list<string>>, tts: record<model_id: string, voice_id: string, supported_voices: list<record>, expressive_mode: bool, suggested_audio_tags: list<record>, agent_output_audio_format: string, optimize_streaming_latency: int, stability: float, speed: float, similarity_boost: float, text_normalisation_type: string, pronunciation_dictionary_locators: list<record>>, turn: record<turn_timeout: float, initial_wait_time: any, silence_end_call_timeout: float, mode: string, turn_eagerness: string, spelling_patience: string, speculative_turn: bool, retranscribe_on_turn_timeout: bool, turn_model: string>, conversation: record<text_only: bool, max_duration_seconds: int, client_events: list<string>, file_input: record<enabled: bool, max_files_per_conversation: int>, monitoring_enabled: bool, monitoring_events: list<string>, source_attribution: bool>, privacy: record<record_voice: bool, retention_days: int, delete_transcript_and_pii: bool, delete_audio: bool, apply_to_existing_conversations: bool, zero_retention_mode: bool, conversation_history_redaction: record<enabled: bool, entities: list>>, call_limits: record<agent_concurrency_limit: int, daily_limit: int, bursting_enabled: bool>, language: string, tags: list<string>, overrides: record<first_message: bool>, metadata: record<created_at_unix_secs: int, updated_at_unix_secs: int, created_from: string, last_updated_from: string>, access_info: any> {
+]: nothing -> record<speech_engine_id: string, name: string, speech_engine: record<ws_url: string, request_headers: record>, asr: record<quality: string, provider: string, user_input_audio_format: string, keywords: list<string>>, tts: record<model_id: string, voice_id: string, supported_voices: list<record>, expressive_mode: bool, suggested_audio_tags: list<record>, agent_output_audio_format: string, optimize_streaming_latency: int, stability: float, speed: float, similarity_boost: float, text_normalisation_type: string, pronunciation_dictionary_locators: list<record>, enable_phoneme_tags: bool>, turn: record<turn_timeout: float, initial_wait_time: any, silence_end_call_timeout: float, mode: string, turn_eagerness: string, spelling_patience: string, speculative_turn: bool, retranscribe_on_turn_timeout: bool, turn_model: string>, conversation: record<text_only: bool, max_duration_seconds: int, client_events: list<string>, file_input: record<enabled: bool, max_files_per_conversation: int>, monitoring_enabled: bool, monitoring_events: list<string>, source_attribution: bool>, privacy: record<record_voice: bool, retention_days: int, delete_transcript_and_pii: bool, delete_audio: bool, apply_to_existing_conversations: bool, zero_retention_mode: bool, conversation_history_redaction: record<enabled: bool, entities: list>>, call_limits: record<agent_concurrency_limit: int, daily_limit: int, bursting_enabled: bool>, language: string, tags: list<string>, overrides: record<first_message: bool>, metadata: record<created_at_unix_secs: int, updated_at_unix_secs: int, created_from: string, last_updated_from: string>, access_info: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/speech-engine/($speech_engine_id)")
@@ -8450,7 +8731,7 @@ export def "speech-engine engine-by-speech_engine_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Speech Engine
@@ -8466,6 +8747,7 @@ export def "speech-engine engine-by-speech_engine_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --name: any
   --speech-engine: any
@@ -8478,7 +8760,7 @@ export def "speech-engine engine-by-speech_engine_id-1" [
   --language: any
   --tags: any
   --overrides: any
-]: any -> record<speech_engine_id: string, name: string, speech_engine: record<ws_url: string, request_headers: record>, asr: record<quality: string, provider: string, user_input_audio_format: string, keywords: list<string>>, tts: record<model_id: string, voice_id: string, supported_voices: list<record>, expressive_mode: bool, suggested_audio_tags: list<record>, agent_output_audio_format: string, optimize_streaming_latency: int, stability: float, speed: float, similarity_boost: float, text_normalisation_type: string, pronunciation_dictionary_locators: list<record>>, turn: record<turn_timeout: float, initial_wait_time: any, silence_end_call_timeout: float, mode: string, turn_eagerness: string, spelling_patience: string, speculative_turn: bool, retranscribe_on_turn_timeout: bool, turn_model: string>, conversation: record<text_only: bool, max_duration_seconds: int, client_events: list<string>, file_input: record<enabled: bool, max_files_per_conversation: int>, monitoring_enabled: bool, monitoring_events: list<string>, source_attribution: bool>, privacy: record<record_voice: bool, retention_days: int, delete_transcript_and_pii: bool, delete_audio: bool, apply_to_existing_conversations: bool, zero_retention_mode: bool, conversation_history_redaction: record<enabled: bool, entities: list>>, call_limits: record<agent_concurrency_limit: int, daily_limit: int, bursting_enabled: bool>, language: string, tags: list<string>, overrides: record<first_message: bool>, metadata: record<created_at_unix_secs: int, updated_at_unix_secs: int, created_from: string, last_updated_from: string>, access_info: any> {
+]: any -> record<speech_engine_id: string, name: string, speech_engine: record<ws_url: string, request_headers: record>, asr: record<quality: string, provider: string, user_input_audio_format: string, keywords: list<string>>, tts: record<model_id: string, voice_id: string, supported_voices: list<record>, expressive_mode: bool, suggested_audio_tags: list<record>, agent_output_audio_format: string, optimize_streaming_latency: int, stability: float, speed: float, similarity_boost: float, text_normalisation_type: string, pronunciation_dictionary_locators: list<record>, enable_phoneme_tags: bool>, turn: record<turn_timeout: float, initial_wait_time: any, silence_end_call_timeout: float, mode: string, turn_eagerness: string, spelling_patience: string, speculative_turn: bool, retranscribe_on_turn_timeout: bool, turn_model: string>, conversation: record<text_only: bool, max_duration_seconds: int, client_events: list<string>, file_input: record<enabled: bool, max_files_per_conversation: int>, monitoring_enabled: bool, monitoring_events: list<string>, source_attribution: bool>, privacy: record<record_voice: bool, retention_days: int, delete_transcript_and_pii: bool, delete_audio: bool, apply_to_existing_conversations: bool, zero_retention_mode: bool, conversation_history_redaction: record<enabled: bool, entities: list>>, call_limits: record<agent_concurrency_limit: int, daily_limit: int, bursting_enabled: bool>, language: string, tags: list<string>, overrides: record<first_message: bool>, metadata: record<created_at_unix_secs: int, updated_at_unix_secs: int, created_from: string, last_updated_from: string>, access_info: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8489,7 +8771,7 @@ export def "speech-engine engine-by-speech_engine_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Speech Engine
@@ -8505,6 +8787,7 @@ export def "speech-engine engine-by-speech_engine_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8514,7 +8797,7 @@ export def "speech-engine engine-by-speech_engine_id-2" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Run Conversation Analysis
@@ -8530,6 +8813,7 @@ export def "convai-conversations-analysis-run analysis" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<agent_id: string, agent_name: any, conversation_product: string, status: string, user_id: any, branch_id: any, version_id: any, metadata: record<start_time_unix_secs: int, accepted_time_unix_secs: any, call_duration_secs: int, cost: any, deletion_settings: record<deletion_time_unix_secs: any, deleted_logs_at_time_unix_secs: any, deleted_audio_at_time_unix_secs: any, deleted_transcript_at_time_unix_secs: any, delete_transcript_and_pii: bool, delete_audio: bool>, feedback: record<type: any, overall_score: any, likes: int, dislikes: int, rating: any, comment: any>, authorization_method: string, charging: record<dev_discount: bool, is_burst: bool, tier: any, llm_usage: record, llm_price: any, llm_charge: any, call_charge: any, free_minutes_consumed: float, free_llm_dollars_consumed: float, tts_usage: any, asr_usage: any>, phone_call: any, batch_call: any, termination_reason: string, error: any, warnings: list<string>, main_language: any, rag_usage: any, text_only: bool, features_usage: record<language_detection: record, transfer_to_agent: record, transfer_to_number: record, multivoice: record, dtmf_tones: record, external_mcp_servers: record, pii_zrm_workspace: bool, pii_zrm_agent: bool, tool_dynamic_variable_updates: record, is_livekit: bool, voicemail_detection: record, dtmf_input: record, workflow: record, agent_testing: record, versioning: record, file_input: record>, eleven_assistant: record<is_eleven_assistant: bool>, initiator_id: any, conversation_initiation_source: string, conversation_initiation_source_version: any, timezone: any, async_metadata: any, whatsapp: any, sms: any, agent_created_from: string, agent_last_updated_from: string, voice_rewards: list<record>>, analysis: any, visited_agents: table<agent_id: string, branch_id: any>, conversation_initiation_client_data: record<conversation_config_override: record<asr: any, turn: any, tts: any, conversation: any, agent: any>, custom_llm_extra_body: record, user_id: any, source_info: record<source: any, version: any>, branch_id: any, environment: any, starting_workflow_node_id: any, dynamic_variables: record>, environment: string, conversation_id: string, has_audio: bool, has_user_audio: bool, has_response_audio: bool, transcript: table<role: string, agent_metadata: any, message: any, multivoice_message: any, tool_calls: list, tool_results: list, feedback: any, llm_override: any, time_in_call_secs: int, conversation_turn_metrics: any, rag_retrieval_info: any, llm_usage: any, interrupted: bool, original_message: any, source_medium: any, source_event_id: any, used_static_kb_document_ids: list, file_input: any, contextual_update_info: any>, tag_ids: list<string>, otlp_traces: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8539,7 +8823,38 @@ export def "convai-conversations-analysis-run analysis" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Run Conversation Evaluation
+#
+# POST /v1/convai/conversations/{conversation_id}/analysis/evaluations/run
+# operationId: run_conversation_evaluations
+export def "convai-conversations-analysis-evaluations-run evaluations" [
+  conversation_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
+  evaluation_id: string # ID of the single evaluation criterion to rerun.
+  --scope: string@scope-completer # default: conversation
+]: any -> record<agent_id: string, agent_name: any, conversation_product: string, status: string, user_id: any, branch_id: any, version_id: any, metadata: record<start_time_unix_secs: int, accepted_time_unix_secs: any, call_duration_secs: int, cost: any, deletion_settings: record<deletion_time_unix_secs: any, deleted_logs_at_time_unix_secs: any, deleted_audio_at_time_unix_secs: any, deleted_transcript_at_time_unix_secs: any, delete_transcript_and_pii: bool, delete_audio: bool>, feedback: record<type: any, overall_score: any, likes: int, dislikes: int, rating: any, comment: any>, authorization_method: string, charging: record<dev_discount: bool, is_burst: bool, tier: any, llm_usage: record, llm_price: any, llm_charge: any, call_charge: any, free_minutes_consumed: float, free_llm_dollars_consumed: float, tts_usage: any, asr_usage: any>, phone_call: any, batch_call: any, termination_reason: string, error: any, warnings: list<string>, main_language: any, rag_usage: any, text_only: bool, features_usage: record<language_detection: record, transfer_to_agent: record, transfer_to_number: record, multivoice: record, dtmf_tones: record, external_mcp_servers: record, pii_zrm_workspace: bool, pii_zrm_agent: bool, tool_dynamic_variable_updates: record, is_livekit: bool, voicemail_detection: record, dtmf_input: record, workflow: record, agent_testing: record, versioning: record, file_input: record>, eleven_assistant: record<is_eleven_assistant: bool>, initiator_id: any, conversation_initiation_source: string, conversation_initiation_source_version: any, timezone: any, async_metadata: any, whatsapp: any, sms: any, agent_created_from: string, agent_last_updated_from: string, voice_rewards: list<record>>, analysis: any, visited_agents: table<agent_id: string, branch_id: any>, conversation_initiation_client_data: record<conversation_config_override: record<asr: any, turn: any, tts: any, conversation: any, agent: any>, custom_llm_extra_body: record, user_id: any, source_info: record<source: any, version: any>, branch_id: any, environment: any, starting_workflow_node_id: any, dynamic_variables: record>, environment: string, conversation_id: string, has_audio: bool, has_user_audio: bool, has_response_audio: bool, transcript: table<role: string, agent_metadata: any, message: any, multivoice_message: any, tool_calls: list, tool_results: list, feedback: any, llm_override: any, time_in_call_secs: int, conversation_turn_metrics: any, rag_retrieval_info: any, llm_usage: any, interrupted: bool, original_message: any, source_medium: any, source_event_id: any, used_static_kb_document_ids: list, file_input: any, contextual_update_info: any>, tag_ids: list<string>, otlp_traces: any> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v1/convai/conversations/($conversation_id)/analysis/evaluations/run")
+  let body = {evaluation_id: $evaluation_id, scope: $scope} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Environment Variables
@@ -8554,6 +8869,7 @@ export def "convai-environment-variables variables" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # Pagination cursor from previous response
   --page-size: int # Number of items to return (1-100) (default: 100)
   --label: string # Filter by exact label match
@@ -8569,7 +8885,7 @@ export def "convai-environment-variables variables" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Environment Variable
@@ -8585,6 +8901,7 @@ export def "convai-environment-variables variable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   type: string@type-completer
   --label: string # Unique label for the environment variable.
@@ -8600,7 +8917,7 @@ export def "convai-environment-variables variable" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Environment Variable
@@ -8616,6 +8933,7 @@ export def "convai-environment-variables variable-by-env_var_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<label: string, created_at_unix_secs: int, updated_at_unix_secs: int, created_by_user_id: any, type: string, id: string, workspace_id: string, values: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8625,7 +8943,7 @@ export def "convai-environment-variables variable-by-env_var_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Environment Variable
@@ -8641,6 +8959,7 @@ export def "convai-environment-variables variable-by-env_var_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   values: record # Values to replace. Set to null to remove an environment (except 'production').
 ]: any -> record<label: string, created_at_unix_secs: int, updated_at_unix_secs: int, created_by_user_id: any, type: string, id: string, workspace_id: string, values: any> {
@@ -8654,7 +8973,7 @@ export def "convai-environment-variables variable-by-env_var_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Generate Composition Plan
@@ -8669,6 +8988,7 @@ export def "music-plan plan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   prompt: string # A simple text prompt to compose a plan from.
   --music-length-ms: any # The length of the composition plan to generate in milliseconds. Must be between 3000ms and 600000ms. Optional - if not provided, the model will choose a length based on the prompt.
@@ -8685,7 +9005,7 @@ export def "music-plan plan" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Compose Music
@@ -8701,6 +9021,7 @@ export def "music generate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --prompt: any # A simple text prompt to generate a song from. Cannot be used in conjunction with `composition_plan`.
@@ -8730,7 +9051,7 @@ export def "music generate" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Compose Music With A Detailed Response
@@ -8746,6 +9067,7 @@ export def "music-detailed detailed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --prompt: any # A simple text prompt to generate a song from. Cannot be used in conjunction with `composition_plan`.
@@ -8777,7 +9099,7 @@ export def "music-detailed detailed" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "multipart/mixed"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Stream Composed Music
@@ -8793,6 +9115,7 @@ export def "music-stream compose" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --prompt: any # A simple text prompt to generate a song from. Cannot be used in conjunction with `composition_plan`.
@@ -8820,7 +9143,7 @@ export def "music-stream compose" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Upload Music
@@ -8835,9 +9158,10 @@ export def "music-upload song" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   file: string # The audio file to upload. (format: binary)
-  --extract-composition-plan: oneof<nothing, bool> # Whether to generate and return the composition plan for the uploaded song. If True, the response will include the composition_plan but will increase the latency. (default: false)
+  --extract-composition-plan: any@extract-composition-plan-completer # Whether to generate and return the composition plan for the uploaded song. Pass a model id (`music_v1` or `music_v2`) to control which composition plan format is returned. Passing `true`/`false` is deprecated; `true` defaults to the `music_v1` plan format. Enabling this will increase the latency. (default: false)
   --with-timestamps: oneof<nothing, bool> # Whether to transcribe the uploaded song and return word-level timestamps. If True, the response will include words_timestamps but will increase the latency. (default: false)
 ]: any -> record<song_id: string, composition_plan: any, words_timestamps: any> {
   let input = $in
@@ -8850,7 +9174,7 @@ export def "music-upload song" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Stem Separation
@@ -8865,6 +9189,7 @@ export def "music-stem-separation stems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   file: string # The audio file to separate into stems. (format: binary)
@@ -8882,7 +9207,7 @@ export def "music-stem-separation stems" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Create Order
@@ -8897,6 +9222,7 @@ export def "productions-orders order" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --sandbox: oneof<nothing, bool> # When true, creates a sandbox order that auto-progresses without producer intervention. (default: false)
 ]: any -> record<order_id: string, sandbox: bool> {
@@ -8910,7 +9236,7 @@ export def "productions-orders order" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Orders
@@ -8925,6 +9251,7 @@ export def "productions-orders orders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # Maximum number of orders to return per page. (default: 20)
   --offset: int # Number of orders to skip for pagination. (default: 0)
   --status: string # Filter orders by one or more statuses.
@@ -8940,7 +9267,7 @@ export def "productions-orders orders" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Order
@@ -8956,6 +9283,7 @@ export def "productions-orders order-by-order_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<order_id: string, name: string, state: string, items: table<item_id: string, item: any, quote: any>, total_amount_usd: any, sandbox: bool, created_at: string, submitted_at: any, paid_at: any, accepted_at: any, completed_at: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8965,7 +9293,7 @@ export def "productions-orders order-by-order_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Order
@@ -8982,6 +9310,7 @@ export def "productions-orders order-by-order_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   request: record # e.g. {name: Spanish Dubs} — shape: {name: string}
 ]: any -> record<name: string> {
@@ -8995,7 +9324,7 @@ export def "productions-orders order-by-order_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Register Media
@@ -9011,6 +9340,7 @@ export def "productions-orders-media media" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   declared_language: string # The language code of the media content (e.g. 'en', 'es-ES'). Must be a supported source language for some order item kind.
   --media: any # The media file to upload. Mutually exclusive with media_url.
@@ -9028,7 +9358,7 @@ export def "productions-orders-media media" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get Media Info
@@ -9045,6 +9375,7 @@ export def "productions-orders-media info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<media_id: string, name: string, content_type: string, language: any, signed_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9054,7 +9385,7 @@ export def "productions-orders-media info" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upsert Order Item
@@ -9071,6 +9402,7 @@ export def "productions-orders-items item-by-order_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   request: record # shape: {item: any, item_id?: any}
 ]: any -> record<item_id: string, quote: any> {
@@ -9084,7 +9416,7 @@ export def "productions-orders-items item-by-order_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove Order Item
@@ -9101,6 +9433,7 @@ export def "productions-orders-items item-by-order_id-item_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9110,7 +9443,7 @@ export def "productions-orders-items item-by-order_id-item_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Submit Order
@@ -9126,6 +9459,7 @@ export def "productions-orders-submit order" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<order_id: string, state: string, submitted_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9135,7 +9469,7 @@ export def "productions-orders-submit order" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Order Deliverables
@@ -9151,6 +9485,7 @@ export def "productions-orders-deliverables deliverables" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<deliverables: table<signed_url: string, content_type: string, name: string, version: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9160,7 +9495,7 @@ export def "productions-orders-deliverables deliverables" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Available Languages
@@ -9177,6 +9512,7 @@ export def "productions-orders-languages languages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9186,7 +9522,7 @@ export def "productions-orders-languages languages" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Pvc Voice
@@ -9201,6 +9537,7 @@ export def "voices-pvc voice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   name: string # The name that identifies this voice. This will be displayed in the dropdown of the website.
   language: string # Language used in the samples.
@@ -9217,7 +9554,7 @@ export def "voices-pvc voice" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Edit Pvc Voice
@@ -9233,6 +9570,7 @@ export def "voices-pvc voice-by-voice_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --name: string # The name that identifies this voice. This will be displayed in the dropdown of the website.
   --language: string # Language used in the samples.
@@ -9249,7 +9587,7 @@ export def "voices-pvc voice-by-voice_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add Samples To Pvc Voice
@@ -9265,6 +9603,7 @@ export def "voices-pvc-samples samples" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   files: list # Audio files used to create the voice.
   --remove-background-noise: oneof<nothing, bool> # If set will remove background noise for voice samples using our audio isolation model. If the samples do not include background noise, it can make the quality worse. (default: false)
@@ -9279,7 +9618,7 @@ export def "voices-pvc-samples samples" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Update Pvc Voice Sample
@@ -9296,6 +9635,7 @@ export def "voices-pvc-samples sample-by-voice_id-sample_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --remove-background-noise: oneof<nothing, bool> # If set will remove background noise for voice samples using our audio isolation model. If the samples do not include background noise, it can make the quality worse. (default: false)
   --selected-speaker-ids: any # Speaker IDs to be used for PVC training. Make sure you send all the speaker IDs you want to use for PVC training in one request because the last request will override the previous ones.
@@ -9313,7 +9653,7 @@ export def "voices-pvc-samples sample-by-voice_id-sample_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Pvc Voice Sample
@@ -9330,6 +9670,7 @@ export def "voices-pvc-samples sample-by-voice_id-sample_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9339,7 +9680,7 @@ export def "voices-pvc-samples sample-by-voice_id-sample_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve Voice Sample Audio
@@ -9356,6 +9697,7 @@ export def "voices-pvc-samples-audio audio" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --remove-background-noise: oneof<nothing, bool> # If set will remove background noise for voice samples using our audio isolation model. If the samples do not include background noise, it can make the quality worse. (default: false)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<audio_base_64: string, voice_id: string, sample_id: string, media_type: string, duration_secs: any> {
@@ -9367,7 +9709,7 @@ export def "voices-pvc-samples-audio audio" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve Voice Sample Visual Waveform
@@ -9384,6 +9726,7 @@ export def "voices-pvc-samples-waveform waveform" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<sample_id: string, visual_waveform: list<float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9393,7 +9736,7 @@ export def "voices-pvc-samples-waveform waveform" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve Speaker Separation Status
@@ -9410,6 +9753,7 @@ export def "voices-pvc-samples-speakers speakers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<voice_id: string, sample_id: string, status: string, speakers: any, selected_speaker_ids: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9419,7 +9763,7 @@ export def "voices-pvc-samples-speakers speakers" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start Speaker Separation
@@ -9436,6 +9780,7 @@ export def "voices-pvc-samples-separate-speakers separation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9445,7 +9790,7 @@ export def "voices-pvc-samples-separate-speakers separation" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve Separated Speaker Audio
@@ -9463,6 +9808,7 @@ export def "voices-pvc-samples-speakers-audio audio" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<audio_base_64: string, media_type: string, duration_secs: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9472,7 +9818,7 @@ export def "voices-pvc-samples-speakers-audio audio" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Pvc Voice Captcha
@@ -9488,6 +9834,7 @@ export def "voices-pvc-captcha captcha-by-voice_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9497,7 +9844,7 @@ export def "voices-pvc-captcha captcha-by-voice_id" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Verify Pvc Voice Captcha
@@ -9513,6 +9860,7 @@ export def "voices-pvc-captcha captcha-by-voice_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   recording: string # Audio recording of the user (format: binary)
 ]: any -> record<status: string> {
@@ -9526,7 +9874,7 @@ export def "voices-pvc-captcha captcha-by-voice_id-1" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Run Pvc Training
@@ -9542,6 +9890,7 @@ export def "voices-pvc-train training" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --model-id: any # The model ID to use for the conversion.
 ]: any -> record<status: string> {
@@ -9555,7 +9904,7 @@ export def "voices-pvc-train training" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Request Manual Verification
@@ -9571,6 +9920,7 @@ export def "voices-pvc-verification verification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   files: list # Verification documents
   --extra-text: any # Extra text to be used in the manual verification process.
@@ -9585,7 +9935,7 @@ export def "voices-pvc-verification verification" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get Workspace Usage
@@ -9600,6 +9950,7 @@ export def "workspace-analytics-query-usage-by-product-over-time time" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   start_time: int # Start of the time range as a Unix timestamp in milliseconds. Must be at least 2020-01-01.
   end_time: int # End of the time range as a Unix timestamp in milliseconds. Must be at least 2020-01-01.
@@ -9618,7 +9969,7 @@ export def "workspace-analytics-query-usage-by-product-over-time time" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Api Requests
@@ -9633,6 +9984,7 @@ export def "workspace-analytics-requests list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --start-time: any # Start of the time range as a Unix timestamp in milliseconds.
   --end-time: any # End of the time range as a Unix timestamp in milliseconds.
@@ -9651,7 +10003,7 @@ export def "workspace-analytics-requests list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Redirect To Mintlify
@@ -9666,11 +10018,12 @@ export def "docs mintlify" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/docs")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

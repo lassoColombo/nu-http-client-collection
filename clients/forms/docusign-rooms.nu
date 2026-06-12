@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -71,7 +72,7 @@ def accessLevel-completer [] { ["Admin" "Company" "Contributor" "Office" "Region
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts GetAccountInformation" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -105,6 +106,7 @@ export def "accounts GetAccountInformation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<companyId: int, name: string, companyVersion: string, docuSignAccountGuid: string, defaultFieldSetId: string, requireOfficeLibraryAssignments: bool> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -112,7 +114,7 @@ export def "accounts GetAccountInformation" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets information about or the contents of a document.
@@ -129,6 +131,7 @@ export def "accounts-documents GetDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --includeContents: oneof<nothing, bool> # When **true,** includes the contents of the document in the `base64Contents` property of the response. The default value is **false.** (default: false)
 ]: nothing -> record<documentId: int, name: string, roomId: int, ownerId: int, size: int, folderId: int, createdDate: string, isSigned: bool, contentType: string, base64Contents: string, isDynamic: bool> {
@@ -138,7 +141,7 @@ export def "accounts-documents GetDocument" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/documents/($documentId)" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a specified document.
@@ -155,6 +158,7 @@ export def "accounts-documents DeleteDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -162,7 +166,7 @@ export def "accounts-documents DeleteDocument" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/documents/($documentId)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Grants a user access to a document.
@@ -179,6 +183,7 @@ export def "accounts-documents-users CreateDocumentUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   userId: int # The ID of the user. (format: int32)
 ]: any -> record<userId: int, documentId: int, name: string, hasAccess: bool, canApproveTask: bool, canAssignToTaskList: bool, canCopy: bool, canDelete: bool, canRemoveFromTaskList: bool, canRemoveApproval: bool, canRename: bool, canShare: bool, canViewActivity: bool> {
@@ -190,7 +195,7 @@ export def "accounts-documents-users CreateDocumentUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets eSignature Permission Profiles.
@@ -206,6 +211,7 @@ export def "accounts-esign-permission-profiles GetESignPermissionProfiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<permissionProfiles: table<eSignPermissionProfileId: string, name: string, settings: record>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -213,7 +219,7 @@ export def "accounts-esign-permission-profiles GetESignPermissionProfiles" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/esign_permission_profiles")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates an external form fill session.
@@ -229,6 +235,7 @@ export def "accounts-external-form-fill-sessions CreateExternalFormFillSession" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --formId: string # (Required) The ID of the form.  Example: `5be324eb-xxxx-xxxx-xxxx-208065181be9`
   roomId: int # (Required) The ID of the room. (format: int32)
@@ -243,7 +250,7 @@ export def "accounts-external-form-fill-sessions CreateExternalFormFillSession" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets a field set.
@@ -260,6 +267,7 @@ export def "accounts-field-sets GetFieldSet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --fieldsCustomDataFilters: list # An comma-separated list that limits the fields to return:  - `IsRequiredOnCreate`: include fields that are required in room creation. - `IsRequiredOnSubmit`: include fields that are required when submitting a room for review.
 ]: nothing -> record<fieldSetId: string, title: string, fields: table<fieldId: string, fieldDefinitionId: string, title: string, apiName: string, type: string, fields: list, configuration: record, customData: record>> {
@@ -269,7 +277,7 @@ export def "accounts-field-sets GetFieldSet" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/field_sets/($fieldSetId)" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets form groups.
@@ -285,6 +293,7 @@ export def "accounts-form-groups GetFormGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --count: int # The number of results to return. This value must be a number between `1` and `100` (default). (format: int32, default: 100)
   --startPosition: int # The starting zero-based index position of the results set. The default value is `0`. (format: int32, default: 0)
@@ -295,7 +304,7 @@ export def "accounts-form-groups GetFormGroups" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/form_groups" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a form group.
@@ -311,6 +320,7 @@ export def "accounts-form-groups CreateFormGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # The name of the group.
 ]: any -> record<formGroupId: string, name: string, officeIds: list<int>, forms: table<formId: string, name: string, isRequired: bool, lastUpdatedDate: string, viewingUserHasAccess: bool>> {
@@ -322,7 +332,7 @@ export def "accounts-form-groups CreateFormGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets a form group.
@@ -339,6 +349,7 @@ export def "accounts-form-groups GetFormGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<formGroupId: string, name: string, officeIds: list<int>, forms: table<formId: string, name: string, isRequired: bool, lastUpdatedDate: string, viewingUserHasAccess: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -346,7 +357,7 @@ export def "accounts-form-groups GetFormGroup" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/form_groups/($formGroupId)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Renames a form group.
@@ -363,6 +374,7 @@ export def "accounts-form-groups RenameFormGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # The name of the office.
 ]: any -> record<formGroupId: string, name: string, officeIds: list<int>, forms: table<formId: string, name: string, isRequired: bool, lastUpdatedDate: string, viewingUserHasAccess: bool>> {
@@ -374,7 +386,7 @@ export def "accounts-form-groups RenameFormGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a form group.
@@ -391,6 +403,7 @@ export def "accounts-form-groups DeleteFormGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -398,7 +411,7 @@ export def "accounts-form-groups DeleteFormGroup" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/form_groups/($formGroupId)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the user's form group forms.
@@ -415,6 +428,7 @@ export def "accounts-form-groups-forms GetFormGroupForms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --count: int # The number of results to return.  Default value is 100 and max value is 100  (format: int32, default: 100)
   --startPosition: int # The starting point of the list. The default is 0.  (format: int32, default: 0)
@@ -425,7 +439,7 @@ export def "accounts-form-groups-forms GetFormGroupForms" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/form_groups/($formGroupId)/forms" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Removes a form from a form group.
@@ -443,6 +457,7 @@ export def "accounts-form-groups-unassign-form RemoveFormGroupForm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -450,7 +465,7 @@ export def "accounts-form-groups-unassign-form RemoveFormGroupForm" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/form_groups/($formGroupId)/unassign_form/($formId)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assigns a form to a form group.
@@ -467,6 +482,7 @@ export def "accounts-form-groups-assign-form AssignFormGroupForm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   formId: string # The ID of the form.  Example: `5be324eb-xxxx-xxxx-xxxx-208065181be9`  (format: uuid)
   --isRequired: oneof<nothing, bool> # **True** if the form is required.
@@ -479,7 +495,7 @@ export def "accounts-form-groups-assign-form AssignFormGroupForm" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Grants an office access to a form group.
@@ -497,6 +513,7 @@ export def "accounts-form-groups-grant-office-access GrantOfficeAccessToFormGrou
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -504,7 +521,7 @@ export def "accounts-form-groups-grant-office-access GrantOfficeAccessToFormGrou
   let full_url = (build-url $base $"/v2/accounts/($accountId)/form_groups/($formGroupId)/grant_office_access/($officeId)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke an office's access to a form group.
@@ -522,6 +539,7 @@ export def "accounts-form-groups-revoke-office-access RevokeOfficeAccessFromForm
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -529,7 +547,7 @@ export def "accounts-form-groups-revoke-office-access RevokeOfficeAccessFromForm
   let full_url = (build-url $base $"/v2/accounts/($accountId)/form_groups/($formGroupId)/revoke_office_access/($officeId)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets form libraries.
@@ -545,6 +563,7 @@ export def "accounts-form-libraries GetFormLibraries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --count: int # The number of results to return. This value must be a number between `1` and `100` (default). (format: int32, default: 100)
   --startPosition: int # The starting zero-based index position of the results set. The default value is `0`. (format: int32, default: 0)
@@ -555,7 +574,7 @@ export def "accounts-form-libraries GetFormLibraries" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/form_libraries" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the forms in a form library.
@@ -572,6 +591,7 @@ export def "accounts-form-libraries-forms GetFormLibraryForms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --count: int # The number of results to return. This value must be a number between `1` and `100` (default). (format: int32, default: 100)
   --startPosition: int # (Optional) The starting zero-based index position of the results set. The default value is `0`. (format: int32, default: 0)
@@ -582,7 +602,7 @@ export def "accounts-form-libraries-forms GetFormLibraryForms" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/form_libraries/($formLibraryId)/forms" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets all associations by provider.
@@ -599,6 +619,7 @@ export def "accounts-form-providers-associations GetFormProviderAssociations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --count: int # The total number of associations to be returned.  (format: int32, default: 100)
   --startPosition: int # The starting position on the list.  (format: int32, default: 0)
@@ -609,7 +630,7 @@ export def "accounts-form-providers-associations GetFormProviderAssociations" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/form_providers/($providerId)/associations" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets form details.
@@ -626,6 +647,7 @@ export def "accounts-forms-details GetFormDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<formId: string, name: string, createdDate: string, lastUpdatedDate: string, availableOnDate: string, ownerName: string, version: string, numberOfPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -633,7 +655,7 @@ export def "accounts-forms-details GetFormDetails" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/forms/($formId)/details")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets countries.
@@ -648,6 +670,7 @@ export def "countries GetCountries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<countries: table<countryId: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -655,7 +678,7 @@ export def "countries GetCountries" [
   let full_url = (build-url $base "/v2/countries")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets closing statuses.
@@ -670,6 +693,7 @@ export def "closing-statuses GetClosingStatuses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<closingStatuses: table<closingStatusId: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -677,7 +701,7 @@ export def "closing-statuses GetClosingStatuses" [
   let full_url = (build-url $base "/v2/closing_statuses")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets contact sides.
@@ -692,6 +716,7 @@ export def "contact-sides GetContactSides" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<contactSides: table<contactSideId: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -699,7 +724,7 @@ export def "contact-sides GetContactSides" [
   let full_url = (build-url $base "/v2/contact_sides")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets financing types.
@@ -714,6 +739,7 @@ export def "financing-types GetFinancingTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<financingTypes: table<financingTypeId: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -721,7 +747,7 @@ export def "financing-types GetFinancingTypes" [
   let full_url = (build-url $base "/v2/financing_types")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets origins of leads.
@@ -736,6 +762,7 @@ export def "origins-of-leads GetOriginsOfLeads" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<originsOfLeads: table<originOfLeadId: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -743,7 +770,7 @@ export def "origins-of-leads GetOriginsOfLeads" [
   let full_url = (build-url $base "/v2/origins_of_leads")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets property types.
@@ -758,6 +785,7 @@ export def "property-types GetPropertyTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<propertyTypes: table<propertyTypeId: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -765,7 +793,7 @@ export def "property-types GetPropertyTypes" [
   let full_url = (build-url $base "/v2/property_types")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets room contact types.
@@ -780,6 +808,7 @@ export def "room-contact-types GetRoomContactTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<roomContactTypes: table<id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -787,7 +816,7 @@ export def "room-contact-types GetRoomContactTypes" [
   let full_url = (build-url $base "/v2/room_contact_types")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets seller decision types.
@@ -802,6 +831,7 @@ export def "seller-decision-types GetSellerDecisionTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<sellerDecisionTypes: table<sellerDecisionTypeId: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -809,7 +839,7 @@ export def "seller-decision-types GetSellerDecisionTypes" [
   let full_url = (build-url $base "/v2/seller_decision_types")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets special circumstance types.
@@ -824,6 +854,7 @@ export def "special-circumstance-types GetSpecialCircumstanceTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<specialCircumstanceTypes: table<specialCircumstanceTypeId: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -831,7 +862,7 @@ export def "special-circumstance-types GetSpecialCircumstanceTypes" [
   let full_url = (build-url $base "/v2/special_circumstance_types")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets task date types.
@@ -846,6 +877,7 @@ export def "task-date-types GetTaskDateTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<taskDateTypes: table<taskDateTypeId: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -853,7 +885,7 @@ export def "task-date-types GetTaskDateTypes" [
   let full_url = (build-url $base "/v2/task_date_types")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets task responsibility types.
@@ -868,6 +900,7 @@ export def "task-responsibility-types GetTaskResponsibilityTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<taskResponsibilityTypes: table<taskResponsibilityTypeId: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -875,7 +908,7 @@ export def "task-responsibility-types GetTaskResponsibilityTypes" [
   let full_url = (build-url $base "/v2/task_responsibility_types")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the list of valid task statuses.
@@ -890,6 +923,7 @@ export def "task-statuses GetTaskStatuses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<taskStatuses: table<taskStatusId: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -897,7 +931,7 @@ export def "task-statuses GetTaskStatuses" [
   let full_url = (build-url $base "/v2/task_statuses")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets transaction sides.
@@ -912,6 +946,7 @@ export def "transaction-sides GetTransactionSides" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<transactionSides: table<transactionSideId: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -919,7 +954,7 @@ export def "transaction-sides GetTransactionSides" [
   let full_url = (build-url $base "/v2/transaction_sides")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets states.
@@ -934,6 +969,7 @@ export def "states GetStates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<states: table<stateId: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -941,7 +977,7 @@ export def "states GetStates" [
   let full_url = (build-url $base "/v2/states")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets valid currencies.
@@ -956,6 +992,7 @@ export def "currencies GetCurrencies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<currencies: table<currencyId: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -963,7 +1000,7 @@ export def "currencies GetCurrencies" [
   let full_url = (build-url $base "/v2/currencies")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets time zones.
@@ -978,6 +1015,7 @@ export def "time-zones GetTimeZones" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<timeZones: table<timeZoneId: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -985,7 +1023,7 @@ export def "time-zones GetTimeZones" [
   let full_url = (build-url $base "/v2/time_zones")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets offices.
@@ -1001,6 +1039,7 @@ export def "accounts-offices GetOffices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --count: int # The number of results to return. This value must be a number between `1` and `100` (default). (format: int32, default: 100)
   --startPosition: int # The starting zero-based index position of the results set from which to begin returning values. The default value is `0`. (format: int32, default: 0)
@@ -1013,7 +1052,7 @@ export def "accounts-offices GetOffices" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/offices" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates an office.
@@ -1029,6 +1068,7 @@ export def "accounts-offices CreateOffice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # The name of the office.
   --regionId: int # The ID of the region. This is the ID that the system generated when you created the region. (format: int32)
@@ -1049,7 +1089,7 @@ export def "accounts-offices CreateOffice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets information about an office.
@@ -1066,6 +1106,7 @@ export def "accounts-offices GetOffice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<officeId: int, name: string, regionId: int, address1: string, address2: string, city: string, stateId: string, postalCode: string, countryId: string, timeZoneId: string, phone: string, createdDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -1073,7 +1114,7 @@ export def "accounts-offices GetOffice" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/offices/($officeId)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes an office.
@@ -1090,6 +1131,7 @@ export def "accounts-offices DeleteOffice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -1097,7 +1139,7 @@ export def "accounts-offices DeleteOffice" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/offices/($officeId)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the number and type of objects that reference an office.
@@ -1114,6 +1156,7 @@ export def "accounts-offices-reference-counts GetReferenceCounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<referencesCounts: table<referenceType: string, referencedCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -1121,7 +1164,7 @@ export def "accounts-offices-reference-counts GetReferenceCounts" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/offices/($officeId)/reference_counts")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a region.
@@ -1137,6 +1180,7 @@ export def "accounts-regions CreateRegion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --regionId: int # The ID of the region. This is the ID that the system generated when you created the region. (format: int32)
   name: string # The name of the office.
@@ -1150,7 +1194,7 @@ export def "accounts-regions CreateRegion" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets regions.
@@ -1166,6 +1210,7 @@ export def "accounts-regions GetRegions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --count: int # The number of results to return. This value must be a number between `1` and `100` (default). (format: int32, default: 100)
   --startPosition: int # The starting zero-based index position of the results set from which to begin returning values. The default value is `0`. (format: int32, default: 0)
@@ -1177,7 +1222,7 @@ export def "accounts-regions GetRegions" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/regions" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets information about a region.
@@ -1194,6 +1239,7 @@ export def "accounts-regions GetRegion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<regionId: int, name: string, createdDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -1201,7 +1247,7 @@ export def "accounts-regions GetRegion" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/regions/($regionId)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a region.
@@ -1218,6 +1264,7 @@ export def "accounts-regions DeleteRegion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -1225,7 +1272,7 @@ export def "accounts-regions DeleteRegion" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/regions/($regionId)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the number and type of objects that reference a region.
@@ -1242,6 +1289,7 @@ export def "accounts-regions-reference-counts GetRegionReferenceCounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<referenceCounts: table<referenceType: string, referenceCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -1249,7 +1297,7 @@ export def "accounts-regions-reference-counts GetRegionReferenceCounts" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/regions/($regionId)/reference_counts")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a role.
@@ -1266,6 +1314,7 @@ export def "accounts-roles CreateRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --name: string # The name of the role.
   --isExternal: oneof<nothing, bool> # When **true,** the role is an external role. You assign external roles to people from outside your company when you invite them into a room.
@@ -1279,7 +1328,7 @@ export def "accounts-roles CreateRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets roles.
@@ -1295,6 +1344,7 @@ export def "accounts-roles GetRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --onlyAssignable: oneof<nothing, bool> # This parameter is deprecated. Use `filterContext` instead. Note that `filterContext=AssignableRolesBasedOnCompanyPermissions` is equivalent to `onlyAssignable=true`. (default: false)
   --filterContext: string # Filters the roles by the calling user's permissions. Valid values are:  - `AllRoles` (default): All roles are returned. - `AssignableRolesBasedOnAllPermissions`: Only roles that the current user can assign to someone else are returned. In other words, given the permission set of the current user, only roles with a subset of those permissions (including the same exact permissions) will be returned. - `AssignableRolesBasedOnCompanyPermissions`: Only roles that the current user can assign to someone else based on company permissions are returned. Other permissions are not taken into account. In other words, given the company permissions of the current user, only roles with a subset of those company permissions (including the same exact company permissions) will be returned.
@@ -1308,7 +1358,7 @@ export def "accounts-roles GetRoles" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/roles" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a role.
@@ -1325,6 +1375,7 @@ export def "accounts-roles GetRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --includeIsAssigned: oneof<nothing, bool> # When **true,** the response includes the `isAssigned` property, which specifies whether the role is currently assigned to any users. The default is **false.** (default: false)
 ]: nothing -> record<roleId: int, legacyRoleId: string, name: string, isDefaultForAdmin: bool, isExternal: bool, createdDate: string, isAssigned: bool, permissions: record<canAddUsersToRooms: bool, canCreateRooms: bool, canSubmitRoomsForReview: bool, canCloseRooms: bool, canReopenRooms: bool, canDeleteOwnedRooms: bool, autoAccessToRooms: bool, canExportRoomActivityDetailsPeople: bool, canCopyRoomDetails: bool, canEditAnyRoomRole: bool, canEditInvitedRoomRole: bool, canEditRoomSide: bool, canManageAnyUserRoomAccess: bool, canManageInvitedUserRoomAccess: bool, isHiddenInRoom: bool, canManageRoomOwners: bool, canDeleteRooms: bool, canConnectToMortgageCadence: bool, autoAccessToRoomsInOfficeOnly: bool, canViewRoomDetails: bool, canViewAndEditRoomDetails: bool, canSendRoomDetailsToLoneWolf: bool, canAddDocuments: bool, canAddDocumentsFromFormGroups: bool, canAddDocumentsFromFormLibraries: bool, documentsViewableByOthersInRoomFromOffice: bool, documentsAutoOwnedByPeers: bool, canDeleteOwnedDocuments: bool, canDeleteSignedDocuments: bool, canDeleteUnsignedDocuments: bool, canManageSharedDocs: bool, canManageFormGroups: bool, canShareDocsNotOwned: bool, canCreateFormTemplates: bool, canManageFormPackets: bool, canAddTasksToAnyTaskLists: bool, canEditEditableTasks: bool, canEditAnyTasks: bool, canDeleteDeletableTasks: bool, canDeleteAnyTasks: bool, canApplyTaskList: bool, canRemoveAnyTaskList: bool, canSubmitTaskList: bool, canAutoSubmitTaskList: bool, canReviewTaskList: bool, canAutoApproveTaskList: bool, canManageTaskTemplatesForAllRegionsAllOffices: bool, canApplyRoomTemplates: bool, canAddTasksToRooms: bool, canReviewAnyTask: bool, canManageDocsOnAnyTask: bool, canAddMemberAndSetRoleLowerAccessLevel: bool, canAddMemberAndSetRoleSameAccessLevel: bool, canChangeMemberRoleLowerAccessLevel: bool, canChangeMemberRoleSameAccessLevel: bool, canManageMemberLowerAccessLevel: bool, canManageMemberSameAccessLevel: bool, canRemoveCompanyMemberLowerAccessLevel: bool, canRemoveCompanyMemberSameAccessLevel: bool, canManageAccount: bool, canManageLogo: bool, canManageRolesAndPermissions: bool, canManageRoomDetails: bool, canManageRoomTemplates: bool, canManageIntegrationSettings: bool, canExportCompanyUsageReport: bool>> {
@@ -1334,7 +1385,7 @@ export def "accounts-roles GetRole" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/roles/($roleId)" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a role.
@@ -1352,6 +1403,7 @@ export def "accounts-roles UpdateRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --name: string # The name of the role.
   --isExternal: oneof<nothing, bool> # When **true,** the role is an external role. You assign external roles to people from outside your company when you invite them into a room.
@@ -1365,7 +1417,7 @@ export def "accounts-roles UpdateRole" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a role.
@@ -1382,6 +1434,7 @@ export def "accounts-roles DeleteRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -1389,7 +1442,7 @@ export def "accounts-roles DeleteRole" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/roles/($roleId)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates an envelope with the given documents. Returns the eSignature envelope ID of the envelope that was created.
@@ -1406,6 +1459,7 @@ export def "accounts-rooms-envelopes CreateRoomEnvelope" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --envelopeName: string
   --documentIds: list
@@ -1418,7 +1472,7 @@ export def "accounts-rooms-envelopes CreateRoomEnvelope" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets a room's field data.
@@ -1435,6 +1489,7 @@ export def "accounts-rooms-field-data GetRoomFieldData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -1442,7 +1497,7 @@ export def "accounts-rooms-field-data GetRoomFieldData" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/rooms/($roomId)/field_data")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a room's field data.
@@ -1459,6 +1514,7 @@ export def "accounts-rooms-field-data UpdateRoomFieldData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --data: record # Field data is a collection of name/value pairs where the names correspond to the fields in the room's **Details** tab. The value of a name/value pair can be a field data collection itself. These collections are implemented as JSON objects.  The fields `address1`, `state`, `postalCode`, and `city` are required. The `state` value must be a `stateId` value returned by the [getStates](/docs/rooms-api/reference/globalresources/states/getstates/) endpoint. For example, use "US-WA" instead of "Washington".  For example, the data for fields named "Tax annual amount" and "buyer1" (along with the required fields) might look like this:   ``` {   "data": {     "taxAnnualAmount": 3389.12,     "buyer1": {       "name": "Elle Woods",       "homePhone": "123-456-7890",       "state": "US-CA",       "email": "elle.woods@harvard.edu"     },     "address1": "123 Harvard Street",     "state": "US-MA",     "postalCode": "02138",     "city": "Cambridge"   } } ```
 ]: any -> record<data: record> {
@@ -1470,7 +1526,7 @@ export def "accounts-rooms-field-data UpdateRoomFieldData" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets a list of room folders accessible to the current user.
@@ -1487,6 +1543,7 @@ export def "accounts-rooms-room-folders GetRoomFolders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --startPosition: int # The starting zero-based index position of the results set. When this property is used as a query parameter, the default value is `0`. (format: int32, default: 0)
   --count: int # The number of results. When this property is used as a request parameter specifying the number of results to return, the value must be a number between `1` and `100` (default). (format: int32, default: 100)
@@ -1497,7 +1554,7 @@ export def "accounts-rooms-room-folders GetRoomFolders" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/rooms/($roomId)/room_folders" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a form to a room.
@@ -1514,6 +1571,7 @@ export def "accounts-rooms-forms AddFormToRoom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   formId: string # (Required) The ID of the form. (format: uuid)
 ]: any -> record<documentId: int, name: string, ownerId: int, size: int, folderId: int, createdDate: string, isSigned: bool, docuSignFormId: string, isArchived: bool, isVirtual: bool, isDynamic: bool, owner: record<userId: int, firstName: string, lastName: string, companyName: string, imageSrc: string>> {
@@ -1525,7 +1583,7 @@ export def "accounts-rooms-forms AddFormToRoom" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Invites a user to a room.
@@ -1542,6 +1600,7 @@ export def "accounts-rooms-users InviteUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   email: string # The user's email address.
   firstName: string # The user's first name.
@@ -1557,7 +1616,7 @@ export def "accounts-rooms-users InviteUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets a room's users.
@@ -1574,6 +1633,7 @@ export def "accounts-rooms-users GetRoomUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --count: int # The number of results to return. This value must be a number between `1` and `100` (default). (format: int32, default: 100)
   --startPosition: int # The index position within the total result set from which to start returning values. The default value is `0`. (format: int32, default: 0)
@@ -1586,7 +1646,7 @@ export def "accounts-rooms-users GetRoomUsers" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/rooms/($roomId)/users" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a room user.
@@ -1604,6 +1664,7 @@ export def "accounts-rooms-users PutRoomUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --roleId: int # The ID of the company role assigned to the user.  You can assign external roles to users who aren't a part of your organization. (format: int32)
   --transactionSideId: string # The ID of the transaction side. Valid values are:  - `buy` - `sell` - `listbuy` - `refi`
@@ -1616,7 +1677,7 @@ export def "accounts-rooms-users PutRoomUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revokes the specified user's access to the room.
@@ -1634,6 +1695,7 @@ export def "accounts-rooms-users-revoke-access RevokeRoomUserAccess" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --revocationDate: string # The date on which the users room access should be revoked in ISO 8601 fomat: `1973-12-31T07:54Z`. (format: date-time)
 ]: any -> any {
@@ -1645,7 +1707,7 @@ export def "accounts-rooms-users-revoke-access RevokeRoomUserAccess" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Restores the specified user's access to the room.
@@ -1663,6 +1725,7 @@ export def "accounts-rooms-users-restore-access RestoreRoomUserAccess" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -1670,7 +1733,7 @@ export def "accounts-rooms-users-restore-access RestoreRoomUserAccess" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/rooms/($roomId)/users/($userId)/restore_access")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of rooms.
@@ -1686,6 +1749,7 @@ export def "accounts-rooms GetRooms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --count: int # The number of results. When this property is used as a request parameter specifying the number of results to return, the value must be a number between 1 and 100 (default). (format: int32, default: 100)
   --startPosition: int # The index position within the total result set from which to start returning values. The default value is `0`. (format: int32, default: 0)
@@ -1702,7 +1766,7 @@ export def "accounts-rooms GetRooms" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/rooms" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a room.
@@ -1719,6 +1783,7 @@ export def "accounts-rooms CreateRoom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   name: string # (Required) The name of the room.
   roleId: int # (Required) The ID of the role that the owner has in the room. (format: int32)
@@ -1737,7 +1802,7 @@ export def "accounts-rooms CreateRoom" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets a room.
@@ -1754,6 +1819,7 @@ export def "accounts-rooms GetRoom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --includeFieldData: oneof<nothing, bool> # When **true,** the response includes the field data from the room. This is the information that appears on the room's **Details** tab. (default: false)
 ]: nothing -> record<roomId: int, companyId: int, name: string, officeId: int, createdDate: string, submittedForReviewDate: string, closedDate: string, rejectedDate: string, createdByUserId: int, roomOwnerIds: list<int>, rejectedByUserId: int, closedStatusId: string, fieldDataLastUpdatedDate: string, fieldData: record<data: record>> {
@@ -1763,7 +1829,7 @@ export def "accounts-rooms GetRoom" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/rooms/($roomId)" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a room.
@@ -1780,6 +1846,7 @@ export def "accounts-rooms DeleteRoom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -1787,7 +1854,7 @@ export def "accounts-rooms DeleteRoom" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/rooms/($roomId)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets assignable room-level roles in v6.
@@ -1804,6 +1871,7 @@ export def "accounts-rooms-assignable-roles GetAssignableRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --assigneeEmail: string # The email address of a specific member. Using this parameter returns only the roles that the current user can assign to the member with that email address.
   --filter: string # A search filter that returns assignable roles by the beginning of the role name.  **Note:** You do not enter a wildcard (*) at the end of the name fragment.
@@ -1816,7 +1884,7 @@ export def "accounts-rooms-assignable-roles GetAssignableRoles" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/rooms/($roomId)/assignable_roles" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a document to a room.
@@ -1833,6 +1901,7 @@ export def "accounts-rooms-documents AddDocumentToRoom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --documentId: int # The ID of the document. (format: int32)
   name: string # The file name associated with the document.
@@ -1854,7 +1923,7 @@ export def "accounts-rooms-documents AddDocumentToRoom" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets a list of documents in a room.
@@ -1871,6 +1940,7 @@ export def "accounts-rooms-documents GetDocuments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --count: int # The number of results to return. This value must be a number between `1` and `100` (default). (format: int32, default: 100)
   --startPosition: int # The index position within the total result set from which to start returning values. The default value is `0`. (format: int32, default: 0)
@@ -1885,7 +1955,7 @@ export def "accounts-rooms-documents GetDocuments" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/rooms/($roomId)/documents" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Uploads the contents of a file as a document to a room.
@@ -1902,6 +1972,7 @@ export def "accounts-rooms-documents-contents AddDocumentToRoomViaFileUpload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --file: path # File to be uploaded
 ]: any -> record<documentId: int, name: string, ownerId: int, size: int, folderId: int, createdDate: string, isSigned: bool, docuSignFormId: string, isArchived: bool, isVirtual: bool, isDynamic: bool, owner: record<userId: int, firstName: string, lastName: string, companyName: string, imageSrc: string>> {
@@ -1914,7 +1985,7 @@ export def "accounts-rooms-documents-contents AddDocumentToRoomViaFileUpload" [
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let body = if ($file | is-not-empty) { $body | upsert file (open -r $file) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Updates the picture for a room.
@@ -1931,6 +2002,7 @@ export def "accounts-rooms-picture UpdatePicture" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --file: path # File to be uploaded
 ]: any -> record<url: string> {
   let input = $in
@@ -1942,7 +2014,7 @@ export def "accounts-rooms-picture UpdatePicture" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let body = if ($file | is-not-empty) { $body | upsert file (open -r $file) } else { $body }
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Gets the field set for a room.
@@ -1959,6 +2031,7 @@ export def "accounts-rooms-field-set GetRoomFieldSet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<fieldSetId: string, title: string, fields: table<fieldId: string, fieldDefinitionId: string, title: string, apiName: string, type: string, fields: list, configuration: record, customData: record>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -1966,7 +2039,7 @@ export def "accounts-rooms-field-set GetRoomFieldSet" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/rooms/($roomId)/field_set")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets task lists for a room.
@@ -1983,6 +2056,7 @@ export def "accounts-rooms-task-lists GetTaskLists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<taskListSummaries: table<taskListId: int, name: string, taskListTemplateId: int, submittedForReviewDate: string, approvalDate: string, rejectedDate: string, createdDate: string, approvedByUserId: int, rejectedByUserId: int, comment: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -1990,7 +2064,7 @@ export def "accounts-rooms-task-lists GetTaskLists" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/rooms/($roomId)/task_lists")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Applies a task list to a room.
@@ -2007,6 +2081,7 @@ export def "accounts-rooms-task-lists CreateTaskList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --taskListTemplateId: int # (Required) The ID of the task list template. (format: int32)
 ]: any -> record<taskListId: int, name: string, taskListTemplateId: int, submittedForReviewDate: string, approvalDate: string, rejectedDate: string, createdDate: string, approvedByUserId: int, rejectedByUserId: int, comment: string, tasks: table<taskId: int, name: string, requiresApproval: bool, dueDateTypeId: string, dueDateOffset: int, fixedDueDate: string, ownerUserId: int, completionDate: string, approvalDate: string, rejectedDate: string, createdDate: string, isDocumentTask: bool, requiresReview: bool>> {
@@ -2018,7 +2093,7 @@ export def "accounts-rooms-task-lists CreateTaskList" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets room templates.
@@ -2034,6 +2109,7 @@ export def "accounts-room-templates GetRoomTemplates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --officeId: int # The ID of the office for which the user wants to create a room. When you pass in a value for this parameter, only room templates that are valid for that office appear in the results. For users who are not Admins, the default is the ID of the user's default office. However, you can specify a value if the user belongs to multiple offices.  If the user is an Admin, set the `forAdmin` search parameter to **true** instead and omit the `officeId` parameter.  (format: int32)
   --onlyAssignable: oneof<nothing, bool> # When **true,** returns only the roles that the current user can assign to someone else. The default value is **false.** (default: false)
@@ -2047,7 +2123,7 @@ export def "accounts-room-templates GetRoomTemplates" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/room_templates" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a task list from a room.
@@ -2064,6 +2140,7 @@ export def "accounts-task-lists DeleteTaskList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -2071,7 +2148,7 @@ export def "accounts-task-lists DeleteTaskList" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/task_lists/($taskListId)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets task list templates.
@@ -2087,6 +2164,7 @@ export def "accounts-task-list-templates GetTaskListTemplates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --startPosition: int # The starting zero-based index position from which to start returning values. The default is `0`. (format: int32, default: 0)
   --count: int # The number of results to return. This value must be a number between `1` and `100` (default). (format: int32, default: 100)
@@ -2097,7 +2175,7 @@ export def "accounts-task-list-templates GetTaskListTemplates" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/task_list_templates" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a list of users.
@@ -2113,6 +2191,7 @@ export def "accounts-users GetUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --filter: string # Filters results by name and email address. This is a  "starts with" filter, which means that you can enter only the beginning of a name or email address.   **Note:** You do not use a wildcard with this filter.
   --qp-sort: string # Specifies how to sort the results. Valid values are:  - `FirstNameAsc` - `LastNameAsc` - `EmailAsc` - `FirstNameDesc` - `LastNameDesc` - `EmailDesc`
@@ -2131,7 +2210,7 @@ export def "accounts-users GetUsers" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/users" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets a user.
@@ -2148,6 +2227,7 @@ export def "accounts-users GetUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<userId: int, email: string, firstName: string, lastName: string, isLockedOut: bool, status: string, accessLevel: string, defaultOfficeId: int, titleId: int, roleId: int, profileImageUrl: string, offices: list<int>, regions: list<int>, permissions: record<isVisibleInTransactionRooms: bool, canDeleteCompanyRooms: bool, canDeleteCompanyDocuments: bool, canManageCompanyRooms: bool, canManageCompanyAccount: bool, canManageCompanySharedLibrary: bool, canManageCompanyMembers: bool, canCloseCompanyRooms: bool, canApproveCompanyChecklists: bool, isCompanySystemAdmin: bool, isRegionManager: bool, isOfficeManager: bool, autoAccessToCompanyRooms: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -2155,7 +2235,7 @@ export def "accounts-users GetUser" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/users/($userId)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a user's default office.
@@ -2172,6 +2252,7 @@ export def "accounts-users UpdateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   defaultOfficeId: int # (Required) The ID of the user's default office. (format: int32)
 ]: any -> record<userId: int, email: string, firstName: string, lastName: string, isLockedOut: bool, status: string, accessLevel: string, defaultOfficeId: int, titleId: int, roleId: int, profileImageUrl: string, offices: list<int>, regions: list<int>, permissions: record<isVisibleInTransactionRooms: bool, canDeleteCompanyRooms: bool, canDeleteCompanyDocuments: bool, canManageCompanyRooms: bool, canManageCompanyAccount: bool, canManageCompanySharedLibrary: bool, canManageCompanyMembers: bool, canCloseCompanyRooms: bool, canApproveCompanyChecklists: bool, isCompanySystemAdmin: bool, isRegionManager: bool, isOfficeManager: bool, autoAccessToCompanyRooms: bool>> {
@@ -2183,7 +2264,7 @@ export def "accounts-users UpdateUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Removes a user from a company account.
@@ -2200,6 +2281,7 @@ export def "accounts-users RemoveUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -2207,7 +2289,7 @@ export def "accounts-users RemoveUser" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/users/($userId)")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invites a user to a company account.
@@ -2223,6 +2305,7 @@ export def "accounts-users-invite-user InviteUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   firstName: string # (Required) The user's first name.
   lastName: string # (Required) The user's last name.
@@ -2244,7 +2327,7 @@ export def "accounts-users-invite-user InviteUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reinvites a user to join a company account.
@@ -2261,6 +2344,7 @@ export def "accounts-users-reinvite ReinviteUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -2268,7 +2352,7 @@ export def "accounts-users-reinvite ReinviteUser" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/users/($userId)/reinvite")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a user to an office.
@@ -2285,6 +2369,7 @@ export def "accounts-users-add-to-office AddUserToOffice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   officeId: int # (Required) The ID of the office. This is the ID that the system generated when you created the office. (format: int32)
 ]: any -> any {
@@ -2296,7 +2381,7 @@ export def "accounts-users-add-to-office AddUserToOffice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Removes a user from an office.
@@ -2313,6 +2398,7 @@ export def "accounts-users-remove-from-office RemoveUserFromOffice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   officeId: int # (Required) The ID of the office. This is the ID that the system generated when you created the office. (format: int32)
 ]: any -> any {
@@ -2324,7 +2410,7 @@ export def "accounts-users-remove-from-office RemoveUserFromOffice" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds a user to a region.
@@ -2341,6 +2427,7 @@ export def "accounts-users-add-to-region AddUserToRegion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   regionId: int # (Required) The ID of the region. This is the ID that the system generated when you created the region. (format: int32)
 ]: any -> any {
@@ -2352,7 +2439,7 @@ export def "accounts-users-add-to-region AddUserToRegion" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Removes a user from a region.
@@ -2369,6 +2456,7 @@ export def "accounts-users-remove-from-region RemoveUserFromRegion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   regionId: int # (Required) The ID of the region. This is the ID that the system generated when you created the region. (format: int32)
 ]: any -> any {
@@ -2380,7 +2468,7 @@ export def "accounts-users-remove-from-region RemoveUserFromRegion" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Locks a user's account.
@@ -2397,6 +2485,7 @@ export def "accounts-users-lock LockUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   reason: string # The reason the account was locked.
 ]: any -> any {
@@ -2408,7 +2497,7 @@ export def "accounts-users-lock LockUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unlocks  a user's account.
@@ -2425,6 +2514,7 @@ export def "accounts-users-unlock UnlockUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -2432,5 +2522,5 @@ export def "accounts-users-unlock UnlockUser" [
   let full_url = (build-url $base $"/v2/accounts/($accountId)/users/($userId)/unlock")
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

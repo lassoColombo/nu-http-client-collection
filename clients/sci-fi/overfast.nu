@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -72,7 +73,7 @@ def hero-completer [] { ["all-heroes" "ana" "anran" "ashe" "baptiste" "bastion" 
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "heroes heroes" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -105,6 +106,7 @@ export def "heroes heroes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --role: string
   --locale: string@locale-completer
   --gamemode: string
@@ -115,7 +117,7 @@ export def "heroes heroes" [
   let full_url = (build-url $base "/heroes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get hero stats
@@ -130,6 +132,7 @@ export def "heroes-stats stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --platform: string@platform-completer
   --gamemode: string@gamemode-completer # Filter on a specific gamemode.
   --region: string@region-completer # Filter on a specific player region.
@@ -144,7 +147,7 @@ export def "heroes-stats stats" [
   let full_url = (build-url $base "/heroes/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get hero data
@@ -160,6 +163,7 @@ export def "heroes hero" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string@locale-completer
 ]: nothing -> record<name: string, description: string, portrait: any, backgrounds: table<url: string, sizes: list>, role: string, subrole: string, location: string, age: any, birthday: any, hitpoints: any, abilities: table<name: string, description: string, icon: string, video: record>, perks: record<minor: list<record>, major: list<record>>, stadium_powers: any, story: record<summary: string, media: any, chapters: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -168,7 +172,7 @@ export def "heroes hero" [
   let full_url = (build-url $base $"/heroes/($hero_key)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of roles
@@ -183,6 +187,7 @@ export def "roles roles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string@locale-completer
 ]: nothing -> table<key: string, name: string, icon: string, description: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -191,7 +196,7 @@ export def "roles roles" [
   let full_url = (build-url $base "/roles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of gamemodes
@@ -206,13 +211,14 @@ export def "gamemodes gamemodes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<key: string, name: string, icon: string, description: string, screenshot: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/gamemodes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of maps
@@ -227,6 +233,7 @@ export def "maps maps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --gamemode: string # Filter maps available for a specific gamemode
 ]: nothing -> table<key: string, name: string, screenshot: string, gamemodes: list<string>, location: string, country_code: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -235,7 +242,7 @@ export def "maps maps" [
   let full_url = (build-url $base "/maps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for a specific player
@@ -250,6 +257,7 @@ export def "players players" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --order-by: string # default: name:asc
   --offset: int # default: 0
@@ -261,7 +269,7 @@ export def "players players" [
   let full_url = (build-url $base "/players" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get player summary
@@ -277,13 +285,14 @@ export def "players-summary summary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<username: string, avatar: any, namecard: any, title: any, endorsement: any, competitive: any, last_updated_at: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/players/($player_id)/summary")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get player stats summary
@@ -299,6 +308,7 @@ export def "players-stats-summary summary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --gamemode: string # Filter on a specific gamemode. If not specified, the data of every gamemode will be combined.
   --platform: string # Filter on a specific platform. If not specified, the data of every platform will be combined.
 ]: nothing -> record<general: any, roles: any, heroes: any> {
@@ -308,7 +318,7 @@ export def "players-stats-summary summary" [
   let full_url = (build-url $base $"/players/($player_id)/stats/summary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get player career stats
@@ -324,6 +334,7 @@ export def "players-stats-career stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --gamemode: string@gamemode-completer # Filter on a specific gamemode.
   --platform: string@platform-completer # Filter on a specific platform. If not specified, the only platform the player played on will be selected. If the player has already played on both PC and console, the PC stats will be displayed by default.
   --hero: string@hero-completer # Filter on a specific hero in order to only get his statistics. You also can specify 'all-heroes' for general stats.
@@ -334,7 +345,7 @@ export def "players-stats-career stats" [
   let full_url = (build-url $base $"/players/($player_id)/stats/career" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get player stats with labels
@@ -350,6 +361,7 @@ export def "players-stats stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --gamemode: string@gamemode-completer # Filter on a specific gamemode.
   --platform: string@platform-completer # Filter on a specific platform. If not specified, the only platform the player played on will be selected. If the player has already played on both PC and console, the PC stats will be displayed by default.
   --hero: string@hero-completer # Filter on a specific hero in order to only get his statistics. You also can specify 'all-heroes' for general stats.
@@ -360,7 +372,7 @@ export def "players-stats stats" [
   let full_url = (build-url $base $"/players/($player_id)/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all player data
@@ -376,6 +388,7 @@ export def "players career" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --gamemode: string # Filter on a specific gamemode. All gamemodes are displayed by default.
   --platform: string # Filter on a specific platform. All platforms are displayed by default.
 ]: nothing -> record<summary: record<username: string, avatar: any, namecard: any, title: any, endorsement: any, competitive: any, last_updated_at: any>, stats: any> {
@@ -385,5 +398,5 @@ export def "players career" [
   let full_url = (build-url $base $"/players/($player_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

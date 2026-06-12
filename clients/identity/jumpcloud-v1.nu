@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -75,7 +76,7 @@ def accept-completer [] { ["application/json" "text/plain"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "application-templates list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -108,6 +109,7 @@ export def "application-templates list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # The space separated fields included in the returned records. If omitted the default list of fields will be returned.
   --limit: int # The number of records to return at once.
   --skip: int # The offset into the records to return.
@@ -123,7 +125,7 @@ export def "application-templates list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an Application Template
@@ -139,6 +141,7 @@ export def "application-templates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # The space separated fields included in the returned records. If omitted the default list of fields will be returned.
   --limit: int # The number of records to return at once.
   --skip: int # The offset into the records to return.
@@ -154,7 +157,7 @@ export def "application-templates get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Applications
@@ -169,6 +172,7 @@ export def "applications list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # The space separated fields included in the returned records. If omitted the default list of fields will be returned.
   --limit: int # The number of records to return at once.
   --skip: int # The offset into the records to return.
@@ -184,7 +188,7 @@ export def "applications list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an Application
@@ -202,6 +206,7 @@ export def "applications post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
   --id: string
   --active: oneof<nothing, bool>
@@ -231,7 +236,7 @@ export def "applications post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get an Application
@@ -247,6 +252,7 @@ export def "applications get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
 ]: nothing -> record<_id: string, active: bool, beta: bool, color: string, config: record<spErrorFlow: record<label: string, position: int, readOnly: bool, required: bool, tooltip: record, type: string, value: bool, visible: bool>, signAssertion: record<label: string, position: int, readOnly: bool, required: bool, tooltip: record, type: string, value: bool, visible: bool>, signResponse: record<label: string, position: int, readOnly: bool, required: bool, tooltip: record, type: string, value: bool, visible: bool>, acsUrl: record<label: string, position: int, readOnly: bool, required: bool, tooltip: record, type: string, value: string, visible: bool>, constantAttributes: record<label: string, mutable: bool, position: int, readOnly: bool, required: bool, tooltip: record, type: string, value: list, visible: bool>, databaseAttributes: record<position: int>, idpCertificate: record<label: string, position: int, readOnly: bool, required: bool, tooltip: record, type: string, value: string, visible: bool>, idpEntityId: record<label: string, position: int, readOnly: bool, required: bool, tooltip: record, type: string, value: string, visible: bool>, idpPrivateKey: record<label: string, position: int, readOnly: bool, required: bool, tooltip: record, type: string, value: string, visible: bool>, spEntityId: record<label: string, position: int, readOnly: bool, required: bool, tooltip: record, type: string, value: string, visible: bool>, authClaimConfiguration: record<type: string, visible: bool, sendAmrClaim: record, authnContextMode: record, singleAuthnContextValue: record, authnContextMappings: record>>, created: string, databaseAttributes: list<record>, description: string, displayLabel: string, displayName: string, learnMore: string, logo: record<color: string, url: string>, name: string, organization: string, sso: record<type: string, beta: bool, jit: bool, idpCertExpirationAt: string, idpCertificateUpdatedAt: string, idpPrivateKeyUpdatedAt: string, spCertificateUpdatedAt: string, hidden: bool>, ssoUrl: string, parentApp: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -256,7 +262,7 @@ export def "applications get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an Application
@@ -275,6 +281,7 @@ export def "applications put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
   --body-id: string
   --active: oneof<nothing, bool>
@@ -304,7 +311,7 @@ export def "applications put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an Application
@@ -320,6 +327,7 @@ export def "applications delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
 ]: nothing -> record<_id: string, active: bool, beta: bool, color: string, config: record<spErrorFlow: record<label: string, position: int, readOnly: bool, required: bool, tooltip: record, type: string, value: bool, visible: bool>, signAssertion: record<label: string, position: int, readOnly: bool, required: bool, tooltip: record, type: string, value: bool, visible: bool>, signResponse: record<label: string, position: int, readOnly: bool, required: bool, tooltip: record, type: string, value: bool, visible: bool>, acsUrl: record<label: string, position: int, readOnly: bool, required: bool, tooltip: record, type: string, value: string, visible: bool>, constantAttributes: record<label: string, mutable: bool, position: int, readOnly: bool, required: bool, tooltip: record, type: string, value: list, visible: bool>, databaseAttributes: record<position: int>, idpCertificate: record<label: string, position: int, readOnly: bool, required: bool, tooltip: record, type: string, value: string, visible: bool>, idpEntityId: record<label: string, position: int, readOnly: bool, required: bool, tooltip: record, type: string, value: string, visible: bool>, idpPrivateKey: record<label: string, position: int, readOnly: bool, required: bool, tooltip: record, type: string, value: string, visible: bool>, spEntityId: record<label: string, position: int, readOnly: bool, required: bool, tooltip: record, type: string, value: string, visible: bool>, authClaimConfiguration: record<type: string, visible: bool, sendAmrClaim: record, authnContextMode: record, singleAuthnContextValue: record, authnContextMappings: record>>, created: string, databaseAttributes: list<record>, description: string, displayLabel: string, displayName: string, learnMore: string, logo: record<color: string, url: string>, name: string, organization: string, sso: record<type: string, beta: bool, jit: bool, idpCertExpirationAt: string, idpCertificateUpdatedAt: string, idpPrivateKeyUpdatedAt: string, spCertificateUpdatedAt: string, hidden: bool>, ssoUrl: string, parentApp: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -329,7 +337,7 @@ export def "applications delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Launch a command via a Trigger
@@ -345,6 +353,7 @@ export def "command-trigger post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
   --body: record
 ]: any -> record<triggered: list<string>> {
@@ -357,7 +366,7 @@ export def "command-trigger post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List all Command Results
@@ -372,6 +381,7 @@ export def "commandresults list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Use a space seperated string of field parameters to include the data in the response. If omitted, the default list of fields will be returned.
   --limit: int # The number of records to return at once. Limited to 100. (default: 10)
   --skip: int # The offset into the records to return. (default: 0)
@@ -386,7 +396,7 @@ export def "commandresults list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List an individual Command result
@@ -402,6 +412,7 @@ export def "commandresults get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Use a space seperated string of field parameters to include the data in the response. If omitted, the default list of fields will be returned.
   --filter: string # A filter to apply to the query. See the supported operators below. For more complex searches, see the related `/search/<domain>` endpoints, e.g. `/search/systems`.  **Filter structure**: The filter syntax follows a consistent pattern of `<field>:<operator>:<value>` (e.g. `department:$eq:Finance`)  **field** = Populate with a valid field from an endpoint response.  **operator** = Supported operators are: - `$eq` - equals (exact match) - `$in` - equals (multiple match terms). Separate terms by `|` character: `<field>:$in:<term one>|<term two>`   - any item with `<field>` that matches ANY of the match terms will be returned   - to use a literal `|` character inside a match term, it must be "escaped" using a backslash `\` (`"\|"`)     - for `GET` endpoints, only ONE backslash is needed: `costCenter:$in:Atlanta\|Tampa|Chicago`     - for `POST` endpoints, TWO backslashes are needed due to the nature of JSON: `costCenter:$in:Atlanta\\|Tampa|Chicago`     - resulting match terms: `"Atlanta|Tampa", "Chicago"` - `$ne` - does not equal - `$nin` - does not equal (multiple match terms). Separate terms by `|` character: `<field>:$nin:<term one>|<term two>`   - any item with `<field>` that DOES NOT match ANY of the match terms will be returned   - refer to above `$in` documentation on using literal `|` character in match terms - `$lt` - is less than - `$lte` - is less than or equal to - `$gt` - is greater than - `$gte` - is greater than or equal to - `$sw` - Finds items where the field value begins with the specified term.  **Eventually Consistent Operators** = These advanced operators support multiple-term matching and **require the `x-eventually-consistent` API request header** to be set as `true`. Terms within the `value` must be separated by the `|` character. - `$sw` - Matches any item where the field value **begins** with **any one** of the provided terms. E.g `<field>:$sw:<term one>|<term two>` - `$ew` - Matches any item where the field value **ends** with **any one** of the provided terms. E.g `<field>:$ew:<term one>|<term two>` - `$co` - Matches any item where the field value **contains** **any one** of the provided terms. E.g `<field>:$co:<term one>|<term two>` - `$nco` - Matches any item where the field value **does not contain** any of the provided terms. E.g `<field>:$nco:<term one>|<term two>`  _Note: v1 operators differ from v2 operators._  _Note: For v1 operators, excluding the `$` will result in undefined behavior **and is not recommended.**_  **value** = Populate with the value you want to search for. **Case sensitive**.  **Examples** - `GET /users?filter=username:$eq:testuser` - `GET /systemusers?filter=department:$in:Finance|IT|Shipping & Receiving` - an item with `{ department: "IT" }` will match - `GET /systemusers?filter=department:$in:Finance \| Sales|IT` - an item with `{ department: "Finance | Sales" }` will match - `GET /systemusers?filter=department:$ne:Accounting` - `GET /systemusers?filter=department:$nin:Finance|IT|Shipping & Receiving` - an item with `{ department: "HR" }` will match - `GET /systemusers?filter=password_expiration_date:$lte:2021-10-24` - `GET /systems?filter[0]=firstname:$eq:foo&filter[1]=lastname:$eq:bar` - this will AND the filters together. - `GET /systems?filter[or][0]=lastname:$eq:foo&filter[or][1]=lastname:$eq:bar` - this will OR the filters together. - `GET /systemusers?filter=department:$sw:Shipping` - an item with `{ department: "Shipping & Receiving" }` will match - `GET /systemusers?filter=department:$sw:Shipping\|Receiving` - an item with `{ department: "Shipping|Receiving Item" }` will match - `GET /systemusers?filter=department:$sw:Shipping|Receiving` - an item with `{ department: "Shipping Item" }` will match or an item with `{ department: "Receiving Item" }` will match. **Use it with `x-eventually-consistent` header set to `true`:**
   --x-org-id: string
@@ -414,7 +425,7 @@ export def "commandresults get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a Command result
@@ -430,6 +441,7 @@ export def "commandresults delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
 ]: nothing -> record<_id: string, command: string, files: list<string>, name: string, organization: string, response: record<data: record<exitCode: int, output: string>, error: string, id: string>, sudo: bool, system: string, systemId: string, user: string, workflowId: string, workflowInstanceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -439,7 +451,7 @@ export def "commandresults delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List All Commands
@@ -454,6 +466,7 @@ export def "commands list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Use a space seperated string of field parameters to include the data in the response. If omitted, the default list of fields will be returned.
   --filter: string # A filter to apply to the query. See the supported operators below. For more complex searches, see the related `/search/<domain>` endpoints, e.g. `/search/systems`.  **Filter structure**: The filter syntax follows a consistent pattern of `<field>:<operator>:<value>` (e.g. `department:$eq:Finance`)  **field** = Populate with a valid field from an endpoint response.  **operator** = Supported operators are: - `$eq` - equals (exact match) - `$in` - equals (multiple match terms). Separate terms by `|` character: `<field>:$in:<term one>|<term two>`   - any item with `<field>` that matches ANY of the match terms will be returned   - to use a literal `|` character inside a match term, it must be "escaped" using a backslash `\` (`"\|"`)     - for `GET` endpoints, only ONE backslash is needed: `costCenter:$in:Atlanta\|Tampa|Chicago`     - for `POST` endpoints, TWO backslashes are needed due to the nature of JSON: `costCenter:$in:Atlanta\\|Tampa|Chicago`     - resulting match terms: `"Atlanta|Tampa", "Chicago"` - `$ne` - does not equal - `$nin` - does not equal (multiple match terms). Separate terms by `|` character: `<field>:$nin:<term one>|<term two>`   - any item with `<field>` that DOES NOT match ANY of the match terms will be returned   - refer to above `$in` documentation on using literal `|` character in match terms - `$lt` - is less than - `$lte` - is less than or equal to - `$gt` - is greater than - `$gte` - is greater than or equal to - `$sw` - Finds items where the field value begins with the specified term.  **Eventually Consistent Operators** = These advanced operators support multiple-term matching and **require the `x-eventually-consistent` API request header** to be set as `true`. Terms within the `value` must be separated by the `|` character. - `$sw` - Matches any item where the field value **begins** with **any one** of the provided terms. E.g `<field>:$sw:<term one>|<term two>` - `$ew` - Matches any item where the field value **ends** with **any one** of the provided terms. E.g `<field>:$ew:<term one>|<term two>` - `$co` - Matches any item where the field value **contains** **any one** of the provided terms. E.g `<field>:$co:<term one>|<term two>` - `$nco` - Matches any item where the field value **does not contain** any of the provided terms. E.g `<field>:$nco:<term one>|<term two>`  _Note: v1 operators differ from v2 operators._  _Note: For v1 operators, excluding the `$` will result in undefined behavior **and is not recommended.**_  **value** = Populate with the value you want to search for. **Case sensitive**.  **Examples** - `GET /users?filter=username:$eq:testuser` - `GET /systemusers?filter=department:$in:Finance|IT|Shipping & Receiving` - an item with `{ department: "IT" }` will match - `GET /systemusers?filter=department:$in:Finance \| Sales|IT` - an item with `{ department: "Finance | Sales" }` will match - `GET /systemusers?filter=department:$ne:Accounting` - `GET /systemusers?filter=department:$nin:Finance|IT|Shipping & Receiving` - an item with `{ department: "HR" }` will match - `GET /systemusers?filter=password_expiration_date:$lte:2021-10-24` - `GET /systems?filter[0]=firstname:$eq:foo&filter[1]=lastname:$eq:bar` - this will AND the filters together. - `GET /systems?filter[or][0]=lastname:$eq:foo&filter[or][1]=lastname:$eq:bar` - this will OR the filters together. - `GET /systemusers?filter=department:$sw:Shipping` - an item with `{ department: "Shipping & Receiving" }` will match - `GET /systemusers?filter=department:$sw:Shipping\|Receiving` - an item with `{ department: "Shipping|Receiving Item" }` will match - `GET /systemusers?filter=department:$sw:Shipping|Receiving` - an item with `{ department: "Shipping Item" }` will match or an item with `{ department: "Receiving Item" }` will match. **Use it with `x-eventually-consistent` header set to `true`:**
   --limit: int # The number of records to return at once. Limited to 100. (default: 10)
@@ -469,7 +482,7 @@ export def "commands list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create A Command
@@ -485,6 +498,7 @@ export def "commands post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
   command: string # The command to execute on the server.
   --commandRunners: list # An array of IDs of the Command Runner Users that can execute this command.
@@ -520,7 +534,7 @@ export def "commands post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List an individual Command
@@ -536,6 +550,7 @@ export def "commands get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Use a space seperated string of field parameters to include the data in the response. If omitted, the default list of fields will be returned.
   --x-org-id: string
 ]: nothing -> record<command: string, commandRunners: list<string>, commandType: string, files: list<string>, launchType: string, listensTo: string, name: string, organization: string, schedule: string, scheduleRepeatType: string, sudo: bool, systems: list<string>, template: string, timeout: string, trigger: string, user: string, shell: string, timeToLiveSeconds: int, scheduleYear: int, filesS3: table<objectStorageId: string, name: string, destination: string, sha256: string>, description: string, aiGenerated: bool, templatingRequired: bool> {
@@ -547,7 +562,7 @@ export def "commands get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Command
@@ -564,6 +579,7 @@ export def "commands put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
   command: string # The command to execute on the server.
   --commandRunners: list # An array of IDs of the Command Runner Users that can execute this command.
@@ -599,7 +615,7 @@ export def "commands put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a Command
@@ -615,6 +631,7 @@ export def "commands delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
 ]: nothing -> record<command: string, commandRunners: list<string>, commandType: string, files: list<string>, launchType: string, listensTo: string, name: string, organization: string, schedule: string, scheduleRepeatType: string, sudo: bool, systems: list<string>, template: string, timeout: string, trigger: string, user: string, shell: string, timeToLiveSeconds: int, scheduleYear: int, filesS3: table<objectStorageId: string, name: string, destination: string, sha256: string>, description: string, aiGenerated: bool, templatingRequired: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -624,7 +641,7 @@ export def "commands delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Command File
@@ -640,6 +657,7 @@ export def "files-command get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Use a space seperated string of field parameters to include the data in the response. If omitted, the default list of fields will be returned.
   --limit: int # The number of records to return at once. Limited to 100. (default: 10)
   --skip: int # The offset into the records to return. (default: 0)
@@ -653,7 +671,7 @@ export def "files-command get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Organization Details
@@ -668,6 +686,7 @@ export def "organizations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Use a space seperated string of field parameters to include the data in the response. If omitted, the default list of fields will be returned.
   --filter: string # A filter to apply to the query. See the supported operators below. For more complex searches, see the related `/search/<domain>` endpoints, e.g. `/search/systems`.  **Filter structure**: The filter syntax follows a consistent pattern of `<field>:<operator>:<value>` (e.g. `department:$eq:Finance`)  **field** = Populate with a valid field from an endpoint response.  **operator** = Supported operators are: - `$eq` - equals (exact match) - `$in` - equals (multiple match terms). Separate terms by `|` character: `<field>:$in:<term one>|<term two>`   - any item with `<field>` that matches ANY of the match terms will be returned   - to use a literal `|` character inside a match term, it must be "escaped" using a backslash `\` (`"\|"`)     - for `GET` endpoints, only ONE backslash is needed: `costCenter:$in:Atlanta\|Tampa|Chicago`     - for `POST` endpoints, TWO backslashes are needed due to the nature of JSON: `costCenter:$in:Atlanta\\|Tampa|Chicago`     - resulting match terms: `"Atlanta|Tampa", "Chicago"` - `$ne` - does not equal - `$nin` - does not equal (multiple match terms). Separate terms by `|` character: `<field>:$nin:<term one>|<term two>`   - any item with `<field>` that DOES NOT match ANY of the match terms will be returned   - refer to above `$in` documentation on using literal `|` character in match terms - `$lt` - is less than - `$lte` - is less than or equal to - `$gt` - is greater than - `$gte` - is greater than or equal to - `$sw` - Finds items where the field value begins with the specified term.  **Eventually Consistent Operators** = These advanced operators support multiple-term matching and **require the `x-eventually-consistent` API request header** to be set as `true`. Terms within the `value` must be separated by the `|` character. - `$sw` - Matches any item where the field value **begins** with **any one** of the provided terms. E.g `<field>:$sw:<term one>|<term two>` - `$ew` - Matches any item where the field value **ends** with **any one** of the provided terms. E.g `<field>:$ew:<term one>|<term two>` - `$co` - Matches any item where the field value **contains** **any one** of the provided terms. E.g `<field>:$co:<term one>|<term two>` - `$nco` - Matches any item where the field value **does not contain** any of the provided terms. E.g `<field>:$nco:<term one>|<term two>`  _Note: v1 operators differ from v2 operators._  _Note: For v1 operators, excluding the `$` will result in undefined behavior **and is not recommended.**_  **value** = Populate with the value you want to search for. **Case sensitive**.  **Examples** - `GET /users?filter=username:$eq:testuser` - `GET /systemusers?filter=department:$in:Finance|IT|Shipping & Receiving` - an item with `{ department: "IT" }` will match - `GET /systemusers?filter=department:$in:Finance \| Sales|IT` - an item with `{ department: "Finance | Sales" }` will match - `GET /systemusers?filter=department:$ne:Accounting` - `GET /systemusers?filter=department:$nin:Finance|IT|Shipping & Receiving` - an item with `{ department: "HR" }` will match - `GET /systemusers?filter=password_expiration_date:$lte:2021-10-24` - `GET /systems?filter[0]=firstname:$eq:foo&filter[1]=lastname:$eq:bar` - this will AND the filters together. - `GET /systems?filter[or][0]=lastname:$eq:foo&filter[or][1]=lastname:$eq:bar` - this will OR the filters together. - `GET /systemusers?filter=department:$sw:Shipping` - an item with `{ department: "Shipping & Receiving" }` will match - `GET /systemusers?filter=department:$sw:Shipping\|Receiving` - an item with `{ department: "Shipping|Receiving Item" }` will match - `GET /systemusers?filter=department:$sw:Shipping|Receiving` - an item with `{ department: "Shipping Item" }` will match or an item with `{ department: "Receiving Item" }` will match. **Use it with `x-eventually-consistent` header set to `true`:**
   --limit: int # The number of records to return at once. Limited to 100. (default: 10)
@@ -682,7 +701,7 @@ export def "organizations list" [
   let full_url = (build-url $base "/organizations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an Organization
@@ -698,6 +717,7 @@ export def "organizations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Use a space seperated string of field parameters to include the data in the response. If omitted, the default list of fields will be returned.
   --filter: string # A filter to apply to the query. See the supported operators below. For more complex searches, see the related `/search/<domain>` endpoints, e.g. `/search/systems`.  **Filter structure**: The filter syntax follows a consistent pattern of `<field>:<operator>:<value>` (e.g. `department:$eq:Finance`)  **field** = Populate with a valid field from an endpoint response.  **operator** = Supported operators are: - `$eq` - equals (exact match) - `$in` - equals (multiple match terms). Separate terms by `|` character: `<field>:$in:<term one>|<term two>`   - any item with `<field>` that matches ANY of the match terms will be returned   - to use a literal `|` character inside a match term, it must be "escaped" using a backslash `\` (`"\|"`)     - for `GET` endpoints, only ONE backslash is needed: `costCenter:$in:Atlanta\|Tampa|Chicago`     - for `POST` endpoints, TWO backslashes are needed due to the nature of JSON: `costCenter:$in:Atlanta\\|Tampa|Chicago`     - resulting match terms: `"Atlanta|Tampa", "Chicago"` - `$ne` - does not equal - `$nin` - does not equal (multiple match terms). Separate terms by `|` character: `<field>:$nin:<term one>|<term two>`   - any item with `<field>` that DOES NOT match ANY of the match terms will be returned   - refer to above `$in` documentation on using literal `|` character in match terms - `$lt` - is less than - `$lte` - is less than or equal to - `$gt` - is greater than - `$gte` - is greater than or equal to - `$sw` - Finds items where the field value begins with the specified term.  **Eventually Consistent Operators** = These advanced operators support multiple-term matching and **require the `x-eventually-consistent` API request header** to be set as `true`. Terms within the `value` must be separated by the `|` character. - `$sw` - Matches any item where the field value **begins** with **any one** of the provided terms. E.g `<field>:$sw:<term one>|<term two>` - `$ew` - Matches any item where the field value **ends** with **any one** of the provided terms. E.g `<field>:$ew:<term one>|<term two>` - `$co` - Matches any item where the field value **contains** **any one** of the provided terms. E.g `<field>:$co:<term one>|<term two>` - `$nco` - Matches any item where the field value **does not contain** any of the provided terms. E.g `<field>:$nco:<term one>|<term two>`  _Note: v1 operators differ from v2 operators._  _Note: For v1 operators, excluding the `$` will result in undefined behavior **and is not recommended.**_  **value** = Populate with the value you want to search for. **Case sensitive**.  **Examples** - `GET /users?filter=username:$eq:testuser` - `GET /systemusers?filter=department:$in:Finance|IT|Shipping & Receiving` - an item with `{ department: "IT" }` will match - `GET /systemusers?filter=department:$in:Finance \| Sales|IT` - an item with `{ department: "Finance | Sales" }` will match - `GET /systemusers?filter=department:$ne:Accounting` - `GET /systemusers?filter=department:$nin:Finance|IT|Shipping & Receiving` - an item with `{ department: "HR" }` will match - `GET /systemusers?filter=password_expiration_date:$lte:2021-10-24` - `GET /systems?filter[0]=firstname:$eq:foo&filter[1]=lastname:$eq:bar` - this will AND the filters together. - `GET /systems?filter[or][0]=lastname:$eq:foo&filter[or][1]=lastname:$eq:bar` - this will OR the filters together. - `GET /systemusers?filter=department:$sw:Shipping` - an item with `{ department: "Shipping & Receiving" }` will match - `GET /systemusers?filter=department:$sw:Shipping\|Receiving` - an item with `{ department: "Shipping|Receiving Item" }` will match - `GET /systemusers?filter=department:$sw:Shipping|Receiving` - an item with `{ department: "Shipping Item" }` will match or an item with `{ department: "Receiving Item" }` will match. **Use it with `x-eventually-consistent` header set to `true`:**
 ]: nothing -> record<_id: string, created: string, customEmailSettings: record<enabled: bool>, displayName: string, entitlement: record<billingModel: string, capUserQuantity: bool, maxUserQuantity: int, purchaseChannel: string, entitlementProducts: list<record>, isManuallyBilled: bool, pricePerUserSum: int>, hasStripeCustomerId: bool, hasCreditCard: bool, lastEstimateCalculationTimeStamp: string, lastSfdcSyncStatus: record, accountsReceivable: string, accessRestriction: string, settings: record<agentVersion: string, betaFeatures: record, chromeDTCEnabled: bool, contactEmail: string, contactName: string, disableCommandRunner: bool, disableLdap: bool, disableUM: bool, duplicateLDAPGroups: bool, emailDisclaimer: string, enableGoogleApps: bool, enableManagedUID: bool, enableO365: bool, enableUserPortalAgentInstall: bool, features: record<directoryInsightsPremium: record, systemInsights: record, directoryInsights: record>, growthData: record, logo: string, name: string, newSystemUserStateDefaults: record<applicationImport: string, csvImport: string, manualEntry: string>, passwordCompliance: string, passwordPolicy: record<allowUnenrolledMFAPasswordReset: bool, allowUsernameSubstring: bool, daysAfterExpirationToSelfRecover: int, daysBeforeExpirationToForceReset: int, disallowCommonlyUsedPasswords: bool, disallowSequentialOrRepetitiveChars: bool, displayComplexityOnResetScreen: bool, effectiveDate: string, enableDaysAfterExpirationToSelfRecover: bool, enableDaysBeforeExpirationToForceReset: bool, enableLockoutTimeInSeconds: bool, enableMaxHistory: bool, enableMaxLoginAttempts: bool, enableMinChangePeriodInDays: bool, enableMinLength: bool, enablePasswordExpirationInDays: bool, gracePeriodDate: string, lockoutTimeInSeconds: int, maxHistory: int, maxLoginAttempts: int, minChangePeriodInDays: int, minLength: int, needsLowercase: bool, needsNumeric: bool, needsSymbolic: bool, needsUppercase: bool, passwordExpirationInDays: int, enableResetLockoutCounter: bool, resetLockoutCounterMinutes: int, enableRecoveryEmail: bool>, pendingDelete: bool, requireAdminMFA: bool, showIntro: bool, systemUserDefaults: record<restrictedFields: list>, systemUserPasswordExpirationInDays: int, systemUsersCanEdit: bool, disableGoogleLogin: bool, userPortal: record<idleSessionDurationMinutes: int, cookieExpirationType: string>, deviceIdentificationEnabled: bool, trustedAppConfig: record<checksum: string, trustedApps: list>, maxSystemUsers: int, windowsMDM: record<enabled: bool, autoEnroll: bool>>, totalBillingEstimate: int> {
@@ -707,7 +727,7 @@ export def "organizations get" [
   let full_url = (build-url $base $"/organizations/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an Organization
@@ -724,6 +744,7 @@ export def "organizations put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --settings: record # shape: {contactEmail?: string, contactName?: string, disableLdap?: bool, disableUM?: bool, duplicateLDAPGroups?: bool, emailDisclaimer?: string, enableManagedUID?: bool, features?: record, growthData?: record, logo?: string, name?: string, newSystemUserStateDefaults?: record, passwordCompliance?: "custom"|"pci3"|"windows", passwordPolicy?: record, showIntro?: bool, systemUserDefaults?: record, systemUserPasswordExpirationInDays?: int, systemUsersCanEdit?: bool, disableGoogleLogin?: bool, userPortal?: record, deviceIdentificationEnabled?: bool, trustedAppConfig?: record, maxSystemUsers?: int}
 ]: any -> record<_id: string, created: string, customEmailSettings: record<enabled: bool>, displayName: string, entitlement: record<billingModel: string, capUserQuantity: bool, maxUserQuantity: int, purchaseChannel: string, entitlementProducts: list<record>, isManuallyBilled: bool, pricePerUserSum: int>, hasStripeCustomerId: bool, hasCreditCard: bool, lastEstimateCalculationTimeStamp: string, lastSfdcSyncStatus: record, accountsReceivable: string, accessRestriction: string, settings: record<agentVersion: string, betaFeatures: record, chromeDTCEnabled: bool, contactEmail: string, contactName: string, disableCommandRunner: bool, disableLdap: bool, disableUM: bool, duplicateLDAPGroups: bool, emailDisclaimer: string, enableGoogleApps: bool, enableManagedUID: bool, enableO365: bool, enableUserPortalAgentInstall: bool, features: record<directoryInsightsPremium: record, systemInsights: record, directoryInsights: record>, growthData: record, logo: string, name: string, newSystemUserStateDefaults: record<applicationImport: string, csvImport: string, manualEntry: string>, passwordCompliance: string, passwordPolicy: record<allowUnenrolledMFAPasswordReset: bool, allowUsernameSubstring: bool, daysAfterExpirationToSelfRecover: int, daysBeforeExpirationToForceReset: int, disallowCommonlyUsedPasswords: bool, disallowSequentialOrRepetitiveChars: bool, displayComplexityOnResetScreen: bool, effectiveDate: string, enableDaysAfterExpirationToSelfRecover: bool, enableDaysBeforeExpirationToForceReset: bool, enableLockoutTimeInSeconds: bool, enableMaxHistory: bool, enableMaxLoginAttempts: bool, enableMinChangePeriodInDays: bool, enableMinLength: bool, enablePasswordExpirationInDays: bool, gracePeriodDate: string, lockoutTimeInSeconds: int, maxHistory: int, maxLoginAttempts: int, minChangePeriodInDays: int, minLength: int, needsLowercase: bool, needsNumeric: bool, needsSymbolic: bool, needsUppercase: bool, passwordExpirationInDays: int, enableResetLockoutCounter: bool, resetLockoutCounterMinutes: int, enableRecoveryEmail: bool>, pendingDelete: bool, requireAdminMFA: bool, showIntro: bool, systemUserDefaults: record<restrictedFields: list>, systemUserPasswordExpirationInDays: int, systemUsersCanEdit: bool, disableGoogleLogin: bool, userPortal: record<idleSessionDurationMinutes: int, cookieExpirationType: string>, deviceIdentificationEnabled: bool, trustedAppConfig: record<checksum: string, trustedApps: list>, maxSystemUsers: int, windowsMDM: record<enabled: bool, autoEnroll: bool>>, totalBillingEstimate: int> {
   let input = $in
@@ -734,7 +755,7 @@ export def "organizations put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List Radius Servers
@@ -749,6 +770,7 @@ export def "radiusservers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Use a space seperated string of field parameters to include the data in the response. If omitted, the default list of fields will be returned.
   --filter: string # A filter to apply to the query. See the supported operators below. For more complex searches, see the related `/search/<domain>` endpoints, e.g. `/search/systems`.  **Filter structure**: The filter syntax follows a consistent pattern of `<field>:<operator>:<value>` (e.g. `department:$eq:Finance`)  **field** = Populate with a valid field from an endpoint response.  **operator** = Supported operators are: - `$eq` - equals (exact match) - `$in` - equals (multiple match terms). Separate terms by `|` character: `<field>:$in:<term one>|<term two>`   - any item with `<field>` that matches ANY of the match terms will be returned   - to use a literal `|` character inside a match term, it must be "escaped" using a backslash `\` (`"\|"`)     - for `GET` endpoints, only ONE backslash is needed: `costCenter:$in:Atlanta\|Tampa|Chicago`     - for `POST` endpoints, TWO backslashes are needed due to the nature of JSON: `costCenter:$in:Atlanta\\|Tampa|Chicago`     - resulting match terms: `"Atlanta|Tampa", "Chicago"` - `$ne` - does not equal - `$nin` - does not equal (multiple match terms). Separate terms by `|` character: `<field>:$nin:<term one>|<term two>`   - any item with `<field>` that DOES NOT match ANY of the match terms will be returned   - refer to above `$in` documentation on using literal `|` character in match terms - `$lt` - is less than - `$lte` - is less than or equal to - `$gt` - is greater than - `$gte` - is greater than or equal to - `$sw` - Finds items where the field value begins with the specified term.  **Eventually Consistent Operators** = These advanced operators support multiple-term matching and **require the `x-eventually-consistent` API request header** to be set as `true`. Terms within the `value` must be separated by the `|` character. - `$sw` - Matches any item where the field value **begins** with **any one** of the provided terms. E.g `<field>:$sw:<term one>|<term two>` - `$ew` - Matches any item where the field value **ends** with **any one** of the provided terms. E.g `<field>:$ew:<term one>|<term two>` - `$co` - Matches any item where the field value **contains** **any one** of the provided terms. E.g `<field>:$co:<term one>|<term two>` - `$nco` - Matches any item where the field value **does not contain** any of the provided terms. E.g `<field>:$nco:<term one>|<term two>`  _Note: v1 operators differ from v2 operators._  _Note: For v1 operators, excluding the `$` will result in undefined behavior **and is not recommended.**_  **value** = Populate with the value you want to search for. **Case sensitive**.  **Examples** - `GET /users?filter=username:$eq:testuser` - `GET /systemusers?filter=department:$in:Finance|IT|Shipping & Receiving` - an item with `{ department: "IT" }` will match - `GET /systemusers?filter=department:$in:Finance \| Sales|IT` - an item with `{ department: "Finance | Sales" }` will match - `GET /systemusers?filter=department:$ne:Accounting` - `GET /systemusers?filter=department:$nin:Finance|IT|Shipping & Receiving` - an item with `{ department: "HR" }` will match - `GET /systemusers?filter=password_expiration_date:$lte:2021-10-24` - `GET /systems?filter[0]=firstname:$eq:foo&filter[1]=lastname:$eq:bar` - this will AND the filters together. - `GET /systems?filter[or][0]=lastname:$eq:foo&filter[or][1]=lastname:$eq:bar` - this will OR the filters together. - `GET /systemusers?filter=department:$sw:Shipping` - an item with `{ department: "Shipping & Receiving" }` will match - `GET /systemusers?filter=department:$sw:Shipping\|Receiving` - an item with `{ department: "Shipping|Receiving Item" }` will match - `GET /systemusers?filter=department:$sw:Shipping|Receiving` - an item with `{ department: "Shipping Item" }` will match or an item with `{ department: "Receiving Item" }` will match. **Use it with `x-eventually-consistent` header set to `true`:**
   --limit: int # The number of records to return at once. Limited to 100. (default: 10)
@@ -764,7 +786,7 @@ export def "radiusservers list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Radius Server
@@ -779,6 +801,7 @@ export def "radiusservers post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
   --authIdp: string@authIdp-completer
   --mfa: string@mfa-completer
@@ -807,7 +830,7 @@ export def "radiusservers post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get Radius Server
@@ -823,6 +846,7 @@ export def "radiusservers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
 ]: nothing -> record<_id: string, authIdp: string, mfa: string, name: string, networkSourceIp: string, organization: string, sharedSecret: string, tagNames: list<string>, tags: list<string>, userLockoutAction: string, userPasswordExpirationAction: string, userPasswordEnabled: bool, userCertEnabled: bool, deviceCertEnabled: bool, caCert: string, requireTlsAuth: bool, radsecEnabled: bool, requireRadsec: bool, caSource: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -832,7 +856,7 @@ export def "radiusservers get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Radius Servers
@@ -848,6 +872,7 @@ export def "radiusservers put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
   --mfa: string@mfa-completer
   name: string
@@ -875,7 +900,7 @@ export def "radiusservers put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Radius Server
@@ -891,6 +916,7 @@ export def "radiusservers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
 ]: nothing -> record<_id: string, authIdp: string, mfa: string, name: string, networkSourceIp: string, tagNames: list<string>, userLockoutAction: string, userPasswordExpirationAction: string, userPasswordEnabled: bool, userCertEnabled: bool, deviceCertEnabled: bool, caCert: string, requireTlsAuth: bool, radsecEnabled: bool, requireRadsec: bool, caSource: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -900,7 +926,7 @@ export def "radiusservers delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search Organizations
@@ -915,6 +941,7 @@ export def "search-organizations post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Use a space seperated string of field parameters to include the data in the response. If omitted, the default list of fields will be returned.
   --filter: string # A filter to apply to the query. See the supported operators below. For more complex searches, see the related `/search/<domain>` endpoints, e.g. `/search/systems`.  **Filter structure**: The filter syntax follows a consistent pattern of `<field>:<operator>:<value>` (e.g. `department:$eq:Finance`)  **field** = Populate with a valid field from an endpoint response.  **operator** = Supported operators are: - `$eq` - equals (exact match) - `$in` - equals (multiple match terms). Separate terms by `|` character: `<field>:$in:<term one>|<term two>`   - any item with `<field>` that matches ANY of the match terms will be returned   - to use a literal `|` character inside a match term, it must be "escaped" using a backslash `\` (`"\|"`)     - for `GET` endpoints, only ONE backslash is needed: `costCenter:$in:Atlanta\|Tampa|Chicago`     - for `POST` endpoints, TWO backslashes are needed due to the nature of JSON: `costCenter:$in:Atlanta\\|Tampa|Chicago`     - resulting match terms: `"Atlanta|Tampa", "Chicago"` - `$ne` - does not equal - `$nin` - does not equal (multiple match terms). Separate terms by `|` character: `<field>:$nin:<term one>|<term two>`   - any item with `<field>` that DOES NOT match ANY of the match terms will be returned   - refer to above `$in` documentation on using literal `|` character in match terms - `$lt` - is less than - `$lte` - is less than or equal to - `$gt` - is greater than - `$gte` - is greater than or equal to - `$sw` - Finds items where the field value begins with the specified term.  **Eventually Consistent Operators** = These advanced operators support multiple-term matching and **require the `x-eventually-consistent` API request header** to be set as `true`. Terms within the `value` must be separated by the `|` character. - `$sw` - Matches any item where the field value **begins** with **any one** of the provided terms. E.g `<field>:$sw:<term one>|<term two>` - `$ew` - Matches any item where the field value **ends** with **any one** of the provided terms. E.g `<field>:$ew:<term one>|<term two>` - `$co` - Matches any item where the field value **contains** **any one** of the provided terms. E.g `<field>:$co:<term one>|<term two>` - `$nco` - Matches any item where the field value **does not contain** any of the provided terms. E.g `<field>:$nco:<term one>|<term two>`  _Note: v1 operators differ from v2 operators._  _Note: For v1 operators, excluding the `$` will result in undefined behavior **and is not recommended.**_  **value** = Populate with the value you want to search for. **Case sensitive**.  **Examples** - `GET /users?filter=username:$eq:testuser` - `GET /systemusers?filter=department:$in:Finance|IT|Shipping & Receiving` - an item with `{ department: "IT" }` will match - `GET /systemusers?filter=department:$in:Finance \| Sales|IT` - an item with `{ department: "Finance | Sales" }` will match - `GET /systemusers?filter=department:$ne:Accounting` - `GET /systemusers?filter=department:$nin:Finance|IT|Shipping & Receiving` - an item with `{ department: "HR" }` will match - `GET /systemusers?filter=password_expiration_date:$lte:2021-10-24` - `GET /systems?filter[0]=firstname:$eq:foo&filter[1]=lastname:$eq:bar` - this will AND the filters together. - `GET /systems?filter[or][0]=lastname:$eq:foo&filter[or][1]=lastname:$eq:bar` - this will OR the filters together. - `GET /systemusers?filter=department:$sw:Shipping` - an item with `{ department: "Shipping & Receiving" }` will match - `GET /systemusers?filter=department:$sw:Shipping\|Receiving` - an item with `{ department: "Shipping|Receiving Item" }` will match - `GET /systemusers?filter=department:$sw:Shipping|Receiving` - an item with `{ department: "Shipping Item" }` will match or an item with `{ department: "Receiving Item" }` will match. **Use it with `x-eventually-consistent` header set to `true`:**
   --limit: int # The number of records to return at once. Limited to 100. (default: 10)
@@ -932,7 +959,7 @@ export def "search-organizations post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search Systems
@@ -947,6 +974,7 @@ export def "search-systems post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Use a space seperated string of field parameters to include the data in the response. If omitted, the default list of fields will be returned.
   --limit: int # The number of records to return at once. Limited to 100. (default: 10)
   --skip: int # The offset into the records to return. (default: 0)
@@ -968,7 +996,7 @@ export def "search-systems post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search System Users
@@ -983,6 +1011,7 @@ export def "search-systemusers post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Use a space seperated string of field parameters to include the data in the response. If omitted, the default list of fields will be returned.
   --filter: string # A filter to apply to the query. See the supported operators below. For more complex searches, see the related `/search/<domain>` endpoints, e.g. `/search/systems`.  **Filter structure**: The filter syntax follows a consistent pattern of `<field>:<operator>:<value>` (e.g. `department:$eq:Finance`)  **field** = Populate with a valid field from an endpoint response.  **operator** = Supported operators are: - `$eq` - equals (exact match) - `$in` - equals (multiple match terms). Separate terms by `|` character: `<field>:$in:<term one>|<term two>`   - any item with `<field>` that matches ANY of the match terms will be returned   - to use a literal `|` character inside a match term, it must be "escaped" using a backslash `\` (`"\|"`)     - for `GET` endpoints, only ONE backslash is needed: `costCenter:$in:Atlanta\|Tampa|Chicago`     - for `POST` endpoints, TWO backslashes are needed due to the nature of JSON: `costCenter:$in:Atlanta\\|Tampa|Chicago`     - resulting match terms: `"Atlanta|Tampa", "Chicago"` - `$ne` - does not equal - `$nin` - does not equal (multiple match terms). Separate terms by `|` character: `<field>:$nin:<term one>|<term two>`   - any item with `<field>` that DOES NOT match ANY of the match terms will be returned   - refer to above `$in` documentation on using literal `|` character in match terms - `$lt` - is less than - `$lte` - is less than or equal to - `$gt` - is greater than - `$gte` - is greater than or equal to - `$sw` - Finds items where the field value begins with the specified term.  **Eventually Consistent Operators** = These advanced operators support multiple-term matching and **require the `x-eventually-consistent` API request header** to be set as `true`. Terms within the `value` must be separated by the `|` character. - `$sw` - Matches any item where the field value **begins** with **any one** of the provided terms. E.g `<field>:$sw:<term one>|<term two>` - `$ew` - Matches any item where the field value **ends** with **any one** of the provided terms. E.g `<field>:$ew:<term one>|<term two>` - `$co` - Matches any item where the field value **contains** **any one** of the provided terms. E.g `<field>:$co:<term one>|<term two>` - `$nco` - Matches any item where the field value **does not contain** any of the provided terms. E.g `<field>:$nco:<term one>|<term two>`  _Note: v1 operators differ from v2 operators._  _Note: For v1 operators, excluding the `$` will result in undefined behavior **and is not recommended.**_  **value** = Populate with the value you want to search for. **Case sensitive**.  **Examples** - `GET /users?filter=username:$eq:testuser` - `GET /systemusers?filter=department:$in:Finance|IT|Shipping & Receiving` - an item with `{ department: "IT" }` will match - `GET /systemusers?filter=department:$in:Finance \| Sales|IT` - an item with `{ department: "Finance | Sales" }` will match - `GET /systemusers?filter=department:$ne:Accounting` - `GET /systemusers?filter=department:$nin:Finance|IT|Shipping & Receiving` - an item with `{ department: "HR" }` will match - `GET /systemusers?filter=password_expiration_date:$lte:2021-10-24` - `GET /systems?filter[0]=firstname:$eq:foo&filter[1]=lastname:$eq:bar` - this will AND the filters together. - `GET /systems?filter[or][0]=lastname:$eq:foo&filter[or][1]=lastname:$eq:bar` - this will OR the filters together. - `GET /systemusers?filter=department:$sw:Shipping` - an item with `{ department: "Shipping & Receiving" }` will match - `GET /systemusers?filter=department:$sw:Shipping\|Receiving` - an item with `{ department: "Shipping|Receiving Item" }` will match - `GET /systemusers?filter=department:$sw:Shipping|Receiving` - an item with `{ department: "Shipping Item" }` will match or an item with `{ department: "Receiving Item" }` will match. **Use it with `x-eventually-consistent` header set to `true`:**
   --limit: int # The number of records to return at once. Limited to 100. (default: 10)
@@ -1004,7 +1033,7 @@ export def "search-systemusers post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search Commands
@@ -1019,6 +1048,7 @@ export def "search-commands post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Use a space seperated string of field parameters to include the data in the response. If omitted, the default list of fields will be returned.
   --filter: string # A filter to apply to the query. See the supported operators below. For more complex searches, see the related `/search/<domain>` endpoints, e.g. `/search/systems`.  **Filter structure**: The filter syntax follows a consistent pattern of `<field>:<operator>:<value>` (e.g. `department:$eq:Finance`)  **field** = Populate with a valid field from an endpoint response.  **operator** = Supported operators are: - `$eq` - equals (exact match) - `$in` - equals (multiple match terms). Separate terms by `|` character: `<field>:$in:<term one>|<term two>`   - any item with `<field>` that matches ANY of the match terms will be returned   - to use a literal `|` character inside a match term, it must be "escaped" using a backslash `\` (`"\|"`)     - for `GET` endpoints, only ONE backslash is needed: `costCenter:$in:Atlanta\|Tampa|Chicago`     - for `POST` endpoints, TWO backslashes are needed due to the nature of JSON: `costCenter:$in:Atlanta\\|Tampa|Chicago`     - resulting match terms: `"Atlanta|Tampa", "Chicago"` - `$ne` - does not equal - `$nin` - does not equal (multiple match terms). Separate terms by `|` character: `<field>:$nin:<term one>|<term two>`   - any item with `<field>` that DOES NOT match ANY of the match terms will be returned   - refer to above `$in` documentation on using literal `|` character in match terms - `$lt` - is less than - `$lte` - is less than or equal to - `$gt` - is greater than - `$gte` - is greater than or equal to - `$sw` - Finds items where the field value begins with the specified term.  **Eventually Consistent Operators** = These advanced operators support multiple-term matching and **require the `x-eventually-consistent` API request header** to be set as `true`. Terms within the `value` must be separated by the `|` character. - `$sw` - Matches any item where the field value **begins** with **any one** of the provided terms. E.g `<field>:$sw:<term one>|<term two>` - `$ew` - Matches any item where the field value **ends** with **any one** of the provided terms. E.g `<field>:$ew:<term one>|<term two>` - `$co` - Matches any item where the field value **contains** **any one** of the provided terms. E.g `<field>:$co:<term one>|<term two>` - `$nco` - Matches any item where the field value **does not contain** any of the provided terms. E.g `<field>:$nco:<term one>|<term two>`  _Note: v1 operators differ from v2 operators._  _Note: For v1 operators, excluding the `$` will result in undefined behavior **and is not recommended.**_  **value** = Populate with the value you want to search for. **Case sensitive**.  **Examples** - `GET /users?filter=username:$eq:testuser` - `GET /systemusers?filter=department:$in:Finance|IT|Shipping & Receiving` - an item with `{ department: "IT" }` will match - `GET /systemusers?filter=department:$in:Finance \| Sales|IT` - an item with `{ department: "Finance | Sales" }` will match - `GET /systemusers?filter=department:$ne:Accounting` - `GET /systemusers?filter=department:$nin:Finance|IT|Shipping & Receiving` - an item with `{ department: "HR" }` will match - `GET /systemusers?filter=password_expiration_date:$lte:2021-10-24` - `GET /systems?filter[0]=firstname:$eq:foo&filter[1]=lastname:$eq:bar` - this will AND the filters together. - `GET /systems?filter[or][0]=lastname:$eq:foo&filter[or][1]=lastname:$eq:bar` - this will OR the filters together. - `GET /systemusers?filter=department:$sw:Shipping` - an item with `{ department: "Shipping & Receiving" }` will match - `GET /systemusers?filter=department:$sw:Shipping\|Receiving` - an item with `{ department: "Shipping|Receiving Item" }` will match - `GET /systemusers?filter=department:$sw:Shipping|Receiving` - an item with `{ department: "Shipping Item" }` will match or an item with `{ department: "Receiving Item" }` will match. **Use it with `x-eventually-consistent` header set to `true`:**
   --limit: int # The number of records to return at once. Limited to 100. (default: 10)
@@ -1039,7 +1069,7 @@ export def "search-commands post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search Commands Results
@@ -1054,6 +1084,7 @@ export def "search-commandresults post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Use a space seperated string of field parameters to include the data in the response. If omitted, the default list of fields will be returned.
   --filter: string # A filter to apply to the query. See the supported operators below. For more complex searches, see the related `/search/<domain>` endpoints, e.g. `/search/systems`.  **Filter structure**: The filter syntax follows a consistent pattern of `<field>:<operator>:<value>` (e.g. `department:$eq:Finance`)  **field** = Populate with a valid field from an endpoint response.  **operator** = Supported operators are: - `$eq` - equals (exact match) - `$in` - equals (multiple match terms). Separate terms by `|` character: `<field>:$in:<term one>|<term two>`   - any item with `<field>` that matches ANY of the match terms will be returned   - to use a literal `|` character inside a match term, it must be "escaped" using a backslash `\` (`"\|"`)     - for `GET` endpoints, only ONE backslash is needed: `costCenter:$in:Atlanta\|Tampa|Chicago`     - for `POST` endpoints, TWO backslashes are needed due to the nature of JSON: `costCenter:$in:Atlanta\\|Tampa|Chicago`     - resulting match terms: `"Atlanta|Tampa", "Chicago"` - `$ne` - does not equal - `$nin` - does not equal (multiple match terms). Separate terms by `|` character: `<field>:$nin:<term one>|<term two>`   - any item with `<field>` that DOES NOT match ANY of the match terms will be returned   - refer to above `$in` documentation on using literal `|` character in match terms - `$lt` - is less than - `$lte` - is less than or equal to - `$gt` - is greater than - `$gte` - is greater than or equal to - `$sw` - Finds items where the field value begins with the specified term.  **Eventually Consistent Operators** = These advanced operators support multiple-term matching and **require the `x-eventually-consistent` API request header** to be set as `true`. Terms within the `value` must be separated by the `|` character. - `$sw` - Matches any item where the field value **begins** with **any one** of the provided terms. E.g `<field>:$sw:<term one>|<term two>` - `$ew` - Matches any item where the field value **ends** with **any one** of the provided terms. E.g `<field>:$ew:<term one>|<term two>` - `$co` - Matches any item where the field value **contains** **any one** of the provided terms. E.g `<field>:$co:<term one>|<term two>` - `$nco` - Matches any item where the field value **does not contain** any of the provided terms. E.g `<field>:$nco:<term one>|<term two>`  _Note: v1 operators differ from v2 operators._  _Note: For v1 operators, excluding the `$` will result in undefined behavior **and is not recommended.**_  **value** = Populate with the value you want to search for. **Case sensitive**.  **Examples** - `GET /users?filter=username:$eq:testuser` - `GET /systemusers?filter=department:$in:Finance|IT|Shipping & Receiving` - an item with `{ department: "IT" }` will match - `GET /systemusers?filter=department:$in:Finance \| Sales|IT` - an item with `{ department: "Finance | Sales" }` will match - `GET /systemusers?filter=department:$ne:Accounting` - `GET /systemusers?filter=department:$nin:Finance|IT|Shipping & Receiving` - an item with `{ department: "HR" }` will match - `GET /systemusers?filter=password_expiration_date:$lte:2021-10-24` - `GET /systems?filter[0]=firstname:$eq:foo&filter[1]=lastname:$eq:bar` - this will AND the filters together. - `GET /systems?filter[or][0]=lastname:$eq:foo&filter[or][1]=lastname:$eq:bar` - this will OR the filters together. - `GET /systemusers?filter=department:$sw:Shipping` - an item with `{ department: "Shipping & Receiving" }` will match - `GET /systemusers?filter=department:$sw:Shipping\|Receiving` - an item with `{ department: "Shipping|Receiving Item" }` will match - `GET /systemusers?filter=department:$sw:Shipping|Receiving` - an item with `{ department: "Shipping Item" }` will match or an item with `{ department: "Receiving Item" }` will match. **Use it with `x-eventually-consistent` header set to `true`:**
   --limit: int # The number of records to return at once. Limited to 100. (default: 10)
@@ -1074,7 +1105,7 @@ export def "search-commandresults post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List All Systems
@@ -1089,6 +1120,7 @@ export def "systems list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Use a space seperated string of field parameters to include the data in the response. If omitted, the default list of fields will be returned.
   --limit: int # The number of records to return at once. Limited to 100. (default: 10)
   --search: string # A nested object containing a `searchTerm` string or array of strings and a list of `fields` to search on.
@@ -1105,7 +1137,7 @@ export def "systems list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List an individual system
@@ -1121,6 +1153,7 @@ export def "systems get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Use a space seperated string of field parameters to include the data in the response. If omitted, the default list of fields will be returned.
   --filter: string # A filter to apply to the query. See the supported operators below. For more complex searches, see the related `/search/<domain>` endpoints, e.g. `/search/systems`.  **Filter structure**: The filter syntax follows a consistent pattern of `<field>:<operator>:<value>` (e.g. `department:$eq:Finance`)  **field** = Populate with a valid field from an endpoint response.  **operator** = Supported operators are: - `$eq` - equals (exact match) - `$in` - equals (multiple match terms). Separate terms by `|` character: `<field>:$in:<term one>|<term two>`   - any item with `<field>` that matches ANY of the match terms will be returned   - to use a literal `|` character inside a match term, it must be "escaped" using a backslash `\` (`"\|"`)     - for `GET` endpoints, only ONE backslash is needed: `costCenter:$in:Atlanta\|Tampa|Chicago`     - for `POST` endpoints, TWO backslashes are needed due to the nature of JSON: `costCenter:$in:Atlanta\\|Tampa|Chicago`     - resulting match terms: `"Atlanta|Tampa", "Chicago"` - `$ne` - does not equal - `$nin` - does not equal (multiple match terms). Separate terms by `|` character: `<field>:$nin:<term one>|<term two>`   - any item with `<field>` that DOES NOT match ANY of the match terms will be returned   - refer to above `$in` documentation on using literal `|` character in match terms - `$lt` - is less than - `$lte` - is less than or equal to - `$gt` - is greater than - `$gte` - is greater than or equal to - `$sw` - Finds items where the field value begins with the specified term.  **Eventually Consistent Operators** = These advanced operators support multiple-term matching and **require the `x-eventually-consistent` API request header** to be set as `true`. Terms within the `value` must be separated by the `|` character. - `$sw` - Matches any item where the field value **begins** with **any one** of the provided terms. E.g `<field>:$sw:<term one>|<term two>` - `$ew` - Matches any item where the field value **ends** with **any one** of the provided terms. E.g `<field>:$ew:<term one>|<term two>` - `$co` - Matches any item where the field value **contains** **any one** of the provided terms. E.g `<field>:$co:<term one>|<term two>` - `$nco` - Matches any item where the field value **does not contain** any of the provided terms. E.g `<field>:$nco:<term one>|<term two>`  _Note: v1 operators differ from v2 operators._  _Note: For v1 operators, excluding the `$` will result in undefined behavior **and is not recommended.**_  **value** = Populate with the value you want to search for. **Case sensitive**.  **Examples** - `GET /users?filter=username:$eq:testuser` - `GET /systemusers?filter=department:$in:Finance|IT|Shipping & Receiving` - an item with `{ department: "IT" }` will match - `GET /systemusers?filter=department:$in:Finance \| Sales|IT` - an item with `{ department: "Finance | Sales" }` will match - `GET /systemusers?filter=department:$ne:Accounting` - `GET /systemusers?filter=department:$nin:Finance|IT|Shipping & Receiving` - an item with `{ department: "HR" }` will match - `GET /systemusers?filter=password_expiration_date:$lte:2021-10-24` - `GET /systems?filter[0]=firstname:$eq:foo&filter[1]=lastname:$eq:bar` - this will AND the filters together. - `GET /systems?filter[or][0]=lastname:$eq:foo&filter[or][1]=lastname:$eq:bar` - this will OR the filters together. - `GET /systemusers?filter=department:$sw:Shipping` - an item with `{ department: "Shipping & Receiving" }` will match - `GET /systemusers?filter=department:$sw:Shipping\|Receiving` - an item with `{ department: "Shipping|Receiving Item" }` will match - `GET /systemusers?filter=department:$sw:Shipping|Receiving` - an item with `{ department: "Shipping Item" }` will match or an item with `{ department: "Receiving Item" }` will match. **Use it with `x-eventually-consistent` header set to `true`:**
   --Date: string # Current date header for the System Context API
@@ -1135,7 +1168,7 @@ export def "systems get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a system
@@ -1153,6 +1186,7 @@ export def "systems put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Date: string # Current date header for the System Context API
   --Authorization: string # Authorization header for the System Context API
   --x-org-id: string
@@ -1175,7 +1209,7 @@ export def "systems put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a System
@@ -1191,6 +1225,7 @@ export def "systems delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Date: string # Current date header for the System Context API
   --Authorization: string # Authorization header for the System Context API
   --x-org-id: string
@@ -1202,7 +1237,7 @@ export def "systems delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all system users
@@ -1217,6 +1252,7 @@ export def "systemusers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of records to return at once. (default: 10)
   --skip: int # The offset into the records to return. (default: 0)
   --qp-sort: string # The space separated fields used to sort the collection. Default sort is ascending, prefix with `-` to sort descending.
@@ -1233,7 +1269,7 @@ export def "systemusers list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a system user
@@ -1255,6 +1291,7 @@ export def "systemusers post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fullValidationDetails: string # Pass this query parameter when a client wants all validation errors to be returned with a detailed error response for the form field specified. The current form fields are allowed:  * `password`  #### Password validation flag Use the `password` validation flag to receive details on a possible bad request response ``` ?fullValidationDetails=password ``` Without the flag, default behavior will be a normal 400 with only a single validation string error #### Expected Behavior Clients can expect a list of validation error mappings for the validation query field in the details provided on the response: ``` {   "code": 400,   "message": "Password validation fail",   "status": "INVALID_ARGUMENT",   "details": [       {         "fieldViolationsList": [           {"field": "password", "description": "specialCharacter"}         ],         '@type': 'type.googleapis.com/google.rpc.BadRequest',       },   ], }, ```
   --x-org-id: string
   --account-locked: oneof<nothing, bool>
@@ -1316,7 +1353,7 @@ export def "systemusers post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List a system user
@@ -1332,6 +1369,7 @@ export def "systemusers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-fields: string # Use a space seperated string of field parameters to include the data in the response. If omitted, the default list of fields will be returned.
   --filter: string # A filter to apply to the query. See the supported operators below. For more complex searches, see the related `/search/<domain>` endpoints, e.g. `/search/systems`.  **Filter structure**: The filter syntax follows a consistent pattern of `<field>:<operator>:<value>` (e.g. `department:$eq:Finance`)  **field** = Populate with a valid field from an endpoint response.  **operator** = Supported operators are: - `$eq` - equals (exact match) - `$in` - equals (multiple match terms). Separate terms by `|` character: `<field>:$in:<term one>|<term two>`   - any item with `<field>` that matches ANY of the match terms will be returned   - to use a literal `|` character inside a match term, it must be "escaped" using a backslash `\` (`"\|"`)     - for `GET` endpoints, only ONE backslash is needed: `costCenter:$in:Atlanta\|Tampa|Chicago`     - for `POST` endpoints, TWO backslashes are needed due to the nature of JSON: `costCenter:$in:Atlanta\\|Tampa|Chicago`     - resulting match terms: `"Atlanta|Tampa", "Chicago"` - `$ne` - does not equal - `$nin` - does not equal (multiple match terms). Separate terms by `|` character: `<field>:$nin:<term one>|<term two>`   - any item with `<field>` that DOES NOT match ANY of the match terms will be returned   - refer to above `$in` documentation on using literal `|` character in match terms - `$lt` - is less than - `$lte` - is less than or equal to - `$gt` - is greater than - `$gte` - is greater than or equal to - `$sw` - Finds items where the field value begins with the specified term.  **Eventually Consistent Operators** = These advanced operators support multiple-term matching and **require the `x-eventually-consistent` API request header** to be set as `true`. Terms within the `value` must be separated by the `|` character. - `$sw` - Matches any item where the field value **begins** with **any one** of the provided terms. E.g `<field>:$sw:<term one>|<term two>` - `$ew` - Matches any item where the field value **ends** with **any one** of the provided terms. E.g `<field>:$ew:<term one>|<term two>` - `$co` - Matches any item where the field value **contains** **any one** of the provided terms. E.g `<field>:$co:<term one>|<term two>` - `$nco` - Matches any item where the field value **does not contain** any of the provided terms. E.g `<field>:$nco:<term one>|<term two>`  _Note: v1 operators differ from v2 operators._  _Note: For v1 operators, excluding the `$` will result in undefined behavior **and is not recommended.**_  **value** = Populate with the value you want to search for. **Case sensitive**.  **Examples** - `GET /users?filter=username:$eq:testuser` - `GET /systemusers?filter=department:$in:Finance|IT|Shipping & Receiving` - an item with `{ department: "IT" }` will match - `GET /systemusers?filter=department:$in:Finance \| Sales|IT` - an item with `{ department: "Finance | Sales" }` will match - `GET /systemusers?filter=department:$ne:Accounting` - `GET /systemusers?filter=department:$nin:Finance|IT|Shipping & Receiving` - an item with `{ department: "HR" }` will match - `GET /systemusers?filter=password_expiration_date:$lte:2021-10-24` - `GET /systems?filter[0]=firstname:$eq:foo&filter[1]=lastname:$eq:bar` - this will AND the filters together. - `GET /systems?filter[or][0]=lastname:$eq:foo&filter[or][1]=lastname:$eq:bar` - this will OR the filters together. - `GET /systemusers?filter=department:$sw:Shipping` - an item with `{ department: "Shipping & Receiving" }` will match - `GET /systemusers?filter=department:$sw:Shipping\|Receiving` - an item with `{ department: "Shipping|Receiving Item" }` will match - `GET /systemusers?filter=department:$sw:Shipping|Receiving` - an item with `{ department: "Shipping Item" }` will match or an item with `{ department: "Receiving Item" }` will match. **Use it with `x-eventually-consistent` header set to `true`:**
   --x-org-id: string
@@ -1344,7 +1382,7 @@ export def "systemusers get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a system user
@@ -1367,6 +1405,7 @@ export def "systemusers put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fullValidationDetails: string # This endpoint can take in a query when a client wants all validation errors to be returned with error response for the form field specified, i.e. 'password' #### Password validation flag Use the "password" validation flag to receive details on a possible bad request response Without the `password` flag, default behavior will be a normal 400 with only a validation string message ``` ?fullValidationDetails=password ``` #### Expected Behavior Clients can expect a list of validation error mappings for the validation query field in the details provided on the response: ``` {   "code": 400,   "message": "Password validation fail",   "status": "INVALID_ARGUMENT",   "details": [       {         "fieldViolationsList": [{ "field": "password", "description": "passwordHistory" }],         '@type': 'type.googleapis.com/google.rpc.BadRequest',       },   ], }, ```
   --x-org-id: string
   --account-locked: oneof<nothing, bool>
@@ -1426,7 +1465,7 @@ export def "systemusers put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a system user
@@ -1442,6 +1481,7 @@ export def "systemusers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cascade-manager: string # This is an optional flag that can be enabled on the DELETE call, DELETE /systemusers/{id}?cascade_manager=null. This parameter will clear the Manager attribute on all direct reports and then delete the account.
   --x-org-id: string
 ]: nothing -> record<_id: string, account_locked: bool, account_locked_date: string, activated: bool, admin: record<id: string, roleName: string, roleNames: list<string>>, addresses: table<country: string, extendedAddress: string, id: string, locality: string, poBox: string, postalCode: string, region: string, streetAddress: string, type: string>, allow_public_key: bool, alternateEmail: string, attributes: table<name: string, value: string>, badLoginAttempts: int, company: string, costCenter: string, created: string, department: string, description: string, disableDeviceMaxLoginAttempts: bool, displayname: string, email: string, employeeIdentifier: string, employeeType: string, enable_managed_uid: bool, enable_user_portal_multifactor: bool, external_dn: string, external_password_expiration_date: string, external_source_type: string, externally_managed: bool, firstname: string, jobTitle: string, lastname: string, ldap_binding_user: bool, location: string, manager: string, mfa: record<configured: bool, exclusion: bool, exclusionUntil: string, exclusionDays: int>, mfaEnrollment: record<totpStatus: string, webAuthnStatus: string, pushStatus: string, smsStatus: string, overallStatus: string, jcGoStatus: string>, middlename: string, organization: string, password_date: string, password_expiration_date: string, password_expired: bool, password_never_expires: bool, passwordless_sudo: bool, phoneNumbers: table<id: string, number: string, type: string>, public_key: string, recoveryEmail: record<address: string, verified: bool, verifiedAt: string>, relationships: table<type: string, value: string>, samba_service_user: bool, ssh_keys: table<_id: string, create_date: string, name: string, public_key: string>, state: string, sudo: bool, suspended: bool, tags: list<string>, totp_enabled: bool, unix_guid: int, unix_uid: int, username: string, managedAppleId: string, creationSource: string, delegatedAuthority: record<name: string, id: string>, restrictedFields: table<field: string, type: string, id: string>> {
@@ -1453,7 +1493,7 @@ export def "systemusers delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Expire a system user's password
@@ -1469,6 +1509,7 @@ export def "systemusers-expire expire" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --x-org-id: string
 ]: nothing -> string {
@@ -1479,7 +1520,7 @@ export def "systemusers-expire expire" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Force set a system user's password
@@ -1495,6 +1536,7 @@ export def "systemusers-password password" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
   --password: string
 ]: any -> any {
@@ -1508,7 +1550,7 @@ export def "systemusers-password password" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a system user's MFA properties
@@ -1525,6 +1567,7 @@ export def "systemusers-mfa-enforce enforce" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
   --enable-user-portal-multifactor: oneof<nothing, bool> # Whether to require MFA for user portal login
   --mfa: record # shape: {configured?: bool, exclusion?: bool, exclusionUntil?: string, exclusionDays?: int}
@@ -1539,7 +1582,7 @@ export def "systemusers-mfa-enforce enforce" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Reset a system user's MFA token
@@ -1555,6 +1598,7 @@ export def "systemusers-resetmfa resetmfa" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --x-org-id: string
   --exclusion: oneof<nothing, bool>
@@ -1571,7 +1615,7 @@ export def "systemusers-resetmfa resetmfa" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Sync a systemuser's mfa enrollment status
@@ -1587,13 +1631,14 @@ export def "systemusers-mfasync mfasync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/systemusers/($id)/mfasync")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a system user's public SSH keys
@@ -1609,6 +1654,7 @@ export def "systemusers-sshkeys list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
 ]: nothing -> table<_id: string, create_date: string, name: string, public_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1618,7 +1664,7 @@ export def "systemusers-sshkeys list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a system user's Public SSH Key
@@ -1634,6 +1680,7 @@ export def "systemusers-sshkeys post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
   name: string # The name of the SSH key.
   public_key: string # The Public SSH key.
@@ -1648,7 +1695,7 @@ export def "systemusers-sshkeys post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Display info about a System User's TOTP enrollment.
@@ -1664,6 +1711,7 @@ export def "systemusers-totpinfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
 ]: nothing -> record<enrollmentDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1673,7 +1721,7 @@ export def "systemusers-totpinfo info" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unlock a system user
@@ -1689,6 +1737,7 @@ export def "systemusers-unlock unlock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --x-org-id: string
 ]: nothing -> string {
@@ -1699,7 +1748,7 @@ export def "systemusers-unlock unlock" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a system user's Public SSH Keys
@@ -1716,6 +1765,7 @@ export def "systemusers-sshkeys delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --x-org-id: string
 ]: nothing -> string {
@@ -1726,7 +1776,7 @@ export def "systemusers-sshkeys delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Activate System User
@@ -1742,6 +1792,7 @@ export def "systemusers-state-activate activate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --email: record
 ]: any -> string {
   let input = $in
@@ -1752,7 +1803,7 @@ export def "systemusers-state-activate activate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Suspend System User
@@ -1768,13 +1819,14 @@ export def "systemusers-state-suspend suspend" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/systemusers/($id)/state/suspend")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Administrator TOTP Reset Initiation
@@ -1790,13 +1842,14 @@ export def "users-resettotp begin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/resettotp/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a user
@@ -1812,6 +1865,7 @@ export def "users put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
   --apiKeyAllowed: oneof<nothing, bool>
   --email: string # format: email
@@ -1833,7 +1887,7 @@ export def "users put" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get results for a specific command
@@ -1849,6 +1903,7 @@ export def "commands-results get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The number of records to return at once. Limited to 100. (default: 10)
   --skip: int # The offset into the records to return. (default: 0)
 ]: nothing -> table<_id: string, command: string, files: list<string>, name: string, organization: string, response: record<data: record, error: string, id: string>, sudo: bool, system: string, systemId: string, user: string, workflowId: string, workflowInstanceId: string> {
@@ -1858,7 +1913,7 @@ export def "commands-results get" [
   let full_url = (build-url $base $"/commands/($id)/results" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reactivate System User
@@ -1874,6 +1929,7 @@ export def "systemusers-reactivate reactivate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
   --email: string # Email address to which the activation email will be sent. If it is not provided, the activation email will be sent to the system user's email address. (format: email)
 ]: any -> any {
@@ -1887,7 +1943,7 @@ export def "systemusers-reactivate reactivate" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Administrator Password Reset Initiation
@@ -1903,13 +1959,14 @@ export def "users-reactivate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/users/reactivate/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Run a command
@@ -1924,6 +1981,7 @@ export def "run-command run" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The ID of the command.
   --systemIds: list # An optional list of device IDs to run the command on. If omitted, the command will run on devices bound to the command.
 ]: any -> record<queueIds: list<string>, workflowInstanceId: string> {
@@ -1935,7 +1993,7 @@ export def "run-command run" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Erase a System
@@ -1951,6 +2009,7 @@ export def "systems-command-builtin-erase commandBuiltinErase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1960,7 +2019,7 @@ export def "systems-command-builtin-erase commandBuiltinErase" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lock a System
@@ -1976,6 +2035,7 @@ export def "systems-command-builtin-lock commandBuiltinLock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1985,7 +2045,7 @@ export def "systems-command-builtin-lock commandBuiltinLock" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Restart a System
@@ -2001,6 +2061,7 @@ export def "systems-command-builtin-restart commandBuiltinRestart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2010,7 +2071,7 @@ export def "systems-command-builtin-restart commandBuiltinRestart" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Shutdown a System
@@ -2026,6 +2087,7 @@ export def "systems-command-builtin-shutdown commandBuiltinShutdown" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --x-org-id: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2035,5 +2097,5 @@ export def "systems-command-builtin-shutdown commandBuiltinShutdown" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

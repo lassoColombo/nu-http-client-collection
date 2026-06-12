@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -105,7 +106,7 @@ def state-completer-4 [] { ["AVAILABLE" "INITIALISATION_FAILED" "INITIALISING"] 
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "access-tokens-latest-projects list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -139,6 +140,7 @@ export def "access-tokens-latest-projects list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
 ]: nothing -> any {
@@ -148,7 +150,7 @@ export def "access-tokens-latest-projects list" [
   let full_url = (build-url $base $"/access-tokens/latest/projects/($projectKey)" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create project HTTP token
@@ -164,6 +166,7 @@ export def "access-tokens-latest-projects createAccessToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expiryDays: int # format: int32
   --name: string # e.g. My access token
   permissions: list # e.g. [REPO_ADMIN, PROJECT_READ]
@@ -176,7 +179,7 @@ export def "access-tokens-latest-projects createAccessToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get repository HTTP tokens
@@ -193,6 +196,7 @@ export def "access-tokens-latest-projects-repos get-by-projectKey-repositorySlug
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
 ]: nothing -> any {
@@ -202,7 +206,7 @@ export def "access-tokens-latest-projects-repos get-by-projectKey-repositorySlug
   let full_url = (build-url $base $"/access-tokens/latest/projects/($projectKey)/repos/($repositorySlug)" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create repository HTTP token
@@ -219,6 +223,7 @@ export def "access-tokens-latest-projects-repos createAccessToken-by-projectKey-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expiryDays: int # format: int32
   --name: string # e.g. My access token
   permissions: list # e.g. [REPO_ADMIN, PROJECT_READ]
@@ -231,7 +236,7 @@ export def "access-tokens-latest-projects-repos createAccessToken-by-projectKey-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a HTTP token
@@ -249,13 +254,14 @@ export def "access-tokens-latest-projects-repos delete-by-projectKey-tokenId-rep
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/access-tokens/latest/projects/($projectKey)/repos/($repositorySlug)/($tokenId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get HTTP token by ID
@@ -273,13 +279,14 @@ export def "access-tokens-latest-projects-repos get-by-projectKey-tokenId-reposi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/access-tokens/latest/projects/($projectKey)/repos/($repositorySlug)/($tokenId)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update HTTP token
@@ -297,6 +304,7 @@ export def "access-tokens-latest-projects-repos updateAccessToken-by-projectKey-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expiryDays: int # format: int32
   --name: string # e.g. My access token
   permissions: list # e.g. [REPO_ADMIN, PROJECT_READ]
@@ -309,7 +317,7 @@ export def "access-tokens-latest-projects-repos updateAccessToken-by-projectKey-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a HTTP token
@@ -326,13 +334,14 @@ export def "access-tokens-latest-projects delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/access-tokens/latest/projects/($projectKey)/($tokenId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get HTTP token by ID
@@ -349,13 +358,14 @@ export def "access-tokens-latest-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/access-tokens/latest/projects/($projectKey)/($tokenId)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update HTTP token
@@ -372,6 +382,7 @@ export def "access-tokens-latest-projects updateAccessToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expiryDays: int # format: int32
   --name: string # e.g. My access token
   permissions: list # e.g. [REPO_ADMIN, PROJECT_READ]
@@ -384,7 +395,7 @@ export def "access-tokens-latest-projects updateAccessToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get personal HTTP tokens
@@ -400,6 +411,7 @@ export def "access-tokens-latest-users get-by-userSlug" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
 ]: nothing -> any {
@@ -409,7 +421,7 @@ export def "access-tokens-latest-users get-by-userSlug" [
   let full_url = (build-url $base $"/access-tokens/latest/users/($userSlug)" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create personal HTTP token
@@ -425,6 +437,7 @@ export def "access-tokens-latest-users createAccessToken-by-userSlug" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expiryDays: int # format: int32
   --name: string # e.g. My access token
   permissions: list # e.g. [REPO_ADMIN, PROJECT_READ]
@@ -437,7 +450,7 @@ export def "access-tokens-latest-users createAccessToken-by-userSlug" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a HTTP token
@@ -454,13 +467,14 @@ export def "access-tokens-latest-users delete-by-tokenId-userSlug" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/access-tokens/latest/users/($userSlug)/($tokenId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get HTTP token by ID
@@ -477,13 +491,14 @@ export def "access-tokens-latest-users get-by-tokenId-userSlug" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/access-tokens/latest/users/($userSlug)/($tokenId)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update HTTP token
@@ -500,6 +515,7 @@ export def "access-tokens-latest-users updateAccessToken-by-tokenId-userSlug" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expiryDays: int # format: int32
   --name: string # e.g. My access token
   permissions: list # e.g. [REPO_ADMIN, PROJECT_READ]
@@ -512,7 +528,7 @@ export def "access-tokens-latest-users updateAccessToken-by-tokenId-userSlug" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Dismiss retention config notification
@@ -527,13 +543,14 @@ export def "audit-latest-notification-settings-retention-config-review dismissRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/audit/latest/notification-settings/retention-config-review")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete branch
@@ -550,6 +567,7 @@ export def "branch-utils-latest-projects-repos-branches delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dryRun: oneof<nothing, bool> # Don't actually delete the ref name, just do a dry run
   --endPoint: string # Commit ID that the provided ref name is expected to point to
   --name: string # Name of the ref to be deleted
@@ -562,7 +580,7 @@ export def "branch-utils-latest-projects-repos-branches delete" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create branch
@@ -579,6 +597,7 @@ export def "branch-utils-latest-projects-repos-branches createBranch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the branch to be created
   --startPoint: string # Commit ID from which the branch is created
 ]: any -> any {
@@ -590,7 +609,7 @@ export def "branch-utils-latest-projects-repos-branches createBranch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get branch
@@ -608,6 +627,7 @@ export def "branch-utils-latest-projects-repos-branches-info findByCommit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
 ]: nothing -> any {
@@ -617,7 +637,7 @@ export def "branch-utils-latest-projects-repos-branches-info findByCommit" [
   let full_url = (build-url $base $"/branch-utils/latest/projects/($projectKey)/repos/($repositorySlug)/branches/info/($commitId)" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get build status statistics for multiple commits
@@ -632,6 +652,7 @@ export def "build-status-latest-commits-stats post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -641,7 +662,7 @@ export def "build-status-latest-commits-stats post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get build status statistics for commit
@@ -657,6 +678,7 @@ export def "build-status-latest-commits-stats get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeUnique: oneof<nothing, bool> # include a unique build result if there is either only one failed build, only one in-progress build or only one successful build
 ]: nothing -> record<cancelled: int, failed: int, inProgress: int, successful: int, unknown: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -665,7 +687,7 @@ export def "build-status-latest-commits-stats get" [
   let full_url = (build-url $base $"/build-status/latest/commits/stats/($commitId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get build statuses for commit
@@ -683,6 +705,7 @@ export def "build-status-latest-commits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orderBy: string # How the results should be ordered. Options are NEWEST, OLDEST, STATUS (e.g. newest, oldest, or status)
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -693,7 +716,7 @@ export def "build-status-latest-commits get" [
   let full_url = (build-url $base $"/build-status/latest/commits/($commitId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create build status for commit
@@ -712,6 +735,7 @@ export def "build-status-latest-commits addBuildStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --buildNumber: string # e.g. 3
   --createdDate: int # format: int64, e.g. 1587533099278
   --description: string # e.g. A description of the build goes here
@@ -735,7 +759,7 @@ export def "build-status-latest-commits addBuildStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a required builds merge check
@@ -752,6 +776,7 @@ export def "required-builds-latest-projects-repos-condition createRequiredBuilds
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -761,7 +786,7 @@ export def "required-builds-latest-projects-repos-condition createRequiredBuilds
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Delete a required builds merge check
@@ -779,13 +804,14 @@ export def "required-builds-latest-projects-repos-condition delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/required-builds/latest/projects/($projectKey)/repos/($repositorySlug)/condition/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a required builds merge check
@@ -803,6 +829,7 @@ export def "required-builds-latest-projects-repos-condition updateRequiredBuilds
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -812,7 +839,7 @@ export def "required-builds-latest-projects-repos-condition updateRequiredBuilds
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Get required builds merge checks
@@ -829,6 +856,7 @@ export def "required-builds-latest-projects-repos-conditions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
 ]: nothing -> any {
@@ -838,7 +866,7 @@ export def "required-builds-latest-projects-repos-conditions get" [
   let full_url = (build-url $base $"/required-builds/latest/projects/($projectKey)/repos/($repositorySlug)/conditions" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Code Insights annotations for a commit
@@ -856,6 +884,7 @@ export def "insights-latest-projects-repos-commits-annotations get-by-projectKey
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --severity: string # Return only annotations that have one of the given severities. Can be specified more than once to filter by more than one severity. Valid severities are <code>LOW</code>, <code>MEDIUM</code> and <code>HIGH</code>.
   --path: string # Return only annotations that appear on one of the provided paths. Can be specified more than once to filter by more than one path.
   --externalId: string # Return only annotations that have one of the provided external IDs. Can be specified more than once to filter by more than one external ID.
@@ -868,7 +897,7 @@ export def "insights-latest-projects-repos-commits-annotations get-by-projectKey
   let full_url = (build-url $base $"/insights/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)/annotations" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all Code Insights reports for a commit
@@ -886,6 +915,7 @@ export def "insights-latest-projects-repos-commits-reports list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
 ]: nothing -> any {
@@ -895,7 +925,7 @@ export def "insights-latest-projects-repos-commits-reports list" [
   let full_url = (build-url $base $"/insights/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)/reports" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a Code Insights report
@@ -914,13 +944,14 @@ export def "insights-latest-projects-repos-commits-reports delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/insights/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)/reports/($key)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a Code Insights report
@@ -939,13 +970,14 @@ export def "insights-latest-projects-repos-commits-reports get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/insights/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)/reports/($key)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Code Insights report
@@ -966,6 +998,7 @@ export def "insights-latest-projects-repos-commits-reports setACodeInsightsRepor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --coverageProviderKey: string
   --createdDate: int # format: int64, e.g. 1630041546433
   data: list # item shape: {title?: string, type?: string, value?: record}
@@ -984,7 +1017,7 @@ export def "insights-latest-projects-repos-commits-reports setACodeInsightsRepor
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Code Insights annotations
@@ -1003,6 +1036,7 @@ export def "insights-latest-projects-repos-commits-reports-annotations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --externalId: string # The external IDs for the annotations that are to be deleted. Can be specified more than once to delete by more than one external ID, or can be unspecified to delete all annotations.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1011,7 +1045,7 @@ export def "insights-latest-projects-repos-commits-reports-annotations delete" [
   let full_url = (build-url $base $"/insights/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)/reports/($key)/annotations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Code Insights annotations for a report
@@ -1030,13 +1064,14 @@ export def "insights-latest-projects-repos-commits-reports-annotations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/insights/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)/reports/($key)/annotations")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add Code Insights annotations
@@ -1056,6 +1091,7 @@ export def "insights-latest-projects-repos-commits-reports-annotations addAnnota
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --annotations: list # item shape: {externalId?: string, line?: int, link?: string, message: string, path?: string, severity: string, type?: string}
 ]: any -> any {
   let input = $in
@@ -1066,7 +1102,7 @@ export def "insights-latest-projects-repos-commits-reports-annotations addAnnota
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create or replace a Code Insights annotation
@@ -1086,6 +1122,7 @@ export def "insights-latest-projects-repos-commits-reports-annotations setAnnota
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-externalId: string # e.g. message-1
   --line: int # format: int32, e.g. 4
   --link: string # e.g. https://link.to.tool/that/produced/annotation/message-1
@@ -1102,7 +1139,7 @@ export def "insights-latest-projects-repos-commits-reports-annotations setAnnota
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Change CSP strictness setting
@@ -1117,6 +1154,7 @@ export def "csp-latest-settings settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --strictness: string@strictness-completer
 ]: any -> any {
   let input = $in
@@ -1127,7 +1165,7 @@ export def "csp-latest-settings settings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create default reviewer condition
@@ -1147,6 +1185,7 @@ export def "default-reviewers-latest-projects-condition createPullRequestConditi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --requiredApprovals: int # format: int32, e.g. 1
   --reviewerGroups: list # item shape: {avatarUrl?: string, description?: string, id?: int, name?: string, scope?: record, users?: list}
   --reviewers: list # item shape: {active?: bool, avatarUrl?: string, displayName?: string, emailAddress?: string, links?: record, name?: string, slug?: string, type?: "NORMAL"|"SERVICE"}
@@ -1161,7 +1200,7 @@ export def "default-reviewers-latest-projects-condition createPullRequestConditi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete default reviewer condition
@@ -1178,13 +1217,14 @@ export def "default-reviewers-latest-projects-condition delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/default-reviewers/latest/projects/($projectKey)/condition/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update default reviewer condition
@@ -1205,6 +1245,7 @@ export def "default-reviewers-latest-projects-condition updatePullRequestConditi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --requiredApprovals: int # format: int32, e.g. 1
   --reviewerGroups: list # item shape: {avatarUrl?: string, description?: string, id?: int, name?: string, scope?: record, users?: list}
   --reviewers: list # item shape: {active?: bool, avatarUrl?: string, displayName?: string, emailAddress?: string, links?: record, name?: string, slug?: string, type?: "NORMAL"|"SERVICE"}
@@ -1219,7 +1260,7 @@ export def "default-reviewers-latest-projects-condition updatePullRequestConditi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get default reviewer conditions
@@ -1235,13 +1276,14 @@ export def "default-reviewers-latest-projects-conditions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: int, requiredApprovals: int, reviewerGroups: list<record>, reviewers: list<record>, scope: record<resourceId: int, type: string>, sourceRefMatcher: record<displayId: string, id: string, type: record>, targetRefMatcher: record<displayId: string, id: string, type: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/default-reviewers/latest/projects/($projectKey)/conditions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create default reviewer condition
@@ -1262,6 +1304,7 @@ export def "default-reviewers-latest-projects-repos-condition createPullRequestC
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --requiredApprovals: int # format: int32, e.g. 1
   --reviewerGroups: list # item shape: {avatarUrl?: string, description?: string, id?: int, name?: string, scope?: record, users?: list}
   --reviewers: list # item shape: {active?: bool, avatarUrl?: string, displayName?: string, emailAddress?: string, links?: record, name?: string, slug?: string, type?: "NORMAL"|"SERVICE"}
@@ -1276,7 +1319,7 @@ export def "default-reviewers-latest-projects-repos-condition createPullRequestC
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete default reviewer condition
@@ -1294,13 +1337,14 @@ export def "default-reviewers-latest-projects-repos-condition delete-by-projectK
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/default-reviewers/latest/projects/($projectKey)/repos/($repositorySlug)/condition/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update default reviewer condition
@@ -1322,6 +1366,7 @@ export def "default-reviewers-latest-projects-repos-condition updatePullRequestC
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --requiredApprovals: int # format: int32, e.g. 1
   --reviewerGroups: list # item shape: {avatarUrl?: string, description?: string, id?: int, name?: string, scope?: record, users?: list}
   --reviewers: list # item shape: {active?: bool, avatarUrl?: string, displayName?: string, emailAddress?: string, links?: record, name?: string, slug?: string, type?: "NORMAL"|"SERVICE"}
@@ -1336,7 +1381,7 @@ export def "default-reviewers-latest-projects-repos-condition updatePullRequestC
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get default reviewer conditions
@@ -1353,13 +1398,14 @@ export def "default-reviewers-latest-projects-repos-conditions get-by-projectKey
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: int, requiredApprovals: int, reviewerGroups: list<record>, reviewers: list<record>, scope: record<resourceId: int, type: string>, sourceRefMatcher: record<displayId: string, id: string, type: record>, targetRefMatcher: record<displayId: string, id: string, type: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/default-reviewers/latest/projects/($projectKey)/repos/($repositorySlug)/conditions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get required reviewers for PR creation
@@ -1376,6 +1422,7 @@ export def "default-reviewers-latest-projects-repos-reviewers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --targetRepoId: string # The ID of the repository in which the target ref exists
   --sourceRepoId: string # The ID of the repository in which the source ref exists
   --sourceRefId: string # The ID of the source ref
@@ -1387,7 +1434,7 @@ export def "default-reviewers-latest-projects-repos-reviewers get" [
   let full_url = (build-url $base $"/default-reviewers/latest/projects/($projectKey)/repos/($repositorySlug)/reviewers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check PR rebase precondition
@@ -1405,13 +1452,14 @@ export def "git-latest-projects-repos-pull-requests-rebase canRebase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/git/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/rebase")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Rebase pull request
@@ -1429,6 +1477,7 @@ export def "git-latest-projects-repos-pull-requests-rebase rebase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: int # format: int32, e.g. 1
 ]: any -> any {
   let input = $in
@@ -1439,7 +1488,7 @@ export def "git-latest-projects-repos-pull-requests-rebase rebase" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create tag
@@ -1456,6 +1505,7 @@ export def "git-latest-projects-repos-tags createTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --force: oneof<nothing, bool>
   --message: string # e.g. A new release tag
   --name: string # e.g. release-tag
@@ -1470,7 +1520,7 @@ export def "git-latest-projects-repos-tags createTag" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete tag
@@ -1488,13 +1538,14 @@ export def "git-latest-projects-repos-tags delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/git/latest/projects/($projectKey)/repos/($repositorySlug)/tags/($name)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes all default tasks for the repository
@@ -1511,13 +1562,14 @@ export def "default-tasks-latest-projects-repos-tasks delete-by-projectKey-repos
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/default-tasks/latest/projects/($projectKey)/repos/($repositorySlug)/tasks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a page of default tasks
@@ -1534,6 +1586,7 @@ export def "default-tasks-latest-projects-repos-tasks get-by-projectKey-reposito
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --markup: string # If present or `"true"`, includes a markup-rendered description
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -1544,7 +1597,7 @@ export def "default-tasks-latest-projects-repos-tasks get-by-projectKey-reposito
   let full_url = (build-url $base $"/default-tasks/latest/projects/($projectKey)/repos/($repositorySlug)/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a default task
@@ -1563,6 +1616,7 @@ export def "default-tasks-latest-projects-repos-tasks addDefaultTask-by-projectK
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   description: string # e.g. Default task description
   --sourceMatcher: any # shape: {displayId?: string, id?: string, type?: record}
   --targetMatcher: record # shape: {displayId?: string, id?: string, type?: record}
@@ -1575,7 +1629,7 @@ export def "default-tasks-latest-projects-repos-tasks addDefaultTask-by-projectK
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a specific default task
@@ -1593,13 +1647,14 @@ export def "default-tasks-latest-projects-repos-tasks delete-by-projectKey-repos
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/default-tasks/latest/projects/($projectKey)/repos/($repositorySlug)/tasks/($taskId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a default task
@@ -1619,6 +1674,7 @@ export def "default-tasks-latest-projects-repos-tasks updateDefaultTask-by-proje
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   description: string # e.g. Default task description
   --sourceMatcher: any # shape: {displayId?: string, id?: string, type?: record}
   --targetMatcher: record # shape: {displayId?: string, id?: string, type?: record}
@@ -1631,7 +1687,7 @@ export def "default-tasks-latest-projects-repos-tasks updateDefaultTask-by-proje
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes all default tasks for the project
@@ -1647,13 +1703,14 @@ export def "default-tasks-latest-projects-tasks delete-by-projectKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/default-tasks/latest/projects/($projectKey)/tasks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a page of default tasks
@@ -1669,6 +1726,7 @@ export def "default-tasks-latest-projects-tasks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --markup: string # If present or "true", includes a markup-rendered description
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -1679,7 +1737,7 @@ export def "default-tasks-latest-projects-tasks get" [
   let full_url = (build-url $base $"/default-tasks/latest/projects/($projectKey)/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a default task
@@ -1697,6 +1755,7 @@ export def "default-tasks-latest-projects-tasks addDefaultTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   description: string # e.g. Default task description
   --sourceMatcher: any # shape: {displayId?: string, id?: string, type?: record}
   --targetMatcher: record # shape: {displayId?: string, id?: string, type?: record}
@@ -1709,7 +1768,7 @@ export def "default-tasks-latest-projects-tasks addDefaultTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a specific default task
@@ -1726,13 +1785,14 @@ export def "default-tasks-latest-projects-tasks delete-by-projectKey-taskId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/default-tasks/latest/projects/($projectKey)/tasks/($taskId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a default task
@@ -1751,6 +1811,7 @@ export def "default-tasks-latest-projects-tasks updateDefaultTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   description: string # e.g. Default task description
   --sourceMatcher: any # shape: {displayId?: string, id?: string, type?: record}
   --targetMatcher: record # shape: {displayId?: string, id?: string, type?: record}
@@ -1763,7 +1824,7 @@ export def "default-tasks-latest-projects-tasks updateDefaultTask" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete all GPG keys for user
@@ -1778,6 +1839,7 @@ export def "gpg-latest-keys delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user: string # The username of the user to delete the keys for. If no username is specified, the GPG keys will be deleted for the currently authenticated user.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1786,7 +1848,7 @@ export def "gpg-latest-keys delete" [
   let full_url = (build-url $base "/gpg/latest/keys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all GPG keys
@@ -1801,6 +1863,7 @@ export def "gpg-latest-keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user: string # The name of the user to get keys for (optional; requires ADMIN permission or higher).
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -1811,7 +1874,7 @@ export def "gpg-latest-keys get" [
   let full_url = (build-url $base "/gpg/latest/keys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a GPG key
@@ -1827,6 +1890,7 @@ export def "gpg-latest-keys addKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user: string # The name of the user to add a key for (optional; requires ADMIN permission or higher).
   --text: string # e.g. -----BEGIN PGP SIGNATURE-----  iQEzBAABCAAdFiEEM8MrWnoxlp3K1lFY5BMGiWNefn4FAlkqKE4ACgkQ5BMGiWNe fn6/kggAyzKhDDqdVb3Rq02hiSqeqKa1JuKRqDmzIpa6Pxa+1CpCnxwaIVrGgIii vj0ZNJzL1Bm2xm0JasotJDiZq5pFKi0FfQ0WmskuhsW1VY/f08TltHpHvK2kHVRr GEMVDUb0nj0I7Duc8XTipiYoDGS1GvydNR/bu3SsFTcZyapXirQcTCRT6/Sn0/IP pUeIwQo1qK4e8gTOhWhfWEiVig39lQhiZFtm5S/vfAY72/Rgp68zMYmwasMSnBgF /LLFW6lXAqZIoAP8AnmsMRjCH6mS98+/lxKq2+K71+2YUUIAnNEeO09Lufo3B3Da Pbs7BpD28w4lKlzb2EQ0n0C9rrxdPA== =VZpm -----END PGP SIGNATURE-----
 ]: any -> record<emailAddress: string, expiryDate: int, fingerprint: string, id: string, subKeys: table<expiryDate: string, fingerprint: string>, text: string> {
@@ -1839,7 +1903,7 @@ export def "gpg-latest-keys addKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a GPG key
@@ -1855,13 +1919,14 @@ export def "gpg-latest-keys delete-by-fingerprintOrId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/gpg/latest/keys/($fingerprintOrId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stop a Jira development information backfill sync
@@ -1876,13 +1941,14 @@ export def "jira-dev-latest-devinfo-backfill stopBackfillSync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/jira-dev/latest/devinfo-backfill")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start a Jira development information backfill sync
@@ -1898,6 +1964,7 @@ export def "jira-dev-latest-devinfo-backfill startBackfillSync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromDate: int # The starting timestamp in milliseconds for looking for backfill items, non-inclusive (format: int64, e.g. 1769123493000)
   jiraSiteIds: list
   repositories: list # item shape: {projectKey: string, slug: string}
@@ -1911,7 +1978,7 @@ export def "jira-dev-latest-devinfo-backfill startBackfillSync" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get repository backfill tasks that failed and their associated errors
@@ -1926,13 +1993,14 @@ export def "jira-dev-latest-devinfo-backfill-report get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/jira-dev/latest/devinfo-backfill/report")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Jira development information backfill status
@@ -1947,13 +2015,14 @@ export def "jira-dev-latest-devinfo-backfill-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/jira-dev/latest/devinfo-backfill/status")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Jira Issue
@@ -1969,6 +2038,7 @@ export def "jira-latest-comments-issues createIssue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --applicationId: string # id of the Jira server
   --body: record
 ]: any -> any {
@@ -1980,7 +2050,7 @@ export def "jira-latest-comments-issues createIssue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get changesets for issue key
@@ -1996,6 +2066,7 @@ export def "jira-latest-issues-commits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --maxChanges: string # The maximum number of changes to retrieve for each changeset
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -2006,7 +2077,7 @@ export def "jira-latest-issues-commits get" [
   let full_url = (build-url $base $"/jira/latest/issues/($issueKey)/commits" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get entity link
@@ -2022,13 +2093,14 @@ export def "jira-latest-projects-primary-enhanced-entitylink get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/jira/latest/projects/($projectKey)/primary-enhanced-entitylink")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get issues for a pull request
@@ -2046,13 +2118,14 @@ export def "jira-latest-projects-repos-pull-requests-issues get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/jira/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/issues")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove a reaction from comment
@@ -2072,13 +2145,14 @@ export def "comment-likes-latest-projects-repos-commits-comments-reactions unRea
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/comment-likes/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)/comments/($commentId)/reactions/($emoticon)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # React to a comment
@@ -2098,13 +2172,14 @@ export def "comment-likes-latest-projects-repos-commits-comments-reactions react
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/comment-likes/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)/comments/($commentId)/reactions/($emoticon)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove a reaction from a PR comment
@@ -2124,13 +2199,14 @@ export def "comment-likes-latest-projects-repos-pull-requests-comments-reactions
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/comment-likes/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/comments/($commentId)/reactions/($emoticon)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # React to a PR comment
@@ -2150,13 +2226,14 @@ export def "comment-likes-latest-projects-repos-pull-requests-comments-reactions
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/comment-likes/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/comments/($commentId)/reactions/($emoticon)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve inactive AES key(s)
@@ -2171,13 +2248,14 @@ export def "secrets-10-keys-inactive get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/secrets/1.0/keys/inactive")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete inactive AES key(s)
@@ -2192,13 +2270,14 @@ export def "secrets-10-keys-inactive delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/secrets/1.0/keys/inactive")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Rotate the current AES key
@@ -2213,13 +2292,14 @@ export def "secrets-10-keys-rotate rotateKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/secrets/1.0/keys/rotate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get farm nodes
@@ -2234,13 +2314,14 @@ export def "mirroring-latest-farm-nodes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mirroring/latest/farmNodes")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get delayed sync repositories
@@ -2255,6 +2336,7 @@ export def "mirroring-latest-mirror-repos-delayed-sync get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --delayThreshold: string # Returns only those repositories that are delayed for the given duration. The minimum allowed value is the configured value for the property <code>plugin.mirroring.synchronization.interval</code>
   --limit: string # Limit the number of delayed sync repositories returned, the maximum allowed value is 100
 ]: nothing -> any {
@@ -2264,7 +2346,7 @@ export def "mirroring-latest-mirror-repos-delayed-sync get" [
   let full_url = (build-url $base "/mirroring/latest/mirrorRepos/delayed-sync" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get clone URLs
@@ -2280,13 +2362,14 @@ export def "mirroring-latest-mirror-repos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/mirroring/latest/mirrorRepos/($externalRepositoryId)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get synchronization progress state
@@ -2301,13 +2384,14 @@ export def "mirroring-latest-progress get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mirroring/latest/progress")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the repository lock owner for the syncing process
@@ -2324,13 +2408,14 @@ export def "mirroring-latest-support-info-projects-repos-repo-lock-owner get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/mirroring/latest/supportInfo/projects/($projectKey)/repos/($repositorySlug)/repo-lock-owner")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets information about the mirrored repository
@@ -2347,13 +2432,14 @@ export def "mirroring-latest-support-info-projects-repos-repo-sync-status get-by
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/mirroring/latest/supportInfo/projects/($projectKey)/repos/($repositorySlug)/repoSyncStatus")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get items in ref changes queue
@@ -2368,13 +2454,14 @@ export def "mirroring-latest-support-info-ref-changes-queue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mirroring/latest/supportInfo/refChangesQueue")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get total number of items in ref changes queue
@@ -2389,13 +2476,14 @@ export def "mirroring-latest-support-info-ref-changes-queue-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mirroring/latest/supportInfo/refChangesQueue/count")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all the repository lock owners for the syncing process
@@ -2410,13 +2498,14 @@ export def "mirroring-latest-support-info-repo-lock-owners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mirroring/latest/supportInfo/repo-lock-owners")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get sync status of repositories
@@ -2431,6 +2520,7 @@ export def "mirroring-latest-support-info-repo-sync-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
 ]: nothing -> any {
@@ -2440,7 +2530,7 @@ export def "mirroring-latest-support-info-repo-sync-status get" [
   let full_url = (build-url $base "/mirroring/latest/supportInfo/repoSyncStatus" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get upstream settings
@@ -2455,13 +2545,14 @@ export def "mirroring-latest-sync-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mirroring/latest/syncSettings")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update upstream settings
@@ -2476,6 +2567,7 @@ export def "mirroring-latest-sync-settings setMirrorSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --mode: string@mode-completer
   --projectIds: list
 ]: any -> any {
@@ -2487,7 +2579,7 @@ export def "mirroring-latest-sync-settings setMirrorSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get mirror mode
@@ -2502,13 +2594,14 @@ export def "mirroring-latest-sync-settings-mode get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mirroring/latest/syncSettings/mode")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update mirror mode
@@ -2523,6 +2616,7 @@ export def "mirroring-latest-sync-settings-mode setMirrorMode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -2532,7 +2626,7 @@ export def "mirroring-latest-sync-settings-mode setMirrorMode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get mirrored project IDs
@@ -2547,13 +2641,14 @@ export def "mirroring-latest-sync-settings-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mirroring/latest/syncSettings/projects")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add multiple projects to be mirrored
@@ -2568,6 +2663,7 @@ export def "mirroring-latest-sync-settings-projects startMirroringProjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -2577,7 +2673,7 @@ export def "mirroring-latest-sync-settings-projects startMirroringProjects" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Stop mirroring project
@@ -2593,13 +2689,14 @@ export def "mirroring-latest-sync-settings-projects stopMirroringProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/mirroring/latest/syncSettings/projects/($projectId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add project to be mirrored
@@ -2615,13 +2712,14 @@ export def "mirroring-latest-sync-settings-projects startMirroringProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/mirroring/latest/syncSettings/projects/($projectId)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get upstream server
@@ -2636,13 +2734,14 @@ export def "mirroring-latest-upstream-server get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mirroring/latest/upstreamServer")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # End ZDU upgrade on mirror farm
@@ -2657,13 +2756,14 @@ export def "mirroring-latest-zdu-end endRollingUpgrade" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mirroring/latest/zdu/end")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start ZDU upgrade on mirror farm
@@ -2678,13 +2778,14 @@ export def "mirroring-latest-zdu-start startRollingUpgrade" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mirroring/latest/zdu/start")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get synchronization status
@@ -2701,6 +2802,7 @@ export def "sync-latest-projects-repos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --at: string # Retrieves the synchronization status for the specified ref within the repository, rather than for the entire repository
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2709,7 +2811,7 @@ export def "sync-latest-projects-repos get" [
   let full_url = (build-url $base $"/sync/latest/projects/($projectKey)/repos/($repositorySlug)" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disable synchronization
@@ -2729,6 +2831,7 @@ export def "sync-latest-projects-repos setEnabled" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
@@ -2739,7 +2842,7 @@ export def "sync-latest-projects-repos setEnabled" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Manual synchronization
@@ -2757,6 +2860,7 @@ export def "sync-latest-projects-repos-synchronize synchronize" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --action: string@action-completer # e.g. MERGE
   --context: record # shape: {commitMessage?: string}
   --refId: string # e.g. refs/heads/master
@@ -2769,7 +2873,7 @@ export def "sync-latest-projects-repos-synchronize synchronize" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove preferred mirror
@@ -2784,13 +2888,14 @@ export def "mirroring-latest-account-settings-preferred-mirror delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mirroring/latest/account/settings/preferred-mirror")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get preferred mirror
@@ -2805,13 +2910,14 @@ export def "mirroring-latest-account-settings-preferred-mirror get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mirroring/latest/account/settings/preferred-mirror")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set preferred mirror
@@ -2826,6 +2932,7 @@ export def "mirroring-latest-account-settings-preferred-mirror setPreferredMirro
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -2835,7 +2942,7 @@ export def "mirroring-latest-account-settings-preferred-mirror setPreferredMirro
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get analytics settings from upstream
@@ -2850,13 +2957,14 @@ export def "mirroring-latest-analytics-settings analyticsSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mirroring/latest/analyticsSettings")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Authenticate on behalf of a user
@@ -2872,6 +2980,7 @@ export def "mirroring-latest-authenticate authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   credentials: record # shape: {password?: string, username?: string, token?: string, algorithm?: string, publicKey?: string}
   --repositoryId: int # format: int32
 ]: any -> any {
@@ -2883,7 +2992,7 @@ export def "mirroring-latest-authenticate authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all mirrors
@@ -2898,6 +3007,7 @@ export def "mirroring-latest-mirror-servers listMirrors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
 ]: nothing -> any {
@@ -2907,7 +3017,7 @@ export def "mirroring-latest-mirror-servers listMirrors" [
   let full_url = (build-url $base "/mirroring/latest/mirrorServers" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete mirror by ID
@@ -2923,13 +3033,14 @@ export def "mirroring-latest-mirror-servers remove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/mirroring/latest/mirrorServers/($mirrorId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get mirror by ID
@@ -2945,13 +3056,14 @@ export def "mirroring-latest-mirror-servers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/mirroring/latest/mirrorServers/($mirrorId)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upgrade mirror server
@@ -2967,6 +3079,7 @@ export def "mirroring-latest-mirror-servers upgrade" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --baseUrl: string # e.g. https://bitbucket-eu.example.com:7990/bitbucket
   --productVersion: string # e.g. 8.0.0
 ]: any -> any {
@@ -2978,7 +3091,7 @@ export def "mirroring-latest-mirror-servers upgrade" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Publish RepositoryMirrorEvent
@@ -2994,6 +3107,7 @@ export def "mirroring-latest-mirror-servers-events publishEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --mirrorRepoId: int # format: int32, e.g. 42
   type: string@type-completer-1
   upstreamRepoId: string # e.g. 24
@@ -3006,7 +3120,7 @@ export def "mirroring-latest-mirror-servers-events publishEvent" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get project
@@ -3022,13 +3136,14 @@ export def "mirroring-latest-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/mirroring/latest/projects/($projectId)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get hashes for repositories in project
@@ -3044,6 +3159,7 @@ export def "mirroring-latest-projects-repos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeDefaultBranch: string@includeDefaultBranch-completer # includes defaultBranchId in the response, if <code>true</code>. Default value is <code>false</code> (default: false)
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -3054,7 +3170,7 @@ export def "mirroring-latest-projects-repos get" [
   let full_url = (build-url $base $"/mirroring/latest/projects/($projectId)/repos" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get content hashes for repositories
@@ -3069,6 +3185,7 @@ export def "mirroring-latest-repos list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeDefaultBranch: string@includeDefaultBranch-completer # includes defaultBranchId for each repository in the response, if <code>true</code>. Default value is <code>false</code>. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3077,7 +3194,7 @@ export def "mirroring-latest-repos list" [
   let full_url = (build-url $base "/mirroring/latest/repos" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get content hash for a repository
@@ -3093,6 +3210,7 @@ export def "mirroring-latest-repos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeDefaultBranch: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3101,7 +3219,7 @@ export def "mirroring-latest-repos get" [
   let full_url = (build-url $base $"/mirroring/latest/repos/($repoId)" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get mirrors for repository
@@ -3117,6 +3235,7 @@ export def "mirroring-latest-repos-mirrors get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --preAuthorized: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3125,7 +3244,7 @@ export def "mirroring-latest-repos-mirrors get" [
   let full_url = (build-url $base $"/mirroring/latest/repos/($repoId)/mirrors" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get mirroring requests
@@ -3140,6 +3259,7 @@ export def "mirroring-latest-requests listRequests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --state: string@state-completer-1 # (optional) the request state to filter on
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -3150,7 +3270,7 @@ export def "mirroring-latest-requests listRequests" [
   let full_url = (build-url $base "/mirroring/latest/requests" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a mirroring request
@@ -3165,6 +3285,7 @@ export def "mirroring-latest-requests register" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --mirrorBaseUrl: string # e.g. https://bitbucket-eu.example.com:7990/bitbucket
   --mirrorId: string # e.g. 4f0eb5fc-67fc-48f8-b4a7-87981f026c6a
   --mirrorName: string # e.g. Bitbucket Mirror
@@ -3180,7 +3301,7 @@ export def "mirroring-latest-requests register" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a mirroring request
@@ -3196,13 +3317,14 @@ export def "mirroring-latest-requests delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/mirroring/latest/requests/($mirroringRequestId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a mirroring request
@@ -3218,13 +3340,14 @@ export def "mirroring-latest-requests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/mirroring/latest/requests/($mirroringRequestId)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Accept a mirroring request
@@ -3240,13 +3363,14 @@ export def "mirroring-latest-requests-accept accept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/mirroring/latest/requests/($mirroringRequestId)/accept")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Reject a mirroring request
@@ -3262,13 +3386,14 @@ export def "mirroring-latest-requests-reject reject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/mirroring/latest/requests/($mirroringRequestId)/reject")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get repository archive policy
@@ -3283,13 +3408,14 @@ export def "policies-latest-admin-repos-archive get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/policies/latest/admin/repos/archive")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update repository archive policy
@@ -3304,6 +3430,7 @@ export def "policies-latest-admin-repos-archive setRepositoryArchivePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --permission: string@permission-completer # The permission required to delete repositories. Must be one of: "SYS_ADMIN", "ADMIN", "PROJECT_ADMIN", "REPO_ADMIN". (e.g. ADMIN)
 ]: any -> any {
   let input = $in
@@ -3314,7 +3441,7 @@ export def "policies-latest-admin-repos-archive setRepositoryArchivePolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get repository delete policy
@@ -3329,13 +3456,14 @@ export def "policies-latest-admin-repos-delete get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/policies/latest/admin/repos/delete")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the repository delete policy
@@ -3350,6 +3478,7 @@ export def "policies-latest-admin-repos-delete setRepositoryDeletePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --permission: string@permission-completer # The permission required to delete repositories. Must be one of: "SYS_ADMIN", "ADMIN", "PROJECT_ADMIN", "REPO_ADMIN". (e.g. ADMIN)
 ]: any -> any {
   let input = $in
@@ -3360,7 +3489,7 @@ export def "policies-latest-admin-repos-delete setRepositoryDeletePolicy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search for ref restrictions
@@ -3377,6 +3506,7 @@ export def "branch-permissions-latest-projects-repos-restrictions get-by-project
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --matcherType: string@matcherType-completer # Matcher type to filter on
   --matcherId: string # Matcher id to filter on. Requires the matcherType parameter to be specified also.
   --type: string@type-completer-2 # Types of restrictions to filter on.
@@ -3389,7 +3519,7 @@ export def "branch-permissions-latest-projects-repos-restrictions get-by-project
   let full_url = (build-url $base $"/branch-permissions/latest/projects/($projectKey)/repos/($repositorySlug)/restrictions" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create multiple ref restrictions
@@ -3406,6 +3536,7 @@ export def "branch-permissions-latest-projects-repos-restrictions createRestrict
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -3415,7 +3546,7 @@ export def "branch-permissions-latest-projects-repos-restrictions createRestrict
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atl.bitbucket.bulk+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atl.bitbucket.bulk+json" $body
 }
 
 # Delete a ref restriction
@@ -3433,13 +3564,14 @@ export def "branch-permissions-latest-projects-repos-restrictions delete-by-proj
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/branch-permissions/latest/projects/($projectKey)/repos/($repositorySlug)/restrictions/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a ref restriction
@@ -3457,13 +3589,14 @@ export def "branch-permissions-latest-projects-repos-restrictions get-by-project
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/branch-permissions/latest/projects/($projectKey)/repos/($repositorySlug)/restrictions/($id)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for ref restrictions
@@ -3479,6 +3612,7 @@ export def "branch-permissions-latest-projects-restrictions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --matcherType: string@matcherType-completer # Matcher type to filter on
   --matcherId: string # Matcher id to filter on. Requires the matcherType parameter to be specified also.
   --type: string@type-completer-2 # Types of restrictions to filter on.
@@ -3491,7 +3625,7 @@ export def "branch-permissions-latest-projects-restrictions list" [
   let full_url = (build-url $base $"/branch-permissions/latest/projects/($projectKey)/restrictions" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create multiple ref restrictions
@@ -3507,6 +3641,7 @@ export def "branch-permissions-latest-projects-restrictions createRestrictions" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -3516,7 +3651,7 @@ export def "branch-permissions-latest-projects-restrictions createRestrictions" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/vnd.atl.bitbucket.bulk+json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/vnd.atl.bitbucket.bulk+json" $body
 }
 
 # Delete a ref restriction
@@ -3533,13 +3668,14 @@ export def "branch-permissions-latest-projects-restrictions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/branch-permissions/latest/projects/($projectKey)/restrictions/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a ref restriction
@@ -3556,13 +3692,14 @@ export def "branch-permissions-latest-projects-restrictions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/branch-permissions/latest/projects/($projectKey)/restrictions/($id)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all configured IdPs
@@ -3577,6 +3714,7 @@ export def "authconfig-latest-idps list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 50 is used. A limit of -1 means that the request will fetch all results. (e.g. 50)
 ]: nothing -> record<isLastPage: bool, limit: float, results: table<additional_scopes: list, authorization_endpoint: string, buttonText: string, certificate: string, client_id: string, client_secret: string, crowd_url: string, discovery_enabled: bool, enable_remember_me: bool, enabled: bool, id: int, idp_type: string, include_customer_logins: bool, issuer_url: string, jit_configuration: record, last_updated: string, name: string, name_id_policy: string, sign_authnrequest: bool, signature_algorithm: string, sso_issuer: string, sso_type: string, sso_url: string, token_endpoint: string, userinfo_endpoint: string, username_attribute: string, username_claim: string>, size: float, start: int> {
@@ -3586,7 +3724,7 @@ export def "authconfig-latest-idps list" [
   let full_url = (build-url $base "/authconfig/latest/idps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create IdP configuration
@@ -3602,6 +3740,7 @@ export def "authconfig-latest-idps addIdp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-scopes: list
   --authorization-endpoint: string
   --buttonText: string
@@ -3638,7 +3777,7 @@ export def "authconfig-latest-idps addIdp" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete IdP configuration
@@ -3654,13 +3793,14 @@ export def "authconfig-latest-idps removeIdp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<additional_scopes: list<string>, authorization_endpoint: string, buttonText: string, certificate: string, client_id: string, client_secret: string, crowd_url: string, discovery_enabled: bool, enable_remember_me: bool, enabled: bool, id: int, idp_type: string, include_customer_logins: bool, issuer_url: string, jit_configuration: record<additional_openid_scopes: list<string>, mapping_display_name: string, mapping_email: string, mapping_groups: string, user_provisioning_enabled: bool>, last_updated: string, name: string, name_id_policy: string, sign_authnrequest: bool, signature_algorithm: string, sso_issuer: string, sso_type: string, sso_url: string, token_endpoint: string, userinfo_endpoint: string, username_attribute: string, username_claim: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/authconfig/latest/idps/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get IdP configuration
@@ -3676,13 +3816,14 @@ export def "authconfig-latest-idps get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<additional_scopes: list<string>, authorization_endpoint: string, buttonText: string, certificate: string, client_id: string, client_secret: string, crowd_url: string, discovery_enabled: bool, enable_remember_me: bool, enabled: bool, id: int, idp_type: string, include_customer_logins: bool, issuer_url: string, jit_configuration: record<additional_openid_scopes: list<string>, mapping_display_name: string, mapping_email: string, mapping_groups: string, user_provisioning_enabled: bool>, last_updated: string, name: string, name_id_policy: string, sign_authnrequest: bool, signature_algorithm: string, sso_issuer: string, sso_type: string, sso_url: string, token_endpoint: string, userinfo_endpoint: string, username_attribute: string, username_claim: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/authconfig/latest/idps/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update IdP configuration
@@ -3699,6 +3840,7 @@ export def "authconfig-latest-idps updateIdp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --additional-scopes: list
   --authorization-endpoint: string
   --buttonText: string
@@ -3735,7 +3877,7 @@ export def "authconfig-latest-idps updateIdp" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all JIT provisioned users
@@ -3750,13 +3892,14 @@ export def "authconfig-latest-jit-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<display_name: string, email: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authconfig/latest/jit-users")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get available login options
@@ -3771,6 +3914,7 @@ export def "authconfig-latest-login-options get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 50 is used. A limit of -1 means that the request will fetch all results. (e.g. 50)
 ]: nothing -> record<isLastPage: bool, limit: float, results: table<buttonText: string, id: int, loginLink: string, type: string>, size: float, start: int> {
@@ -3780,7 +3924,7 @@ export def "authconfig-latest-login-options get" [
   let full_url = (build-url $base "/authconfig/latest/login-options" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # returns the currently used certificate for signing SAML authentication requests
@@ -3795,13 +3939,14 @@ export def "authconfig-latest-saml-certificate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authconfig/latest/saml/certificate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # generates a new certificate for signing SAML authentication requests
@@ -3816,13 +3961,14 @@ export def "authconfig-latest-saml-certificate-reset regenerateCertificate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authconfig/latest/saml/certificate/reset")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get SSO configuration
@@ -3837,13 +3983,14 @@ export def "authconfig-latest-sso get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<discovery_refresh_cron: string, enable_authentication_fallback: bool, last_updated: string, show_login_form: bool, show_login_form_for_jsm: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authconfig/latest/sso")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update SSO configuration
@@ -3858,6 +4005,7 @@ export def "authconfig-latest-sso updateConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --discovery-refresh-cron: string
   --enable-authentication-fallback: oneof<nothing, bool>
   --last-updated: string # format: date-time
@@ -3872,7 +4020,7 @@ export def "authconfig-latest-sso updateConfig" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get basic auth configuration
@@ -3887,13 +4035,14 @@ export def "basicauth-latest-config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<allowed_paths: list<string>, allowed_users: list<string>, block_requests: bool, show_warning_message: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/basicauth/latest/config")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update basic auth configuration
@@ -3908,6 +4057,7 @@ export def "basicauth-latest-config put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allowed-paths: list
   --allowed-users: list
   --block-requests: oneof<nothing, bool>
@@ -3921,7 +4071,7 @@ export def "basicauth-latest-config put" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate with 2SV
@@ -3936,6 +4086,7 @@ export def "tsv-latest-authenticate authenticate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --captchaChallenge: string
   --captchaId: string
   --password: string
@@ -3951,7 +4102,7 @@ export def "tsv-latest-authenticate authenticate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get CAPTCHA challenge
@@ -3966,13 +4117,14 @@ export def "tsv-latest-authenticate-captcha get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<captchaId: string, captchaImageUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tsv/latest/authenticate/captcha")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Authenticate using recovery code
@@ -3987,6 +4139,7 @@ export def "tsv-latest-authenticate-recovery-code authenticateWithRecoveryCode" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --conversationId: string
   --recoveryCode: string
 ]: any -> record<next: string> {
@@ -3998,7 +4151,7 @@ export def "tsv-latest-authenticate-recovery-code authenticateWithRecoveryCode" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Authenticate using TOTP code
@@ -4013,6 +4166,7 @@ export def "tsv-latest-authenticate-totp-code verifyCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --conversationId: string
   --totpCode: string
 ]: any -> any {
@@ -4024,7 +4178,7 @@ export def "tsv-latest-authenticate-totp-code verifyCode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get elevated session status
@@ -4039,6 +4193,7 @@ export def "tsv-latest-elevate-permissions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --actionType: string@actionType-completer # The type of action being performed.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4047,7 +4202,7 @@ export def "tsv-latest-elevate-permissions get" [
   let full_url = (build-url $base "/tsv/latest/elevate-permissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create elevated session with password
@@ -4062,6 +4217,7 @@ export def "tsv-latest-elevate-permissions-password elevatePermissionsWithPasswo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --actionType: string@actionType-completer # The type of action being performed.
   --totpCode: string
 ]: any -> any {
@@ -4074,7 +4230,7 @@ export def "tsv-latest-elevate-permissions-password elevatePermissionsWithPasswo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create elevated session with recovery code
@@ -4089,6 +4245,7 @@ export def "tsv-latest-elevate-permissions-recovery-code elevatePermissionsWithR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --actionType: string@actionType-completer # The type of action being performed.
   --recoveryCode: string
 ]: any -> record<recoveryCode: string> {
@@ -4101,7 +4258,7 @@ export def "tsv-latest-elevate-permissions-recovery-code elevatePermissionsWithR
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create elevated session with TOTP
@@ -4116,6 +4273,7 @@ export def "tsv-latest-elevate-permissions-totp elevatePermissionsWithTotp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --actionType: string@actionType-completer # The type of action being performed.
   --totpCode: string
 ]: any -> any {
@@ -4128,7 +4286,7 @@ export def "tsv-latest-elevate-permissions-totp elevatePermissionsWithTotp" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get SSO management status
@@ -4143,13 +4301,14 @@ export def "tsv-latest-sso-management-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<isManaged: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tsv/latest/sso-management-status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get two-step verification status
@@ -4164,13 +4323,14 @@ export def "tsv-latest-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<isTwoSVActive: bool, methods: table<enabled: bool, enabledAt: string, enforced: bool, type: string>, twoSVActive: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tsv/latest/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Complete enforced enrollment in 2SV
@@ -4185,6 +4345,7 @@ export def "tsv-latest-totp-complete-enforced-enrollment completeEnforcedEnrollm
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --conversationId: string
   --totpCode: string
 ]: any -> record<recoveryCode: string> {
@@ -4196,7 +4357,7 @@ export def "tsv-latest-totp-complete-enforced-enrollment completeEnforcedEnrollm
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Complete authentication app update for 2SV
@@ -4211,6 +4372,7 @@ export def "tsv-latest-totp-complete-enrollment-update completeAuthenticationCha
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --conversationId: string
   --totpCode: string
 ]: any -> record<conversationId: string, secret: string, url: string, userName: string> {
@@ -4222,7 +4384,7 @@ export def "tsv-latest-totp-complete-enrollment-update completeAuthenticationCha
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Complete voluntary enrollment in 2SV
@@ -4237,6 +4399,7 @@ export def "tsv-latest-totp-complete-voluntary-enrollment completeVoluntaryEnrol
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --conversationId: string
   --totpCode: string
 ]: any -> record<conversationId: string, secret: string, url: string, userName: string> {
@@ -4248,7 +4411,7 @@ export def "tsv-latest-totp-complete-voluntary-enrollment completeVoluntaryEnrol
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Rotate recovery code
@@ -4263,13 +4426,14 @@ export def "tsv-latest-totp-recovery-code-rotate rotateRecoverCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<recoveryCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tsv/latest/totp/recovery-code/rotate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start enforced enrollment in 2SV
@@ -4284,6 +4448,7 @@ export def "tsv-latest-totp-start-enforced-enrollment startEnforcedEnrollment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --conversationId: string
 ]: any -> record<conversationId: string, secret: string, url: string, userName: string> {
   let input = $in
@@ -4294,7 +4459,7 @@ export def "tsv-latest-totp-start-enforced-enrollment startEnforcedEnrollment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Start authentication app update for 2SV
@@ -4309,13 +4474,14 @@ export def "tsv-latest-totp-start-enrollment-update startEnrollmentUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<conversationId: string, secret: string, url: string, userName: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tsv/latest/totp/start-enrollment-update")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start voluntary enrollment in 2SV
@@ -4330,13 +4496,14 @@ export def "tsv-latest-totp-start-voluntary-enrollment startVoluntaryEnrollment"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<conversationId: string, secret: string, url: string, userName: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tsv/latest/totp/start-voluntary-enrollment")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Uneroll current user from two-step verification
@@ -4351,13 +4518,14 @@ export def "tsv-latest-totp-unenroll unenroll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tsv/latest/totp/unenroll")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unenroll specific user from two-step verification
@@ -4373,6 +4541,7 @@ export def "tsv-latest-totp-unenroll-user unenrollUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --totpCode: string
 ]: any -> any {
   let input = $in
@@ -4383,7 +4552,7 @@ export def "tsv-latest-totp-unenroll-user unenrollUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get repository search indexing details.
@@ -4400,13 +4569,14 @@ export def "indexing-latest-projects-repos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<indexingError: string, lastIndexedCommitId: string, lastIndexedTimestamp: int, projectKey: string, repositorySlug: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/indexing/latest/projects/($projectKey)/repos/($repositorySlug)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve detailed queue information for a repository
@@ -4423,13 +4593,14 @@ export def "indexing-latest-projects-repos-indexing-queue-details get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<capturedAt: int, nodeId: string, queued: bool, queuedAt: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/indexing/latest/projects/($projectKey)/repos/($repositorySlug)/indexing-queue-details")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Checks if a repository has been queued for indexing.
@@ -4446,13 +4617,14 @@ export def "indexing-latest-projects-repos-indexing-queued-status indexingQueued
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<queued: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/indexing/latest/projects/($projectKey)/repos/($repositorySlug)/indexing-queued-status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Re-indexes the search index of the provided list of repositories
@@ -4467,6 +4639,7 @@ export def "indexing-latest-reindex reindexRepositories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -4476,7 +4649,7 @@ export def "indexing-latest-reindex reindexRepositories" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Restarts the search indexing worker thread
@@ -4491,6 +4664,7 @@ export def "indexing-latest-restart restartIndexingThreadWorker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --gracefulShutdown: oneof<nothing, bool> # Should the indexing thread terminate immediately (default: false, e.g. true)
   --waitForRestart: oneof<nothing, bool> # Should the response wait until the worker has been restarted (default: false, e.g. true)
 ]: any -> any {
@@ -4502,7 +4676,7 @@ export def "indexing-latest-restart restartIndexingThreadWorker" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a paged list of repositories which have exceeded the configured maximum indexing retries.
@@ -4517,6 +4691,7 @@ export def "indexing-latest-support-info-broken-index-status-repos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
 ]: nothing -> record<isLastPage: bool, limit: float, nextPageStart: int, size: float, start: int, values: table<details: record, repository: record>> {
@@ -4526,7 +4701,7 @@ export def "indexing-latest-support-info-broken-index-status-repos get" [
   let full_url = (build-url $base "/indexing/latest/support-info/broken-index-status-repos" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a snapshot of the indexing thread details.
@@ -4541,13 +4716,14 @@ export def "indexing-latest-support-info-indexing-thread-snapshot get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<capturedAt: int, currentProcess: record<currentTask: string, event: record>, delayedQueueSize: int, queueSize: int, state: record<code: string, description: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/indexing/latest/support-info/indexing-thread-snapshot")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sets the desired number of indexing worker threads
@@ -4562,6 +4738,7 @@ export def "indexing-latest-threads setWorkerThreadCount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   desiredCount: int # The desired number of indexing worker threads (format: int32, e.g. 4)
 ]: any -> any {
   let input = $in
@@ -4572,7 +4749,7 @@ export def "indexing-latest-threads setWorkerThreadCount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get global SSH key settings
@@ -4587,13 +4764,14 @@ export def "admin get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update global SSH key settings
@@ -4609,6 +4787,7 @@ export def "admin updateGlobalSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --keyTypeRestrictions: list # item shape: {algorithm?: string, allowed?: bool, minKeyLength?: int}
   --maxExpiryDays: int # format: int32
 ]: any -> any {
@@ -4620,7 +4799,7 @@ export def "admin updateGlobalSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get supported SSH key algorithms and lengths
@@ -4635,13 +4814,14 @@ export def "admin-supported-key-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/supported-key-types")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get repository SSH keys
@@ -4658,6 +4838,7 @@ export def "keys-latest-projects-repos-ssh get-by-projectKey-repositorySlug" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # If specified only SSH access keys with a label prefixed with the supplied string will be returned
   --effective: string # Controls whether SSH access keys configured at the project level should be included in the results or not. When set to <code>true</code> all keys that have <em>access</em> to the repository (including project level keys) are included in the results. When set to <code>false</code>, only access keys configured for the specified <code>repository</code> are considered. Default is <code>false</code>.
   --minimumPermission: string # If specified only SSH access keys with at least the supplied permission will be returned. Default is <code>Permission.REPO_READ</code>.
@@ -4671,7 +4852,7 @@ export def "keys-latest-projects-repos-ssh get-by-projectKey-repositorySlug" [
   let full_url = (build-url $base $"/keys/latest/projects/($projectKey)/repos/($repositorySlug)/ssh" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add repository SSH key
@@ -4691,6 +4872,7 @@ export def "keys-latest-projects-repos-ssh addForRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: record # shape: {algorithmType?: string, bitLength?: int, expiryDays?: int, label?: string, text?: string}
   --permission: string@permission-completer-1
   --project: record # shape: {avatar?: string, avatarUrl?: string, key: string, links?: record}
@@ -4704,7 +4886,7 @@ export def "keys-latest-projects-repos-ssh addForRepository" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revoke repository SSH key
@@ -4722,13 +4904,14 @@ export def "keys-latest-projects-repos-ssh revokeForRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/keys/latest/projects/($projectKey)/repos/($repositorySlug)/ssh/($keyId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get repository SSH key
@@ -4746,13 +4929,14 @@ export def "keys-latest-projects-repos-ssh get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/keys/latest/projects/($projectKey)/repos/($repositorySlug)/ssh/($keyId)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update repository SSH key permission
@@ -4771,13 +4955,14 @@ export def "keys-latest-projects-repos-ssh-permission updatePermission-by-projec
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/keys/latest/projects/($projectKey)/repos/($repositorySlug)/ssh/($keyId)/permission/($permission)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get SSH key
@@ -4793,6 +4978,7 @@ export def "keys-latest-projects-ssh list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # If specified only SSH access keys with a label prefixed with the supplied string will be returned.
   --permission: string # If specified only SSH access keys with at least the supplied permission will be returned Default is PROJECT_READ.
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
@@ -4804,7 +4990,7 @@ export def "keys-latest-projects-ssh list" [
   let full_url = (build-url $base $"/keys/latest/projects/($projectKey)/ssh" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add project SSH key
@@ -4823,6 +5009,7 @@ export def "keys-latest-projects-ssh addForProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: record # shape: {algorithmType?: string, bitLength?: int, expiryDays?: int, label?: string, text?: string}
   --permission: string@permission-completer-1
   --project: record # shape: {avatar?: string, avatarUrl?: string, key: string, links?: record}
@@ -4836,7 +5023,7 @@ export def "keys-latest-projects-ssh addForProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revoke project SSH key
@@ -4853,13 +5040,14 @@ export def "keys-latest-projects-ssh revokeForProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/keys/latest/projects/($projectKey)/ssh/($keyId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project SSH key
@@ -4876,13 +5064,14 @@ export def "keys-latest-projects-ssh get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/keys/latest/projects/($projectKey)/ssh/($keyId)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update project SSH key permission
@@ -4900,13 +5089,14 @@ export def "keys-latest-projects-ssh-permission updatePermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/keys/latest/projects/($projectKey)/ssh/($keyId)/permission/($permission)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke project SSH key
@@ -4924,6 +5114,7 @@ export def "keys-latest-ssh revokeMany" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --projects: any # shape: {avatar?: string, avatarUrl?: string, key?: string, links?: record}
   --repositories: any # shape: {defaultBranch?: string, links?: record, name?: string, project?: record, scmId?: string, slug?: string}
 ]: any -> any {
@@ -4935,7 +5126,7 @@ export def "keys-latest-ssh revokeMany" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get project SSH keys
@@ -4951,13 +5142,14 @@ export def "keys-latest-ssh-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/keys/latest/ssh/($keyId)/projects")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get repository SSH key
@@ -4973,6 +5165,7 @@ export def "keys-latest-ssh-repos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --withRestrictions: string # Include the readOnly field. The `readOnly` field is contextual for the user making the request. `readOnly` returns true if there is a restriction and the user does not have`PROJECT_ADMIN` access for the repository the key is associated with.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4981,7 +5174,7 @@ export def "keys-latest-ssh-repos get" [
   let full_url = (build-url $base $"/keys/latest/ssh/($keyId)/repos" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete all user SSH key
@@ -4996,6 +5189,7 @@ export def "ssh-latest-keys delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userName: string # the username of the user to delete the keys for. If no username is specified, the SSH keys will be deleted for the current authenticated user.
   --user: string
 ]: nothing -> any {
@@ -5005,7 +5199,7 @@ export def "ssh-latest-keys delete" [
   let full_url = (build-url $base "/ssh/latest/keys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get SSH keys for user
@@ -5020,6 +5214,7 @@ export def "ssh-latest-keys list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --userName: string # the username of the user to retrieve the keys for. If no username is specified, the SSH keys will be retrieved for the current authenticated user.
   --user: string
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
@@ -5031,7 +5226,7 @@ export def "ssh-latest-keys list" [
   let full_url = (build-url $base "/ssh/latest/keys" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add SSH key for user
@@ -5046,6 +5241,7 @@ export def "ssh-latest-keys addSshKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user: string # the username of the user to add the SSH key for. If no username is specified, the SSH key will be added for the current authenticated user.
   --algorithmType: string
   --bitLength: int # format: int32
@@ -5062,7 +5258,7 @@ export def "ssh-latest-keys addSshKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove SSH key
@@ -5078,13 +5274,14 @@ export def "ssh-latest-keys delete-by-keyId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ssh/latest/keys/($keyId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get SSH key for user by keyId
@@ -5100,13 +5297,14 @@ export def "ssh-latest-keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ssh/latest/keys/($keyId)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get SSH settings
@@ -5121,13 +5319,14 @@ export def "ssh-latest-settings sshSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ssh/latest/settings")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete announcement banner
@@ -5142,13 +5341,14 @@ export def "latest-admin-banner delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/admin/banner")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get announcement banner
@@ -5163,13 +5363,14 @@ export def "latest-admin-banner get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/admin/banner")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update/Set announcement banner
@@ -5184,6 +5385,7 @@ export def "latest-admin-banner setBanner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   audience: string@audience-completer
   --enabled: oneof<nothing, bool>
   --message: string
@@ -5196,7 +5398,7 @@ export def "latest-admin-banner setBanner" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get cluster node information
@@ -5211,13 +5413,14 @@ export def "latest-admin-cluster get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/admin/cluster")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Clear default branch
@@ -5232,13 +5435,14 @@ export def "latest-admin-default-branch clearDefaultBranch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/admin/default-branch")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the default branch
@@ -5253,13 +5457,14 @@ export def "latest-admin-default-branch get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/admin/default-branch")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update/Set default branch
@@ -5274,6 +5479,7 @@ export def "latest-admin-default-branch setDefaultBranch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string
 ]: any -> any {
   let input = $in
@@ -5284,7 +5490,7 @@ export def "latest-admin-default-branch setDefaultBranch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the control plane PEM
@@ -5299,13 +5505,14 @@ export def "latest-admin-git-mesh-config-control-planepem get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/admin/git/mesh/config/control-plane.pem")
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Generate Mesh connectivity report
@@ -5320,13 +5527,14 @@ export def "latest-admin-git-mesh-diagnostics-connectivity connectivity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/admin/git/mesh/diagnostics/connectivity")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all registered Mesh nodes
@@ -5341,13 +5549,14 @@ export def "latest-admin-git-mesh-nodes list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/admin/git/mesh/nodes")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Register new Mesh node
@@ -5362,6 +5571,7 @@ export def "latest-admin-git-mesh-nodes registerNewMeshNode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --availabilityZone: string # e.g. zone-1
   --id: string # e.g. 1
   --lastSeenDate: float # e.g. 1630041546433
@@ -5379,7 +5589,7 @@ export def "latest-admin-git-mesh-nodes registerNewMeshNode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete Mesh node
@@ -5395,6 +5605,7 @@ export def "latest-admin-git-mesh-nodes delete-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --force: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5403,7 +5614,7 @@ export def "latest-admin-git-mesh-nodes delete-by-id" [
   let full_url = (build-url $base $"/api/latest/admin/git/mesh/nodes/($id)" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Mesh node
@@ -5419,13 +5630,14 @@ export def "latest-admin-git-mesh-nodes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/admin/git/mesh/nodes/($id)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update Mesh node
@@ -5441,6 +5653,7 @@ export def "latest-admin-git-mesh-nodes updateMeshNode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --availabilityZone: string # e.g. zone-1
   --body-id: string # e.g. 1
   --lastSeenDate: float # e.g. 1630041546433
@@ -5458,7 +5671,7 @@ export def "latest-admin-git-mesh-nodes updateMeshNode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get support zips for all Mesh nodes
@@ -5473,13 +5686,14 @@ export def "latest-admin-git-mesh-support-zips list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/admin/git/mesh/support-zips")
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get support zip for node
@@ -5495,13 +5709,14 @@ export def "latest-admin-git-mesh-support-zips get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/admin/git/mesh/support-zips/($id)")
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove group
@@ -5516,6 +5731,7 @@ export def "latest-admin-groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name identifying the group to delete.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5524,7 +5740,7 @@ export def "latest-admin-groups delete" [
   let full_url = (build-url $base "/api/latest/admin/groups" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get groups
@@ -5539,6 +5755,7 @@ export def "latest-admin-groups get-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # If specified only group names containing the supplied string will be returned.
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -5549,7 +5766,7 @@ export def "latest-admin-groups get-by-" [
   let full_url = (build-url $base "/api/latest/admin/groups" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create group
@@ -5564,6 +5781,7 @@ export def "latest-admin-groups createGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the group.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5572,7 +5790,7 @@ export def "latest-admin-groups createGroup" [
   let full_url = (build-url $base "/api/latest/admin/groups" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add user to group
@@ -5589,6 +5807,7 @@ export def "latest-admin-groups-add-user addUserToGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --context: string # e.g. group_a
   --itemName: string # e.g. user_a
 ]: any -> any {
@@ -5600,7 +5819,7 @@ export def "latest-admin-groups-add-user addUserToGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add multiple users to group
@@ -5615,6 +5834,7 @@ export def "latest-admin-groups-add-users addUsersToGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --group: string # e.g. group
   users: list # e.g. [user1, user2]
 ]: any -> any {
@@ -5626,7 +5846,7 @@ export def "latest-admin-groups-add-users addUsersToGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get group members
@@ -5641,6 +5861,7 @@ export def "latest-admin-groups-more-members findUsersInGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # If specified only users with usernames, display names or email addresses containing the supplied string will be returned.
   --context: string # The group which should be used to locate members.
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
@@ -5652,7 +5873,7 @@ export def "latest-admin-groups-more-members findUsersInGroup" [
   let full_url = (build-url $base "/api/latest/admin/groups/more-members" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get members not in group
@@ -5667,6 +5888,7 @@ export def "latest-admin-groups-more-non-members findUsersNotInGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # If specified only users with usernames, display names or email addresses containing the supplied string will be returned.
   --context: string # The group which should be used to locate members.
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
@@ -5678,7 +5900,7 @@ export def "latest-admin-groups-more-non-members findUsersNotInGroup" [
   let full_url = (build-url $base "/api/latest/admin/groups/more-non-members" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove user from group
@@ -5695,6 +5917,7 @@ export def "latest-admin-groups-remove-user removeUserFromGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --context: string # e.g. group_a
   --itemName: string # e.g. user_a
 ]: any -> any {
@@ -5706,7 +5929,7 @@ export def "latest-admin-groups-remove-user removeUserFromGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get license details
@@ -5721,13 +5944,14 @@ export def "latest-admin-license get-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/admin/license")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update license
@@ -5743,6 +5967,7 @@ export def "latest-admin-license updateLicense" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --license: string # e.g. <encoded license text>
 ]: any -> any {
   let input = $in
@@ -5753,7 +5978,7 @@ export def "latest-admin-license updateLicense" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete mail configuration
@@ -5768,13 +5993,14 @@ export def "latest-admin-mail-server delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/admin/mail-server")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get mail configuration
@@ -5789,13 +6015,14 @@ export def "latest-admin-mail-server get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/admin/mail-server")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update mail configuration
@@ -5810,6 +6037,7 @@ export def "latest-admin-mail-server setMailConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --authType: string@authType-completer
   --hostname: string # e.g. smtp.example.com
   --oauth2ProviderId: string
@@ -5830,7 +6058,7 @@ export def "latest-admin-mail-server setMailConfig" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update mail configuration
@@ -5845,13 +6073,14 @@ export def "latest-admin-mail-server-sender-address clearSenderAddress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/admin/mail-server/sender-address")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get server mail address
@@ -5866,13 +6095,14 @@ export def "latest-admin-mail-server-sender-address get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/admin/mail-server/sender-address")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update server mail address
@@ -5887,6 +6117,7 @@ export def "latest-admin-mail-server-sender-address setSenderAddress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -5896,7 +6127,7 @@ export def "latest-admin-mail-server-sender-address setSenderAddress" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revoke all global permissions for group
@@ -5911,6 +6142,7 @@ export def "latest-admin-permissions-groups revokePermissionsForGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the group
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5919,7 +6151,7 @@ export def "latest-admin-permissions-groups revokePermissionsForGroup" [
   let full_url = (build-url $base "/api/latest/admin/permissions/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get groups with a global permission
@@ -5934,6 +6166,7 @@ export def "latest-admin-permissions-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # If specified only group names containing the supplied string will be returned
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -5944,7 +6177,7 @@ export def "latest-admin-permissions-groups get" [
   let full_url = (build-url $base "/api/latest/admin/permissions/groups" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update global permission for group
@@ -5959,6 +6192,7 @@ export def "latest-admin-permissions-groups setPermissionForGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: list # The names of the groups
   --permission: string@permission-completer-2 # The permission to grant
 ]: nothing -> any {
@@ -5968,7 +6202,7 @@ export def "latest-admin-permissions-groups setPermissionForGroups" [
   let full_url = (build-url $base "/api/latest/admin/permissions/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get groups with no global permission
@@ -5983,6 +6217,7 @@ export def "latest-admin-permissions-groups-none get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # If specified only user names containing the supplied string will be returned
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -5993,7 +6228,7 @@ export def "latest-admin-permissions-groups-none get" [
   let full_url = (build-url $base "/api/latest/admin/permissions/groups/none" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke all global permissions for user
@@ -6008,6 +6243,7 @@ export def "latest-admin-permissions-users revokePermissionsForUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the user
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6016,7 +6252,7 @@ export def "latest-admin-permissions-users revokePermissionsForUser" [
   let full_url = (build-url $base "/api/latest/admin/permissions/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get users with a global permission
@@ -6031,6 +6267,7 @@ export def "latest-admin-permissions-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # If specified only user names containing the supplied string will be returned
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -6041,7 +6278,7 @@ export def "latest-admin-permissions-users get" [
   let full_url = (build-url $base "/api/latest/admin/permissions/users" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update global permission for user
@@ -6056,6 +6293,7 @@ export def "latest-admin-permissions-users setPermissionForUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: list # The names of the users
   --permission: string@permission-completer-2 # The permission to grant
 ]: nothing -> any {
@@ -6065,7 +6303,7 @@ export def "latest-admin-permissions-users setPermissionForUsers" [
   let full_url = (build-url $base "/api/latest/admin/permissions/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get users with no global permission
@@ -6080,6 +6318,7 @@ export def "latest-admin-permissions-users-none get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # If specified only user names containing the supplied string will be returned
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -6090,7 +6329,7 @@ export def "latest-admin-permissions-users-none get" [
   let full_url = (build-url $base "/api/latest/admin/permissions/users/none" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get merge strategies
@@ -6106,13 +6345,14 @@ export def "latest-admin-pull-requests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/admin/pull-requests/($scmId)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update merge strategies
@@ -6129,6 +6369,7 @@ export def "latest-admin-pull-requests setMergeConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --mergeConfig: record # shape: {commitMessageTemplate?: record, commitSummaries?: int, defaultStrategy?: record, strategies: list}
 ]: any -> any {
   let input = $in
@@ -6139,7 +6380,7 @@ export def "latest-admin-pull-requests setMergeConfig" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get rate limit history
@@ -6154,6 +6395,7 @@ export def "latest-admin-rate-limit-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string@order-completer # An optional sort category to arrange the results in descending order
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -6164,7 +6406,7 @@ export def "latest-admin-rate-limit-history get" [
   let full_url = (build-url $base "/api/latest/admin/rate-limit/history" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get rate limit settings
@@ -6179,13 +6421,14 @@ export def "latest-admin-rate-limit-settings get-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/admin/rate-limit/settings")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set rate limit
@@ -6201,6 +6444,7 @@ export def "latest-admin-rate-limit-settings setSettings-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --defaultSettings: record # shape: {capacity?: int, fillRate?: int}
   --enabled: oneof<nothing, bool>
 ]: any -> any {
@@ -6212,7 +6456,7 @@ export def "latest-admin-rate-limit-settings setSettings-by-" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get rate limit settings for user
@@ -6227,6 +6471,7 @@ export def "latest-admin-rate-limit-settings-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Optional filter
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -6237,7 +6482,7 @@ export def "latest-admin-rate-limit-settings-users get" [
   let full_url = (build-url $base "/api/latest/admin/rate-limit/settings/users" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set rate limit settings for users
@@ -6253,6 +6498,7 @@ export def "latest-admin-rate-limit-settings-users set-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --settings: record # shape: {capacity?: int, fillRate?: int}
   usernames: list
   --whitelisted: oneof<nothing, bool>
@@ -6265,7 +6511,7 @@ export def "latest-admin-rate-limit-settings-users set-by-" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete user specific rate limit settings
@@ -6281,13 +6527,14 @@ export def "latest-admin-rate-limit-settings-users delete-by-userSlug" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/admin/rate-limit/settings/users/($userSlug)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get user specific rate limit settings
@@ -6303,13 +6550,14 @@ export def "latest-admin-rate-limit-settings-users get-by-userSlug" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/admin/rate-limit/settings/users/($userSlug)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set rate limit settings for user
@@ -6326,6 +6574,7 @@ export def "latest-admin-rate-limit-settings-users set-by-userSlug" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --settings: record # shape: {capacity?: int, fillRate?: int}
   --whitelisted: oneof<nothing, bool>
 ]: any -> any {
@@ -6337,7 +6586,7 @@ export def "latest-admin-rate-limit-settings-users set-by-userSlug" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get directories
@@ -6352,6 +6601,7 @@ export def "latest-admin-user-directories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --includeInactive: string # Set <code>true</code> to include inactive directories; otherwise, <code>false</code> to only return active directories.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6360,7 +6610,7 @@ export def "latest-admin-user-directories get" [
   let full_url = (build-url $base "/api/latest/admin/user-directories" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove user
@@ -6375,6 +6625,7 @@ export def "latest-admin-users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The username identifying the user to delete.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6383,7 +6634,7 @@ export def "latest-admin-users delete" [
   let full_url = (build-url $base "/api/latest/admin/users" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get users
@@ -6398,6 +6649,7 @@ export def "latest-admin-users get-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # If specified only users with usernames, display name or email addresses containing the supplied string will be returned.
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -6408,7 +6660,7 @@ export def "latest-admin-users get-by-" [
   let full_url = (build-url $base "/api/latest/admin/users" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create user
@@ -6423,6 +6675,7 @@ export def "latest-admin-users createUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --emailAddress: string # The e-mail address for the new user.
   --password: string # The password for the new user. Required if the <code>notify</code> parameter is not present or is set to <code>false</false>
   --addToDefaultGroup: oneof<nothing, bool> # Set <code>true</code> to add the user to the default group, which can be used to grant them a set of initial permissions; otherwise, <code>false</code> to not add them to a group. (default: true)
@@ -6436,7 +6689,7 @@ export def "latest-admin-users createUser" [
   let full_url = (build-url $base "/api/latest/admin/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update user details
@@ -6451,6 +6704,7 @@ export def "latest-admin-users updateUserDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --displayName: string # e.g. Jane Citizen
   --email: string # e.g. jane@example.com
   --name: string # e.g. jcitizen
@@ -6463,7 +6717,7 @@ export def "latest-admin-users updateUserDetails" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add user to group
@@ -6480,6 +6734,7 @@ export def "latest-admin-users-add-group addGroupToUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --context: string # e.g. user_a
   --itemName: string # e.g. group_a
 ]: any -> any {
@@ -6491,7 +6746,7 @@ export def "latest-admin-users-add-group addGroupToUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Add user to groups
@@ -6506,6 +6761,7 @@ export def "latest-admin-users-add-groups addUserToGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   groups: list # e.g. [group_a, group_b]
   --user: string # e.g. user
 ]: any -> any {
@@ -6517,7 +6773,7 @@ export def "latest-admin-users-add-groups addUserToGroups" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Clear CAPTCHA for user
@@ -6532,6 +6788,7 @@ export def "latest-admin-users-captcha clearUserCaptchaChallenge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The username
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6540,7 +6797,7 @@ export def "latest-admin-users-captcha clearUserCaptchaChallenge" [
   let full_url = (build-url $base "/api/latest/admin/users/captcha" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set password for user
@@ -6555,6 +6812,7 @@ export def "latest-admin-users-credentials updateUserPassword" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # e.g. jcitizen
   --password: string # e.g. my-secret-password
   --passwordConfirm: string # e.g. my-secret-password
@@ -6567,7 +6825,7 @@ export def "latest-admin-users-credentials updateUserPassword" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Check user removal
@@ -6582,6 +6840,7 @@ export def "latest-admin-users-erasure validateErasable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The username of the user to validate erasability for.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6590,7 +6849,7 @@ export def "latest-admin-users-erasure validateErasable" [
   let full_url = (build-url $base "/api/latest/admin/users/erasure" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Erase user information
@@ -6605,6 +6864,7 @@ export def "latest-admin-users-erasure eraseUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The username identifying the user to erase.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6613,7 +6873,7 @@ export def "latest-admin-users-erasure eraseUser" [
   let full_url = (build-url $base "/api/latest/admin/users/erasure" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get groups for user
@@ -6628,6 +6888,7 @@ export def "latest-admin-users-more-members findGroupsForUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # If specified only users with usernames, display names or email addresses containing the supplied string will be returned.
   --context: string # The group which should be used to locate members.
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
@@ -6639,7 +6900,7 @@ export def "latest-admin-users-more-members findGroupsForUser" [
   let full_url = (build-url $base "/api/latest/admin/users/more-members" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find other groups for user
@@ -6654,6 +6915,7 @@ export def "latest-admin-users-more-non-members findOtherGroupsForUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # If specified only groups with names containing the supplied string will be returned.
   --context: string # The user which should be used to locate groups.
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
@@ -6665,7 +6927,7 @@ export def "latest-admin-users-more-non-members findOtherGroupsForUser" [
   let full_url = (build-url $base "/api/latest/admin/users/more-non-members" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove user from group
@@ -6680,6 +6942,7 @@ export def "latest-admin-users-remove-group removeGroupFromUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --context: string # e.g. user_a
   --itemName: string # e.g. group_a
 ]: any -> any {
@@ -6691,7 +6954,7 @@ export def "latest-admin-users-remove-group removeGroupFromUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Rename user
@@ -6706,6 +6969,7 @@ export def "latest-admin-users-rename renameUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # e.g. jcitizen
   --newName: string # e.g. jcitizen-new
 ]: any -> any {
@@ -6717,7 +6981,7 @@ export def "latest-admin-users-rename renameUser" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get application properties
@@ -6732,13 +6996,14 @@ export def "latest-application-properties get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/application-properties")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get build capabilities
@@ -6753,13 +7018,14 @@ export def "latest-build-capabilities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/build/capabilities")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pull request suggestions
@@ -6774,6 +7040,7 @@ export def "latest-dashboard-pull-request-suggestions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --changesSince: string # restrict pull request suggestions to be based on events that occurred since some timein the past. This is expressed in seconds since "now". So to return suggestionsbased only on activity within the past 48 hours, pass a value of 172800.
   --limit: string # restricts the result set to return at most this many suggestions.
 ]: nothing -> any {
@@ -6783,7 +7050,7 @@ export def "latest-dashboard-pull-request-suggestions get" [
   let full_url = (build-url $base "/api/latest/dashboard/pull-request-suggestions" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pull requests for a user
@@ -6798,6 +7065,7 @@ export def "latest-dashboard-pull-requests get-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --closedSince: string # (optional, defaults to returning pull requests regardless of closed since date). Permits returning only pull requests with a closed timestamp set more recently that (now - closedSince). Units are in seconds. So for example if closed since 86400 is set only pull requests closed in the previous 24 hours will be returned.
   --role: string # (optional, defaults to returning pull requests for any role). If a role is supplied only pull requests where the authenticated user is a participant in the given role will be returned. Either <strong>REVIEWER</strong>, <strong>AUTHOR</strong> or <strong>PARTICIPANT</strong>.
   --participantStatus: string # (optional, defaults to returning pull requests with any participant status). A comma separated list of participant status. That is, one or more of <strong>UNAPPROVED</strong>, <strong>NEEDS_WORK</strong>, or <strong>APPROVED</strong>.
@@ -6813,7 +7081,7 @@ export def "latest-dashboard-pull-requests get-by-" [
   let full_url = (build-url $base "/api/latest/dashboard/pull-requests" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get deployment capabilities
@@ -6828,13 +7096,14 @@ export def "latest-deployment-capabilities get-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/deployment/capabilities")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get group names
@@ -6849,6 +7118,7 @@ export def "latest-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -6859,7 +7129,7 @@ export def "latest-groups get" [
   let full_url = (build-url $base "/api/latest/groups" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new hook script
@@ -6874,6 +7144,7 @@ export def "latest-hook-scripts createHookScript" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --content: string # The hook script contents.
   --description: string # A description of the hook script (useful when querying registered hook scripts).
   --name: string # The name of the hook script (useful when querying registered hook scripts).
@@ -6887,7 +7158,7 @@ export def "latest-hook-scripts createHookScript" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Delete a hook script.
@@ -6903,13 +7174,14 @@ export def "latest-hook-scripts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/hook-scripts/($scriptId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a hook script
@@ -6925,13 +7197,14 @@ export def "latest-hook-scripts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/hook-scripts/($scriptId)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a hook script
@@ -6947,6 +7220,7 @@ export def "latest-hook-scripts updateHookScript" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -6956,7 +7230,7 @@ export def "latest-hook-scripts updateHookScript" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Get hook script content
@@ -6972,6 +7246,7 @@ export def "latest-hook-scripts-content read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6979,7 +7254,7 @@ export def "latest-hook-scripts-content read" [
   let full_url = (build-url $base $"/api/latest/hook-scripts/($scriptId)/content")
   let accept_val = ($accept | default "application/octet-stream")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get project avatar
@@ -6995,6 +7270,7 @@ export def "latest-hooks-avatar get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # (optional) Version used for HTTP caching only - any non-blank version will result in a large max-age Cache-Control header. Note that this does not affect the Last-Modified header.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7003,7 +7279,7 @@ export def "latest-hooks-avatar get" [
   let full_url = (build-url $base $"/api/latest/hooks/($hookKey)/avatar" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pull requests in inbox
@@ -7018,6 +7294,7 @@ export def "latest-inbox-pull-requests get-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --role: string # default: reviewer
   --limit: int # format: int32, default: 25
   --start: int # format: int32, default: 0
@@ -7028,7 +7305,7 @@ export def "latest-inbox-pull-requests get-by-" [
   let full_url = (build-url $base "/api/latest/inbox/pull-requests" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get total number of pull requests in inbox
@@ -7043,13 +7320,14 @@ export def "latest-inbox-pull-requests-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/inbox/pull-requests/count")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all labels
@@ -7064,6 +7342,7 @@ export def "latest-labels list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --prefix: string # (optional) prefix to filter the labels on.
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -7074,7 +7353,7 @@ export def "latest-labels list" [
   let full_url = (build-url $base "/api/latest/labels" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get label
@@ -7090,13 +7369,14 @@ export def "latest-labels get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/labels/($labelName)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get labelables for label
@@ -7112,6 +7392,7 @@ export def "latest-labels-labeled get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string #  the type of labelables to be returned. Supported values: REPOSITORY
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -7122,7 +7403,7 @@ export def "latest-labels-labeled get" [
   let full_url = (build-url $base $"/api/latest/labels/($labelName)/labeled" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get current log level
@@ -7138,13 +7419,14 @@ export def "latest-logs-logger get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/logs/logger/($loggerName)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set log level
@@ -7161,13 +7443,14 @@ export def "latest-logs-logger setLevel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/logs/logger/($loggerName)/($levelName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get root log level
@@ -7182,13 +7465,14 @@ export def "latest-logs-root-logger get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/logs/rootLogger")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set root log level
@@ -7204,13 +7488,14 @@ export def "latest-logs-root-logger setRootLevel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/logs/rootLogger/($levelName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get debug logging and profiling
@@ -7225,13 +7510,14 @@ export def "latest-logs-settings get-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/logs/settings")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set debug logging and profiling
@@ -7246,6 +7532,7 @@ export def "latest-logs-settings setSettings-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --debugLoggingEnabled: oneof<nothing, bool> # e.g. false
   --profilingEnabled: oneof<nothing, bool> # e.g. false
 ]: any -> any {
@@ -7257,7 +7544,7 @@ export def "latest-logs-settings setSettings-by-" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Preview markdown render
@@ -7272,6 +7559,7 @@ export def "latest-markup-preview preview" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --htmlEscape: string # (Optional) true if HTML should be escaped in the input markup, false otherwise.
   --urlMode: string # (Optional) The mode to use when building URLs. One of: ABSOLUTE, RELATIVE or, CONFIGURED. By default this is RELATIVE.
   --includeHeadingId: string # (Optional) true if headers should contain an ID based on the heading content.
@@ -7286,7 +7574,7 @@ export def "latest-markup-preview preview" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Start export job
@@ -7302,6 +7590,7 @@ export def "latest-migration-exports startExport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --exportLocation: string # e.g. example/sub/directory
   repositoriesRequest: record # shape: {includes: list}
 ]: any -> any {
@@ -7313,7 +7602,7 @@ export def "latest-migration-exports startExport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Preview export
@@ -7329,6 +7618,7 @@ export def "latest-migration-exports-preview previewExport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --exportLocation: string # e.g. example/sub/directory
   repositoriesRequest: record # shape: {includes: list}
 ]: any -> any {
@@ -7340,7 +7630,7 @@ export def "latest-migration-exports-preview previewExport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get export job details
@@ -7356,13 +7646,14 @@ export def "latest-migration-exports get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/migration/exports/($jobId)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel export job
@@ -7378,13 +7669,14 @@ export def "latest-migration-exports-cancel cancelExportJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/migration/exports/($jobId)/cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get job messages
@@ -7400,6 +7692,7 @@ export def "latest-migration-exports-messages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --severity: string # The severity to include in the results
   --subject: string # The subject
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
@@ -7411,7 +7704,7 @@ export def "latest-migration-exports-messages get" [
   let full_url = (build-url $base $"/api/latest/migration/exports/($jobId)/messages" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start import job
@@ -7426,6 +7719,7 @@ export def "latest-migration-imports startImport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --archivePath: string # e.g. Bitbucket_export_1.tar
 ]: any -> any {
   let input = $in
@@ -7436,7 +7730,7 @@ export def "latest-migration-imports startImport" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get import job status
@@ -7452,13 +7746,14 @@ export def "latest-migration-imports get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/migration/imports/($jobId)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel import job
@@ -7474,13 +7769,14 @@ export def "latest-migration-imports-cancel cancelImportJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/migration/imports/($jobId)/cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get import job messages
@@ -7496,6 +7792,7 @@ export def "latest-migration-imports-messages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --severity: string # The severity to include in the results
   --subject: string # The subject
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
@@ -7507,7 +7804,7 @@ export def "latest-migration-imports-messages get" [
   let full_url = (build-url $base $"/api/latest/migration/imports/($jobId)/messages" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Start Mesh migration job
@@ -7522,6 +7819,7 @@ export def "latest-migration-mesh startMeshMigration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --all: oneof<nothing, bool>
   projectIds: list
   repositoryIds: list
@@ -7534,7 +7832,7 @@ export def "latest-migration-mesh startMeshMigration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Preview Mesh migration
@@ -7549,6 +7847,7 @@ export def "latest-migration-mesh-preview previewMeshMigration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --all: oneof<nothing, bool>
   projectIds: list
   repositoryIds: list
@@ -7561,7 +7860,7 @@ export def "latest-migration-mesh-preview previewMeshMigration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Find repositories by Mesh migration state
@@ -7576,6 +7875,7 @@ export def "latest-migration-mesh-repos searchMeshMigrationRepos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --migrationId: string # (optional) The currently active migration job. If not passed, this is looked up internally.
   --projectKey: string # (optional) The project key. Can be specified more than once to filter by more than one project.
   --name: string # (optional) The repository name
@@ -7590,7 +7890,7 @@ export def "latest-migration-mesh-repos searchMeshMigrationRepos" [
   let full_url = (build-url $base "/api/latest/migration/mesh/repos" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all Mesh migration job summaries
@@ -7605,6 +7905,7 @@ export def "latest-migration-mesh-summaries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
 ]: nothing -> any {
@@ -7614,7 +7915,7 @@ export def "latest-migration-mesh-summaries get" [
   let full_url = (build-url $base "/api/latest/migration/mesh/summaries" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get summary for Mesh migration job
@@ -7629,13 +7930,14 @@ export def "latest-migration-mesh-summary list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/migration/mesh/summary")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Mesh migration job details
@@ -7651,13 +7953,14 @@ export def "latest-migration-mesh get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/migration/mesh/($jobId)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel Mesh migration job
@@ -7673,13 +7976,14 @@ export def "latest-migration-mesh-cancel cancelMeshMigrationJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/migration/mesh/($jobId)/cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Mesh migration job messages
@@ -7695,6 +7999,7 @@ export def "latest-migration-mesh-messages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --severity: string # The severity to include in the results
   --subject: string # The subject
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
@@ -7706,7 +8011,7 @@ export def "latest-migration-mesh-messages get" [
   let full_url = (build-url $base $"/api/latest/migration/mesh/($jobId)/messages" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get Mesh migration job summary
@@ -7722,13 +8027,14 @@ export def "latest-migration-mesh-summary get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/migration/mesh/($jobId)/summary")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get recently accessed repositories
@@ -7743,6 +8049,7 @@ export def "latest-profile-recent-repos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --permission: string # (optional) If specified, it must be a valid repository permission level name and will limit the resulting repository list to ones that the requesting user has the specified permission level to. If not specified, the default <code>REPO_READ</code> permission level will be assumed. (default: REPO_READ)
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -7753,7 +8060,7 @@ export def "latest-profile-recent-repos get" [
   let full_url = (build-url $base "/api/latest/profile/recent/repos" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get projects
@@ -7768,6 +8075,7 @@ export def "latest-projects list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name to filter by.
   --permission: string # Permission to filter by
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
@@ -7779,7 +8087,7 @@ export def "latest-projects list" [
   let full_url = (build-url $base "/api/latest/projects" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new project
@@ -7794,6 +8102,7 @@ export def "latest-projects createProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --avatar: string
   --avatarUrl: string
   --key: string # e.g. PRJ
@@ -7807,7 +8116,7 @@ export def "latest-projects createProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete project
@@ -7823,13 +8132,14 @@ export def "latest-projects delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a project
@@ -7845,13 +8155,14 @@ export def "latest-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update project
@@ -7867,6 +8178,7 @@ export def "latest-projects updateProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --avatar: string
   --avatarUrl: string
   --key: string # e.g. PRJ
@@ -7880,7 +8192,7 @@ export def "latest-projects updateProject" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get avatar for project
@@ -7896,6 +8208,7 @@ export def "latest-projects-avatarpng get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --s: string # The desired size of the image. The server will return an image as close as possible to the specified size.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7904,7 +8217,7 @@ export def "latest-projects-avatarpng get" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/avatar.png" $qp)
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update project avatar
@@ -7920,6 +8233,7 @@ export def "latest-projects-avatarpng uploadAvatar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --avatar: string # The avatar file to upload. (format: binary)
 ]: any -> any {
   let input = $in
@@ -7930,7 +8244,7 @@ export def "latest-projects-avatarpng uploadAvatar" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get configured hook scripts
@@ -7946,6 +8260,7 @@ export def "latest-projects-hook-scripts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
 ]: nothing -> any {
@@ -7955,7 +8270,7 @@ export def "latest-projects-hook-scripts get" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/hook-scripts" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove a hook script
@@ -7972,13 +8287,14 @@ export def "latest-projects-hook-scripts removeConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/hook-scripts/($scriptId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create/update a hook script
@@ -7995,6 +8311,7 @@ export def "latest-projects-hook-scripts setConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   triggerIds: list
 ]: any -> any {
   let input = $in
@@ -8005,7 +8322,7 @@ export def "latest-projects-hook-scripts setConfiguration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revoke project permissions
@@ -8021,6 +8338,7 @@ export def "latest-projects-permissions revokePermissions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user: string # The names of the users
   --group: string # The names of the groups
 ]: nothing -> any {
@@ -8030,7 +8348,7 @@ export def "latest-projects-permissions revokePermissions" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/permissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke group project permission
@@ -8046,6 +8364,7 @@ export def "latest-projects-permissions-groups revokePermissionsForGroup-by-proj
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the group
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8054,7 +8373,7 @@ export def "latest-projects-permissions-groups revokePermissionsForGroup-by-proj
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/permissions/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get groups with permission to project
@@ -8070,6 +8389,7 @@ export def "latest-projects-permissions-groups get-by-projectKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # If specified only group names containing the supplied string will be returned
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -8080,7 +8400,7 @@ export def "latest-projects-permissions-groups get-by-projectKey" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/permissions/groups" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update group project permission
@@ -8096,6 +8416,7 @@ export def "latest-projects-permissions-groups setPermissionForGroups-by-project
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The names of the groups
   --permission: string # The permission to grant.See the [permissions documentation](https://confluence.atlassian.com/display/BitbucketServer/Using+project+permissions)for a detailed explanation of what each permission entails. Available project permissions are:  - PROJECT_READ - PROJECT_WRITE - PROJECT_ADMIN  
 ]: nothing -> any {
@@ -8105,7 +8426,7 @@ export def "latest-projects-permissions-groups setPermissionForGroups-by-project
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/permissions/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get groups without project permission
@@ -8121,6 +8442,7 @@ export def "latest-projects-permissions-groups-none get-by-projectKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # If specified only group names containing the supplied string will be returned
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -8131,7 +8453,7 @@ export def "latest-projects-permissions-groups-none get-by-projectKey" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/permissions/groups/none" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search project permissions
@@ -8147,6 +8469,7 @@ export def "latest-projects-permissions-search searchPermissions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --permission: string # Permissions to filter by. See the [permissions documentation](https://confluence.atlassian.com/display/BitbucketServer/Using+project+permissions)for a detailed explanation of what each permission entails. This parameter can be specified multiple times to filter by more than one permission, and can contain global and project permissions. 
   --filterText: string # Name of the user or group to filter the name of
   --type: string # Type of entity (user or group)Valid entity types are:  - USER- GROUP
@@ -8157,7 +8480,7 @@ export def "latest-projects-permissions-search searchPermissions" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/permissions/search" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke user project permission
@@ -8173,6 +8496,7 @@ export def "latest-projects-permissions-users revokePermissionsForUser-by-projec
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the user
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8181,7 +8505,7 @@ export def "latest-projects-permissions-users revokePermissionsForUser-by-projec
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/permissions/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get users with permission to project
@@ -8197,6 +8521,7 @@ export def "latest-projects-permissions-users get-by-projectKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # If specified only user names containing the supplied string will be returned
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -8207,7 +8532,7 @@ export def "latest-projects-permissions-users get-by-projectKey" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/permissions/users" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update user project permission
@@ -8223,6 +8548,7 @@ export def "latest-projects-permissions-users setPermissionForUsers-by-projectKe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The names of the users
   --permission: string # The permission to grant.See the [permissions documentation](https://confluence.atlassian.com/display/BitbucketServer/Using+project+permissions)for a detailed explanation of what each permission entails. Available project permissions are:  - PROJECT_READ - PROJECT_WRITE - PROJECT_ADMIN  
 ]: nothing -> any {
@@ -8232,7 +8558,7 @@ export def "latest-projects-permissions-users setPermissionForUsers-by-projectKe
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/permissions/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get users without project permission
@@ -8248,6 +8574,7 @@ export def "latest-projects-permissions-users-none get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # If specified only user names containing the supplied string will be returned
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -8258,7 +8585,7 @@ export def "latest-projects-permissions-users-none get" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/permissions/users/none" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Check default project permission
@@ -8275,13 +8602,14 @@ export def "latest-projects-permissions-all hasAllUserPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/permissions/($permission)/all")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Grant project permission
@@ -8298,6 +8626,7 @@ export def "latest-projects-permissions-all modifyAllUserPermission" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --allow: string # <em>true</em> to grant the specified permission to all users, or <em>false</em> to revoke it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8306,7 +8635,7 @@ export def "latest-projects-permissions-all modifyAllUserPermission" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/permissions/($permission)/all" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get repositories for project
@@ -8322,6 +8651,7 @@ export def "latest-projects-repos list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
 ]: nothing -> any {
@@ -8331,7 +8661,7 @@ export def "latest-projects-repos list" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create repository
@@ -8349,6 +8679,7 @@ export def "latest-projects-repos createRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --defaultBranch: string # e.g. main
   --links: record
   --name: string # e.g. My repo
@@ -8364,7 +8695,7 @@ export def "latest-projects-repos createRepository" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete repository
@@ -8381,6 +8712,7 @@ export def "latest-projects-repos delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8388,7 +8720,7 @@ export def "latest-projects-repos delete" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)")
   let accept_val = ($accept | default "application/json;charset=UTF-8")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get repository
@@ -8405,13 +8737,14 @@ export def "latest-projects-repos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fork repository
@@ -8430,6 +8763,7 @@ export def "latest-projects-repos forkRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --defaultBranch: string # e.g. main
   --links: record
   --name: string # e.g. My repo
@@ -8445,7 +8779,7 @@ export def "latest-projects-repos forkRepository" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update repository
@@ -8464,6 +8798,7 @@ export def "latest-projects-repos updateRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --defaultBranch: string # e.g. main
   --links: record
   --name: string # e.g. My repo
@@ -8479,7 +8814,7 @@ export def "latest-projects-repos updateRepository" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Stream archive of repository
@@ -8496,6 +8831,7 @@ export def "latest-projects-repos-archive get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --path: string # Paths to include in the streamed archive; may be repeated to include multiple paths
   --filename: string # A filename to include the "Content-Disposition" header
@@ -8509,7 +8845,7 @@ export def "latest-projects-repos-archive get" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/archive" $qp)
   let accept_val = ($accept | default "application/octet-stream")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an attachment
@@ -8527,13 +8863,14 @@ export def "latest-projects-repos-attachments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/attachments/($attachmentId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get an attachment
@@ -8551,6 +8888,7 @@ export def "latest-projects-repos-attachments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --User-Agent: string
   --Range: string
 ]: nothing -> any {
@@ -8561,7 +8899,7 @@ export def "latest-projects-repos-attachments get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete attachment metadata
@@ -8579,13 +8917,14 @@ export def "latest-projects-repos-attachments-metadata delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/attachments/($attachmentId)/metadata")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get attachment metadata
@@ -8603,13 +8942,14 @@ export def "latest-projects-repos-attachments-metadata get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/attachments/($attachmentId)/metadata")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Save attachment metadata
@@ -8627,6 +8967,7 @@ export def "latest-projects-repos-attachments-metadata saveAttachmentMetadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -8636,7 +8977,7 @@ export def "latest-projects-repos-attachments-metadata saveAttachmentMetadata" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Find branches
@@ -8653,6 +8994,7 @@ export def "latest-projects-repos-branches get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --boostMatches: oneof<nothing, bool> # Controls whether exact and prefix matches will be boosted to the top
   --context: string
   --orderBy: string@orderBy-completer # Ordering of refs either ALPHABETICAL (by name) or MODIFICATION (last updated)
@@ -8668,7 +9010,7 @@ export def "latest-projects-repos-branches get" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/branches" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create branch
@@ -8685,6 +9027,7 @@ export def "latest-projects-repos-branches createBranchForRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --message: string # e.g. This is my branch or tag
   --name: string # e.g. my-branch-or-tag
   --startPoint: string # e.g. 8d351a10fb428c0c1239530256e21cf24f136e73
@@ -8697,7 +9040,7 @@ export def "latest-projects-repos-branches createBranchForRepository" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get default branch
@@ -8716,13 +9059,14 @@ export def "latest-projects-repos-branches-default get-by-projectKey-repositoryS
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/branches/default")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update default branch
@@ -8741,6 +9085,7 @@ export def "latest-projects-repos-branches-default setDefaultBranch-by-projectKe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # e.g. refs/heads/master
   --type: any
 ]: any -> any {
@@ -8752,7 +9097,7 @@ export def "latest-projects-repos-branches-default setDefaultBranch-by-projectKe
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get file content at revision
@@ -8769,6 +9114,7 @@ export def "latest-projects-repos-browse get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --noContent: string # If blame&amp;noContent only the blame is retrieved instead of the contents
   --at: string # The commit ID or ref to retrieve the content for
   --size: string # If true only the size will be returned for the file path instead of the contents
@@ -8781,7 +9127,7 @@ export def "latest-projects-repos-browse get" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/browse" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get file content
@@ -8799,6 +9145,7 @@ export def "latest-projects-repos-browse get-by-path-projectKey-repositorySlug" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --noContent: string # If blame&amp;noContent only the blame is retrieved instead of the contents
   --at: string # The commit ID or ref to retrieve the content for
   --size: string # If true only the size will be returned for the file path instead of the contents
@@ -8811,7 +9158,7 @@ export def "latest-projects-repos-browse get-by-path-projectKey-repositorySlug" 
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/browse/($path)" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit file
@@ -8829,6 +9176,7 @@ export def "latest-projects-repos-browse editFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # The branch on which the <code>path</code> should be modified or created.
   --content: string # The full content of the file at <code>path</code>.
   --message: string # The message associated with this change, to be used as the commit message. Or null if the default message should be used.
@@ -8843,7 +9191,7 @@ export def "latest-projects-repos-browse editFile" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get changes made in commit
@@ -8860,6 +9208,7 @@ export def "latest-projects-repos-changes get-by-projectKey-repositorySlug" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --until: string # The commit to retrieve changes for
   --since: string # The commit to which <code>until</code> should be compared to produce a page of changes. If not specified the commit's first parent is assumed (if one exists)
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
@@ -8871,7 +9220,7 @@ export def "latest-projects-repos-changes get-by-projectKey-repositorySlug" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/changes" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get commits
@@ -8888,6 +9237,7 @@ export def "latest-projects-repos-commits list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --avatarScheme: string # The desired scheme for the avatar URL. If the parameter is not present URLs will use the same scheme as this request
   --path: string # An optional path to filter commits by
   --withCounts: string # Optionally include the total number of commits and total number of unique authors
@@ -8906,7 +9256,7 @@ export def "latest-projects-repos-commits list" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/commits" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get commit by ID
@@ -8924,6 +9274,7 @@ export def "latest-projects-repos-commits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --path: string # An optional path to filter the commit by. If supplied the details returned <i>may not</i> be for the specified commit. Instead, starting from the specified commit, they will be the details for the first commit affecting the specified path.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8932,7 +9283,7 @@ export def "latest-projects-repos-commits get" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a specific build status
@@ -8950,6 +9301,7 @@ export def "latest-projects-repos-commits-builds delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # the key of the build status
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8958,7 +9310,7 @@ export def "latest-projects-repos-commits-builds delete" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)/builds" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a specific build status
@@ -8976,6 +9328,7 @@ export def "latest-projects-repos-commits-builds get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # the key of the build status
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8984,7 +9337,7 @@ export def "latest-projects-repos-commits-builds get" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)/builds" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Store a build status
@@ -9002,6 +9355,7 @@ export def "latest-projects-repos-commits-builds add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -9011,7 +9365,7 @@ export def "latest-projects-repos-commits-builds add" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Get changes in commit
@@ -9029,6 +9383,7 @@ export def "latest-projects-repos-commits-changes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --withComments: string # <code>true</code> to apply comment counts in the changes (the default); otherwise, <code>false</code> to stream changes without comment counts
   --since: string # The commit to which <code>until</code> should be compared to produce a page of changes. If not specified the commit's first parent is assumed (if one exists)
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
@@ -9040,7 +9395,7 @@ export def "latest-projects-repos-commits-changes get" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)/changes" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for commit comments
@@ -9058,6 +9413,7 @@ export def "latest-projects-repos-commits-comments list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --path: string # The path to the file on which comments were made
   --since: string # For a merge commit, a parent can be provided to specify which diff the comments are on. For a commit range, a sinceId can be provided to specify where the comments are anchored from.
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
@@ -9069,7 +9425,7 @@ export def "latest-projects-repos-commits-comments list" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)/comments" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a new commit comment
@@ -9093,6 +9449,7 @@ export def "latest-projects-repos-commits-comments createComment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --since: string # For a merge commit, a parent can be provided to specify which diff the comments should be on. For a commit range, a sinceId can be provided to specify where the comments should be anchored from.
   --anchor: record # shape: {diffType?: "COMMIT"|"EFFECTIVE"|"RANGE", fileType?: "FROM"|"TO", fromHash?: string, line?: int, lineType?: "ADDED"|"CONTEXT"|"REMOVED", path?: record, srcPath?: record, toHash?: string}
   --comments: list # item shape: {anchor?: record, comments?: list, id?: int, properties?: record, severity?: string, state?: string, text?: string, threadResolved?: bool, version?: int}
@@ -9113,7 +9470,7 @@ export def "latest-projects-repos-commits-comments createComment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a commit comment
@@ -9132,6 +9489,7 @@ export def "latest-projects-repos-commits-comments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The expected version of the comment. This must match the server's version of the comment or the delete will fail. To determine the current version of the comment, the comment should be fetched from the server prior to the delete. Look for the 'version' attribute in the returned JSON structure.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -9140,7 +9498,7 @@ export def "latest-projects-repos-commits-comments delete" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)/comments/($commentId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a commit comment
@@ -9159,13 +9517,14 @@ export def "latest-projects-repos-commits-comments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)/comments/($commentId)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a commit comment
@@ -9190,6 +9549,7 @@ export def "latest-projects-repos-commits-comments updateComment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anchor: record # shape: {diffType?: "COMMIT"|"EFFECTIVE"|"RANGE", fileType?: "FROM"|"TO", fromHash?: string, line?: int, lineType?: "ADDED"|"CONTEXT"|"REMOVED", path?: record, srcPath?: record, toHash?: string}
   --comments: list # item shape: {anchor?: record, comments?: list, id?: int, properties?: record, severity?: string, state?: string, text?: string, threadResolved?: bool, version?: int}
   --id: int # format: int64, e.g. 1
@@ -9208,7 +9568,7 @@ export def "latest-projects-repos-commits-comments updateComment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a deployment
@@ -9226,6 +9586,7 @@ export def "latest-projects-repos-commits-deployments delete-by-projectKey-commi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --deploymentSequenceNumber: string # the sequence number of the deployment, as detailed by the query parameter
   --key: string # the key of the deployment, as detailed by the query parameter
   --environmentKey: string # the key of the environment, as detailed by the query parameter
@@ -9236,7 +9597,7 @@ export def "latest-projects-repos-commits-deployments delete-by-projectKey-commi
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)/deployments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a deployment
@@ -9254,6 +9615,7 @@ export def "latest-projects-repos-commits-deployments get-by-projectKey-commitId
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --deploymentSequenceNumber: string # the sequence number of the deployment, as detailed by the query param (e.g. deploymentSequenceNumber)
   --key: string # the key of the deployment, as detailed by the query parameter
   --environmentKey: string # the key of the environment, as detailed by the query parameter
@@ -9264,7 +9626,7 @@ export def "latest-projects-repos-commits-deployments get-by-projectKey-commitId
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)/deployments" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update a deployment
@@ -9282,6 +9644,7 @@ export def "latest-projects-repos-commits-deployments createOrUpdateDeployment" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -9291,7 +9654,7 @@ export def "latest-projects-repos-commits-deployments createOrUpdateDeployment" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Get diff stats summary between revisions
@@ -9310,6 +9673,7 @@ export def "latest-projects-repos-commits-diff-stats-summary get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --srcPath: string # The source path for the file, if it was copied, moved or renamed
   --autoSrcPath: string # <code>true</code> to automatically try to find the source path when it's not provided, <code>false</code> otherwise. Requires the path to be provided.
   --whitespace: string # Optional whitespace flag which can be set to ignore-all
@@ -9321,7 +9685,7 @@ export def "latest-projects-repos-commits-diff-stats-summary get" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)/diff-stats-summary/($path)" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get diff between revisions
@@ -9340,6 +9704,7 @@ export def "latest-projects-repos-commits-diff streamDiff" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --srcPath: string # The source path for the file, if it was copied, moved or renamed
   --avatarSize: string # If present the service adds avatar URLs for comment authors where the provided value specifies the desired avatar size in pixels. Not applicable if streaming raw diff
   --filter: string # Text used to filter files and lines (optional). Not applicable if streaming raw diff
@@ -9356,7 +9721,7 @@ export def "latest-projects-repos-commits-diff streamDiff" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)/diff/($path)" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the common ancestor between two commits
@@ -9374,6 +9739,7 @@ export def "latest-projects-repos-commits-merge-base get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --otherCommitId: string # The other commit id to calculate the merge-base on
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -9382,7 +9748,7 @@ export def "latest-projects-repos-commits-merge-base get" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)/merge-base" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get repository pull requests containing commit
@@ -9400,6 +9766,7 @@ export def "latest-projects-repos-commits-pull-requests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
 ]: nothing -> any {
@@ -9409,7 +9776,7 @@ export def "latest-projects-repos-commits-pull-requests get" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)/pull-requests" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stop watching commit
@@ -9427,13 +9794,14 @@ export def "latest-projects-repos-commits-watch unwatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)/watch")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Watch commit
@@ -9451,13 +9819,14 @@ export def "latest-projects-repos-commits-watch watch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/commits/($commitId)/watch")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Compare commits
@@ -9474,6 +9843,7 @@ export def "latest-projects-repos-compare-changes streamChanges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromRepo: string # an optional parameter specifying the source repository containing the source commit if that commit is not present in the current repository; the repository can be specified by either its ID <em>fromRepo=42</em> or by its project key plus its repo slug separated by a slash: <em>fromRepo=projectKey/repoSlug</em>
   --qp-from: string # the source commit (can be a partial/full commit ID or qualified/unqualified ref name)
   --qp-to: string # the target commit (can be a partial/full commit ID or qualified/unqualified ref name)
@@ -9486,7 +9856,7 @@ export def "latest-projects-repos-compare-changes streamChanges" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/compare/changes" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get accessible commits
@@ -9503,6 +9873,7 @@ export def "latest-projects-repos-compare-commits streamCommits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromRepo: string # an optional parameter specifying the source repository containing the source commit if that commit is not present in the current repository; the repository can be specified by either its ID <em>fromRepo=42</em> or by its project key plus its repo slug separated by a slash: <em>fromRepo=projectKey/repoSlug</em>
   --qp-from: string # the source commit (can be a partial/full commit ID or qualified/unqualified ref name)
   --qp-to: string # the target commit (can be a partial/full commit ID or qualified/unqualified ref name)
@@ -9515,7 +9886,7 @@ export def "latest-projects-repos-compare-commits streamCommits" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/compare/commits" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the diff stats summary between commits
@@ -9533,6 +9904,7 @@ export def "latest-projects-repos-compare-diff-stats-summary-path get-by-path-pr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromRepo: string # an optional parameter specifying the source repository containing the source commit if that commit is not present in the current repository; the repository can be specified by either its ID <em>fromRepo=42</em> or by its project key plus its repo slug separated by a slash: <em>fromRepo=projectKey/repoSlug</em>
   --srcPath: string # source path
   --qp-from: string # the source commit (can be a partial/full commit ID or qualified/unqualified ref name)
@@ -9545,7 +9917,7 @@ export def "latest-projects-repos-compare-diff-stats-summary-path get-by-path-pr
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/compare/diff-stats-summary($path)" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get diff between commits
@@ -9563,6 +9935,7 @@ export def "latest-projects-repos-compare-diff-path streamDiff-by-path-projectKe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contextLines: string # an optional number of context lines to include around each added or removed lines in the diff
   --fromRepo: string # an optional parameter specifying the source repository containing the source commit if that commit is not present in the current repository; the repository can be specified by either its ID <em>fromRepo=42</em> or by its project key plus its repo slug separated by a slash: <em>fromRepo=projectKey/repoSlug</em>
   --srcPath: string # source path
@@ -9576,7 +9949,7 @@ export def "latest-projects-repos-compare-diff-path streamDiff-by-path-projectKe
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/compare/diff($path)" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get repository contributing guidelines
@@ -9593,6 +9966,7 @@ export def "latest-projects-repos-contributing streamContributing" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --at: string # A specific commit or ref to retrieve the guidelines at, or the default branch if not specified
   --markup: string # If present or <code>"true"</code>, triggers the raw content to be markup-rendered and returned as HTML; otherwise, if not specified, or any value other than <code>"true"</code>, the content is streamed without markup
   --htmlEscape: string # (Optional) true if HTML should be escaped in the input markup, false otherwise. If not specified, the value of the <code>markup.render.html.escape</code> property, which is <code>true</code> by default, will be used
@@ -9605,7 +9979,7 @@ export def "latest-projects-repos-contributing streamContributing" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/contributing" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get repository default branch
@@ -9622,13 +9996,14 @@ export def "latest-projects-repos-default-branch get-by-projectKey-repositorySlu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/default-branch")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update default branch for repository
@@ -9645,6 +10020,7 @@ export def "latest-projects-repos-default-branch setDefaultBranch-by-projectKey-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # e.g. refs/heads/master
   --type: any
 ]: any -> any {
@@ -9656,7 +10032,7 @@ export def "latest-projects-repos-default-branch setDefaultBranch-by-projectKey-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get raw diff for path
@@ -9673,6 +10049,7 @@ export def "latest-projects-repos-diff streamRawDiff" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contextLines: string # The number of context lines to include around added/removed lines in the diff
   --srcPath: string # The source path for the file, if it was copied, moved or renamed
   --until: string # The target revision to diff to (required)
@@ -9685,7 +10062,7 @@ export def "latest-projects-repos-diff streamRawDiff" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/diff" $qp)
   let accept_val = "text/plain; qs=0.1"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get raw diff for path
@@ -9703,6 +10080,7 @@ export def "latest-projects-repos-diff streamRawDiff-by-path-projectKey-reposito
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contextLines: string # The number of context lines to include around added/removed lines in the diff
   --srcPath: string # The source path for the file, if it was copied, moved or renamed
   --until: string # The target revision to diff to (required)
@@ -9715,7 +10093,7 @@ export def "latest-projects-repos-diff streamRawDiff-by-path-projectKey-reposito
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/diff/($path)" $qp)
   let accept_val = "text/plain; qs=0.1"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get files in directory
@@ -9732,6 +10110,7 @@ export def "latest-projects-repos-files streamFiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --at: string # The commit ID or ref (e.g. a branch or tag) to list the files at. If not specified the default branch will be used instead.
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -9742,7 +10121,7 @@ export def "latest-projects-repos-files streamFiles" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/files" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get files in directory
@@ -9760,6 +10139,7 @@ export def "latest-projects-repos-files streamFiles-by-path-projectKey-repositor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --at: string # The commit ID or ref (e.g. a branch or tag) to list the files at. If not specified the default branch will be used instead.
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -9770,7 +10150,7 @@ export def "latest-projects-repos-files streamFiles-by-path-projectKey-repositor
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/files/($path)" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get repository forks
@@ -9787,6 +10167,7 @@ export def "latest-projects-repos-forks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
 ]: nothing -> any {
@@ -9796,7 +10177,7 @@ export def "latest-projects-repos-forks get" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/forks" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get hook scripts
@@ -9813,6 +10194,7 @@ export def "latest-projects-repos-hook-scripts get-by-projectKey-repositorySlug"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
 ]: nothing -> any {
@@ -9822,7 +10204,7 @@ export def "latest-projects-repos-hook-scripts get-by-projectKey-repositorySlug"
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/hook-scripts" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove a hook script
@@ -9840,13 +10222,14 @@ export def "latest-projects-repos-hook-scripts removeConfiguration-by-projectKey
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/hook-scripts/($scriptId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create/update a hook script
@@ -9864,6 +10247,7 @@ export def "latest-projects-repos-hook-scripts setConfiguration-by-projectKey-sc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   triggerIds: list
 ]: any -> any {
   let input = $in
@@ -9874,7 +10258,7 @@ export def "latest-projects-repos-hook-scripts setConfiguration-by-projectKey-sc
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get repository labels
@@ -9891,13 +10275,14 @@ export def "latest-projects-repos-labels get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/labels")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add repository label
@@ -9914,6 +10299,7 @@ export def "latest-projects-repos-labels addLabel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # e.g. labelName
 ]: any -> any {
   let input = $in
@@ -9924,7 +10310,7 @@ export def "latest-projects-repos-labels addLabel" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove repository label
@@ -9942,13 +10328,14 @@ export def "latest-projects-repos-labels removeLabel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/labels/($labelName)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stream files
@@ -9965,6 +10352,7 @@ export def "latest-projects-repos-last-modified stream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --at: string # The commit to use as the starting point when listing files and calculating modifications
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -9973,7 +10361,7 @@ export def "latest-projects-repos-last-modified stream" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/last-modified" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stream files with last modified commit in path
@@ -9991,6 +10379,7 @@ export def "latest-projects-repos-last-modified stream-by-path-projectKey-reposi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --at: string # The commit to use as the starting point when listing files and calculating modifications
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -9999,7 +10388,7 @@ export def "latest-projects-repos-last-modified stream-by-path-projectKey-reposi
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/last-modified/($path)" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get repository license
@@ -10016,6 +10405,7 @@ export def "latest-projects-repos-license streamLicense" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --at: string # A specific commit or ref to retrieve the guidelines at, or the default branch if not specified
   --markup: string # If present or <code>"true"</code>, triggers the raw content to be markup-rendered and returned as HTML; otherwise, if not specified, or any value other than <code>"true"</code>, the content is streamed without markup
   --htmlEscape: string # (Optional) true if HTML should be escaped in the input markup, false otherwise. If not specified, the value of the <code>markup.render.html.escape</code> property, which is <code>true</code> by default, will be used
@@ -10028,7 +10418,7 @@ export def "latest-projects-repos-license streamLicense" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/license" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search pull request participants
@@ -10045,6 +10435,7 @@ export def "latest-projects-repos-participants search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # (optional) Return only users, whose username, name or email address <i>contain</i> the filter value
   --role: string # (optional) The role associated with the pull request participant. This must be one of AUTHOR, REVIEWER, or PARTICIPANT
   --direction: string # (optional), Defaults to <strong>INCOMING</strong>) the direction relative to the specified repository. Either <strong>INCOMING</strong> or <strong>OUTGOING</strong>.
@@ -10057,7 +10448,7 @@ export def "latest-projects-repos-participants search" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/participants" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get patch content at revision
@@ -10074,6 +10465,7 @@ export def "latest-projects-repos-patch streamPatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --until: string # The target revision from which to generate the patch (required)
   --allAncestors: string # indicates whether or not to generate a patch which includes all the ancestors of the 'until' revision. If true, the value provided by 'since' is ignored.
   --since: string # The base revision from which to generate the patch. This is only applicable when 'allAncestors' is false. If omitted the patch will represent one single commit, the 'until'.
@@ -10084,7 +10476,7 @@ export def "latest-projects-repos-patch streamPatch" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/patch" $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke all repository permissions for users and groups
@@ -10101,6 +10493,7 @@ export def "latest-projects-repos-permissions revokePermissions-by-projectKey-re
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user: string # The names of the users
   --group: string # The names of the groups
 ]: nothing -> any {
@@ -10110,7 +10503,7 @@ export def "latest-projects-repos-permissions revokePermissions-by-projectKey-re
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/permissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke group repository permission
@@ -10127,6 +10520,7 @@ export def "latest-projects-repos-permissions-groups revokePermissionsForGroup-b
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the group.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -10135,7 +10529,7 @@ export def "latest-projects-repos-permissions-groups revokePermissionsForGroup-b
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/permissions/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get groups with permission to repository
@@ -10152,6 +10546,7 @@ export def "latest-projects-repos-permissions-groups get-by-projectKey-repositor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # If specified only group names containing the supplied string will be returned.
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -10162,7 +10557,7 @@ export def "latest-projects-repos-permissions-groups get-by-projectKey-repositor
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/permissions/groups" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update group repository permission
@@ -10179,6 +10574,7 @@ export def "latest-projects-repos-permissions-groups setPermissionForGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: list # The names of the groups.
   --permission: string@permission-completer-3 # The permission to grant
 ]: nothing -> any {
@@ -10188,7 +10584,7 @@ export def "latest-projects-repos-permissions-groups setPermissionForGroup" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/permissions/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get groups without repository permission
@@ -10205,6 +10601,7 @@ export def "latest-projects-repos-permissions-groups-none get-by-projectKey-repo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # If specified only group names containing the supplied string will be returned.
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -10215,7 +10612,7 @@ export def "latest-projects-repos-permissions-groups-none get-by-projectKey-repo
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/permissions/groups/none" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search repository permissions
@@ -10232,6 +10629,7 @@ export def "latest-projects-repos-permissions-search searchPermissions-by-projec
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --permission: string # Permissions to filter by. See the [permissions documentation](https://confluence.atlassian.com/display/BitbucketServer/Using+repository+permissions)for a detailed explanation of what each permission entails. This parameter can be specified multiple times to filter by more than one permission, and can contain repository, project, and global permissions. 
   --filterText: string # Name of the user or group to filter the name of
   --type: string # Type of entity (user or group)Valid entity types are:  - USER- GROUP
@@ -10242,7 +10640,7 @@ export def "latest-projects-repos-permissions-search searchPermissions-by-projec
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/permissions/search" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke user repository permission
@@ -10259,6 +10657,7 @@ export def "latest-projects-repos-permissions-users revokePermissionsForUser-by-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the user.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -10267,7 +10666,7 @@ export def "latest-projects-repos-permissions-users revokePermissionsForUser-by-
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/permissions/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get users with permission to repository
@@ -10284,6 +10683,7 @@ export def "latest-projects-repos-permissions-users get-by-projectKey-repository
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # If specified only user names containing the supplied string will be returned.
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -10294,7 +10694,7 @@ export def "latest-projects-repos-permissions-users get-by-projectKey-repository
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/permissions/users" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update user repository permission
@@ -10311,6 +10711,7 @@ export def "latest-projects-repos-permissions-users setPermissionForUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: list # The names of the users.
   --permission: string@permission-completer-3 # The permission to grant
 ]: nothing -> any {
@@ -10320,7 +10721,7 @@ export def "latest-projects-repos-permissions-users setPermissionForUser" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/permissions/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get users without repository permission
@@ -10337,6 +10738,7 @@ export def "latest-projects-repos-permissions-users-none get-by-projectKey-repos
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # If specified only user names containing the supplied string will be returned.
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -10347,7 +10749,7 @@ export def "latest-projects-repos-permissions-users-none get-by-projectKey-repos
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/permissions/users/none" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pull requests for repository
@@ -10364,6 +10766,7 @@ export def "latest-projects-repos-pull-requests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --withAttributes: string # (optional) defaults to true, whether to return additional pull request attributes
   --at: string # (optional) a <i>fully-qualified</i> branch ID to find pull requests to or from, such as refs/heads/master
   --withProperties: string # (optional) defaults to true, whether to return additional pull request properties
@@ -10381,7 +10784,7 @@ export def "latest-projects-repos-pull-requests get" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create pull request
@@ -10403,6 +10806,7 @@ export def "latest-projects-repos-pull-requests create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --closed: oneof<nothing, bool>
   --closedDate: int # format: int64, e.g. 19990759200
   --createdDate: int # format: int64, e.g. 13590759200
@@ -10431,7 +10835,7 @@ export def "latest-projects-repos-pull-requests create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete pull request
@@ -10449,6 +10853,7 @@ export def "latest-projects-repos-pull-requests delete-by-projectKey-pullRequest
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: int # format: int32
 ]: any -> any {
   let input = $in
@@ -10459,7 +10864,7 @@ export def "latest-projects-repos-pull-requests delete-by-projectKey-pullRequest
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get pull request
@@ -10477,6 +10882,7 @@ export def "latest-projects-repos-pull-requests get-by-projectKey-pullRequestId-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --withProperties: string # (optional) defaults to false, whether to return additional pull request properties
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -10485,7 +10891,7 @@ export def "latest-projects-repos-pull-requests get-by-projectKey-pullRequestId-
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update pull request metadata
@@ -10508,6 +10914,7 @@ export def "latest-projects-repos-pull-requests update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --closed: oneof<nothing, bool>
   --closedDate: int # format: int64, e.g. 19990759200
   --createdDate: int # format: int64, e.g. 13590759200
@@ -10536,7 +10943,7 @@ export def "latest-projects-repos-pull-requests update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Stream raw pull request diff
@@ -10554,6 +10961,7 @@ export def "latest-projects-repos-pull-requests streamRawDiff-by-projectKey-pull
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --contextLines: string # The number of context lines to include around added/removed lines in the diff
   --whitespace: string # optional whitespace flag which can be set to <code>ignore-all</code>
 ]: nothing -> any {
@@ -10563,7 +10971,7 @@ export def "latest-projects-repos-pull-requests streamRawDiff-by-projectKey-pull
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId).diff" $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stream pull request as patch
@@ -10581,13 +10989,14 @@ export def "latest-projects-repos-pull-requests streamPatch-by-projectKey-pullRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId).patch")
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pull request activity
@@ -10605,6 +11014,7 @@ export def "latest-projects-repos-pull-requests-activities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fromType: string # (required if <strong>fromId</strong> is present) the type of the activity item specified by <strong>fromId</strong> (either <strong>COMMENT</strong> or <strong>ACTIVITY</strong>)
   --fromId: string # (optional) the ID of the activity item to use as the first item in the returned page
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
@@ -10616,7 +11026,7 @@ export def "latest-projects-repos-pull-requests-activities get" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/activities" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unapprove pull request
@@ -10636,13 +11046,14 @@ export def "latest-projects-repos-pull-requests-approve withdrawApproval" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/approve")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Approve pull request
@@ -10662,13 +11073,14 @@ export def "latest-projects-repos-pull-requests-approve approve" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/approve")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cancel auto-merge for pull request
@@ -10686,13 +11098,14 @@ export def "latest-projects-repos-pull-requests-auto-merge cancelAutoMerge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/auto-merge")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get auto-merge request for pull request
@@ -10710,13 +11123,14 @@ export def "latest-projects-repos-pull-requests-auto-merge get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/auto-merge")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Auto-merge pull request
@@ -10734,13 +11148,14 @@ export def "latest-projects-repos-pull-requests-auto-merge tryAutoMerge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/auto-merge")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search pull request comments
@@ -10758,6 +11173,7 @@ export def "latest-projects-repos-pull-requests-blocker-comments get-by-projectK
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --count: string # If true only the count of the comments by state will be returned (and not the body of the comments).
   --state: list
   --states: string # (optional). If supplied, only comments with a state in the given list will be returned. The state can be OPEN or RESOLVED.
@@ -10770,7 +11186,7 @@ export def "latest-projects-repos-pull-requests-blocker-comments get-by-projectK
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/blocker-comments" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add new blocker comment
@@ -10794,6 +11210,7 @@ export def "latest-projects-repos-pull-requests-blocker-comments createComment-b
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anchor: record # shape: {diffType?: "COMMIT"|"EFFECTIVE"|"RANGE", fileType?: "FROM"|"TO", fromHash?: string, line?: int, lineType?: "ADDED"|"CONTEXT"|"REMOVED", path?: record, srcPath?: record, toHash?: string}
   --comments: list # item shape: {anchor?: record, comments?: list, id?: int, properties?: record, severity?: string, state?: string, text?: string, threadResolved?: bool, version?: int}
   --id: int # format: int64, e.g. 1
@@ -10812,7 +11229,7 @@ export def "latest-projects-repos-pull-requests-blocker-comments createComment-b
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete pull request comment
@@ -10831,6 +11248,7 @@ export def "latest-projects-repos-pull-requests-blocker-comments delete-by-proje
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The expected version of the comment. This must match the server's version of the comment or the delete will fail. To determine the current version of the comment, the comment should be fetched from the server prior to the delete. Look for the 'version' attribute in the returned JSON structure.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -10839,7 +11257,7 @@ export def "latest-projects-repos-pull-requests-blocker-comments delete-by-proje
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/blocker-comments/($commentId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pull request comment
@@ -10858,13 +11276,14 @@ export def "latest-projects-repos-pull-requests-blocker-comments get-by-projectK
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/blocker-comments/($commentId)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update pull request comment
@@ -10889,6 +11308,7 @@ export def "latest-projects-repos-pull-requests-blocker-comments updateComment-b
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anchor: record # shape: {diffType?: "COMMIT"|"EFFECTIVE"|"RANGE", fileType?: "FROM"|"TO", fromHash?: string, line?: int, lineType?: "ADDED"|"CONTEXT"|"REMOVED", path?: record, srcPath?: record, toHash?: string}
   --comments: list # item shape: {anchor?: record, comments?: list, id?: int, properties?: record, severity?: string, state?: string, text?: string, threadResolved?: bool, version?: int}
   --id: int # format: int64, e.g. 1
@@ -10907,7 +11327,7 @@ export def "latest-projects-repos-pull-requests-blocker-comments updateComment-b
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Gets pull request changes
@@ -10925,6 +11345,7 @@ export def "latest-projects-repos-pull-requests-changes streamChanges-by-project
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sinceId: string # The since commit hash to stream changes for a RANGE arbitrary change scope
   --changeScope: string # UNREVIEWED to stream the unreviewed changes for the current user (if they exist); RANGE to stream changes between two arbitrary commits (requires 'sinceId' and 'untilId'); otherwise ALL to stream all changes (the default)
   --untilId: string # The until commit hash to stream changes for a RANGE arbitrary change scope
@@ -10938,7 +11359,7 @@ export def "latest-projects-repos-pull-requests-changes streamChanges-by-project
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/changes" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pull request comments for path
@@ -10956,6 +11377,7 @@ export def "latest-projects-repos-pull-requests-comments get-by-projectKey-pullR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --path: string # The path to stream comments for a given path
   --fromHash: string # The from commit hash to stream comments for a RANGE or COMMIT arbitrary change scope
   --anchorState: string # ACTIVE to stream the active comments; ORPHANED to stream the orphaned comments; ALL to stream both the active and the orphaned comments;
@@ -10973,7 +11395,7 @@ export def "latest-projects-repos-pull-requests-comments get-by-projectKey-pullR
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/comments" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add pull request comment
@@ -10997,6 +11419,7 @@ export def "latest-projects-repos-pull-requests-comments createComment-by-projec
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anchor: record # shape: {diffType?: "COMMIT"|"EFFECTIVE"|"RANGE", fileType?: "FROM"|"TO", fromHash?: string, line?: int, lineType?: "ADDED"|"CONTEXT"|"REMOVED", path?: record, srcPath?: record, toHash?: string}
   --comments: list # item shape: {anchor?: record, comments?: list, id?: int, properties?: record, severity?: string, state?: string, text?: string, threadResolved?: bool, version?: int}
   --id: int # format: int64, e.g. 1
@@ -11015,7 +11438,7 @@ export def "latest-projects-repos-pull-requests-comments createComment-by-projec
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a pull request comment
@@ -11034,6 +11457,7 @@ export def "latest-projects-repos-pull-requests-comments delete-by-projectKey-co
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The expected version of the comment. This must match the server's version of the comment or the delete will fail. To determine the current version of the comment, the comment should be fetched from the server prior to the delete. Look for the 'version' attribute in the returned JSON structure.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -11042,7 +11466,7 @@ export def "latest-projects-repos-pull-requests-comments delete-by-projectKey-co
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/comments/($commentId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a pull request comment
@@ -11061,13 +11485,14 @@ export def "latest-projects-repos-pull-requests-comments get-by-projectKey-comme
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/comments/($commentId)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update pull request comment
@@ -11092,6 +11517,7 @@ export def "latest-projects-repos-pull-requests-comments updateComment-by-projec
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --anchor: record # shape: {diffType?: "COMMIT"|"EFFECTIVE"|"RANGE", fileType?: "FROM"|"TO", fromHash?: string, line?: int, lineType?: "ADDED"|"CONTEXT"|"REMOVED", path?: record, srcPath?: record, toHash?: string}
   --comments: list # item shape: {anchor?: record, comments?: list, id?: int, properties?: record, severity?: string, state?: string, text?: string, threadResolved?: bool, version?: int}
   --id: int # format: int64, e.g. 1
@@ -11110,7 +11536,7 @@ export def "latest-projects-repos-pull-requests-comments updateComment-by-projec
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Apply pull request suggestion
@@ -11129,6 +11555,7 @@ export def "latest-projects-repos-pull-requests-comments-apply-suggestion applyS
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   commentVersion: int # format: int32, e.g. 0
   --commitMessage: string # e.g. A commit message
   pullRequestVersion: int # format: int32, e.g. 1
@@ -11142,7 +11569,7 @@ export def "latest-projects-repos-pull-requests-comments-apply-suggestion applyS
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get commit message suggestion
@@ -11160,13 +11587,14 @@ export def "latest-projects-repos-pull-requests-commit-message-suggestion get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/commit-message-suggestion")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pull request commits
@@ -11184,6 +11612,7 @@ export def "latest-projects-repos-pull-requests-commits get-by-projectKey-pullRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --avatarScheme: string # The desired scheme for the avatar URL. If the parameter is not present URLs will use the same scheme as this request
   --withCounts: string # If set to true, the service will add "authorCount" and "totalCount" at the end of the page. "authorCount" is the number of different authors and "totalCount" is the total number of commits.
   --avatarSize: string # If present the service adds avatar URLs for commit authors. Should be an integer specifying the desired size in pixels. If the parameter is not present, avatar URLs will not be setCOMMIT to stream comments related to a commit between two arbitrary commits (requires 'fromHash' and 'toHash')
@@ -11196,7 +11625,7 @@ export def "latest-projects-repos-pull-requests-commits get-by-projectKey-pullRe
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/commits" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Decline pull request
@@ -11214,6 +11643,7 @@ export def "latest-projects-repos-pull-requests-decline decline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The current version of the pull request. If the server's version isn't the same as the specified version the operation will fail. To determine the current version of the pull request it should be fetched from the server prior to this operation. Look for the 'version' attribute in the returned JSON structure.
   --comment: string # e.g. An optional comment explaining why the pull request is being declined
   --version: int # format: int32
@@ -11227,7 +11657,7 @@ export def "latest-projects-repos-pull-requests-decline decline" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get diff stats summary for pull request
@@ -11246,6 +11676,7 @@ export def "latest-projects-repos-pull-requests-diff-stats-summary get-by-path-p
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sinceId: string # The since commit hash to stream a diff between two arbitrary hashes
   --srcPath: string # The previous path to the file, if the file has been copied, moved or renamed
   --untilId: string # The until commit hash to stream a diff between two arbitrary hashes
@@ -11257,7 +11688,7 @@ export def "latest-projects-repos-pull-requests-diff-stats-summary get-by-path-p
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/diff-stats-summary/($path)" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stream a diff within a pull request
@@ -11276,6 +11707,7 @@ export def "latest-projects-repos-pull-requests-diff streamDiff-by-path-projectK
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --avatarScheme: string # The security scheme for avatar URLs. If the scheme is not present then it is inherited from the request. It can be set to "https" to force the use of secure URLs. Not applicable if streaming raw diff
   --contextLines: string # The number of context lines to include around added/removed lines in the diff
   --sinceId: string # The since commit hash to stream a diff between two arbitrary hashes
@@ -11292,7 +11724,7 @@ export def "latest-projects-repos-pull-requests-diff streamDiff-by-path-projectK
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/diff/($path)" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Test if pull request can be merged
@@ -11310,13 +11742,14 @@ export def "latest-projects-repos-pull-requests-merge canMerge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/merge")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Merge pull request
@@ -11334,6 +11767,7 @@ export def "latest-projects-repos-pull-requests-merge merge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The current version of the pull request. If the server's version isn't the same as the specified version the operation will fail. To determine the current version of the pull request it should be fetched from the server prior to this operation. Look for the 'version' attribute in the returned JSON structure.
   --autoMerge: oneof<nothing, bool> # e.g. false
   --autoSubject: string # e.g. (Optional, 5.7+) true to prepend an auto-generated subject to the message (default), or false to use the message as-is
@@ -11351,7 +11785,7 @@ export def "latest-projects-repos-pull-requests-merge merge" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get the common ancestor between the latest commits of the source and target branches of the pull request
@@ -11369,13 +11803,14 @@ export def "latest-projects-repos-pull-requests-merge-base get-by-projectKey-pul
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/merge-base")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Unassign pull request participant
@@ -11395,6 +11830,7 @@ export def "latest-projects-repos-pull-requests-participants unassignParticipant
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --username: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -11403,7 +11839,7 @@ export def "latest-projects-repos-pull-requests-participants unassignParticipant
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/participants" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pull request participants
@@ -11421,6 +11857,7 @@ export def "latest-projects-repos-pull-requests-participants listParticipants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
 ]: nothing -> any {
@@ -11430,7 +11867,7 @@ export def "latest-projects-repos-pull-requests-participants listParticipants" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/participants" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign pull request participant role
@@ -11449,6 +11886,7 @@ export def "latest-projects-repos-pull-requests-participants assignParticipantRo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --role: string@role-completer
   --user: record # shape: {active?: bool, avatarUrl?: string, displayName: string, emailAddress?: string, links?: record, name: string, slug: string, type: "NORMAL"|"SERVICE"}
 ]: any -> any {
@@ -11460,7 +11898,7 @@ export def "latest-projects-repos-pull-requests-participants assignParticipantRo
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Unassign pull request participant
@@ -11479,13 +11917,14 @@ export def "latest-projects-repos-pull-requests-participants unassignParticipant
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/participants/($userSlug)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Change pull request status
@@ -11505,6 +11944,7 @@ export def "latest-projects-repos-pull-requests-participants updateStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The current version of the pull request. If the server's version isn't the same as the specified version the operation will fail. To determine the current version of the pull request it should be fetched from the server prior to this operation. Look for the 'version' attribute in the returned JSON structure. Note: This parameter is deprecated. Use last reviewed commit in request body instead (DEPRECATED)
   --lastReviewedCommit: string # e.g. 685cac2c4499ff1f308851e35d2b4357844d8927
   --status: string@status-completer
@@ -11518,7 +11958,7 @@ export def "latest-projects-repos-pull-requests-participants updateStatus" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Re-open pull request
@@ -11536,6 +11976,7 @@ export def "latest-projects-repos-pull-requests-reopen reopen" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The current version of the pull request. If the server's version isn't the same as the specified version the operation will fail. To determine the current version of the pull request it should be fetched from the server prior to this operation. Look for the 'version' attribute in the returned JSON structure.
   --version: int # format: int32
 ]: any -> any {
@@ -11548,7 +11989,7 @@ export def "latest-projects-repos-pull-requests-reopen reopen" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Discard pull request review
@@ -11566,13 +12007,14 @@ export def "latest-projects-repos-pull-requests-review discardReview" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/review")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pull request comment thread
@@ -11590,6 +12032,7 @@ export def "latest-projects-repos-pull-requests-review get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
 ]: nothing -> any {
@@ -11599,7 +12042,7 @@ export def "latest-projects-repos-pull-requests-review get" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/review" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Complete pull request review
@@ -11618,6 +12061,7 @@ export def "latest-projects-repos-pull-requests-review finishReview" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The current version of the pull request. If the server's version isn't the same as the specified version the operation will fail. To determine the current version of the pull request it should be fetched from the server prior to this operation. Look for the 'version' attribute in the returned JSON structure. Note: This parameter is deprecated. Use last reviewed commit in request body instead (DEPRECATED)
   --commentText: string # e.g. General comment text
   --lastReviewedCommit: string # e.g. 685cac2c4499ff1f308851e35d2b4357844d8927
@@ -11632,7 +12076,7 @@ export def "latest-projects-repos-pull-requests-review finishReview" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Stop watching pull request
@@ -11650,13 +12094,14 @@ export def "latest-projects-repos-pull-requests-watch unwatch-by-projectKey-pull
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/watch")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Watch pull request
@@ -11674,13 +12119,14 @@ export def "latest-projects-repos-pull-requests-watch watch-by-projectKey-pullRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/pull-requests/($pullRequestId)/watch")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get raw content of a file at revision
@@ -11698,6 +12144,7 @@ export def "latest-projects-repos-raw streamRaw" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --at: string # A specific commit or ref to retrieve the raw content at, or the default branch if not specified
   --markup: string # If present or "true", triggers the raw content to be markup-rendered and returned as HTML; otherwise, if not specified, or any value other than "true", the content is streamed without markup
   --htmlEscape: string # (Optional) true if HTML should be escaped in the input markup, false otherwise. If not specified, the value of the markup.render.html.escape property, which is true by default, will be used
@@ -11710,7 +12157,7 @@ export def "latest-projects-repos-raw streamRaw" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/raw/($path)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get repository readme
@@ -11727,6 +12174,7 @@ export def "latest-projects-repos-readme streamReadme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --at: string # A specific commit or ref to retrieve the guidelines at, or the default branch if not specified
   --markup: string # If present or <code>"true"</code>, triggers the raw content to be markup-rendered and returned as HTML; otherwise, if not specified, or any value other than <code>"true"</code>, the content is streamed without markup
   --htmlEscape: string # (Optional) true if HTML should be escaped in the input markup, false otherwise. If not specified, the value of the <code>markup.render.html.escape</code> property, which is <code>true</code> by default, will be used
@@ -11739,7 +12187,7 @@ export def "latest-projects-repos-readme streamReadme" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/readme" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retry repository creation
@@ -11756,13 +12204,14 @@ export def "latest-projects-repos-recreate retryCreateRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/recreate")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get ref change activity
@@ -11779,6 +12228,7 @@ export def "latest-projects-repos-ref-change-activities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ref: string # (optional) exact match for a ref ID to filter ref change activity for
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -11789,7 +12239,7 @@ export def "latest-projects-repos-ref-change-activities get" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/ref-change-activities" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get branches with ref change activities for repository
@@ -11806,6 +12256,7 @@ export def "latest-projects-repos-ref-change-activities-branches findBranches" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filterText: string # (optional) Partial match for a ref ID to filter minimal refs for
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -11816,7 +12267,7 @@ export def "latest-projects-repos-ref-change-activities-branches findBranches" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/ref-change-activities/branches" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get related repository
@@ -11833,6 +12284,7 @@ export def "latest-projects-repos-related get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
 ]: nothing -> any {
@@ -11842,7 +12294,7 @@ export def "latest-projects-repos-related get" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/related" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find repository secret scanning allowlist rules
@@ -11859,6 +12311,7 @@ export def "latest-projects-repos-secret-scanning-allowlist search-by-projectKey
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter names by the provided text (e.g. Access)
   --order: string@order-completer-1 # Order by
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
@@ -11870,7 +12323,7 @@ export def "latest-projects-repos-secret-scanning-allowlist search-by-projectKey
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/secret-scanning/allowlist" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create repository secret scanning allowlist rule
@@ -11887,6 +12340,7 @@ export def "latest-projects-repos-secret-scanning-allowlist createAllowlistRule-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -11896,7 +12350,7 @@ export def "latest-projects-repos-secret-scanning-allowlist createAllowlistRule-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Delete a repository secret scanning allowlist rule
@@ -11914,13 +12368,14 @@ export def "latest-projects-repos-secret-scanning-allowlist delete-by-projectKey
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/secret-scanning/allowlist/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a repository secret scanning allowlist rule
@@ -11938,13 +12393,14 @@ export def "latest-projects-repos-secret-scanning-allowlist get-by-projectKey-id
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/secret-scanning/allowlist/($id)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit an existing repository secret scanning allowlist rule
@@ -11962,6 +12418,7 @@ export def "latest-projects-repos-secret-scanning-allowlist editAllowlistRule-by
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -11971,7 +12428,7 @@ export def "latest-projects-repos-secret-scanning-allowlist editAllowlistRule-by
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Delete an exempt repository
@@ -11988,13 +12445,14 @@ export def "latest-projects-repos-secret-scanning-exempt delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/secret-scanning/exempt")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get whether a repository is exempt
@@ -12011,13 +12469,14 @@ export def "latest-projects-repos-secret-scanning-exempt isRepoExempt" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/secret-scanning/exempt")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Exempt a repo from secret scanning
@@ -12036,13 +12495,14 @@ export def "latest-projects-repos-secret-scanning-exempt addExemptRepo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/secret-scanning/exempt")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find repository secret scanning rules
@@ -12059,6 +12519,7 @@ export def "latest-projects-repos-secret-scanning-rules search-by-projectKey-rep
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter names by the provided text (e.g. Access)
   --order: string@order-completer-1 # Order by
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
@@ -12070,7 +12531,7 @@ export def "latest-projects-repos-secret-scanning-rules search-by-projectKey-rep
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/secret-scanning/rules" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create repository secret scanning rule
@@ -12087,6 +12548,7 @@ export def "latest-projects-repos-secret-scanning-rules createRule-by-projectKey
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -12096,7 +12558,7 @@ export def "latest-projects-repos-secret-scanning-rules createRule-by-projectKey
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Delete a repository secret scanning rule
@@ -12114,13 +12576,14 @@ export def "latest-projects-repos-secret-scanning-rules delete-by-projectKey-id-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/secret-scanning/rules/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a repository secret scanning rule
@@ -12138,13 +12601,14 @@ export def "latest-projects-repos-secret-scanning-rules get-by-projectKey-id-rep
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/secret-scanning/rules/($id)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit an existing repository secret scanning rule
@@ -12162,6 +12626,7 @@ export def "latest-projects-repos-secret-scanning-rules editRule-by-projectKey-i
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -12171,7 +12636,7 @@ export def "latest-projects-repos-secret-scanning-rules editRule-by-projectKey-i
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Delete auto decline settings
@@ -12188,13 +12653,14 @@ export def "latest-projects-repos-settings-auto-decline delete-by-projectKey-rep
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/settings/auto-decline")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get auto decline settings
@@ -12211,13 +12677,14 @@ export def "latest-projects-repos-settings-auto-decline get-by-projectKey-reposi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/settings/auto-decline")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create auto decline settings
@@ -12234,6 +12701,7 @@ export def "latest-projects-repos-settings-auto-decline setAutoDeclineSettings-b
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # e.g. true
   --inactivityWeeks: int # format: int32, e.g. 4
 ]: any -> any {
@@ -12245,7 +12713,7 @@ export def "latest-projects-repos-settings-auto-decline setAutoDeclineSettings-b
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete pull request auto-merge settings
@@ -12262,13 +12730,14 @@ export def "latest-projects-repos-settings-auto-merge delete-by-projectKey-repos
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/settings/auto-merge")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pull request auto-merge settings
@@ -12285,13 +12754,14 @@ export def "latest-projects-repos-settings-auto-merge get-by-projectKey-reposito
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/settings/auto-merge")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update the pull request auto-merge settings
@@ -12308,6 +12778,7 @@ export def "latest-projects-repos-settings-auto-merge set-by-projectKey-reposito
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # e.g. false
 ]: any -> any {
   let input = $in
@@ -12318,7 +12789,7 @@ export def "latest-projects-repos-settings-auto-merge set-by-projectKey-reposito
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get repository hooks
@@ -12335,6 +12806,7 @@ export def "latest-projects-repos-settings-hooks get-by-projectKey-repositorySlu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-3 # The optional type to filter by.
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -12345,7 +12817,7 @@ export def "latest-projects-repos-settings-hooks get-by-projectKey-repositorySlu
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/settings/hooks" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete repository hook
@@ -12363,13 +12835,14 @@ export def "latest-projects-repos-settings-hooks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/settings/hooks/($hookKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get repository hook
@@ -12387,13 +12860,14 @@ export def "latest-projects-repos-settings-hooks get-by-projectKey-hookKey-repos
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/settings/hooks/($hookKey)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disable repository hook
@@ -12411,13 +12885,14 @@ export def "latest-projects-repos-settings-hooks-enabled disableHook-by-projectK
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/settings/hooks/($hookKey)/enabled")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable repository hook
@@ -12435,6 +12910,7 @@ export def "latest-projects-repos-settings-hooks-enabled enableHook-by-projectKe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Length: string # The content length.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -12444,7 +12920,7 @@ export def "latest-projects-repos-settings-hooks-enabled enableHook-by-projectKe
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get repository hook settings
@@ -12462,13 +12938,14 @@ export def "latest-projects-repos-settings-hooks-settings get-by-projectKey-hook
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/settings/hooks/($hookKey)/settings")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update repository hook settings
@@ -12486,6 +12963,7 @@ export def "latest-projects-repos-settings-hooks-settings setSettings-by-project
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --booleanValue: oneof<nothing, bool> # e.g. true
   --doubleValue: float # format: double, e.g. 1.1
   --integerValue: int # format: int32, e.g. 1
@@ -12500,7 +12978,7 @@ export def "latest-projects-repos-settings-hooks-settings setSettings-by-project
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get pull request settings
@@ -12517,13 +12995,14 @@ export def "latest-projects-repos-settings-pull-requests get-by-projectKey-repos
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/settings/pull-requests")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update pull request settings
@@ -12543,6 +13022,7 @@ export def "latest-projects-repos-settings-pull-requests updatePullRequestSettin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --mergeConfig: record # shape: {commitMessageTemplate?: record, commitSummaries?: int, defaultStrategy?: record, strategies: list}
   --requiredAllApprovers: oneof<nothing, bool>
   --requiredAllTasksComplete: oneof<nothing, bool>
@@ -12559,7 +13039,7 @@ export def "latest-projects-repos-settings-pull-requests updatePullRequestSettin
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all reviewer groups
@@ -12576,6 +13056,7 @@ export def "latest-projects-repos-settings-reviewer-groups get-by-projectKey-rep
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
 ]: nothing -> any {
@@ -12585,7 +13066,7 @@ export def "latest-projects-repos-settings-reviewer-groups get-by-projectKey-rep
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/settings/reviewer-groups" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create reviewer group
@@ -12604,6 +13085,7 @@ export def "latest-projects-repos-settings-reviewer-groups create-by-projectKey-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --avatarUrl: string
   --description: string # e.g. null
   --id: int # format: int64
@@ -12619,7 +13101,7 @@ export def "latest-projects-repos-settings-reviewer-groups create-by-projectKey-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete reviewer group
@@ -12637,13 +13119,14 @@ export def "latest-projects-repos-settings-reviewer-groups delete-by-projectKey-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/settings/reviewer-groups/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get reviewer group
@@ -12661,13 +13144,14 @@ export def "latest-projects-repos-settings-reviewer-groups get-by-projectKey-id-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/settings/reviewer-groups/($id)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update reviewer group attributes
@@ -12687,6 +13171,7 @@ export def "latest-projects-repos-settings-reviewer-groups update-by-projectKey-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --avatarUrl: string
   --description: string # e.g. null
   --body-id: int # format: int64
@@ -12702,7 +13187,7 @@ export def "latest-projects-repos-settings-reviewer-groups update-by-projectKey-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get reviewer group users
@@ -12720,13 +13205,14 @@ export def "latest-projects-repos-settings-reviewer-groups-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/settings/reviewer-groups/($id)/users")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find tag
@@ -12743,6 +13229,7 @@ export def "latest-projects-repos-tags list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orderBy: string # Ordering of refs either ALPHABETICAL (by name) or MODIFICATION (last updated)
   --filterText: string # The text to match on.
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
@@ -12754,7 +13241,7 @@ export def "latest-projects-repos-tags list" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/tags" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create tag
@@ -12771,6 +13258,7 @@ export def "latest-projects-repos-tags createTagForRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --message: string # e.g. This is my branch or tag
   --name: string # e.g. my-branch-or-tag
   --startPoint: string # e.g. 8d351a10fb428c0c1239530256e21cf24f136e73
@@ -12783,7 +13271,7 @@ export def "latest-projects-repos-tags createTagForRepository" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get tag
@@ -12801,13 +13289,14 @@ export def "latest-projects-repos-tags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/tags/($name)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Stop watching repository
@@ -12824,13 +13313,14 @@ export def "latest-projects-repos-watch unwatch-by-projectKey-repositorySlug" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/watch")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Watch repository
@@ -12849,6 +13339,7 @@ export def "latest-projects-repos-watch watch-by-projectKey-repositorySlug" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --defaultBranch: string # e.g. main
   --links: record
   --name: string # e.g. My repo
@@ -12864,7 +13355,7 @@ export def "latest-projects-repos-watch watch-by-projectKey-repositorySlug" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Find webhooks
@@ -12881,6 +13372,7 @@ export def "latest-projects-repos-webhooks findWebhooks-by-projectKey-repository
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --event: string # List of <code>com.atlassian.webhooks.WebhookEvent</code> IDs to filter for
   --statistics: oneof<nothing, bool> # <code>true</code> if statistics should be provided for all found webhooks
 ]: nothing -> any {
@@ -12890,7 +13382,7 @@ export def "latest-projects-repos-webhooks findWebhooks-by-projectKey-repository
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/webhooks" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create webhook
@@ -12908,6 +13400,7 @@ export def "latest-projects-repos-webhooks createWebhook-by-projectKey-repositor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool>
   --configuration: record
   --credentials: any # shape: {password?: string, username?: string}
@@ -12926,7 +13419,7 @@ export def "latest-projects-repos-webhooks createWebhook-by-projectKey-repositor
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Search webhooks
@@ -12943,6 +13436,7 @@ export def "latest-projects-repos-webhooks-search searchWebhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --scopeType: string # Scopes to filter by. This parameter can be specified once e.g. "scopeType=repository", or twice e.g. "scopeType=repository&scopeType=project", to filter by more than one scope level. 
   --event: string # List of <code>com.atlassian.webhooks.WebhookEvent</code> ids to filter for
   --statistics: oneof<nothing, bool> # <code>true</code> if statistics should be provided for all found webhooks
@@ -12953,7 +13447,7 @@ export def "latest-projects-repos-webhooks-search searchWebhooks" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/webhooks/search" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Test webhook
@@ -12970,6 +13464,7 @@ export def "latest-projects-repos-webhooks-test testWebhook-by-projectKey-reposi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --webhookId: int # format: int32
   --sslVerificationRequired: string # Whether SSL verification is required for the specified webhook URL. Default value is  <code>true</code>.
   --qp-url: string # The url in which to connect to
@@ -12985,7 +13480,7 @@ export def "latest-projects-repos-webhooks-test testWebhook-by-projectKey-reposi
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete webhook
@@ -13003,13 +13498,14 @@ export def "latest-projects-repos-webhooks delete-by-projectKey-webhookId-reposi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/webhooks/($webhookId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get webhook
@@ -13027,6 +13523,7 @@ export def "latest-projects-repos-webhooks get-by-projectKey-webhookId-repositor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --statistics: string # <code>true</code> if statistics should be provided for the webhook
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -13035,7 +13532,7 @@ export def "latest-projects-repos-webhooks get-by-projectKey-webhookId-repositor
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/webhooks/($webhookId)" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update webhook
@@ -13054,6 +13551,7 @@ export def "latest-projects-repos-webhooks updateWebhook-by-projectKey-webhookId
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool>
   --configuration: record
   --credentials: any # shape: {password?: string, username?: string}
@@ -13072,7 +13570,7 @@ export def "latest-projects-repos-webhooks updateWebhook-by-projectKey-webhookId
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get last webhook invocation details
@@ -13090,6 +13588,7 @@ export def "latest-projects-repos-webhooks-latest get-by-projectKey-webhookId-re
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --event: string # The string ID of a specific event to retrieve the last invocation for.
   --outcome: string # The outcome to filter for. Can be SUCCESS, FAILURE, ERROR. None specified means that the all will be considered
 ]: nothing -> any {
@@ -13099,7 +13598,7 @@ export def "latest-projects-repos-webhooks-latest get-by-projectKey-webhookId-re
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/webhooks/($webhookId)/latest" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get webhook statistics
@@ -13117,6 +13616,7 @@ export def "latest-projects-repos-webhooks-statistics get-by-projectKey-webhookI
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --event: string # The string ID of a specific event to retrieve the last invocation for. May be empty, in which case all events are considered
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -13125,7 +13625,7 @@ export def "latest-projects-repos-webhooks-statistics get-by-projectKey-webhookI
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/webhooks/($webhookId)/statistics" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get webhook statistics summary
@@ -13143,13 +13643,14 @@ export def "latest-projects-repos-webhooks-statistics-summary get-by-projectKey-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/repos/($repositorySlug)/webhooks/($webhookId)/statistics/summary")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find project secret scanning allowlist rules
@@ -13165,6 +13666,7 @@ export def "latest-projects-secret-scanning-allowlist searchAllowlistRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter names by the provided text (e.g. Access)
   --order: string@order-completer-1 # Order by
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
@@ -13176,7 +13678,7 @@ export def "latest-projects-secret-scanning-allowlist searchAllowlistRule" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/secret-scanning/allowlist" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create project secret scanning allowlist rule
@@ -13192,6 +13694,7 @@ export def "latest-projects-secret-scanning-allowlist createAllowlistRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -13201,7 +13704,7 @@ export def "latest-projects-secret-scanning-allowlist createAllowlistRule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Delete a project secret scanning allowlist rule
@@ -13218,13 +13721,14 @@ export def "latest-projects-secret-scanning-allowlist delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/secret-scanning/allowlist/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a project secret scanning allowlist rule
@@ -13241,13 +13745,14 @@ export def "latest-projects-secret-scanning-allowlist get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/secret-scanning/allowlist/($id)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit an existing project secret scanning allowlist rule
@@ -13264,6 +13769,7 @@ export def "latest-projects-secret-scanning-allowlist editAllowlistRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -13273,7 +13779,7 @@ export def "latest-projects-secret-scanning-allowlist editAllowlistRule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Find repos exempt from secret scanning for a project
@@ -13289,6 +13795,7 @@ export def "latest-projects-secret-scanning-exempt findExemptReposByProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string@order-completer-1 # Order by project name followed by repository name either ascending or descending, defaults to ascending.
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -13299,7 +13806,7 @@ export def "latest-projects-secret-scanning-exempt findExemptReposByProject" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/secret-scanning/exempt" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk exempt repos from secret scanning
@@ -13315,6 +13822,7 @@ export def "latest-projects-secret-scanning-exempt bulkAddExemptRepositories-by-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -13324,7 +13832,7 @@ export def "latest-projects-secret-scanning-exempt bulkAddExemptRepositories-by-
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Find project secret scanning rules
@@ -13340,6 +13848,7 @@ export def "latest-projects-secret-scanning-rules search-by-projectKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter names by the provided text (e.g. Access)
   --order: string@order-completer-1 # Order by
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
@@ -13351,7 +13860,7 @@ export def "latest-projects-secret-scanning-rules search-by-projectKey" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/secret-scanning/rules" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create project secret scanning rule
@@ -13367,6 +13876,7 @@ export def "latest-projects-secret-scanning-rules createRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -13376,7 +13886,7 @@ export def "latest-projects-secret-scanning-rules createRule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Delete a project secret scanning rule
@@ -13393,13 +13903,14 @@ export def "latest-projects-secret-scanning-rules delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/secret-scanning/rules/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a project secret scanning rule
@@ -13416,13 +13927,14 @@ export def "latest-projects-secret-scanning-rules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/secret-scanning/rules/($id)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit an existing project secret scanning rule
@@ -13439,6 +13951,7 @@ export def "latest-projects-secret-scanning-rules editRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -13448,7 +13961,7 @@ export def "latest-projects-secret-scanning-rules editRule" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Stop enforcing project restriction
@@ -13464,6 +13977,7 @@ export def "latest-projects-settings-restriction delete-by-projectKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --namespace: string # A namespace used to identify the provider of the feature
   --componentKey: string # A key to uniquely identify individually restrictable subcomponents of a feature within the provided feature key and namespace
   --featureKey: string # A key to uniquely identify the feature within the provided namespace
@@ -13474,7 +13988,7 @@ export def "latest-projects-settings-restriction delete-by-projectKey" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/settings-restriction" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get enforcing project setting
@@ -13490,6 +14004,7 @@ export def "latest-projects-settings-restriction get-by-projectKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --namespace: string # The namespace used to identify the provider of the feature
   --componentKey: string # The component key to uniquely identify individually restrictable subcomponents of a feature within the provided feature key and namespace
   --featureKey: string # The feature key to uniquely identify the feature within the provided namespace
@@ -13500,7 +14015,7 @@ export def "latest-projects-settings-restriction get-by-projectKey" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/settings-restriction" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enforce project restriction
@@ -13516,6 +14031,7 @@ export def "latest-projects-settings-restriction create-by-projectKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --componentKey: string # e.g. my-admin-component
   featureKey: string # e.g. my-admin-feature
   namespace: string # e.g. org.featuredeveloper
@@ -13528,7 +14044,7 @@ export def "latest-projects-settings-restriction create-by-projectKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all enforcing project settings
@@ -13544,6 +14060,7 @@ export def "latest-projects-settings-restriction-all get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --namespace: string # A namespace used to identify the provider of the feature
   --featureKey: string # A key to uniquely identify the feature within the provided namespace
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
@@ -13555,7 +14072,7 @@ export def "latest-projects-settings-restriction-all get" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/settings-restriction/all" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete auto decline settings
@@ -13571,13 +14088,14 @@ export def "latest-projects-settings-auto-decline delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/settings/auto-decline")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get auto decline settings
@@ -13593,13 +14111,14 @@ export def "latest-projects-settings-auto-decline get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/settings/auto-decline")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create/Update auto decline settings
@@ -13615,6 +14134,7 @@ export def "latest-projects-settings-auto-decline setAutoDeclineSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # e.g. true
   --inactivityWeeks: int # format: int32, e.g. 4
 ]: any -> any {
@@ -13626,7 +14146,7 @@ export def "latest-projects-settings-auto-decline setAutoDeclineSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete pull request auto-merge settings
@@ -13642,13 +14162,14 @@ export def "latest-projects-settings-auto-merge delete-by-projectKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/settings/auto-merge")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get pull request auto-merge settings
@@ -13664,13 +14185,14 @@ export def "latest-projects-settings-auto-merge get-by-projectKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/settings/auto-merge")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update the pull request auto-merge settings
@@ -13686,6 +14208,7 @@ export def "latest-projects-settings-auto-merge set" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # e.g. false
   --restrictionAction: string@restrictionAction-completer # e.g. CREATE
 ]: any -> any {
@@ -13697,7 +14220,7 @@ export def "latest-projects-settings-auto-merge set" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get repository hooks
@@ -13713,6 +14236,7 @@ export def "latest-projects-settings-hooks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer-3 # The optional type to filter by.
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -13723,7 +14247,7 @@ export def "latest-projects-settings-hooks list" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/settings/hooks" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a repository hook
@@ -13740,13 +14264,14 @@ export def "latest-projects-settings-hooks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/settings/hooks/($hookKey)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Disable repository hook
@@ -13763,13 +14288,14 @@ export def "latest-projects-settings-hooks-enabled disableHook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/settings/hooks/($hookKey)/enabled")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enable repository hook
@@ -13786,6 +14312,7 @@ export def "latest-projects-settings-hooks-enabled enableHook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Content-Length: int # The content length.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -13795,7 +14322,7 @@ export def "latest-projects-settings-hooks-enabled enableHook" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get repository hook settings
@@ -13812,13 +14339,14 @@ export def "latest-projects-settings-hooks-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/settings/hooks/($hookKey)/settings")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update repository hook settings
@@ -13835,6 +14363,7 @@ export def "latest-projects-settings-hooks-settings setSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --booleanValue: oneof<nothing, bool> # e.g. true
   --doubleValue: float # format: double, e.g. 1.1
   --integerValue: int # format: int32, e.g. 1
@@ -13849,7 +14378,7 @@ export def "latest-projects-settings-hooks-settings setSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get merge strategy
@@ -13866,13 +14395,14 @@ export def "latest-projects-settings-pull-requests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/settings/pull-requests/($scmId)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update merge strategy
@@ -13890,6 +14420,7 @@ export def "latest-projects-settings-pull-requests updatePullRequestSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --mergeConfig: record # shape: {commitMessageTemplate?: record, commitSummaries?: int, defaultStrategy?: record, strategies: list}
 ]: any -> any {
   let input = $in
@@ -13900,7 +14431,7 @@ export def "latest-projects-settings-pull-requests updatePullRequestSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all reviewer groups
@@ -13916,6 +14447,7 @@ export def "latest-projects-settings-reviewer-groups list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
 ]: nothing -> any {
@@ -13925,7 +14457,7 @@ export def "latest-projects-settings-reviewer-groups list" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/settings/reviewer-groups" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create reviewer group
@@ -13943,6 +14475,7 @@ export def "latest-projects-settings-reviewer-groups create-by-projectKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --avatarUrl: string
   --description: string # e.g. null
   --id: int # format: int64
@@ -13958,7 +14491,7 @@ export def "latest-projects-settings-reviewer-groups create-by-projectKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete reviewer group
@@ -13975,13 +14508,14 @@ export def "latest-projects-settings-reviewer-groups delete-by-projectKey-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/settings/reviewer-groups/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get reviewer group
@@ -13998,13 +14532,14 @@ export def "latest-projects-settings-reviewer-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/settings/reviewer-groups/($id)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update reviewer group attributes
@@ -14023,6 +14558,7 @@ export def "latest-projects-settings-reviewer-groups update-by-projectKey-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --avatarUrl: string
   --description: string # e.g. null
   --body-id: int # format: int64
@@ -14038,7 +14574,7 @@ export def "latest-projects-settings-reviewer-groups update-by-projectKey-id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Find webhooks
@@ -14054,6 +14590,7 @@ export def "latest-projects-webhooks findWebhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --event: string # List of <code>com.atlassian.webhooks.WebhookEvent</code> IDs to filter for
   --statistics: oneof<nothing, bool> # <code>true</code> if statistics should be provided for all found webhooks
 ]: nothing -> any {
@@ -14063,7 +14600,7 @@ export def "latest-projects-webhooks findWebhooks" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/webhooks" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create webhook
@@ -14080,6 +14617,7 @@ export def "latest-projects-webhooks createWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool>
   --configuration: record
   --credentials: any # shape: {password?: string, username?: string}
@@ -14098,7 +14636,7 @@ export def "latest-projects-webhooks createWebhook" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Test webhook
@@ -14114,6 +14652,7 @@ export def "latest-projects-webhooks-test testWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --webhookId: int # format: int32
   --sslVerificationRequired: oneof<nothing, bool> # default: true
   --qp-url: string # The url in which to connect to
@@ -14129,7 +14668,7 @@ export def "latest-projects-webhooks-test testWebhook" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete webhook
@@ -14146,13 +14685,14 @@ export def "latest-projects-webhooks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/webhooks/($webhookId)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get webhook
@@ -14169,6 +14709,7 @@ export def "latest-projects-webhooks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --statistics: string # <code>true</code> if statistics should be provided for the webhook
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -14177,7 +14718,7 @@ export def "latest-projects-webhooks get" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/webhooks/($webhookId)" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update webhook
@@ -14195,6 +14736,7 @@ export def "latest-projects-webhooks updateWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool>
   --configuration: record
   --credentials: any # shape: {password?: string, username?: string}
@@ -14213,7 +14755,7 @@ export def "latest-projects-webhooks updateWebhook" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get last webhook invocation details
@@ -14230,6 +14772,7 @@ export def "latest-projects-webhooks-latest get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --event: string # The string ID of a specific event to retrieve the last invocation for.
   --outcome: string # The outcome to filter for. Can be SUCCESS, FAILURE, ERROR. None specified means that the all will be considered
 ]: nothing -> any {
@@ -14239,7 +14782,7 @@ export def "latest-projects-webhooks-latest get" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/webhooks/($webhookId)/latest" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get webhook statistics
@@ -14256,6 +14799,7 @@ export def "latest-projects-webhooks-statistics get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --event: string # The string ID of a specific event to retrieve the last invocation for. May be empty, in which case all events are considered
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -14264,7 +14808,7 @@ export def "latest-projects-webhooks-statistics get" [
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/webhooks/($webhookId)/statistics" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get webhook statistics summary
@@ -14281,13 +14825,14 @@ export def "latest-projects-webhooks-statistics-summary get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/projects/($projectKey)/webhooks/($webhookId)/statistics/summary")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Search for repositories
@@ -14302,6 +14847,7 @@ export def "latest-repos get-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --archived: string # (optional) if specified, this will limit the resulting repository list to ones whose are <tt>ACTIVE</tt>, <tt>ARCHIVED</tt> or <tt>ALL</tt> for both. The match performed is case-insensitive. This filter defaults to <tt>ACTIVE</tt> when not set. <em>Available since 8.0</em>
   --projectname: string # (optional) if specified, this will limit the resulting repository list to ones whose project's name matches this parameter's value. The match performed is case-insensitive and any leading and/or trailing whitespace characters on the <code>projectname</code> parameter will be stripped.
   --projectkey: string # (optional) if specified, this will limit the resulting repository list to ones whose project's key matches this parameter's value. The match performed is case-insensitive and any leading  and/or trailing whitespace characters on the <code>projectKey</code> parameter will be stripped. <em>Available since 8.0</em>
@@ -14318,7 +14864,7 @@ export def "latest-repos get-by-" [
   let full_url = (build-url $base "/api/latest/repos" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find all repos exempt from secret scan
@@ -14333,6 +14879,7 @@ export def "latest-secret-scanning-exempt findExemptReposByScope" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string@order-completer-1 # Order by project name followed by repository name either ascending or descending, defaults to ascending.
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
   --limit: float # Number of items to return. If not passed, a page size of 25 is used. (e.g. 25)
@@ -14343,7 +14890,7 @@ export def "latest-secret-scanning-exempt findExemptReposByScope" [
   let full_url = (build-url $base "/api/latest/secret-scanning/exempt" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk exempt repos from secret scanning
@@ -14358,6 +14905,7 @@ export def "latest-secret-scanning-exempt bulkAddExemptRepositories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -14367,7 +14915,7 @@ export def "latest-secret-scanning-exempt bulkAddExemptRepositories" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Find global secret scanning rules
@@ -14382,6 +14930,7 @@ export def "latest-secret-scanning-rules search-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Filter by rule name (e.g. Access)
   --order: string@order-completer-1 # Order by
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
@@ -14393,7 +14942,7 @@ export def "latest-secret-scanning-rules search-by-" [
   let full_url = (build-url $base "/api/latest/secret-scanning/rules" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create global secret scanning rule
@@ -14408,6 +14957,7 @@ export def "latest-secret-scanning-rules createRule-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -14417,7 +14967,7 @@ export def "latest-secret-scanning-rules createRule-by-" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Delete a global secret scanning rule
@@ -14433,13 +14983,14 @@ export def "latest-secret-scanning-rules delete-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/secret-scanning/rules/($id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a global secret scanning rule
@@ -14455,13 +15006,14 @@ export def "latest-secret-scanning-rules get-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/secret-scanning/rules/($id)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit a global secret scanning rule.
@@ -14477,6 +15029,7 @@ export def "latest-secret-scanning-rules editRule-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> any {
   let input = $in
@@ -14486,7 +15039,7 @@ export def "latest-secret-scanning-rules editRule-by-id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "*/*" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "*/*" $body
 }
 
 # Get all X.509 certificates
@@ -14501,13 +15054,14 @@ export def "latest-signing-x509-certificates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/signing/x509-certificates")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an X.509 certificate
@@ -14522,6 +15076,7 @@ export def "latest-signing-x509-certificates createCertificate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --certificate: string # The X.509 certificate file to upload. (format: binary)
 ]: any -> any {
   let input = $in
@@ -14532,7 +15087,7 @@ export def "latest-signing-x509-certificates createCertificate" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Update X.509 CRL entries
@@ -14548,13 +15103,14 @@ export def "latest-signing-x509-certificates-crl updateCertificateRevocationList
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/signing/x509-certificates/crl/($id)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an X.509 certificate
@@ -14570,13 +15126,14 @@ export def "latest-signing-x509-certificates delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/signing/x509-certificates/($id)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get system signing configuration
@@ -14591,13 +15148,14 @@ export def "latest-system-signing-configuration get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/latest/system-signing/configuration")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update system signing configuration
@@ -14612,6 +15170,7 @@ export def "latest-system-signing-configuration updateSystemSigningConfiguration
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # e.g. false
 ]: any -> any {
   let input = $in
@@ -14622,7 +15181,7 @@ export def "latest-system-signing-configuration updateSystemSigningConfiguration
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get all users
@@ -14637,6 +15196,7 @@ export def "latest-users get-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Return only users, whose username, name or email address <i>contain</i> the <code> filter</code> value
   --permissionN: string # The "root" of a single permission filter, similar to the <code>permission</code> parameter, where "N" is a natural number starting from 1. This allows clients to specify multiple permission filters, by providing consecutive filters as <code>permission.1</code>, <code>permission.2</code> etc. Note that the filters numbering has to start with 1 and be continuous for all filters to be processed. The total allowed number of permission filters is 50 and all filters exceeding that limit will be dropped. See the section "Permission Filters" above for more details on how the permission filters are processed.
   --permission: string # The "root" of a permission filter, whose value must be a valid global, project, or repository permission. Additional filter parameters referring to this filter that specify the resource (project or repository) to apply the filter to must be prefixed with <code>permission.</code>. See the section "Permission Filters" above for more details.
@@ -14648,7 +15208,7 @@ export def "latest-users get-by-" [
   let full_url = (build-url $base "/api/latest/users" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update user details
@@ -14663,6 +15223,7 @@ export def "latest-users updateUserDetails-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --displayName: string # e.g. Jane Citizen
   --email: string # e.g. jane@example.com
   --name: string # e.g. jcitizen
@@ -14676,7 +15237,7 @@ export def "latest-users updateUserDetails-by-" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Set password
@@ -14691,6 +15252,7 @@ export def "latest-users-credentials updateUserPassword-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --oldPassword: string # e.g. my-old-secret-password
   --password: string # e.g. my-secret-password
   --passwordConfirm: string # e.g. my-secret-password
@@ -14703,7 +15265,7 @@ export def "latest-users-credentials updateUserPassword-by-" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get user
@@ -14719,13 +15281,14 @@ export def "latest-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/users/($userSlug)")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete user avatar
@@ -14741,13 +15304,14 @@ export def "latest-users-avatarpng delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/users/($userSlug)/avatar.png")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update user avatar
@@ -14763,6 +15327,7 @@ export def "latest-users-avatarpng uploadAvatar-by-userSlug" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --X-Atlassian-Token: string # This resource has Cross-Site Request Forgery (XSRF) protection. To allow the request to pass the XSRF check the caller needs to send an <code>X-Atlassian-Token</code> HTTP header with the value <code>no-check</code>. (e.g. no-check)
   --avatar: string # The avatar file to upload. (format: binary)
 ]: any -> any {
@@ -14776,7 +15341,7 @@ export def "latest-users-avatarpng uploadAvatar-by-userSlug" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Get user settings
@@ -14792,13 +15357,14 @@ export def "latest-users-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/latest/users/($userSlug)/settings")
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update user settings
@@ -14814,6 +15380,7 @@ export def "latest-users-settings updateSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --boolean key: oneof<nothing, bool> # e.g. true
   --long key: float # e.g. 10
   --string key: string # e.g. string value
@@ -14826,5 +15393,5 @@ export def "latest-users-settings updateSettings" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

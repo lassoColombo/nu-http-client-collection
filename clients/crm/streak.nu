@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -66,7 +67,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "billing-backfill-pro-plus-trial-end post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -98,6 +99,7 @@ export def "billing-backfill-pro-plus-trial-end post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dryRun: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -106,7 +108,7 @@ export def "billing-backfill-pro-plus-trial-end post" [
   let full_url = (build-url $base "/billingBackfill/proPlusTrialEnd" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get current user
@@ -120,13 +122,14 @@ export def "users-me get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<email: string, creationTimestamp: int, lastUpdatedTimestamp: int, lastSavedTimestamp: int, lastSeenTimestamp: int, googleProfileId: string, googleProfilePhotoUrl: string, googleProfileLink: string, googleProfileFullName: string, googleProfileFirstName: string, googleProfileLastName: string, timezoneId: string, userType: string, securityReportOnTeamsPipelines: bool, externalSharingRestrictionOnTeamsPipelines: bool, automaticallySendInvoiceEmails: bool, emailsToSendInvoiceTo: list<string>, customerSpecifiedInvoiceData: string, firstOauthTimestamp: int, wantsTaskDigestEmail: bool, displayName: string, key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/users/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update user by key
@@ -141,6 +144,7 @@ export def "users post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --automaticallySendInvoiceEmails: oneof<nothing, bool> # Whether invoice emails should be sent automatically. (nullable)
   --emailsToSendInvoiceTo: list # Who should receive invoices (nullable)
   --customerSpecifiedInvoiceData: string # Custom data that should be shown on the invoice (nullable)
@@ -153,7 +157,7 @@ export def "users post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get user by key
@@ -168,13 +172,14 @@ export def "users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<email: string, creationTimestamp: int, lastUpdatedTimestamp: int, lastSavedTimestamp: int, lastSeenTimestamp: int, googleProfileId: string, googleProfilePhotoUrl: string, googleProfileLink: string, googleProfileFullName: string, googleProfileFirstName: string, googleProfileLastName: string, timezoneId: string, userType: string, securityReportOnTeamsPipelines: bool, externalSharingRestrictionOnTeamsPipelines: bool, automaticallySendInvoiceEmails: bool, emailsToSendInvoiceTo: list<string>, customerSpecifiedInvoiceData: string, firstOauthTimestamp: int, wantsTaskDigestEmail: bool, displayName: string, key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/users/($userKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List comments
@@ -189,13 +194,14 @@ export def "boxes-comments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<hasNextPage: bool, results: table<key: string, commentKey: string, boxKey: string, pipelineKey: string, creatorKey: string, newsfeedEntryKey: string, timestamp: int, message: string, mentions: list, parent: string, children: list, reactionSummary: list, lastSavedTimestamp: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/boxes/($boxKey)/comments")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create comment
@@ -211,6 +217,7 @@ export def "boxes-comments post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   message: string # Comment text.
   --mentions: list # Mention ranges in the comment text. (nullable) — item shape: {userKey: string, offset?: int, length?: int}
   --parent: string # Parent comment key when creating a reply. (nullable)
@@ -224,7 +231,7 @@ export def "boxes-comments post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update comment
@@ -240,6 +247,7 @@ export def "comments post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --message: string # New comment text. Omit this field to keep the existing comment text unchanged. (nullable)
   --mentions: list # New mention ranges for the comment text. Omit this field to keep existing mentions unchanged. (nullable) — item shape: {userKey: string, offset?: int, length?: int}
 ]: any -> record<key: string, commentKey: string, boxKey: string, pipelineKey: string, creatorKey: string, newsfeedEntryKey: string, timestamp: int, message: string, mentions: table<userKey: string, offset: int, length: int>, parent: string, children: list<any>, reactionSummary: table<emoji: string, count: int, users: list>, lastSavedTimestamp: int> {
@@ -251,7 +259,7 @@ export def "comments post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get comment
@@ -266,13 +274,14 @@ export def "comments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, commentKey: string, boxKey: string, pipelineKey: string, creatorKey: string, newsfeedEntryKey: string, timestamp: int, message: string, mentions: table<userKey: string, offset: int, length: int>, parent: string, children: list<any>, reactionSummary: table<emoji: string, count: int, users: list>, lastSavedTimestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/comments/($commentKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete comment
@@ -287,13 +296,14 @@ export def "comments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v2/comments/($commentKey)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # React to comment
@@ -308,6 +318,7 @@ export def "comments-react post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   emoji: string # Emoji to add or remove as a reaction.
 ]: any -> record<key: string, commentKey: string, boxKey: string, pipelineKey: string, creatorKey: string, newsfeedEntryKey: string, timestamp: int, message: string, mentions: table<userKey: string, offset: int, length: int>, parent: string, children: list<any>, reactionSummary: table<emoji: string, count: int, users: list>, lastSavedTimestamp: int> {
   let input = $in
@@ -318,7 +329,7 @@ export def "comments-react post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove comment reaction
@@ -333,6 +344,7 @@ export def "comments-unreact post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   emoji: string # Emoji to add or remove as a reaction.
 ]: any -> record<key: string, commentKey: string, boxKey: string, pipelineKey: string, creatorKey: string, newsfeedEntryKey: string, timestamp: int, message: string, mentions: table<userKey: string, offset: int, length: int>, parent: string, children: list<any>, reactionSummary: table<emoji: string, count: int, users: list>, lastSavedTimestamp: int> {
   let input = $in
@@ -343,5 +355,5 @@ export def "comments-unreact post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

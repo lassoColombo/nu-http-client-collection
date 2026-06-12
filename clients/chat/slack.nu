@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -67,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "adminappsapprove approve" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -101,6 +102,7 @@ export def "adminappsapprove approve" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.apps:write`
   --app-id: string # The id of the app to approve.
   --request-id: string # The id of the request to approve.
@@ -116,7 +118,7 @@ export def "adminappsapprove approve" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List approved apps for an org or workspace.
@@ -132,6 +134,7 @@ export def "adminappsapprovedlist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `admin.apps:read`
   --limit: int # The maximum number of items to return. Must be between 1 - 1000 both inclusive.
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page
@@ -144,7 +147,7 @@ export def "adminappsapprovedlist list" [
   let full_url = (build-url $base "/admin.apps.approved.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List app requests for a team/workspace.
@@ -160,6 +163,7 @@ export def "adminappsrequestslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `admin.apps:read`
   --limit: int # The maximum number of items to return. Must be between 1 - 1000 both inclusive.
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page
@@ -171,7 +175,7 @@ export def "adminappsrequestslist list" [
   let full_url = (build-url $base "/admin.apps.requests.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Restrict an app for installation on a workspace.
@@ -187,6 +191,7 @@ export def "adminappsrestrict restrict" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.apps:write`
   --app-id: string # The id of the app to restrict.
   --request-id: string # The id of the request to restrict.
@@ -202,7 +207,7 @@ export def "adminappsrestrict restrict" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List restricted apps for an org or workspace.
@@ -218,6 +223,7 @@ export def "adminappsrestrictedlist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `admin.apps:read`
   --limit: int # The maximum number of items to return. Must be between 1 - 1000 both inclusive.
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page
@@ -230,7 +236,7 @@ export def "adminappsrestrictedlist list" [
   let full_url = (build-url $base "/admin.apps.restricted.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Archive a public or private channel.
@@ -246,6 +252,7 @@ export def "adminconversationsarchive archive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
   channel_id: string # The channel to archive.
 ]: any -> record<ok: bool> {
@@ -259,7 +266,7 @@ export def "adminconversationsarchive archive" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Convert a public channel to a private channel.
@@ -275,6 +282,7 @@ export def "adminconversationsconvert-to-private convertToPrivate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
   channel_id: string # The channel to convert to private.
 ]: any -> record<ok: bool> {
@@ -288,7 +296,7 @@ export def "adminconversationsconvert-to-private convertToPrivate" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a public or private channel-based conversation.
@@ -304,6 +312,7 @@ export def "adminconversationscreate create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
   name: string # Name of the public or private channel to create.
   --description: string # Description of the public or private channel to create.
@@ -321,7 +330,7 @@ export def "adminconversationscreate create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a public or private channel.
@@ -337,6 +346,7 @@ export def "adminconversationsdelete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
   channel_id: string # The channel to delete.
 ]: any -> record<ok: bool> {
@@ -350,7 +360,7 @@ export def "adminconversationsdelete delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Disconnect a connected channel from one or more workspaces.
@@ -366,6 +376,7 @@ export def "adminconversationsdisconnect-shared disconnectShared" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
   channel_id: string # The channel to be disconnected from some workspaces.
   --leaving-team-ids: string # The team to be removed from the channel. Currently only a single team id can be specified.
@@ -380,7 +391,7 @@ export def "adminconversationsdisconnect-shared disconnectShared" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all disconnected channels—i.e., channels that were once connected to other workspaces and then disconnected—and the corresponding original channel IDs for key revocation with EKM.
@@ -396,6 +407,7 @@ export def "adminconversationsekmlist-original-connected-channel-info listOrigin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `admin.conversations:read`
   --channel-ids: string # A comma-separated list of channels to filter to.
   --team-ids: string # A comma-separated list of the workspaces to which the channels you would like returned belong.
@@ -408,7 +420,7 @@ export def "adminconversationsekmlist-original-connected-channel-info listOrigin
   let full_url = (build-url $base "/admin.conversations.ekm.listOriginalConnectedChannelInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get conversation preferences for a public or private channel.
@@ -424,6 +436,7 @@ export def "adminconversationsget-conversation-prefs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --channel-id: string # The channel to get preferences for.
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:read`
 ]: nothing -> record<ok: bool, prefs: record<can_thread: record<type: list, user: list>, who_can_post: record<type: list, user: list>>> {
@@ -435,7 +448,7 @@ export def "adminconversationsget-conversation-prefs get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get all the workspaces a given public or private channel is connected to within this Enterprise org.
@@ -451,6 +464,7 @@ export def "adminconversationsget-teams get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --channel-id: string # The channel to determine connected workspaces within the organization for.
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page
   --limit: int # The maximum number of items to return. Must be between 1 - 1000 both inclusive.
@@ -464,7 +478,7 @@ export def "adminconversationsget-teams get" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invite a user to a public or private channel.
@@ -480,6 +494,7 @@ export def "adminconversationsinvite invite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
   user_ids: string # The users to invite.
   channel_id: string # The channel that the users will be invited to.
@@ -494,7 +509,7 @@ export def "adminconversationsinvite invite" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Rename a public or private channel.
@@ -510,6 +525,7 @@ export def "adminconversationsrename rename" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
   channel_id: string # The channel to rename.
   name: string
@@ -524,7 +540,7 @@ export def "adminconversationsrename rename" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add an allowlist of IDP groups for accessing a channel
@@ -540,6 +556,7 @@ export def "adminconversationsrestrict-accessadd-group addGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Authentication token. Requires scope: `admin.conversations:write`
   --team-id: string # The workspace where the channel exists. This argument is required for channels only tied to one workspace, and optional for channels that are shared across an organization.
   group_id: string # The [IDP Group](https://slack.com/help/articles/115001435788-Connect-identity-provider-groups-to-your-Enterprise-Grid-org) ID to be an allowlist for the private channel.
@@ -553,7 +570,7 @@ export def "adminconversationsrestrict-accessadd-group addGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all IDP Groups linked to a channel
@@ -569,6 +586,7 @@ export def "adminconversationsrestrict-accesslist-groups listGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `admin.conversations:read`
   --channel-id: string
   --team-id: string # The workspace where the channel exists. This argument is required for channels only tied to one workspace, and optional for channels that are shared across an organization.
@@ -579,7 +597,7 @@ export def "adminconversationsrestrict-accesslist-groups listGroups" [
   let full_url = (build-url $base "/admin.conversations.restrictAccess.listGroups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove a linked IDP group linked from a private channel
@@ -595,6 +613,7 @@ export def "adminconversationsrestrict-accessremove-group removeGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Authentication token. Requires scope: `admin.conversations:write`
   team_id: string # The workspace where the channel exists. This argument is required for channels only tied to one workspace, and optional for channels that are shared across an organization.
   group_id: string # The [IDP Group](https://slack.com/help/articles/115001435788-Connect-identity-provider-groups-to-your-Enterprise-Grid-org) ID to remove from the private channel.
@@ -608,7 +627,7 @@ export def "adminconversationsrestrict-accessremove-group removeGroup" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Search for public or private channels in an Enterprise organization.
@@ -624,6 +643,7 @@ export def "adminconversationssearch search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --team-ids: string # Comma separated string of team IDs, signifying the workspaces to search through.
   --qp-query: string # Name of the the channel to query by.
   --limit: int # Maximum number of items to be returned. Must be between 1 - 20 both inclusive. Default is 10.
@@ -641,7 +661,7 @@ export def "adminconversationssearch search" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set the posting permissions for a public or private channel.
@@ -657,6 +677,7 @@ export def "adminconversationsset-conversation-prefs setConversationPrefs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
   channel_id: string # The channel to set the prefs for
   prefs: string # The prefs for this channel in a stringified JSON format.
@@ -671,7 +692,7 @@ export def "adminconversationsset-conversation-prefs setConversationPrefs" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set the workspaces in an Enterprise grid org that connect to a public or private channel.
@@ -687,6 +708,7 @@ export def "adminconversationsset-teams setTeams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
   channel_id: string # The encoded `channel_id` to add or remove to workspaces.
   --team-id: string # The workspace to which the channel belongs. Omit this argument if the channel is a cross-workspace shared channel.
@@ -703,7 +725,7 @@ export def "adminconversationsset-teams setTeams" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Unarchive a public or private channel.
@@ -719,6 +741,7 @@ export def "adminconversationsunarchive unarchive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
   channel_id: string # The channel to unarchive.
 ]: any -> record<ok: bool> {
@@ -732,7 +755,7 @@ export def "adminconversationsunarchive unarchive" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add an emoji.
@@ -748,6 +771,7 @@ export def "adminemojiadd add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Authentication token. Requires scope: `admin.teams:write`
   name: string # The name of the emoji to be removed. Colons (`:myemoji:`) around the value are not required, although they may be included.
   --body-url: string # The URL of a file to use as an image for the emoji. Square images under 128KB and with transparent backgrounds work best.
@@ -760,7 +784,7 @@ export def "adminemojiadd add" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add an emoji alias.
@@ -776,6 +800,7 @@ export def "adminemojiadd-alias addAlias" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Authentication token. Requires scope: `admin.teams:write`
   name: string # The name of the emoji to be aliased. Colons (`:myemoji:`) around the value are not required, although they may be included.
   alias_for: string # The alias of the emoji.
@@ -788,7 +813,7 @@ export def "adminemojiadd-alias addAlias" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List emoji for an Enterprise Grid organization.
@@ -804,6 +829,7 @@ export def "adminemojilist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `admin.teams:read`
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page
   --limit: int # The maximum number of items to return. Must be between 1 - 1000 both inclusive.
@@ -814,7 +840,7 @@ export def "adminemojilist list" [
   let full_url = (build-url $base "/admin.emoji.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove an emoji across an Enterprise Grid organization
@@ -830,6 +856,7 @@ export def "adminemojiremove remove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Authentication token. Requires scope: `admin.teams:write`
   name: string # The name of the emoji to be removed. Colons (`:myemoji:`) around the value are not required, although they may be included.
 ]: any -> record<ok: bool> {
@@ -841,7 +868,7 @@ export def "adminemojiremove remove" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Rename an emoji.
@@ -857,6 +884,7 @@ export def "adminemojirename rename" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Authentication token. Requires scope: `admin.teams:write`
   name: string # The name of the emoji to be renamed. Colons (`:myemoji:`) around the value are not required, although they may be included.
   new_name: string # The new name of the emoji.
@@ -869,7 +897,7 @@ export def "adminemojirename rename" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Approve a workspace invite request.
@@ -885,6 +913,7 @@ export def "admininvite-requestsapprove approve" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.invites:write`
   --team-id: string # ID for the workspace where the invite request was made.
   invite_request_id: string # ID of the request to invite.
@@ -899,7 +928,7 @@ export def "admininvite-requestsapprove approve" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all approved workspace invite requests.
@@ -915,6 +944,7 @@ export def "admininvite-requestsapprovedlist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # ID for the workspace where the invite requests were made.
   --cursor: string # Value of the `next_cursor` field sent as part of the previous API response
   --limit: int # The number of results that will be returned by the API on each invocation. Must be between 1 - 1000, both inclusive
@@ -928,7 +958,7 @@ export def "admininvite-requestsapprovedlist list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all denied workspace invite requests.
@@ -944,6 +974,7 @@ export def "admininvite-requestsdeniedlist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # ID for the workspace where the invite requests were made.
   --cursor: string # Value of the `next_cursor` field sent as part of the previous api response
   --limit: int # The number of results that will be returned by the API on each invocation. Must be between 1 - 1000 both inclusive
@@ -957,7 +988,7 @@ export def "admininvite-requestsdeniedlist list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deny a workspace invite request.
@@ -973,6 +1004,7 @@ export def "admininvite-requestsdeny deny" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.invites:write`
   --team-id: string # ID for the workspace where the invite request was made.
   invite_request_id: string # ID of the request to invite.
@@ -987,7 +1019,7 @@ export def "admininvite-requestsdeny deny" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all pending workspace invite requests.
@@ -1003,6 +1035,7 @@ export def "admininvite-requestslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # ID for the workspace where the invite requests were made.
   --cursor: string # Value of the `next_cursor` field sent as part of the previous API response
   --limit: int # The number of results that will be returned by the API on each invocation. Must be between 1 - 1000, both inclusive
@@ -1016,7 +1049,7 @@ export def "admininvite-requestslist list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all of the admins on a given workspace.
@@ -1032,6 +1065,7 @@ export def "adminteamsadminslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `admin.teams:read`
   --limit: int # The maximum number of items to return.
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page.
@@ -1043,7 +1077,7 @@ export def "adminteamsadminslist list" [
   let full_url = (build-url $base "/admin.teams.admins.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create an Enterprise team.
@@ -1059,6 +1093,7 @@ export def "adminteamscreate create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.teams:write`
   team_domain: string # Team domain (for example, slacksoftballteam).
   team_name: string # Team name (for example, Slack Softball Team).
@@ -1075,7 +1110,7 @@ export def "adminteamscreate create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all teams on an Enterprise organization
@@ -1091,6 +1126,7 @@ export def "adminteamslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of items to return. Must be between 1 - 100 both inclusive.
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page.
   --hdr-token: string # Authentication token. Requires scope: `admin.teams:read`
@@ -1103,7 +1139,7 @@ export def "adminteamslist list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all of the owners on a given workspace.
@@ -1119,6 +1155,7 @@ export def "adminteamsownerslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `admin.teams:read`
   --team-id: string
   --limit: int # The maximum number of items to return. Must be between 1 - 1000 both inclusive.
@@ -1130,7 +1167,7 @@ export def "adminteamsownerslist list" [
   let full_url = (build-url $base "/admin.teams.owners.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch information about settings in a workspace
@@ -1146,6 +1183,7 @@ export def "adminteamssettingsinfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string
   --hdr-token: string # Authentication token. Requires scope: `admin.teams:read`
 ]: nothing -> record<ok: bool> {
@@ -1157,7 +1195,7 @@ export def "adminteamssettingsinfo info" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set the default channels of a workspace.
@@ -1173,6 +1211,7 @@ export def "adminteamssettingsset-default-channels setDefaultChannels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Authentication token. Requires scope: `admin.teams:write`
   team_id: string # ID for the workspace to set the default channel for.
   channel_ids: string # An array of channel IDs.
@@ -1185,7 +1224,7 @@ export def "adminteamssettingsset-default-channels setDefaultChannels" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set the description of a given workspace.
@@ -1201,6 +1240,7 @@ export def "adminteamssettingsset-description setDescription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.teams:write`
   team_id: string # ID for the workspace to set the description for.
   description: string # The new description for the workspace.
@@ -1215,7 +1255,7 @@ export def "adminteamssettingsset-description setDescription" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # An API method that allows admins to set the discoverability of a given workspace
@@ -1231,6 +1271,7 @@ export def "adminteamssettingsset-discoverability setDiscoverability" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.teams:write`
   team_id: string # The ID of the workspace to set discoverability on.
   discoverability: string # This workspace's discovery setting. It must be set to one of `open`, `invite_only`, `closed`, or `unlisted`.
@@ -1245,7 +1286,7 @@ export def "adminteamssettingsset-discoverability setDiscoverability" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Sets the icon of a workspace.
@@ -1261,6 +1302,7 @@ export def "adminteamssettingsset-icon setIcon" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Authentication token. Requires scope: `admin.teams:write`
   image_url: string # Image URL for the icon
   team_id: string # ID for the workspace to set the icon for.
@@ -1273,7 +1315,7 @@ export def "adminteamssettingsset-icon setIcon" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set the name of a given workspace.
@@ -1289,6 +1331,7 @@ export def "adminteamssettingsset-name setName" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.teams:write`
   team_id: string # ID for the workspace to set the name for.
   name: string # The new name of the workspace.
@@ -1303,7 +1346,7 @@ export def "adminteamssettingsset-name setName" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add one or more default channels to an IDP group.
@@ -1319,6 +1362,7 @@ export def "adminusergroupsadd-channels addChannels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.usergroups:write`
   usergroup_id: string # ID of the IDP group to add default channels for.
   --team-id: string # The workspace to add default channels in.
@@ -1334,7 +1378,7 @@ export def "adminusergroupsadd-channels addChannels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Associate one or more default workspaces with an organization-wide IDP group.
@@ -1350,6 +1394,7 @@ export def "adminusergroupsadd-teams addTeams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.teams:write`
   usergroup_id: string # An encoded usergroup (IDP Group) ID.
   team_ids: string # A comma separated list of encoded team (workspace) IDs. Each workspace *MUST* belong to the organization associated with the token.
@@ -1365,7 +1410,7 @@ export def "adminusergroupsadd-teams addTeams" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List the channels linked to an org-level IDP group (user group).
@@ -1381,6 +1426,7 @@ export def "adminusergroupslist-channels listChannels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --usergroup-id: string # ID of the IDP group to list default channels for.
   --team-id: string # ID of the the workspace.
   --include-num-members: oneof<nothing, bool> # Flag to include or exclude the count of members per channel.
@@ -1394,7 +1440,7 @@ export def "adminusergroupslist-channels listChannels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove one or more default channels from an org-level IDP group (user group).
@@ -1410,6 +1456,7 @@ export def "adminusergroupsremove-channels removeChannels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.usergroups:write`
   usergroup_id: string # ID of the IDP Group
   channel_ids: string # Comma-separated string of channel IDs
@@ -1424,7 +1471,7 @@ export def "adminusergroupsremove-channels removeChannels" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Add an Enterprise user to a workspace.
@@ -1440,6 +1487,7 @@ export def "adminusersassign assign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
   team_id: string # The ID (`T1234`) of the workspace.
   user_id: string # The ID of the user to add to the workspace.
@@ -1457,7 +1505,7 @@ export def "adminusersassign assign" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Invite a user to a workspace.
@@ -1473,6 +1521,7 @@ export def "adminusersinvite invite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
   team_id: string # The ID (`T1234`) of the workspace.
   email: string # The email address of the person to invite.
@@ -1494,7 +1543,7 @@ export def "adminusersinvite invite" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List users on a workspace
@@ -1510,6 +1559,7 @@ export def "adminuserslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --team-id: string # The ID (`T1234`) of the workspace.
   --cursor: string # Set `cursor` to `next_cursor` returned by the previous call to list items in the next page.
   --limit: int # Limit for how many users to be retrieved per page
@@ -1523,7 +1573,7 @@ export def "adminuserslist list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove a user from a workspace.
@@ -1539,6 +1589,7 @@ export def "adminusersremove remove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
   team_id: string # The ID (`T1234`) of the workspace.
   user_id: string # The ID of the user to remove.
@@ -1553,7 +1604,7 @@ export def "adminusersremove remove" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Invalidate a single session for a user by session_id
@@ -1569,6 +1620,7 @@ export def "adminuserssessioninvalidate invalidate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
   team_id: string # ID of the team that the session belongs to
   session_id: int
@@ -1583,7 +1635,7 @@ export def "adminuserssessioninvalidate invalidate" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Wipes all valid sessions on all devices for a given user
@@ -1599,6 +1651,7 @@ export def "adminuserssessionreset reset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
   user_id: string # The ID of the user to wipe sessions for
   --mobile-only: oneof<nothing, bool> # Only expire mobile sessions (default: false)
@@ -1614,7 +1667,7 @@ export def "adminuserssessionreset reset" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set an existing guest, regular user, or owner to be an admin user.
@@ -1630,6 +1683,7 @@ export def "adminusersset-admin setAdmin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
   team_id: string # The ID (`T1234`) of the workspace.
   user_id: string # The ID of the user to designate as an admin.
@@ -1644,7 +1698,7 @@ export def "adminusersset-admin setAdmin" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set an expiration for a guest user
@@ -1660,6 +1714,7 @@ export def "adminusersset-expiration setExpiration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
   team_id: string # The ID (`T1234`) of the workspace.
   user_id: string # The ID of the user to set an expiration for.
@@ -1675,7 +1730,7 @@ export def "adminusersset-expiration setExpiration" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set an existing guest, regular user, or admin user to be a workspace owner.
@@ -1691,6 +1746,7 @@ export def "adminusersset-owner setOwner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
   team_id: string # The ID (`T1234`) of the workspace.
   user_id: string # Id of the user to promote to owner.
@@ -1705,7 +1761,7 @@ export def "adminusersset-owner setOwner" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Set an existing guest user, admin user, or owner to be a regular user.
@@ -1721,6 +1777,7 @@ export def "adminusersset-regular setRegular" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
   team_id: string # The ID (`T1234`) of the workspace.
   user_id: string # The ID of the user to designate as a regular user.
@@ -1735,7 +1792,7 @@ export def "adminusersset-regular setRegular" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Checks API calling code.
@@ -1751,6 +1808,7 @@ export def "apitest test" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-error: string # Error response to return
   --foo: string # example property to return
 ]: nothing -> record<ok: bool> {
@@ -1760,7 +1818,7 @@ export def "apitest test" [
   let full_url = (build-url $base "/api.test" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a list of authorizations for the given event context. Each authorization represents an app installation that the event is visible to.
@@ -1776,6 +1834,7 @@ export def "appseventauthorizationslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --event-context: string
   --cursor: string
   --limit: int
@@ -1789,7 +1848,7 @@ export def "appseventauthorizationslist list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns list of permissions this app has on a team.
@@ -1805,6 +1864,7 @@ export def "appspermissionsinfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `none`
 ]: nothing -> record<info: record<app_home: record<resources: record, scopes: list>, channel: record<resources: record, scopes: list>, group: record<resources: record, scopes: list>, im: record<resources: record, scopes: list>, mpim: record<resources: record, scopes: list>, team: record<resources: record, scopes: list>>, ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1813,7 +1873,7 @@ export def "appspermissionsinfo info" [
   let full_url = (build-url $base "/apps.permissions.info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Allows an app to request additional scopes
@@ -1829,6 +1889,7 @@ export def "appspermissionsrequest request" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `none`
   --scopes: string # A comma separated list of scopes to request for
   --trigger-id: string # Token used to trigger the permissions API
@@ -1839,7 +1900,7 @@ export def "appspermissionsrequest request" [
   let full_url = (build-url $base "/apps.permissions.request" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns list of resource grants this app has on a team.
@@ -1855,6 +1916,7 @@ export def "appspermissionsresourceslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `none`
   --cursor: string # Paginate through collections of data by setting the `cursor` parameter to a `next_cursor` attribute returned by a previous request's `response_metadata`. Default value fetches the first "page" of the collection. See [pagination](/docs/pagination) for more detail.
   --limit: int # The maximum number of items to return.
@@ -1865,7 +1927,7 @@ export def "appspermissionsresourceslist list" [
   let full_url = (build-url $base "/apps.permissions.resources.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns list of scopes this app has on a team.
@@ -1881,6 +1943,7 @@ export def "appspermissionsscopeslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `none`
 ]: nothing -> record<ok: bool, scopes: record<app_home: list<string>, channel: list<string>, group: list<string>, im: list<string>, mpim: list<string>, team: list<string>, user: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1889,7 +1952,7 @@ export def "appspermissionsscopeslist list" [
   let full_url = (build-url $base "/apps.permissions.scopes.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns list of user grants and corresponding scopes this app has on a team.
@@ -1905,6 +1968,7 @@ export def "appspermissionsuserslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `none`
   --cursor: string # Paginate through collections of data by setting the `cursor` parameter to a `next_cursor` attribute returned by a previous request's `response_metadata`. Default value fetches the first "page" of the collection. See [pagination](/docs/pagination) for more detail.
   --limit: int # The maximum number of items to return.
@@ -1915,7 +1979,7 @@ export def "appspermissionsuserslist list" [
   let full_url = (build-url $base "/apps.permissions.users.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enables an app to trigger a permissions modal to grant an app access to a user access scope.
@@ -1931,6 +1995,7 @@ export def "appspermissionsusersrequest request" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `none`
   --scopes: string # A comma separated list of user scopes to request for
   --trigger-id: string # Token used to trigger the request
@@ -1942,7 +2007,7 @@ export def "appspermissionsusersrequest request" [
   let full_url = (build-url $base "/apps.permissions.users.request" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Uninstalls your app from a workspace.
@@ -1958,6 +2023,7 @@ export def "appsuninstall uninstall" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `none`
   --client-id: string # Issued when you created your application.
   --client-secret: string # Issued when you created your application.
@@ -1968,7 +2034,7 @@ export def "appsuninstall uninstall" [
   let full_url = (build-url $base "/apps.uninstall" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revokes a token.
@@ -1984,6 +2050,7 @@ export def "authrevoke revoke" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `none`
   --test: oneof<nothing, bool> # Setting this parameter to `1` triggers a _testing mode_ where the specified token will not actually be revoked.
 ]: nothing -> record<ok: bool, revoked: bool> {
@@ -1993,7 +2060,7 @@ export def "authrevoke revoke" [
   let full_url = (build-url $base "/auth.revoke" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Checks authentication & identity.
@@ -2009,6 +2076,7 @@ export def "authtest test" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `none`
 ]: nothing -> record<bot_id: string, is_enterprise_install: bool, ok: bool, team: string, team_id: string, url: string, user: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2018,7 +2086,7 @@ export def "authtest test" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets information about a bot user.
@@ -2034,6 +2102,7 @@ export def "botsinfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `users:read`
   --bot: string # Bot user to get info on
 ]: nothing -> record<bot: record<app_id: string, deleted: bool, icons: record<image_36: string, image_48: string, image_72: string>, id: string, name: string, updated: int, user_id: string>, ok: bool> {
@@ -2043,7 +2112,7 @@ export def "botsinfo info" [
   let full_url = (build-url $base "/bots.info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Registers a new Call.
@@ -2059,6 +2128,7 @@ export def "callsadd add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `calls:write`
   external_unique_id: string # An ID supplied by the 3rd-party Call provider. It must be unique across all Calls from that service.
   --external-display-id: string # An optional, human-readable ID supplied by the 3rd-party Call provider. If supplied, this ID will be displayed in the Call object.
@@ -2079,7 +2149,7 @@ export def "callsadd add" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Ends a Call.
@@ -2095,6 +2165,7 @@ export def "callsend end" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `calls:write`
   id: string # `id` returned when registering the call using the [`calls.add`](/methods/calls.add) method.
   --duration: int # Call duration in seconds
@@ -2109,7 +2180,7 @@ export def "callsend end" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Returns information about a Call.
@@ -2125,6 +2196,7 @@ export def "callsinfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # `id` of the Call returned by the [`calls.add`](/methods/calls.add) method.
   --hdr-token: string # Authentication token. Requires scope: `calls:read`
 ]: nothing -> record<ok: bool> {
@@ -2136,7 +2208,7 @@ export def "callsinfo info" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Registers new participants added to a Call.
@@ -2152,6 +2224,7 @@ export def "callsparticipantsadd add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `calls:write`
   id: string # `id` returned by the [`calls.add`](/methods/calls.add) method.
   users: string # The list of users to add as participants in the Call. [Read more on how to specify users here](/apis/calls#users).
@@ -2166,7 +2239,7 @@ export def "callsparticipantsadd add" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Registers participants removed from a Call.
@@ -2182,6 +2255,7 @@ export def "callsparticipantsremove remove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `calls:write`
   id: string # `id` returned by the [`calls.add`](/methods/calls.add) method.
   users: string # The list of users to remove as participants in the Call. [Read more on how to specify users here](/apis/calls#users).
@@ -2196,7 +2270,7 @@ export def "callsparticipantsremove remove" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Updates information about a Call.
@@ -2212,6 +2286,7 @@ export def "callsupdate update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `calls:write`
   id: string # `id` returned by the [`calls.add`](/methods/calls.add) method.
   --title: string # The name of the Call.
@@ -2228,7 +2303,7 @@ export def "callsupdate update" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Deletes a message.
@@ -2244,6 +2319,7 @@ export def "chatdelete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `chat:write`
   --ts: float # Timestamp of the message to be deleted.
   --channel: string # Channel containing the message to be deleted.
@@ -2259,7 +2335,7 @@ export def "chatdelete delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Deletes a pending scheduled message from the queue.
@@ -2275,6 +2351,7 @@ export def "chatdelete-scheduled-message post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `chat:write`
   --as-user: oneof<nothing, bool> # Pass true to delete the message as the authed user with `chat:write:user` scope. [Bot users](/bot-users) in this context are considered authed users. If unused or false, the message will be deleted with `chat:write:bot` scope.
   channel: string # The channel the scheduled_message is posting to
@@ -2290,7 +2367,7 @@ export def "chatdelete-scheduled-message post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a permalink URL for a specific extant message
@@ -2306,6 +2383,7 @@ export def "chatget-permalink get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `none`
   --channel: string # The ID of the conversation or channel containing the message
   --message-ts: string # A message's `ts` value, uniquely identifying it within a channel
@@ -2316,7 +2394,7 @@ export def "chatget-permalink get" [
   let full_url = (build-url $base "/chat.getPermalink" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Share a me message into a channel.
@@ -2332,6 +2410,7 @@ export def "chatme-message meMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `chat:write`
   --channel: string # Channel to send message to. Can be a public channel, private group or IM channel. Can be an encoded ID, or a name.
   --text: string # Text of the message to send.
@@ -2346,7 +2425,7 @@ export def "chatme-message meMessage" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Sends an ephemeral message to a user in a channel.
@@ -2362,6 +2441,7 @@ export def "chatpost-ephemeral post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `chat:write`
   --as-user: oneof<nothing, bool> # Pass true to post the message as the authed user. Defaults to true if the chat:write:bot scope is not included. Otherwise, defaults to false.
   --attachments: string # A JSON-based array of structured attachments, presented as a URL-encoded string.
@@ -2386,7 +2466,7 @@ export def "chatpost-ephemeral post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Sends a message to a channel.
@@ -2402,6 +2482,7 @@ export def "chatpost-message post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `chat:write`
   --as-user: string # Pass true to post the message as the authed user, instead of as a bot. Defaults to false. See [authorship](#authorship) below.
   --attachments: string # A JSON-based array of structured attachments, presented as a URL-encoded string.
@@ -2429,7 +2510,7 @@ export def "chatpost-message post" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Schedules a message to be sent to a channel.
@@ -2445,6 +2526,7 @@ export def "chatschedule-message scheduleMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `chat:write`
   --channel: string # Channel, private group, or DM channel to send message to. Can be an encoded ID, or a name. See [below](#channels) for more details.
   --text: string # How this field works and whether it is required depends on other fields you use in your API call. [See below](#text_usage) for more detail.
@@ -2469,7 +2551,7 @@ export def "chatschedule-message scheduleMessage" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Returns a list of scheduled messages.
@@ -2485,6 +2567,7 @@ export def "chatscheduled-messageslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --channel: string # The channel of the scheduled messages
   --latest: float # A UNIX timestamp of the latest value in the time range
   --oldest: float # A UNIX timestamp of the oldest value in the time range
@@ -2500,7 +2583,7 @@ export def "chatscheduled-messageslist list" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Provide custom unfurl behavior for user-posted URLs
@@ -2516,6 +2599,7 @@ export def "chatunfurl unfurl" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `links:write`
   channel: string # Channel ID of the message
   ts: string # Timestamp of the message to add unfurl behavior to.
@@ -2534,7 +2618,7 @@ export def "chatunfurl unfurl" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Updates a message.
@@ -2550,6 +2634,7 @@ export def "chatupdate update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `chat:write`
   --as-user: string # Pass true to update the message as the authed user. [Bot users](/bot-users) in this context are considered authed users.
   --attachments: string # A JSON-based array of structured attachments, presented as a URL-encoded string. This field is required when not presenting `text`. If you don't include this field, the message's previous `attachments` will be retained. To remove previous `attachments`, include an empty array for this field.
@@ -2570,7 +2655,7 @@ export def "chatupdate update" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Archives a conversation.
@@ -2586,6 +2671,7 @@ export def "conversationsarchive archive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # ID of conversation to archive
 ]: any -> record<ok: bool> {
@@ -2599,7 +2685,7 @@ export def "conversationsarchive archive" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Closes a direct message or multi-person direct message.
@@ -2615,6 +2701,7 @@ export def "conversationsclose close" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # Conversation to close.
 ]: any -> record<already_closed: bool, no_op: bool, ok: bool> {
@@ -2628,7 +2715,7 @@ export def "conversationsclose close" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Initiates a public or private channel-based conversation
@@ -2644,6 +2731,7 @@ export def "conversationscreate create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --name: string # Name of the public or private channel to create
   --is-private: oneof<nothing, bool> # Create a private channel instead of a public one
@@ -2658,7 +2746,7 @@ export def "conversationscreate create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Fetches a conversation's history of messages and events.
@@ -2674,6 +2762,7 @@ export def "conversationshistory history" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `conversations:history`
   --channel: string # Conversation ID to fetch history for.
   --latest: float # End of time range of messages to include in results.
@@ -2688,7 +2777,7 @@ export def "conversationshistory history" [
   let full_url = (build-url $base "/conversations.history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve information about a conversation.
@@ -2704,6 +2793,7 @@ export def "conversationsinfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `conversations:read`
   --channel: string # Conversation ID to learn more about
   --include-locale: oneof<nothing, bool> # Set this to `true` to receive the locale for this conversation. Defaults to `false`
@@ -2715,7 +2805,7 @@ export def "conversationsinfo info" [
   let full_url = (build-url $base "/conversations.info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Invites users to a channel.
@@ -2731,6 +2821,7 @@ export def "conversationsinvite invite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # The ID of the public or private channel to invite user(s) to.
   --users: string # A comma separated list of user IDs. Up to 1000 users may be listed.
@@ -2745,7 +2836,7 @@ export def "conversationsinvite invite" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Joins an existing conversation.
@@ -2761,6 +2852,7 @@ export def "conversationsjoin join" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `channels:write`
   --channel: string # ID of conversation to join
 ]: any -> record<channel: list<any>, ok: bool, response_metadata: record<warnings: list<string>>, warning: string> {
@@ -2774,7 +2866,7 @@ export def "conversationsjoin join" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Removes a user from a conversation.
@@ -2790,6 +2882,7 @@ export def "conversationskick kick" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # ID of conversation to remove user from.
   --user: string # User ID to be removed.
@@ -2804,7 +2897,7 @@ export def "conversationskick kick" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Leaves a conversation.
@@ -2820,6 +2913,7 @@ export def "conversationsleave leave" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # Conversation to leave
 ]: any -> record<not_in_channel: bool, ok: bool> {
@@ -2833,7 +2927,7 @@ export def "conversationsleave leave" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Lists all channels in a Slack team.
@@ -2849,6 +2943,7 @@ export def "conversationslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `conversations:read`
   --exclude-archived: oneof<nothing, bool> # Set to `true` to exclude archived channels from the list
   --types: string # Mix and match channel types by providing a comma-separated list of any combination of `public_channel`, `private_channel`, `mpim`, `im`
@@ -2861,7 +2956,7 @@ export def "conversationslist list" [
   let full_url = (build-url $base "/conversations.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sets the read cursor in a channel.
@@ -2877,6 +2972,7 @@ export def "conversationsmark mark" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # Channel or conversation to set the read cursor for.
   --ts: float # Unique identifier of message you want marked as most recently seen in this conversation.
@@ -2891,7 +2987,7 @@ export def "conversationsmark mark" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve members of a conversation.
@@ -2907,6 +3003,7 @@ export def "conversationsmembers members" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `conversations:read`
   --channel: string # ID of the conversation to retrieve members for
   --limit: int # The maximum number of items to return. Fewer than the requested number of items may be returned, even if the end of the users list hasn't been reached.
@@ -2918,7 +3015,7 @@ export def "conversationsmembers members" [
   let full_url = (build-url $base "/conversations.members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Opens or resumes a direct message or multi-person direct message.
@@ -2934,6 +3031,7 @@ export def "conversationsopen open" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # Resume a conversation by supplying an `im` or `mpim`'s ID. Or provide the `users` field instead.
   --users: string # Comma separated lists of users. If only one user is included, this creates a 1:1 DM.  The ordering of the users is preserved whenever a multi-person direct message is returned. Supply a `channel` when not supplying `users`.
@@ -2949,7 +3047,7 @@ export def "conversationsopen open" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Renames a conversation.
@@ -2965,6 +3063,7 @@ export def "conversationsrename rename" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # ID of conversation to rename
   --name: string # New name for conversation.
@@ -2979,7 +3078,7 @@ export def "conversationsrename rename" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a thread of messages posted to a conversation
@@ -2995,6 +3094,7 @@ export def "conversationsreplies replies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `conversations:history`
   --channel: string # Conversation ID to fetch thread from.
   --ts: float # Unique identifier of a thread's parent message. `ts` must be the timestamp of an existing message with 0 or more replies. If there are no replies then just the single message referenced by `ts` will return - it is just an ordinary, unthreaded message.
@@ -3010,7 +3110,7 @@ export def "conversationsreplies replies" [
   let full_url = (build-url $base "/conversations.replies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Sets the purpose for a conversation.
@@ -3026,6 +3126,7 @@ export def "conversationsset-purpose setPurpose" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # Conversation to set the purpose of
   --purpose: string # A new, specialer purpose
@@ -3040,7 +3141,7 @@ export def "conversationsset-purpose setPurpose" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Sets the topic for a conversation.
@@ -3056,6 +3157,7 @@ export def "conversationsset-topic setTopic" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # Conversation to set the topic of
   --topic: string # The new topic string. Does not support formatting or linkification.
@@ -3070,7 +3172,7 @@ export def "conversationsset-topic setTopic" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Reverses conversation archival.
@@ -3086,6 +3188,7 @@ export def "conversationsunarchive unarchive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # ID of conversation to unarchive
 ]: any -> record<ok: bool> {
@@ -3099,7 +3202,7 @@ export def "conversationsunarchive unarchive" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Open a dialog with a user
@@ -3115,6 +3218,7 @@ export def "dialogopen open" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dialog: string # The dialog definition. This must be a JSON-encoded string.
   --trigger-id: string # Exchange a trigger to post to the user.
   --hdr-token: string # Authentication token. Requires scope: `none`
@@ -3127,7 +3231,7 @@ export def "dialogopen open" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Ends the current user's Do Not Disturb session immediately.
@@ -3143,6 +3247,7 @@ export def "dndend-dnd endDnd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `dnd:write`
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3152,7 +3257,7 @@ export def "dndend-dnd endDnd" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Ends the current user's snooze mode immediately.
@@ -3168,6 +3273,7 @@ export def "dndend-snooze endSnooze" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `dnd:write`
 ]: nothing -> record<dnd_enabled: bool, next_dnd_end_ts: int, next_dnd_start_ts: int, ok: bool, snooze_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3177,7 +3283,7 @@ export def "dndend-snooze endSnooze" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a user's current Do Not Disturb status.
@@ -3193,6 +3299,7 @@ export def "dndinfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `dnd:read`
   --user: string # User to fetch status for (defaults to current user)
 ]: nothing -> record<dnd_enabled: bool, next_dnd_end_ts: int, next_dnd_start_ts: int, ok: bool, snooze_enabled: bool, snooze_endtime: int, snooze_remaining: int> {
@@ -3202,7 +3309,7 @@ export def "dndinfo info" [
   let full_url = (build-url $base "/dnd.info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Turns on Do Not Disturb mode for the current user, or changes its duration.
@@ -3218,6 +3325,7 @@ export def "dndset-snooze setSnooze" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Authentication token. Requires scope: `dnd:write`
   num_minutes: string # Number of minutes, from now, to snooze until.
 ]: any -> record<ok: bool, snooze_enabled: bool, snooze_endtime: int, snooze_remaining: int> {
@@ -3229,7 +3337,7 @@ export def "dndset-snooze setSnooze" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieves the Do Not Disturb status for up to 50 users on a team.
@@ -3245,6 +3353,7 @@ export def "dndteam-info teamInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `dnd:read`
   --users: string # Comma-separated list of users to fetch Do Not Disturb status for
 ]: nothing -> record<ok: bool> {
@@ -3254,7 +3363,7 @@ export def "dndteam-info teamInfo" [
   let full_url = (build-url $base "/dnd.teamInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists custom emoji for a team.
@@ -3270,6 +3379,7 @@ export def "emojilist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `emoji:read`
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3278,7 +3388,7 @@ export def "emojilist list" [
   let full_url = (build-url $base "/emoji.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes an existing comment on a file.
@@ -3294,6 +3404,7 @@ export def "filescommentsdelete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `files:write:user`
   --file: string # File to delete a comment from.
   --id: string # The comment to delete.
@@ -3308,7 +3419,7 @@ export def "filescommentsdelete delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Deletes a file.
@@ -3324,6 +3435,7 @@ export def "filesdelete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `files:write:user`
   --file: string # ID of file to delete.
 ]: any -> record<ok: bool> {
@@ -3337,7 +3449,7 @@ export def "filesdelete delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Gets information about a file.
@@ -3353,6 +3465,7 @@ export def "filesinfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `files:read`
   --file: string # Specify a file by providing its ID.
   --count: string
@@ -3366,7 +3479,7 @@ export def "filesinfo info" [
   let full_url = (build-url $base "/files.info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List for a team, in a channel, or from a user with applied filters.
@@ -3382,6 +3495,7 @@ export def "fileslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `files:read`
   --user: string # Filter files created by a single user.
   --channel: string # Filter files appearing in a specific channel, indicated by its ID.
@@ -3398,7 +3512,7 @@ export def "fileslist list" [
   let full_url = (build-url $base "/files.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a file from a remote service
@@ -3414,6 +3528,7 @@ export def "filesremoteadd add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Authentication token. Requires scope: `remote_files:write`
   --external-id: string # Creator defined GUID for the file.
   --title: string # Title of the file being shared.
@@ -3430,7 +3545,7 @@ export def "filesremoteadd add" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve information about a remote file added to Slack
@@ -3446,6 +3561,7 @@ export def "filesremoteinfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `remote_files:read`
   --file: string # Specify a file by providing its ID.
   --external-id: string # Creator defined GUID for the file.
@@ -3456,7 +3572,7 @@ export def "filesremoteinfo info" [
   let full_url = (build-url $base "/files.remote.info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve information about a remote file added to Slack
@@ -3472,6 +3588,7 @@ export def "filesremotelist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `remote_files:read`
   --channel: string # Filter files appearing in a specific channel, indicated by its ID.
   --ts-from: float # Filter files created after this timestamp (inclusive).
@@ -3485,7 +3602,7 @@ export def "filesremotelist list" [
   let full_url = (build-url $base "/files.remote.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove a remote file.
@@ -3501,6 +3618,7 @@ export def "filesremoteremove remove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Authentication token. Requires scope: `remote_files:write`
   --file: string # Specify a file by providing its ID.
   --external-id: string # Creator defined GUID for the file.
@@ -3513,7 +3631,7 @@ export def "filesremoteremove remove" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Share a remote file into a channel.
@@ -3529,6 +3647,7 @@ export def "filesremoteshare share" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `remote_files:share`
   --file: string # Specify a file registered with Slack by providing its ID. Either this field or `external_id` or both are required.
   --external-id: string # The globally unique identifier (GUID) for the file, as set by the app registering the file with Slack.  Either this field or `file` or both are required.
@@ -3540,7 +3659,7 @@ export def "filesremoteshare share" [
   let full_url = (build-url $base "/files.remote.share" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates an existing remote file.
@@ -3556,6 +3675,7 @@ export def "filesremoteupdate update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Authentication token. Requires scope: `remote_files:write`
   --file: string # Specify a file by providing its ID.
   --external-id: string # Creator defined GUID for the file.
@@ -3573,7 +3693,7 @@ export def "filesremoteupdate update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Revokes public/external sharing access for a file
@@ -3589,6 +3709,7 @@ export def "filesrevoke-public-url revokePublicURL" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `files:write:user`
   --file: string # File to revoke
 ]: any -> record<file: record<channels: list<string>, comments_count: int, created: int, date_delete: int, display_as_bot: bool, editable: bool, editor: string, external_id: string, external_type: string, external_url: string, filetype: string, groups: list<string>, has_rich_preview: bool, id: string, image_exif_rotation: int, ims: list<string>, is_external: bool, is_public: bool, is_starred: bool, is_tombstoned: bool, last_editor: string, mimetype: string, mode: string, name: string, non_owner_editable: bool, num_stars: int, original_h: int, original_w: int, permalink: string, permalink_public: string, pinned_info: record, pinned_to: list<string>, pretty_type: string, preview: string, public_url_shared: bool, reactions: list<record>, shares: record<private: any, public: any>, size: int, source_team: string, state: string, thumb_1024: string, thumb_1024_h: int, thumb_1024_w: int, thumb_160: string, thumb_360: string, thumb_360_h: int, thumb_360_w: int, thumb_480: string, thumb_480_h: int, thumb_480_w: int, thumb_64: string, thumb_720: string, thumb_720_h: int, thumb_720_w: int, thumb_80: string, thumb_800: string, thumb_800_h: int, thumb_800_w: int, thumb_960: string, thumb_960_h: int, thumb_960_w: int, thumb_tiny: string, timestamp: int, title: string, updated: int, url_private: string, url_private_download: string, user: string, user_team: string, username: string>, ok: bool> {
@@ -3602,7 +3723,7 @@ export def "filesrevoke-public-url revokePublicURL" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Enables a file for public/external sharing.
@@ -3618,6 +3739,7 @@ export def "filesshared-public-url sharedPublicURL" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `files:write:user`
   --file: string # File to share
 ]: any -> record<file: record<channels: list<string>, comments_count: int, created: int, date_delete: int, display_as_bot: bool, editable: bool, editor: string, external_id: string, external_type: string, external_url: string, filetype: string, groups: list<string>, has_rich_preview: bool, id: string, image_exif_rotation: int, ims: list<string>, is_external: bool, is_public: bool, is_starred: bool, is_tombstoned: bool, last_editor: string, mimetype: string, mode: string, name: string, non_owner_editable: bool, num_stars: int, original_h: int, original_w: int, permalink: string, permalink_public: string, pinned_info: record, pinned_to: list<string>, pretty_type: string, preview: string, public_url_shared: bool, reactions: list<record>, shares: record<private: any, public: any>, size: int, source_team: string, state: string, thumb_1024: string, thumb_1024_h: int, thumb_1024_w: int, thumb_160: string, thumb_360: string, thumb_360_h: int, thumb_360_w: int, thumb_480: string, thumb_480_h: int, thumb_480_w: int, thumb_64: string, thumb_720: string, thumb_720_h: int, thumb_720_w: int, thumb_80: string, thumb_800: string, thumb_800_h: int, thumb_800_w: int, thumb_960: string, thumb_960_h: int, thumb_960_w: int, thumb_tiny: string, timestamp: int, title: string, updated: int, url_private: string, url_private_download: string, user: string, user_team: string, username: string>, ok: bool> {
@@ -3631,7 +3753,7 @@ export def "filesshared-public-url sharedPublicURL" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Uploads or creates a file.
@@ -3647,6 +3769,7 @@ export def "filesupload upload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Authentication token. Requires scope: `files:write:user`
   --file: string # File contents via `multipart/form-data`. If omitting this parameter, you must submit `content`.
   --content: string # File contents via a POST variable. If omitting this parameter, you must provide a `file`.
@@ -3665,7 +3788,7 @@ export def "filesupload upload" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # For Enterprise Grid workspaces, map local user IDs to global user IDs
@@ -3681,6 +3804,7 @@ export def "migrationexchange exchange" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `tokens.basic`
   --users: string # A comma-separated list of user ids, up to 400 per request
   --team-id: string # Specify team_id starts with `T` in case of Org Token
@@ -3692,7 +3816,7 @@ export def "migrationexchange exchange" [
   let full_url = (build-url $base "/migration.exchange" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Exchanges a temporary OAuth verifier code for an access token.
@@ -3708,6 +3832,7 @@ export def "oauthaccess access" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Issued when you created your application.
   --client-secret: string # Issued when you created your application.
   --code: string # The `code` param returned via the OAuth callback.
@@ -3720,7 +3845,7 @@ export def "oauthaccess access" [
   let full_url = (build-url $base "/oauth.access" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Exchanges a temporary OAuth verifier code for a workspace token.
@@ -3736,6 +3861,7 @@ export def "oauthtoken token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Issued when you created your application.
   --client-secret: string # Issued when you created your application.
   --code: string # The `code` param returned via the OAuth callback.
@@ -3748,7 +3874,7 @@ export def "oauthtoken token" [
   let full_url = (build-url $base "/oauth.token" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Exchanges a temporary OAuth verifier code for an access token.
@@ -3764,6 +3890,7 @@ export def "oauthv2access access" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --client-id: string # Issued when you created your application.
   --client-secret: string # Issued when you created your application.
   --code: string # The `code` param returned via the OAuth callback.
@@ -3775,7 +3902,7 @@ export def "oauthv2access access" [
   let full_url = (build-url $base "/oauth.v2.access" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Pins an item to a channel.
@@ -3791,6 +3918,7 @@ export def "pinsadd add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `pins:write`
   channel: string # Channel to pin the item in.
   --timestamp: string # Timestamp of the message to pin.
@@ -3805,7 +3933,7 @@ export def "pinsadd add" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Lists items pinned to a channel.
@@ -3821,6 +3949,7 @@ export def "pinslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `pins:read`
   --channel: string # Channel to get pinned items for.
 ]: nothing -> list<any> {
@@ -3830,7 +3959,7 @@ export def "pinslist list" [
   let full_url = (build-url $base "/pins.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Un-pins an item from a channel.
@@ -3846,6 +3975,7 @@ export def "pinsremove remove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `pins:write`
   channel: string # Channel where the item is pinned to.
   --timestamp: string # Timestamp of the message to un-pin.
@@ -3860,7 +3990,7 @@ export def "pinsremove remove" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Adds a reaction to an item.
@@ -3876,6 +4006,7 @@ export def "reactionsadd add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `reactions:write`
   channel: string # Channel where the message to add reaction to was posted.
   name: string # Reaction (emoji) name.
@@ -3891,7 +4022,7 @@ export def "reactionsadd add" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Gets reactions for an item.
@@ -3907,6 +4038,7 @@ export def "reactionsget get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `reactions:read`
   --channel: string # Channel where the message to get reactions for was posted.
   --file: string # File to get reactions for.
@@ -3920,7 +4052,7 @@ export def "reactionsget get" [
   let full_url = (build-url $base "/reactions.get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists reactions made by a user.
@@ -3936,6 +4068,7 @@ export def "reactionslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `reactions:read`
   --user: string # Show reactions made by this user. Defaults to the authed user.
   --full: oneof<nothing, bool> # If true always return the complete reaction list.
@@ -3950,7 +4083,7 @@ export def "reactionslist list" [
   let full_url = (build-url $base "/reactions.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Removes a reaction from an item.
@@ -3966,6 +4099,7 @@ export def "reactionsremove remove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `reactions:write`
   name: string # Reaction (emoji) name.
   --file: string # File to remove reaction from.
@@ -3983,7 +4117,7 @@ export def "reactionsremove remove" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Creates a reminder.
@@ -3999,6 +4133,7 @@ export def "remindersadd add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `reminders:write`
   text: string # The content of the reminder
   time: string # When this reminder should happen: the Unix timestamp (up to five years from now), the number of seconds until the reminder (if within 24 hours), or a natural language description (Ex. "in 15 minutes," or "every Thursday")
@@ -4014,7 +4149,7 @@ export def "remindersadd add" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Marks a reminder as complete.
@@ -4030,6 +4165,7 @@ export def "reminderscomplete complete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `reminders:write`
   --reminder: string # The ID of the reminder to be marked as complete
 ]: any -> record<ok: bool> {
@@ -4043,7 +4179,7 @@ export def "reminderscomplete complete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Deletes a reminder.
@@ -4059,6 +4195,7 @@ export def "remindersdelete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `reminders:write`
   --reminder: string # The ID of the reminder
 ]: any -> record<ok: bool> {
@@ -4072,7 +4209,7 @@ export def "remindersdelete delete" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Gets information about a reminder.
@@ -4088,6 +4225,7 @@ export def "remindersinfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `reminders:read`
   --reminder: string # The ID of the reminder
 ]: nothing -> record<ok: bool, reminder: record<complete_ts: int, creator: string, id: string, recurring: bool, text: string, time: int, user: string>> {
@@ -4097,7 +4235,7 @@ export def "remindersinfo info" [
   let full_url = (build-url $base "/reminders.info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all reminders created by or for a given user.
@@ -4113,6 +4251,7 @@ export def "reminderslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `reminders:read`
 ]: nothing -> record<ok: bool, reminders: table<complete_ts: int, creator: string, id: string, recurring: bool, text: string, time: int, user: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4121,7 +4260,7 @@ export def "reminderslist list" [
   let full_url = (build-url $base "/reminders.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Starts a Real Time Messaging session.
@@ -4137,6 +4276,7 @@ export def "rtmconnect connect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `rtm:stream`
   --batch-presence-aware: oneof<nothing, bool> # Batch presence deliveries via subscription. Enabling changes the shape of `presence_change` events. See [batch presence](/docs/presence-and-status#batching).
   --presence-sub: oneof<nothing, bool> # Only deliver presence events when requested by subscription. See [presence subscriptions](/docs/presence-and-status#subscriptions).
@@ -4147,7 +4287,7 @@ export def "rtmconnect connect" [
   let full_url = (build-url $base "/rtm.connect" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Searches for messages matching a query.
@@ -4163,6 +4303,7 @@ export def "searchmessages messages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `search:read`
   --count: int # Pass the number of results you want per "page". Maximum of `100`.
   --highlight: oneof<nothing, bool> # Pass a value of `true` to enable query highlight markers (see below).
@@ -4177,7 +4318,7 @@ export def "searchmessages messages" [
   let full_url = (build-url $base "/search.messages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a star to an item.
@@ -4193,6 +4334,7 @@ export def "starsadd add" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `stars:write`
   --channel: string # Channel to add star to, or channel where the message to add star to was posted (used with `timestamp`).
   --file: string # File to add star to.
@@ -4209,7 +4351,7 @@ export def "starsadd add" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Lists stars for a user.
@@ -4225,6 +4367,7 @@ export def "starslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `stars:read`
   --count: string
   --page: string
@@ -4237,7 +4380,7 @@ export def "starslist list" [
   let full_url = (build-url $base "/stars.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Removes a star from an item.
@@ -4253,6 +4396,7 @@ export def "starsremove remove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `stars:write`
   --channel: string # Channel to remove star from, or channel where the message to remove star from was posted (used with `timestamp`).
   --file: string # File to remove star from.
@@ -4269,7 +4413,7 @@ export def "starsremove remove" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Gets the access logs for the current team.
@@ -4285,6 +4429,7 @@ export def "teamaccess-logs accessLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `admin`
   --before: string # End of time range of logs to include in results (inclusive).
   --count: string
@@ -4296,7 +4441,7 @@ export def "teamaccess-logs accessLogs" [
   let full_url = (build-url $base "/team.accessLogs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets billable users information for the current team.
@@ -4312,6 +4457,7 @@ export def "teambillable-info billableInfo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `admin`
   --user: string # A user to retrieve the billable information for. Defaults to all users.
 ]: nothing -> record<ok: bool> {
@@ -4321,7 +4467,7 @@ export def "teambillable-info billableInfo" [
   let full_url = (build-url $base "/team.billableInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets information about the current team.
@@ -4337,6 +4483,7 @@ export def "teaminfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `team:read`
   --team: string # Team to get info on, if omitted, will return information about the current team. Will only return team that the authenticated token is allowed to see through external shared channels
 ]: nothing -> record<ok: bool, team: record<archived: bool, avatar_base_url: string, created: int, date_create: int, deleted: bool, description: string, discoverable: list<any>, domain: string, email_domain: string, enterprise_id: string, enterprise_name: string, external_org_migrations: record<current: list, date_updated: int>, has_compliance_export: bool, icon: record<image_102: string, image_132: string, image_230: string, image_34: string, image_44: string, image_68: string, image_88: string, image_default: bool>, id: string, is_assigned: bool, is_enterprise: int, is_over_storage_limit: bool, limit_ts: int, locale: string, messages_count: int, msg_edit_window_mins: int, name: string, over_integrations_limit: bool, over_storage_limit: bool, pay_prod_cur: string, plan: string, primary_owner: record<email: string, id: string>, sso_provider: record<label: string, name: string, type: string>>> {
@@ -4346,7 +4493,7 @@ export def "teaminfo info" [
   let full_url = (build-url $base "/team.info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets the integration logs for the current team.
@@ -4362,6 +4509,7 @@ export def "teamintegration-logs integrationLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `admin`
   --app-id: string # Filter logs to this Slack app. Defaults to all logs.
   --change-type: string # Filter logs with this change type. Defaults to all logs.
@@ -4376,7 +4524,7 @@ export def "teamintegration-logs integrationLogs" [
   let full_url = (build-url $base "/team.integrationLogs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a team's profile.
@@ -4392,6 +4540,7 @@ export def "teamprofileget get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `users.profile:read`
   --visibility: string # Filter by visibility.
 ]: nothing -> record<ok: bool, profile: record<fields: list<record>>> {
@@ -4401,7 +4550,7 @@ export def "teamprofileget get" [
   let full_url = (build-url $base "/team.profile.get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a User Group
@@ -4417,6 +4566,7 @@ export def "usergroupscreate create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `usergroups:write`
   --channels: string # A comma separated string of encoded channel IDs for which the User Group uses as a default.
   --description: string # A short description of the User Group.
@@ -4434,7 +4584,7 @@ export def "usergroupscreate create" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Disable an existing User Group
@@ -4450,6 +4600,7 @@ export def "usergroupsdisable disable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `usergroups:write`
   --include-count: oneof<nothing, bool> # Include the number of users in the User Group.
   usergroup: string # The encoded ID of the User Group to disable.
@@ -4464,7 +4615,7 @@ export def "usergroupsdisable disable" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Enable a User Group
@@ -4480,6 +4631,7 @@ export def "usergroupsenable enable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `usergroups:write`
   --include-count: oneof<nothing, bool> # Include the number of users in the User Group.
   usergroup: string # The encoded ID of the User Group to enable.
@@ -4494,7 +4646,7 @@ export def "usergroupsenable enable" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all User Groups for a team
@@ -4510,6 +4662,7 @@ export def "usergroupslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --include-users: oneof<nothing, bool> # Include the list of users for each User Group.
   --qp-token: string # Authentication token. Requires scope: `usergroups:read`
   --include-count: oneof<nothing, bool> # Include the number of users in each User Group.
@@ -4521,7 +4674,7 @@ export def "usergroupslist list" [
   let full_url = (build-url $base "/usergroups.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing User Group
@@ -4537,6 +4690,7 @@ export def "usergroupsupdate update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `usergroups:write`
   --handle: string # A mention handle. Must be unique among channels, users and User Groups.
   --description: string # A short description of the User Group.
@@ -4555,7 +4709,7 @@ export def "usergroupsupdate update" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List all users in a User Group
@@ -4571,6 +4725,7 @@ export def "usergroupsuserslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `usergroups:read`
   --include-disabled: oneof<nothing, bool> # Allow results that involve disabled User Groups.
   --usergroup: string # The encoded ID of the User Group to update.
@@ -4581,7 +4736,7 @@ export def "usergroupsuserslist list" [
   let full_url = (build-url $base "/usergroups.users.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the list of users for a User Group
@@ -4597,6 +4752,7 @@ export def "usergroupsusersupdate update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `usergroups:write`
   --include-count: oneof<nothing, bool> # Include the number of users in the User Group.
   usergroup: string # The encoded ID of the User Group to update.
@@ -4612,7 +4768,7 @@ export def "usergroupsusersupdate update" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # List conversations the calling user may access.
@@ -4628,6 +4784,7 @@ export def "usersconversations conversations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `conversations:read`
   --user: string # Browse conversations by a specific user ID's membership. Non-public channels are restricted to those where the calling user shares membership.
   --types: string # Mix and match channel types by providing a comma-separated list of any combination of `public_channel`, `private_channel`, `mpim`, `im`
@@ -4641,7 +4798,7 @@ export def "usersconversations conversations" [
   let full_url = (build-url $base "/users.conversations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the user profile photo
@@ -4657,6 +4814,7 @@ export def "usersdelete-photo post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Authentication token. Requires scope: `users.profile:write`
 ]: any -> record<ok: bool> {
   let input = $in
@@ -4667,7 +4825,7 @@ export def "usersdelete-photo post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Gets user presence information.
@@ -4683,6 +4841,7 @@ export def "usersget-presence get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `users:read`
   --user: string # User to get presence info on. Defaults to the authed user.
 ]: nothing -> record<auto_away: bool, connection_count: int, last_activity: int, manual_away: bool, ok: bool, online: bool, presence: string> {
@@ -4692,7 +4851,7 @@ export def "usersget-presence get" [
   let full_url = (build-url $base "/users.getPresence" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get a user's identity.
@@ -4708,6 +4867,7 @@ export def "usersidentity identity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `identity.basic`
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4716,7 +4876,7 @@ export def "usersidentity identity" [
   let full_url = (build-url $base "/users.identity" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Gets information about a user.
@@ -4732,6 +4892,7 @@ export def "usersinfo info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `users:read`
   --include-locale: oneof<nothing, bool> # Set this to `true` to receive the locale for this user. Defaults to `false`
   --user: string # User to get info on
@@ -4742,7 +4903,7 @@ export def "usersinfo info" [
   let full_url = (build-url $base "/users.info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all users in a Slack team.
@@ -4758,6 +4919,7 @@ export def "userslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `users:read`
   --limit: int # The maximum number of items to return. Fewer than the requested number of items may be returned, even if the end of the users list hasn't been reached. Providing no `limit` value will result in Slack attempting to deliver you the entire result set. If the collection is too large you may experience `limit_required` or HTTP 500 errors.
   --cursor: string # Paginate through collections of data by setting the `cursor` parameter to a `next_cursor` attribute returned by a previous request's `response_metadata`. Default value fetches the first "page" of the collection. See [pagination](/docs/pagination) for more detail.
@@ -4769,7 +4931,7 @@ export def "userslist list" [
   let full_url = (build-url $base "/users.list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Find a user with an email address.
@@ -4785,6 +4947,7 @@ export def "userslookup-by-email lookupByEmail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `users:read.email`
   --email: string # An email address belonging to a user in the workspace
 ]: nothing -> record<ok: bool, user: list<any>> {
@@ -4794,7 +4957,7 @@ export def "userslookup-by-email lookupByEmail" [
   let full_url = (build-url $base "/users.lookupByEmail" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a user's profile information.
@@ -4810,6 +4973,7 @@ export def "usersprofileget get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Authentication token. Requires scope: `users.profile:read`
   --include-labels: oneof<nothing, bool> # Include labels for each ID in custom profile fields
   --user: string # User to retrieve profile info for
@@ -4820,7 +4984,7 @@ export def "usersprofileget get" [
   let full_url = (build-url $base "/users.profile.get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set the profile information for a user.
@@ -4836,6 +5000,7 @@ export def "usersprofileset set" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `users.profile:write`
   --name: string # Name of a single key to set. Usable only if `profile` is not passed.
   --profile: string # Collection of key:value pairs presented as a URL-encoded JSON hash. At most 50 fields may be set. Each field name is limited to 255 characters.
@@ -4852,7 +5017,7 @@ export def "usersprofileset set" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Marked a user as active. Deprecated and non-functional.
@@ -4868,6 +5033,7 @@ export def "usersset-active setActive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `users:write`
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4877,7 +5043,7 @@ export def "usersset-active setActive" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Set the user profile photo
@@ -4893,6 +5059,7 @@ export def "usersset-photo setPhoto" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # Authentication token. Requires scope: `users.profile:write`
   --crop-w: string # Width/height of crop box (always square)
   --crop-x: string # X coordinate of top-left corner of crop box
@@ -4907,7 +5074,7 @@ export def "usersset-photo setPhoto" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Manually sets user presence.
@@ -4923,6 +5090,7 @@ export def "usersset-presence setPresence" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-token: string # Authentication token. Requires scope: `users:write`
   presence: string # Either `auto` or `away`
 ]: any -> record<ok: bool> {
@@ -4936,7 +5104,7 @@ export def "usersset-presence setPresence" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Open a view for a user.
@@ -4952,6 +5120,7 @@ export def "viewsopen open" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --trigger-id: string # Exchange a trigger to post to the user.
   --view: string # A [view payload](/reference/surfaces/views). This must be a JSON-encoded string.
   --hdr-token: string # Authentication token. Requires scope: `none`
@@ -4964,7 +5133,7 @@ export def "viewsopen open" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Publish a static view for a User.
@@ -4980,6 +5149,7 @@ export def "viewspublish publish" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # `id` of the user you want publish a view to.
   --view: string # A [view payload](/reference/surfaces/views). This must be a JSON-encoded string.
   --hash: string # A string that represents view state to protect against possible race conditions.
@@ -4993,7 +5163,7 @@ export def "viewspublish publish" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Push a view onto the stack of a root view.
@@ -5009,6 +5179,7 @@ export def "viewspush push" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --trigger-id: string # Exchange a trigger to post to the user.
   --view: string # A [view payload](/reference/surfaces/views). This must be a JSON-encoded string.
   --hdr-token: string # Authentication token. Requires scope: `none`
@@ -5021,7 +5192,7 @@ export def "viewspush push" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing view.
@@ -5037,6 +5208,7 @@ export def "viewsupdate update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --view-id: string # A unique identifier of the view to be updated. Either `view_id` or `external_id` is required.
   --external-id: string # A unique identifier of the view set by the developer. Must be unique for all views on a team. Max length of 255 characters. Either `view_id` or `external_id` is required.
   --view: string # A [view object](/reference/surfaces/views). This must be a JSON-encoded string.
@@ -5051,7 +5223,7 @@ export def "viewsupdate update" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Indicate that an app's step in a workflow completed execution.
@@ -5067,6 +5239,7 @@ export def "workflowsstep-completed stepCompleted" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --workflow-step-execute-id: string # Context identifier that maps to the correct workflow step execution.
   --outputs: string # Key-value object of outputs from your step. Keys of this object reflect the configured `key` properties of your [`outputs`](/reference/workflows/workflow_step#output) array from your `workflow_step` object.
   --hdr-token: string # Authentication token. Requires scope: `workflow.steps:execute`
@@ -5079,7 +5252,7 @@ export def "workflowsstep-completed stepCompleted" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Indicate that an app's step in a workflow failed to execute.
@@ -5095,6 +5268,7 @@ export def "workflowsstep-failed stepFailed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --workflow-step-execute-id: string # Context identifier that maps to the correct workflow step execution.
   --qp-error: string # A JSON-based object with a `message` property that should contain a human readable error message.
   --hdr-token: string # Authentication token. Requires scope: `workflow.steps:execute`
@@ -5107,7 +5281,7 @@ export def "workflowsstep-failed stepFailed" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the configuration for a workflow extension step.
@@ -5123,6 +5297,7 @@ export def "workflowsupdate-step updateStep" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --workflow-step-edit-id: string # A context identifier provided with `view_submission` payloads used to call back to `workflows.updateStep`.
   --inputs: string # A JSON key-value map of inputs required from a user during configuration. This is the data your app expects to receive when the workflow step starts. **Please note**: the embedded variable format is set and replaced by the workflow system. You cannot create custom variables that will be replaced at runtime. [Read more about variables in workflow steps here](/workflows/steps#variables).
   --outputs: string # An JSON array of output objects used during step execution. This is the data your app agrees to provide when your workflow step was executed.
@@ -5138,5 +5313,5 @@ export def "workflowsupdate-step updateStep" [
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

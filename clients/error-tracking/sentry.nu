@@ -45,10 +45,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -119,7 +120,7 @@ def stopping-point-completer [] { ["code_changes" "open_pr" "root_cause" "soluti
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "0-organizations List-Your-Organizations" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -152,6 +153,7 @@ export def "0-organizations List-Your-Organizations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --owner: oneof<nothing, bool> # Specify `true` to restrict results to organizations in which you are an owner.
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
   --qp-query: string # Filters results by using [query syntax](/product/sentry-basics/search/).  Valid query fields include: - `id`: The organization ID - `slug`: The organization slug - `status`: The organization's current status (one of `active`, `pending_deletion`, or `deletion_in_progress`) - `email` or `member_id`: Filter your organizations by the emails or [organization member IDs](/api/organizations/list-an-organizations-members/) of specific members included - `query`: Filter your organizations by name, slug, and members that contain this substring  Example: `query=(slug:foo AND status:active) OR (email:[thing-one@example.com,thing-two@example.com] AND query:bar)`
@@ -164,7 +166,7 @@ export def "0-organizations List-Your-Organizations" [
   let full_url = (build-url $base "/api/0/organizations/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return details on an individual organization, including various details such as membership access and teams.
@@ -180,6 +182,7 @@ export def "0-organizations Retrieve-an-Organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --detailed: string #  Specify `"0"` to return organization details that do not include projects or teams.
 ]: nothing -> record<features: list<string>, extraOptions: record, access: list<string>, onboardingTasks: table<task: string, status: string, completionSeen: string, dateCompleted: string, data: any>, id: string, slug: string, status: record<id: string, name: string>, name: string, dateCreated: string, isEarlyAdopter: bool, require2FA: bool, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, links: record<organizationUrl: string, regionUrl: string>, hasAuthProvider: bool, allowMemberInvite: bool, allowMemberProjectCreation: bool, allowSuperuserAccess: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -188,7 +191,7 @@ export def "0-organizations Retrieve-an-Organization" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update various attributes and configurable settings for the given organization.
@@ -204,6 +207,7 @@ export def "0-organizations Update-an-Organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --slug: string # The new slug for the organization, which needs to be unique.
   --name: string # The new name for the organization.
   --isEarlyAdopter: oneof<nothing, bool> # Specify `true` to opt-in to new features before they're released to the public.
@@ -243,7 +247,7 @@ export def "0-organizations Update-an-Organization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Get integration provider information about all available integrations for an organization.
@@ -259,6 +263,7 @@ export def "0-organizations-config-integrations Get-Integration-Provider-Informa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --providerKey: string # Specific integration provider to filter by such as `slack`. See our [Integrations Documentation](/product/integrations/) for an updated list of providers.
 ]: nothing -> record<providers: table<key: string, slug: string, name: string, metadata: any, canAdd: bool, canDisable: bool, features: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -267,7 +272,7 @@ export def "0-organizations-config-integrations Get-Integration-Provider-Informa
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/config/integrations/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List an Organization's Custom Dashboards
@@ -283,6 +288,7 @@ export def "0-organizations-dashboards listOrganizationDashboards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --per-page: int # Limit the number of rows to return in the result. Default and maximum allowed is 100.
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<id: string, title: string, dateCreated: string, createdBy: record<identities: list, avatar: record, authenticators: list, canReset2fa: bool, id: string, name: string, username: string, email: string, avatarUrl: string, isActive: bool, isSuspended: bool, hasPasswordAuth: bool, isManaged: bool, dateJoined: string, lastLogin: string, has2fa: bool, lastActive: string, isSuperuser: bool, isStaff: bool, experiments: record, emails: list>, environment: list<string>, filters: record<release: list, releaseId: list, globalFilter: list>, lastVisited: string, widgetDisplay: list<string>, widgetPreview: list<record>, permissions: record<isEditableByEveryone: bool, teamsWithEditAccess: list>, isFavorited: bool, projects: list<int>, prebuiltId: int> {
@@ -292,7 +298,7 @@ export def "0-organizations-dashboards listOrganizationDashboards" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/dashboards/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a New Dashboard for an Organization
@@ -309,6 +315,7 @@ export def "0-organizations-dashboards createOrganizationDashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   title: string # The user defined title for this dashboard.
   --id: string # A dashboard's unique id.
   --widgets: list # A json list of widgets saved in this dashboard. — item shape: {id?: string, title?: string, description?: string, thresholds?: record, display_type?: "line"|"area"|"bar"|"table"|"big_number"|"details"|"categorical_bar"|"wheel"|"rage_and_dead_clicks"|"server_tree"|"text"|"agents_traces_table", interval?: string, queries?: list, widget_type?: "discover"|"issue"|"metrics"|"error-events"|"transaction-like"|"spans"|"logs"|"tracemetrics"|"preprod-app-size"|"", limit?: int, layout?: any, axis_range?: "auto"|"dataMin"|"", legend_type?: "default"|"breakdown"|""}
@@ -330,7 +337,7 @@ export def "0-organizations-dashboards createOrganizationDashboard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve an Organization's Custom Dashboard
@@ -347,13 +354,14 @@ export def "0-organizations-dashboards get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<environment: list<string>, period: string, utc: string, expired: bool, start: string, end: string, id: string, title: string, dateCreated: string, createdBy: record<identities: list<record>, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, authenticators: list<any>, canReset2fa: bool, id: string, name: string, username: string, email: string, avatarUrl: string, isActive: bool, isSuspended: bool, hasPasswordAuth: bool, isManaged: bool, dateJoined: string, lastLogin: string, has2fa: bool, lastActive: string, isSuperuser: bool, isStaff: bool, experiments: record, emails: list<record>>, widgets: table<id: string, title: string, description: string, displayType: string, thresholds: record, interval: string, dateCreated: string, dashboardId: string, queries: list, limit: int, widgetType: string, layout: record, axisRange: string, legendType: string, datasetSource: string, exploreUrls: list, changedReason: list>, projects: list<int>, filters: record<release: list<string>, releaseId: list<string>, globalFilter: list<record>>, permissions: record<isEditableByEveryone: bool, teamsWithEditAccess: list<int>>, isFavorited: bool, prebuiltId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/dashboards/($dashboard_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit an Organization's Custom Dashboard
@@ -371,6 +379,7 @@ export def "0-organizations-dashboards updateOrganizationDashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # A dashboard's unique id.
   --title: string # The user-defined dashboard title.
   --widgets: list # A json list of widgets saved in this dashboard. — item shape: {id?: string, title?: string, description?: string, thresholds?: record, display_type?: "line"|"area"|"bar"|"table"|"big_number"|"details"|"categorical_bar"|"wheel"|"rage_and_dead_clicks"|"server_tree"|"text"|"agents_traces_table", interval?: string, queries?: list, widget_type?: "discover"|"issue"|"metrics"|"error-events"|"transaction-like"|"spans"|"logs"|"tracemetrics"|"preprod-app-size"|"", limit?: int, layout?: any, axis_range?: "auto"|"dataMin"|"", legend_type?: "default"|"breakdown"|""}
@@ -391,7 +400,7 @@ export def "0-organizations-dashboards updateOrganizationDashboard" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an Organization's Custom Dashboard
@@ -408,13 +417,14 @@ export def "0-organizations-dashboards delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/dashboards/($dashboard_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List an Organization's Monitors
@@ -430,7 +440,8 @@ export def "0-organizations-detectors Fetch-an-Organizations-Monitors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --project: list # The IDs of projects to filter by. `-1` means all available projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=-1`
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --project: list # The IDs or slugs of projects to filter by. Project slugs are unique within each organization. Omit this parameter to include all accessible projects. `-1` is also accepted to include all accessible projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=android&project=javascript-react` - `/?project=-1`
   --qp-query: string # An optional search query for filtering monitors.  Available fields are: - `name` - `type`: e.g. `error`, `metric_issue`, `issue_stream` - `assignee`: email, username, #team, me, none         
   --sortBy: string # The property to sort results by. If not specified, the results are sorted by id.  Available fields are: - `name` - `id` - `type` - `connectedWorkflows` - `latestGroup` - `openIssues`  Prefix with `-` to sort in descending order.         
   --id: list # The ID of the monitor you'd like to query.
@@ -441,7 +452,7 @@ export def "0-organizations-detectors Fetch-an-Organizations-Monitors" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/detectors/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk enable or disable an Organization's Monitors
@@ -457,7 +468,8 @@ export def "0-organizations-detectors Mutate-an-Organizations-Monitors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --project: list # The IDs of projects to filter by. `-1` means all available projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=-1`
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --project: list # The IDs or slugs of projects to filter by. Project slugs are unique within each organization. Omit this parameter to include all accessible projects. `-1` is also accepted to include all accessible projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=android&project=javascript-react` - `/?project=-1`
   --qp-query: string # An optional search query for filtering monitors.  Available fields are: - `name` - `type`: e.g. `error`, `metric_issue`, `issue_stream` - `assignee`: email, username, #team, me, none         
   --id: list # The ID of the monitor you'd like to query.
   --enabled: oneof<nothing, bool> # Whether to enable or disable the monitors
@@ -471,7 +483,7 @@ export def "0-organizations-detectors Mutate-an-Organizations-Monitors" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk delete Monitors for a given organization
@@ -487,7 +499,8 @@ export def "0-organizations-detectors Bulk-Delete-Monitors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --project: list # The IDs of projects to filter by. `-1` means all available projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=-1`
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --project: list # The IDs or slugs of projects to filter by. Project slugs are unique within each organization. Omit this parameter to include all accessible projects. `-1` is also accepted to include all accessible projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=android&project=javascript-react` - `/?project=-1`
   --qp-query: string # An optional search query for filtering monitors.  Available fields are: - `name` - `type`: e.g. `error`, `metric_issue`, `issue_stream` - `assignee`: email, username, #team, me, none         
   --sortBy: string # The property to sort results by. If not specified, the results are sorted by id.  Available fields are: - `name` - `id` - `type` - `connectedWorkflows` - `latestGroup` - `openIssues`  Prefix with `-` to sort in descending order.         
   --id: list # The ID of the monitor you'd like to query.
@@ -498,7 +511,7 @@ export def "0-organizations-detectors Bulk-Delete-Monitors" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/detectors/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return details on an individual monitor
@@ -515,13 +528,14 @@ export def "0-organizations-detectors Fetch-a-Monitor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<owner: record<type: string, id: string, name: string, email: string>, createdBy: string, latestGroup: record, description: string, id: string, projectId: string, name: string, type: string, workflowIds: list<string>, dateCreated: string, dateUpdated: string, dataSources: list<record>, conditionGroup: record, config: record, enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/detectors/($detector_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing monitor
@@ -538,6 +552,7 @@ export def "0-organizations-detectors Update-a-Monitor-by-ID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Name of the monitor.
   type: string # The type of monitor - `metric_issue`.
   --workflow-ids: list # The IDs of the alerts to connect this monitor to. Use the 'Fetch Alerts' endpoint to find the IDs.
@@ -556,7 +571,7 @@ export def "0-organizations-detectors Update-a-Monitor-by-ID" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a monitor
@@ -573,13 +588,14 @@ export def "0-organizations-detectors Delete-a-Monitor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/detectors/($detector_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List an Organization's Discover Saved Queries
@@ -595,6 +611,7 @@ export def "0-organizations-discover-saved listOrganizationDiscoverSavedQueries"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --per-page: int # Limit the number of rows to return in the result. Default and maximum allowed is 100.
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
   --qp-query: string # The name of the Discover query you'd like to filter by.
@@ -606,7 +623,7 @@ export def "0-organizations-discover-saved listOrganizationDiscoverSavedQueries"
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/discover/saved/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a New Saved Query
@@ -622,6 +639,7 @@ export def "0-organizations-discover-saved createOrganizationDiscoverSavedQuery"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The user-defined saved query name.
   --projects: list # The saved projects filter for this query.
   --queryDataset: string@queryDataset-completer # The dataset you would like to query. Note: `discover` is a **deprecated** value. The allowed values are: `error-events`, `transaction-like`  * `discover` * `error-events` * `transaction-like` (default: error-events)
@@ -645,7 +663,7 @@ export def "0-organizations-discover-saved createOrganizationDiscoverSavedQuery"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve an Organization's Discover Saved Query
@@ -662,13 +680,14 @@ export def "0-organizations-discover-saved get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<environment: list<string>, query: string, fields: list<string>, widths: list<string>, conditions: list<string>, aggregations: list<string>, range: string, start: string, end: string, orderby: string, limit: string, yAxis: list<string>, display: string, topEvents: int, interval: string, exploreQuery: record, id: string, name: string, projects: list<int>, version: int, queryDataset: string, datasetSource: string, expired: bool, dateCreated: string, dateUpdated: string, createdBy: record<identities: list<record>, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, authenticators: list<any>, canReset2fa: bool, id: string, name: string, username: string, email: string, avatarUrl: string, isActive: bool, isSuspended: bool, hasPasswordAuth: bool, isManaged: bool, dateJoined: string, lastLogin: string, has2fa: bool, lastActive: string, isSuperuser: bool, isStaff: bool, experiments: record, emails: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/discover/saved/($query_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Edit an Organization's Discover Saved Query
@@ -685,6 +704,7 @@ export def "0-organizations-discover-saved updateOrganizationDiscoverSavedQuery"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The user-defined saved query name.
   --projects: list # The saved projects filter for this query.
   --queryDataset: string@queryDataset-completer # The dataset you would like to query. Note: `discover` is a **deprecated** value. The allowed values are: `error-events`, `transaction-like`  * `discover` * `error-events` * `transaction-like` (default: error-events)
@@ -708,7 +728,7 @@ export def "0-organizations-discover-saved updateOrganizationDiscoverSavedQuery"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an Organization's Discover Saved Query
@@ -725,13 +745,14 @@ export def "0-organizations-discover-saved delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/discover/saved/($query_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists an organization's environments.
@@ -747,6 +768,7 @@ export def "0-organizations-environments List-an-Organizations-Environments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --visibility: string@visibility-completer # The visibility of the environments to filter by. Defaults to `visible`.
 ]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -755,7 +777,7 @@ export def "0-organizations-environments List-an-Organizations-Environments" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/environments/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # This resolves an event ID to the project slug and internal issue ID and internal event ID.
@@ -772,13 +794,14 @@ export def "0-organizations-eventids Resolve-an-Event-ID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<organizationSlug: string, projectSlug: string, groupId: string, eventId: string, event: record<id: string, groupID: string, eventID: string, projectID: string, message: string, title: string, location: string, user: record<id: string, email: string, username: string, ip_address: string, name: string, geo: record, data: record>, tags: list<record>, platform: string, dateReceived: string, contexts: record, size: int, entries: list<any>, dist: string, sdk: record, context: record, packages: record, type: string, metadata: any, errors: list<any>, occurrence: any, _meta: record, crashFile: string, culprit: string, dateCreated: string, fingerprints: list<string>, groupingConfig: any, startTimestamp: string, endTimestamp: string, measurements: any, breakdowns: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/eventids/($event_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves explore data for a given organization.  **Note**: This endpoint is intended to get a table of results, and is not for doing a full export of data sent to Sentry.  The `field` query parameter determines what fields will be selected in the `data` and `meta` keys of the endpoint response. - The `data` key contains a list of results row by row that match the `query` made - The `meta` key contains information about the response, including the unit or type of the fields requested
@@ -794,11 +817,12 @@ export def "0-organizations-events Query-Explore-Events-in-Table-Format" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --field: list # The fields, functions, or equations to request for the query. At most 20 fields can be selected per request. Each field can be one of the following types: - A built-in key field. See possible fields in the [properties table](/concepts/search/searchable-properties/), under any field that matches the dataset passed to the dataset parameter     - example: `field=transaction` - A tag. Tags should use the `tag[{name}, {type}]` formatting to avoid ambiguity with any fields,     - example: `field=tag[isEnterprise, string]`     - example: `field=tag[numberOfBytes, number]` - A function which will be in the format of `function_name(parameters,...)`. See possible functions in the [query builder documentation](/product/discover-queries/query-builder/#stacking-functions).     - when a function is included, Discover will group by any tags or fields     - example: `field=count_if(transaction.duration,greater,300)` - An equation when prefixed with `equation|`. Read more about [equations here](/product/discover-queries/query-builder/query-equations/).     - example: `field=equation|count_if(transaction.duration,greater,300) / count() * 100`
   --dataset: string@dataset-completer # Which dataset to query. The chosen dataset determines which fields are queryable. - `errors` - Error events. - `logs` - Structured log events. - `profile_functions` - Function-level Profiling data. - `spans` - Distributed tracing span events. - `tracemetrics` - Application Metrics. - `uptime_results` - Uptime monitoring check results.
   --end: string # The end of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
   --environment: list # The name of environments to filter by.
-  --project: list # The IDs of projects to filter by. `-1` means all available projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=-1`
+  --project: list # The IDs or slugs of projects to filter by. Project slugs are unique within each organization. Omit this parameter to include all accessible projects. `-1` is also accepted to include all accessible projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=android&project=javascript-react` - `/?project=-1`
   --start: string # The start of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
   --statsPeriod: string # The period of time for the query, will override the start & end parameters, a number followed by one of: - `d` for days - `h` for hours - `m` for minutes - `s` for seconds - `w` for weeks  For example, `24h`, to mean query data starting from 24 hours ago to now.
   --per-page: int # Limit the number of rows to return in the result. Default and maximum allowed is 100.
@@ -813,7 +837,7 @@ export def "0-organizations-events Query-Explore-Events-in-Table-Format" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/events/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves explore data for a given organization as a timeseries.  This endpoint can return timeseries for either 1 or many axis, and results grouped to the top events depending on the parameters passed
@@ -829,10 +853,11 @@ export def "0-organizations-events-timeseries Query-Explore-Events-in-Timeseries
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --dataset: string@dataset-completer # Which dataset to query. The chosen dataset determines which fields are queryable. - `errors` - Error events. - `logs` - Structured log events. - `profile_functions` - Function-level Profiling data. - `spans` - Distributed tracing span events. - `tracemetrics` - Application Metrics. - `uptime_results` - Uptime monitoring check results.
   --end: string # The end of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
   --environment: list # The name of environments to filter by.
-  --project: list # The IDs of projects to filter by. `-1` means all available projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=-1`
+  --project: list # The IDs or slugs of projects to filter by. Project slugs are unique within each organization. Omit this parameter to include all accessible projects. `-1` is also accepted to include all accessible projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=android&project=javascript-react` - `/?project=-1`
   --start: string # The start of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
   --statsPeriod: string # The period of time for the query, will override the start & end parameters, a number followed by one of: - `d` for days - `h` for hours - `m` for minutes - `s` for seconds - `w` for weeks  For example, `24h`, to mean query data starting from 24 hours ago to now.
   --topEvents: int # The number of top event results to return, must be between 1 and 10. When TopEvents is passed, both sort and groupBy are required parameters
@@ -852,7 +877,7 @@ export def "0-organizations-events-timeseries Query-Explore-Events-in-Timeseries
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/events-timeseries/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Link a user from an external provider to a Sentry user.
@@ -868,6 +893,7 @@ export def "0-organizations-external-users Create-an-External-User" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   user_id: int # The user ID in Sentry.
   external_name: string # The associated name for the provider.
   provider: string@provider-completer # The provider of the external actor.  * `github` * `github_enterprise` * `jira_server` * `slack` * `slack_staging` * `perforce` * `gitlab` * `msteams` * `custom_scm`
@@ -882,7 +908,7 @@ export def "0-organizations-external-users Create-an-External-User" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a user in an external provider that is currently linked to a Sentry user.
@@ -899,6 +925,7 @@ export def "0-organizations-external-users Update-an-External-User" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   user_id: int # The user ID in Sentry.
   external_name: string # The associated name for the provider.
   provider: string@provider-completer # The provider of the external actor.  * `github` * `github_enterprise` * `jira_server` * `slack` * `slack_staging` * `perforce` * `gitlab` * `msteams` * `custom_scm`
@@ -913,7 +940,7 @@ export def "0-organizations-external-users Update-an-External-User" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete the link between a user from an external provider and a Sentry user.
@@ -930,13 +957,14 @@ export def "0-organizations-external-users Delete-an-External-User" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/external-users/($external_user_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of data forwarders for an organization.
@@ -952,13 +980,14 @@ export def "0-organizations-forwarding Retrieve-Data-Forwarders-for-an-Organizat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, organizationId: string, isEnabled: bool, enrollNewProjects: bool, enrolledProjects: list<record>, provider: string, config: record, projectConfigs: list<record>, dateAdded: string, dateUpdated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/forwarding/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new data forwarder for an organization. Only one data forwarder can be created per provider for a given organization.  Project-specific overrides can only be created after creating the data forwarder.
@@ -974,6 +1003,7 @@ export def "0-organizations-forwarding Create-a-Data-Forwarder-for-an-Organizati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organization_id: int # The ID of the organization related to the data forwarder.
   provider: string@provider-completer-1 # The provider of the data forwarder. One of "segment", "sqs", or "splunk".  * `segment` - Segment * `sqs` - Amazon SQS * `splunk` - Splunk
   --is-enabled: oneof<nothing, bool> # Whether the data forwarder is enabled. (default: true)
@@ -989,7 +1019,7 @@ export def "0-organizations-forwarding Create-a-Data-Forwarder-for-an-Organizati
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates a data forwarder for an organization or update a project-specific override. Updates to the data forwarder's configuration require `org:write` permissions, and the entire configuration to be provided, including the `project_ids` field.  To configure project-specific overrides, specify only the following fields:    - 'project_id': The ID of the project to create/modify the override for.   - 'overrides': Follows the same format as `config` but all provider fields are optional, since only specified fields are overridden.   - 'is_enabled': To enable/disable the forwarder for events on the specific project.  Overrides can be performed with `project:write` permissions on the project being modified.
@@ -1006,6 +1036,7 @@ export def "0-organizations-forwarding Update-a-Data-Forwarder-for-an-Organizati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   organization_id: int # The ID of the organization related to the data forwarder.
   provider: string@provider-completer-1 # The provider of the data forwarder. One of "segment", "sqs", or "splunk".  * `segment` - Segment * `sqs` - Amazon SQS * `splunk` - Splunk
   --is-enabled: oneof<nothing, bool> # Whether the data forwarder is enabled. (default: true)
@@ -1021,7 +1052,7 @@ export def "0-organizations-forwarding Update-a-Data-Forwarder-for-an-Organizati
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a data forwarder for an organization. All project-specific overrides will be deleted as well.
@@ -1038,13 +1069,14 @@ export def "0-organizations-forwarding Delete-a-Data-Forwarder-for-an-Organizati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/forwarding/($data_forwarder_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists all the available Integrations for an Organization.
@@ -1060,6 +1092,7 @@ export def "0-organizations-integrations List-an-Organizations-Available-Integra
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --providerKey: string # Specific integration provider to filter by such as `slack`. See our [Integrations Documentation](/product/integrations/) for an updated list of providers.
   --features: list # Integration features to filter by. See our [Integrations Documentation](/product/integrations/) for an updated list of features. Current available ones are: - `alert-rule` - `chat-unfurl` - `codeowners` - `commits` - `data-forwarding` - `deployment` - `enterprise-alert-rule` - `enterprise-incident-management` - `incident-management` - `issue-basic` - `issue-sync` - `mobile` - `serverless` - `session-replay` - `stacktrace-link` - `ticket-rules`     
   --includeConfig: oneof<nothing, bool> # Specify `True` to fetch third-party integration configurations. Note that this can add several seconds to the response time.
@@ -1071,7 +1104,7 @@ export def "0-organizations-integrations List-an-Organizations-Available-Integra
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/integrations/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OrganizationIntegrationBaseEndpoints expect both Integration and OrganizationIntegration DB entries to exist for a given organization and integration_id.
@@ -1088,13 +1121,14 @@ export def "0-organizations-integrations Retrieve-an-Integration-for-an-Organiza
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, icon: string, domainName: string, accountType: string, scopes: list<string>, status: string, provider: any, configOrganization: any, configData: any, externalId: string, organizationId: int, organizationIntegrationStatus: string, gracePeriodEnd: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/integrations/($integration_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # OrganizationIntegrationBaseEndpoints expect both Integration and OrganizationIntegration DB entries to exist for a given organization and integration_id.
@@ -1111,13 +1145,14 @@ export def "0-organizations-integrations Delete-an-Integration-for-an-Organizati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/integrations/($integration_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a list of issues for an organization. All parameters are supplied as query string parameters. A default query of `is:unresolved` is applied. To return all results, use an empty query value (i.e. ``?query=`). 
@@ -1133,8 +1168,9 @@ export def "0-organizations-issues List-an-Organizations-Issues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --environment: list # The name of environments to filter by.
-  --project: list # The IDs of projects to filter by. `-1` means all available projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=-1`
+  --project: list # The IDs or slugs of projects to filter by. Project slugs are unique within each organization. Omit this parameter to include all accessible projects. `-1` is also accepted to include all accessible projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=android&project=javascript-react` - `/?project=-1`
   --statsPeriod: string # The period of time for the query, will override the start & end parameters, a number followed by one of: - `d` for days - `h` for hours - `m` for minutes - `s` for seconds - `w` for weeks  For example, `24h`, to mean query data starting from 24 hours ago to now.
   --start: string # The start of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
   --end: string # The end of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
@@ -1154,7 +1190,7 @@ export def "0-organizations-issues List-an-Organizations-Issues" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/issues/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk mutate various attributes on a maxmimum of 1000 issues.  - For non-status updates, the `id` query parameter is required.  - For status updates, the `id` query parameter may be omitted to update issues that match the filtering.  If any IDs are out of scope, the data won't be mutated but the endpoint will still produce a successful response. For example, if no issues were found matching the criteria, a HTTP 204 is returned.
@@ -1170,8 +1206,9 @@ export def "0-organizations-issues Bulk-Mutate-an-Organizations-Issues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --environment: list # The name of environments to filter by.
-  --project: list # The IDs of projects to filter by. `-1` means all available projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=-1`
+  --project: list # The IDs or slugs of projects to filter by. Project slugs are unique within each organization. Omit this parameter to include all accessible projects. `-1` is also accepted to include all accessible projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=android&project=javascript-react` - `/?project=-1`
   --id: list # The list of issue IDs to mutate. It is optional for status updates, in which an implicit `update all` is assumed.
   --qp-query: string # An optional search query for filtering issues. A default query will apply if no view/query is set. For all results use this parameter with an empty string. (default: is:unresolved)
   --viewId: string # The ID of the view to use. If no query is present, the view's query and filters will be applied.
@@ -1199,7 +1236,7 @@ export def "0-organizations-issues Bulk-Mutate-an-Organizations-Issues" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Permanently remove the given issues. If IDs are provided, queries and filtering will be ignored. If any IDs are out of scope, the data won't be mutated but the endpoint will still produce a successful response. For example, if no issues were found matching the criteria, a HTTP 204 is returned.
@@ -1215,8 +1252,9 @@ export def "0-organizations-issues Bulk-Remove-an-Organizations-Issues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --environment: list # The name of environments to filter by.
-  --project: list # The IDs of projects to filter by. `-1` means all available projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=-1`
+  --project: list # The IDs or slugs of projects to filter by. Project slugs are unique within each organization. Omit this parameter to include all accessible projects. `-1` is also accepted to include all accessible projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=android&project=javascript-react` - `/?project=-1`
   --id: list # The list of issue IDs to be removed. If not provided, it will attempt to remove the first 1000 issues.
   --qp-query: string # An optional search query for filtering issues. A default query will apply if no view/query is set. For all results use this parameter with an empty string. (default: is:unresolved)
   --viewId: string # The ID of the view to use. If no query is present, the view's query and filters will be applied.
@@ -1229,7 +1267,7 @@ export def "0-organizations-issues Bulk-Remove-an-Organizations-Issues" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/issues/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all organization members.  Response includes pending invites that are approved by organization owners or managers but waiting to be accepted by the invitee.
@@ -1245,6 +1283,7 @@ export def "0-organizations-members List-an-Organizations-Members" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<externalUsers: list<record>, id: string, email: string, name: string, user: record<identities: list, avatar: record, authenticators: list, canReset2fa: bool, id: string, name: string, username: string, email: string, avatarUrl: string, isActive: bool, isSuspended: bool, hasPasswordAuth: bool, isManaged: bool, dateJoined: string, lastLogin: string, has2fa: bool, lastActive: string, isSuperuser: bool, isStaff: bool, experiments: record, emails: list>, orgRole: string, pending: bool, expired: bool, flags: record<idp_provisioned: bool, idp_role_restricted: bool, sso_linked: bool, sso_invalid: bool, member_limit_restricted: bool, partnership_restricted: bool>, dateCreated: string, inviteStatus: string, inviterName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1253,7 +1292,7 @@ export def "0-organizations-members List-an-Organizations-Members" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/members/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add or invite a member to an organization.
@@ -1269,6 +1308,7 @@ export def "0-organizations-members Add-a-Member-to-an-Organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The email address to send the invitation to. (format: email)
   --orgRole: string@orgRole-completer # The organization-level role of the new member. Roles include:  * `billing` - Can manage payment and compliance details. * `member` - Can view and act on events, as well as view most other data within the organization. * `manager` - Has full management access to all teams and projects. Can also manage         the organization's membership. * `owner` - Has unrestricted access to the organization, its data, and its         settings. Can add, modify, and delete projects and members, as well as         make billing and plan changes. * `admin` - Can edit global integrations, manage projects, and add/remove teams.         They automatically assume the Team Admin role for teams they join.         Note: This role can no longer be assigned in Business and Enterprise plans. Use `TeamRoles` instead.          (default: member)
   --teamRoles: list # The team and team-roles assigned to the member. Team roles can be either:         - `contributor` - Can view and act on issues. Depending on organization settings, they can also add team members.         - `admin` - Has full management access to their team's membership and projects. (nullable)
@@ -1283,7 +1323,7 @@ export def "0-organizations-members Add-a-Member-to-an-Organization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve an organization member's details.  Response will be a pending invite if it has been approved by organization owners or managers but is waiting to be accepted by the invitee.
@@ -1300,13 +1340,14 @@ export def "0-organizations-members Retrieve-an-Organization-Member" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<externalUsers: table<externalId: string, userId: string, teamId: string, id: string, provider: string, externalName: string, integrationId: string>, role: string, roleName: string, id: string, email: string, name: string, user: record<identities: list<record>, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, authenticators: list<any>, canReset2fa: bool, id: string, name: string, username: string, email: string, avatarUrl: string, isActive: bool, isSuspended: bool, hasPasswordAuth: bool, isManaged: bool, dateJoined: string, lastLogin: string, has2fa: bool, lastActive: string, isSuperuser: bool, isStaff: bool, experiments: record, emails: list<record>>, orgRole: string, pending: bool, expired: bool, flags: record<idp_provisioned: bool, idp_role_restricted: bool, sso_linked: bool, sso_invalid: bool, member_limit_restricted: bool, partnership_restricted: bool>, dateCreated: string, inviteStatus: string, inviterName: string, teams: list<string>, teamRoles: table<teamSlug: string, role: string>, invite_link: string, isOnlyOwner: bool, orgRoleList: table<id: string, name: string, desc: string, scopes: list, allowed: bool, isAllowed: bool, isRetired: bool, isTeamRolesAllowed: bool, is_global: bool, isGlobal: bool, minimumTeamRole: string>, teamRoleList: table<id: string, name: string, desc: string, scopes: list, allowed: bool, isAllowed: bool, isRetired: bool, isTeamRolesAllowed: bool, isMinimumRoleFor: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/members/($member_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a member's [organization-level](https://docs.sentry.io/organization/membership/#organization-level-roles) and [team-level](https://docs.sentry.io/organization/membership/#team-level-roles) roles.  Note that for changing organization-roles, this endpoint is restricted to [user auth tokens](https://docs.sentry.io/account/auth-tokens/#user-auth-tokens). Additionally, both the original and desired organization role must have the same or lower permissions than the role of the organization user making the request  For example, an organization Manager may change someone's role from Member to Manager, but not to Owner.
@@ -1323,6 +1364,7 @@ export def "0-organizations-members Update-an-Organization-Members-Roles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --orgRole: string@orgRole-completer # The organization role of the member. The options are:  * `billing` - Can manage payment and compliance details. * `member` - Can view and act on events, as well as view most other data within the organization. * `manager` - Has full management access to all teams and projects. Can also manage         the organization's membership. * `owner` - Has unrestricted access to the organization, its data, and its         settings. Can add, modify, and delete projects and members, as well as         make billing and plan changes. * `admin` - Can edit global integrations, manage projects, and add/remove teams.         They automatically assume the Team Admin role for teams they join.         Note: This role can no longer be assigned in Business and Enterprise plans. Use `TeamRoles` instead.         
   --teamRoles: list #  Configures the team role of the member. The two roles are: - `contributor` - Can view and act on issues. Depending on organization settings, they can also add team members. - `admin` - Has full management access to their team's membership and projects. ```json {     "teamRoles": [         {             "teamSlug": "ancient-gabelers",             "role": "admin"         },         {             "teamSlug": "powerful-abolitionist",             "role": "contributor"         }     ] } ```  (nullable)
 ]: any -> record<externalUsers: table<externalId: string, userId: string, teamId: string, id: string, provider: string, externalName: string, integrationId: string>, role: string, roleName: string, id: string, email: string, name: string, user: record<identities: list<record>, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, authenticators: list<any>, canReset2fa: bool, id: string, name: string, username: string, email: string, avatarUrl: string, isActive: bool, isSuspended: bool, hasPasswordAuth: bool, isManaged: bool, dateJoined: string, lastLogin: string, has2fa: bool, lastActive: string, isSuperuser: bool, isStaff: bool, experiments: record, emails: list<record>>, orgRole: string, pending: bool, expired: bool, flags: record<idp_provisioned: bool, idp_role_restricted: bool, sso_linked: bool, sso_invalid: bool, member_limit_restricted: bool, partnership_restricted: bool>, dateCreated: string, inviteStatus: string, inviterName: string, teams: list<string>, teamRoles: table<teamSlug: string, role: string>, invite_link: string, isOnlyOwner: bool, orgRoleList: table<id: string, name: string, desc: string, scopes: list, allowed: bool, isAllowed: bool, isRetired: bool, isTeamRolesAllowed: bool, is_global: bool, isGlobal: bool, minimumTeamRole: string>, teamRoleList: table<id: string, name: string, desc: string, scopes: list, allowed: bool, isAllowed: bool, isRetired: bool, isTeamRolesAllowed: bool, isMinimumRoleFor: string>> {
@@ -1334,7 +1376,7 @@ export def "0-organizations-members Update-an-Organization-Members-Roles" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove an organization member.
@@ -1351,13 +1393,14 @@ export def "0-organizations-members Delete-an-Organization-Member" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/members/($member_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # This request can return various success codes depending on the context of the team: - **`201`**: The member has been successfully added. - **`202`**: The member needs permission to join the team and an access request has been generated. - **`204`**: The member is already on the team.  If the team is provisioned through an identity provider, the member cannot join the team through Sentry.  Note the permission scopes vary depending on the organization setting `"Open Membership"` and the type of authorization token. The following table outlines the accepted scopes. <table style="width: 100%;"> <thead>     <tr>     <th style="width: 33%;"></th>     <th colspan="2" style="text-align: center; font-weight: bold; width: 33%;">Open Membership</th>     </tr> </thead> <tbody>     <tr>     <td style="width: 34%;"></td>     <td style="text-align: center; font-weight: bold; width: 33%;">On</td>     <td style="text-align: center; font-weight: bold; width: 33%;">Off</td>     </tr>     <tr>     <td style="text-align: center; font-weight: bold; vertical-align: middle;"><a     href="https://docs.sentry.io/account/auth-tokens/#internal-integrations">Internal Integration Token</a></td>     <td style="text-align: left; width: 33%;">         <ul style="list-style-type: none; padding-left: 0;">         <li><strong style="color: #9c5f99;">&bull; org:read</strong></li>         </ul>     </td>     <td style="text-align: left; width: 33%;">         <ul style="list-style-type: none; padding-left: 0;">         <li><strong style="color: #9c5f99;">&bull; org:write</strong></li>         <li><strong style="color: #9c5f99;">&bull; team:write</strong></li>         </ul>     </td>     </tr>     <tr>     <td style="text-align: center; font-weight: bold; vertical-align: middle;"><a     href="https://docs.sentry.io/account/auth-tokens/#user-auth-tokens">User Auth Token</a></td>     <td style="text-align: left; width: 33%;">         <ul style="list-style-type: none; padding-left: 0;">         <li><strong style="color: #9c5f99;">&bull; org:read</strong></li>         </ul>     </td>     <td style="text-align: left; width: 33%;">         <ul style="list-style-type: none; padding-left: 0;">         <li><strong style="color: #9c5f99;">&bull; org:read*</strong></li>         <li><strong style="color: #9c5f99;">&bull; org:write</strong></li>         <li><strong style="color: #9c5f99;">&bull; org:read +</strong></li>         <li><strong style="color: #9c5f99;">&nbsp; &nbsp;team:write**</strong></li>         </ul>     </td>     </tr> </tbody> </table>   *Organization members are restricted to this scope. When sending a request, it will always return a 202 and request an invite to the team.   \*\*Team Admins must have both **`org:read`** and **`team:write`** scopes in their user authorization token to add members to their teams.
@@ -1375,13 +1418,14 @@ export def "0-organizations-members-teams Add-an-Organization-Member-to-a-Team" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, slug: string, name: string, dateCreated: string, isMember: bool, teamRole: string, flags: record, access: list<string>, hasAccess: bool, isPending: bool, memberCount: int, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/members/($member_id)/teams/($team_id_or_slug)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # The relevant organization member must already be a part of the team.  Note that for organization admins, managers, and owners, they are automatically granted a minimum team role of `admin` on all teams they are part of. Read more about [team roles](https://docs.sentry.io/product/teams/roles/).
@@ -1399,6 +1443,7 @@ export def "0-organizations-members-teams Update-an-Organization-Members-Team-Ro
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --teamRole: string@teamRole-completer # The team-level role to switch to. Valid roles include:  * `contributor` - Contributors can view and act on events, as well as view most other data within the team's projects. * `admin` - Admin privileges on the team. They can create and remove projects, and can manage the team's memberships. (default: contributor)
 ]: any -> record<isActive: bool, teamRole: string> {
   let input = $in
@@ -1409,7 +1454,7 @@ export def "0-organizations-members-teams Update-an-Organization-Members-Team-Ro
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an organization member from a team.  Note the permission scopes vary depending on the type of authorization token. The following table outlines the accepted scopes. <table style="width: 100%;">     <tr style="width: 50%;">         <td style="width: 50%; text-align: center; font-weight: bold; vertical-align: middle;"><a href="https://docs.sentry.io/api/auth/#auth-tokens">Org Auth Token</a></td>         <td style="width: 50%; text-align: left;">             <ul style="list-style-type: none; padding-left: 0;">                 <li><strong style="color: #9c5f99;">&bull; org:write</strong></li>                 <li><strong style="color: #9c5f99;">&bull; org:admin</strong></li>                 <li><strong style="color: #9c5f99;">&bull; team:admin</strong></li>             </ul>         </td>     </tr>     <tr style="width: 50%;">         <td style="width: 50%; text-align: center; font-weight: bold; vertical-align: middle;"><a href="https://docs.sentry.io/api/auth/#user-authentication-tokens">User Auth Token</a></td>         <td style="width: 50%; text-align: left;">             <ul style="list-style-type: none; padding-left: 0;">                 <li><strong style="color: #9c5f99;">&bull; org:read*</strong></li>                 <li><strong style="color: #9c5f99;">&bull; org:write</strong></li>                 <li><strong style="color: #9c5f99;">&bull; org:admin</strong></li>                 <li><strong style="color: #9c5f99;">&bull; team:admin</strong></li>                 <li><strong style="color: #9c5f99;">&bull; org:read + team:admin**</strong></li>             </ul>         </td>     </tr> </table>   \***`org:read`** can only be used to remove yourself from the teams you are a member of.   \*\*Team Admins must have both **`org:read`** and **`team:admin`** scopes in their user authorization token to delete members from their teams.
@@ -1427,13 +1472,14 @@ export def "0-organizations-members-teams Delete-an-Organization-Member-from-a-T
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, slug: string, name: string, dateCreated: string, isMember: bool, teamRole: string, flags: record, access: list<string>, hasAccess: bool, isPending: bool, memberCount: int, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/members/($member_id)/teams/($team_id_or_slug)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists monitors, including nested monitor environments. May be filtered to a project or environment.
@@ -1449,7 +1495,8 @@ export def "0-organizations-monitors Retrieve-Monitors-for-an-Organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --project: list # The IDs of projects to filter by. `-1` means all available projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=-1`
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --project: list # The IDs or slugs of projects to filter by. Project slugs are unique within each organization. Omit this parameter to include all accessible projects. `-1` is also accepted to include all accessible projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=android&project=javascript-react` - `/?project=-1`
   --environment: list # The name of environments to filter by.
   --owner: string # The owner of the monitor, in the format `user:id` or `team:id`. May be specified multiple times.
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
@@ -1460,7 +1507,7 @@ export def "0-organizations-monitors Retrieve-Monitors-for-an-Organization" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/monitors/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new monitor.
@@ -1476,6 +1523,7 @@ export def "0-organizations-monitors Create-a-Monitor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   project: string # The project slug to associate the monitor to.
   name: string # Name of the monitor. Used for notifications. If not set the slug will be derived from your monitor name.
   config: any # The configuration for the monitor.
@@ -1492,7 +1540,7 @@ export def "0-organizations-monitors Create-a-Monitor" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves details for a monitor.
@@ -1509,6 +1557,7 @@ export def "0-organizations-monitors Retrieve-a-Monitor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --environment: list # The name of environments to filter by.
 ]: nothing -> record<alertRule: record<targets: list<record>, environment: string>, id: string, name: string, slug: string, status: string, isMuted: bool, isUpserting: bool, config: record<schedule_type: string, schedule: any, checkin_margin: int, max_runtime: int, timezone: string, failure_issue_threshold: int, recovery_threshold: int, alert_rule_id: int>, dateCreated: string, project: record<stats: any, transactionStats: any, sessionStats: any, id: string, slug: string, name: string, platform: string, dateCreated: string, isBookmarked: bool, isMember: bool, features: list<string>, firstEvent: string, firstTransactionEvent: bool, access: list<string>, hasAccess: bool, hasFeedbacks: bool, hasFlags: bool, hasMinifiedStackTrace: bool, hasMonitors: bool, hasNewFeedbacks: bool, hasProfiles: bool, hasReplays: bool, hasSessions: bool, hasInsightsHttp: bool, hasInsightsDb: bool, hasInsightsAssets: bool, hasInsightsAppStart: bool, hasInsightsScreenLoad: bool, hasInsightsVitals: bool, hasInsightsCaches: bool, hasInsightsQueues: bool, hasInsightsAgentMonitoring: bool, hasInsightsMCP: bool, hasLogs: bool, hasTraceMetrics: bool, isInternal: bool, isPublic: bool, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, color: string, status: string>, environments: record<name: string, status: string, isMuted: bool, dateCreated: string, lastCheckIn: string, nextCheckIn: string, nextCheckInLatest: string, activeIncident: record<startingTimestamp: string, resolvingTimestamp: string, brokenNotice: record>>, owner: record<type: string, id: string, name: string, email: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1517,7 +1566,7 @@ export def "0-organizations-monitors Retrieve-a-Monitor" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/monitors/($monitor_id_or_slug)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a monitor.
@@ -1534,6 +1583,7 @@ export def "0-organizations-monitors Update-a-Monitor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   project: string # The project slug to associate the monitor to.
   name: string # Name of the monitor. Used for notifications. If not set the slug will be derived from your monitor name.
   config: any # The configuration for the monitor.
@@ -1550,7 +1600,7 @@ export def "0-organizations-monitors Update-a-Monitor" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a monitor or monitor environments.
@@ -1567,6 +1617,7 @@ export def "0-organizations-monitors Delete-a-Monitor-or-Monitor-Environments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --environment: list # The name of environments to filter by.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1575,7 +1626,7 @@ export def "0-organizations-monitors Delete-a-Monitor-or-Monitor-Environments" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/monitors/($monitor_id_or_slug)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of check-ins for a monitor
@@ -1592,6 +1643,7 @@ export def "0-organizations-monitors-checkins Retrieve-Check-Ins-for-a-Monitor" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<groups: list<string>, id: string, environment: string, status: string, duration: int, dateCreated: string, dateAdded: string, dateUpdated: string, dateInProgress: string, dateClock: string, expectedTime: string, monitorConfig: record<schedule_type: string, schedule: any, checkin_margin: int, max_runtime: int, timezone: string, failure_issue_threshold: int, recovery_threshold: int, alert_rule_id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1600,10 +1652,10 @@ export def "0-organizations-monitors-checkins Retrieve-Check-Ins-for-a-Monitor" 
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/monitors/($monitor_id_or_slug)/checkins/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
-# Returns all Spike Protection Notification Actions for an organization.  Notification Actions notify a set of members when an action has been triggered through a notification service such as Slack or Sentry. For example, organization owners and managers can receive an email when a spike occurs.  You can use either the `project` or `projectSlug` query parameter to filter for certain projects. Note that if both are present, `projectSlug` takes priority.
+# Returns all Spike Protection Notification Actions for an organization.  Notification Actions notify a set of members when an action has been triggered through a notification service such as Slack or Sentry. For example, organization owners and managers can receive an email when a spike occurs.  You can use the `project` query parameter with project IDs or slugs to filter for certain projects. A legacy project slug query parameter is also supported and takes priority if both are present.
 #
 # GET /api/0/organizations/{organization_id_or_slug}/notifications/actions/
 # operationId: List Spike Protection Notifications
@@ -1616,8 +1668,9 @@ export def "0-organizations-notifications-actions List-Spike-Protection-Notifica
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --project: list # The IDs of projects to filter by. `-1` means all available projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=-1`
-  --project-id-or-slug: list # The project slugs to filter by. Use `$all` to include all available projects. For example, the following are valid parameters: - `/?projectSlug=$all` - `/?projectSlug=android&projectSlug=javascript-react`
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --project: list # The IDs or slugs of projects to filter by. Project slugs are unique within each organization. Omit this parameter to include all accessible projects. `-1` is also accepted to include all accessible projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=android&project=javascript-react` - `/?project=-1`
+  --project-id-or-slug: list # The legacy project slug filter. Prefer `project`, which accepts project IDs or slugs. Use `$all` to include all available projects. For example, the following are valid parameters: - `/?projectSlug=$all` - `/?projectSlug=android&projectSlug=javascript-react`
   --triggerType: string # Type of the trigger that causes the notification. The only supported value right now is: `spike-protection`
 ]: nothing -> record<id: int, organizationId: int, integrationId: int, sentryAppId: int, projects: list<int>, serviceType: string, triggerType: string, targetType: string, targetIdentifier: string, targetDisplay: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1626,7 +1679,7 @@ export def "0-organizations-notifications-actions List-Spike-Protection-Notifica
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/notifications/actions/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new Notification Action for Spike Protection.  Notification Actions notify a set of members when an action has been triggered through a notification service such as Slack or Sentry. For example, organization owners and managers can receive an email when a spike occurs.
@@ -1642,6 +1695,7 @@ export def "0-organizations-notifications-actions Create-a-Spike-Protection-Noti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   trigger_type: string # Type of the trigger that causes the notification. The only supported trigger right now is: `spike-protection`.
   service_type: string # Service that is used for sending the notification. - `email` - `slack` - `sentry_notification` - `pagerduty` - `opsgenie`
   --integration-id: int # ID of the integration used as the notification service. See [List Integrations](https://docs.sentry.io/api/integrations/list-an-organizations-available-integrations/) to retrieve a full list of integrations.  Required if **service_type** is `slack`, `pagerduty` or `opsgenie`.
@@ -1657,7 +1711,7 @@ export def "0-organizations-notifications-actions Create-a-Spike-Protection-Noti
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Returns a serialized Spike Protection Notification Action object.  Notification Actions notify a set of members when an action has been triggered through a notification service such as Slack or Sentry. For example, organization owners and managers can receive an email when a spike occurs.
@@ -1674,13 +1728,14 @@ export def "0-organizations-notifications-actions Retrieve-a-Spike-Protection-No
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, organizationId: int, integrationId: int, sentryAppId: int, projects: list<int>, serviceType: string, triggerType: string, targetType: string, targetIdentifier: string, targetDisplay: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/notifications/actions/($action_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates a Spike Protection Notification Action.  Notification Actions notify a set of members when an action has been triggered through a notification service such as Slack or Sentry. For example, organization owners and managers can receive an email when a spike occurs.
@@ -1697,6 +1752,7 @@ export def "0-organizations-notifications-actions Update-a-Spike-Protection-Noti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   trigger_type: string # Type of the trigger that causes the notification. The only supported trigger right now is: `spike-protection`.
   service_type: string # Service that is used for sending the notification. - `email` - `slack` - `sentry_notification` - `pagerduty` - `opsgenie`
   --integration-id: int # ID of the integration used as the notification service. See [List Integrations](https://docs.sentry.io/api/integrations/list-an-organizations-available-integrations/) to retrieve a full list of integrations.  Required if **service_type** is `slack`, `pagerduty` or `opsgenie`.
@@ -1712,7 +1768,7 @@ export def "0-organizations-notifications-actions Update-a-Spike-Protection-Noti
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes a Spike Protection Notification Action.  Notification Actions notify a set of members when an action has been triggered through a notification service such as Slack or Sentry. For example, organization owners and managers can receive an email when a spike occurs.
@@ -1729,13 +1785,14 @@ export def "0-organizations-notifications-actions Delete-a-Spike-Protection-Noti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/notifications/actions/($action_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve install info for a given artifact.  Returns distribution and installation details for a specific preprod artifact, including whether the artifact is installable, the install URL, download count, and iOS-specific code signing information.
@@ -1752,13 +1809,14 @@ export def "0-organizations-preprodartifacts-install-details Retrieve-install-in
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<buildId: string, state: string, appInfo: record<appId: string, name: string, version: string, buildNumber: int, artifactType: string, dateAdded: string, dateBuilt: string>, gitInfo: record<headSha: string, baseSha: string, provider: string, headRepoName: string, baseRepoName: string, headRef: string, baseRef: string, prNumber: int>, platform: string, projectId: string, projectSlug: string, buildConfiguration: string, isInstallable: bool, installUrl: string, installUrlExpiresAt: string, downloadCount: int, releaseNotes: string, installGroups: list<string>, isCodeSignatureValid: bool, profileName: string, codesigningType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/preprodartifacts/($artifact_id)/install-details/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve size analysis results for a given artifact.  Returns size metrics including download size, install size, and optional insights. When a base artifact exists (either from commit comparison or via the `baseArtifactId` parameter), comparison data showing size differences is included.  The response `state` field indicates the analysis status: - `PENDING`: Analysis has not started yet. - `PROCESSING`: Analysis is currently running. - `FAILED` / `NOT_RAN`: Analysis did not complete; `errorCode` and `errorMessage` are included. - `COMPLETED`: Analysis finished successfully with full size data.
@@ -1775,6 +1833,7 @@ export def "0-organizations-preprodartifacts-size-analysis Retrieve-Size-Analysi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --baseArtifactId: string # Optional ID of the base artifact to compare against. If not provided, uses the default base head artifact.
 ]: nothing -> record<buildId: string, state: string, appInfo: record<appId: string, name: string, version: string, buildNumber: int, artifactType: string, dateAdded: string, dateBuilt: string>, gitInfo: record<headSha: string, baseSha: string, provider: string, headRepoName: string, baseRepoName: string, headRef: string, baseRef: string, prNumber: int>, errorCode: string, errorMessage: string, downloadSize: int, installSize: int, analysisDuration: float, analysisVersion: string, baseBuildId: string, baseAppInfo: record<appId: string, name: string, version: string, buildNumber: int, artifactType: string, dateAdded: string, dateBuilt: string>, insights: record, appComponents: table<componentType: string, name: string, appId: string, path: string, downloadSize: int, installSize: int>, comparisons: table<metricsArtifactType: string, identifier: string, state: string, errorCode: string, errorMessage: string, sizeMetricDiff: record, diffItems: list, insightDiffItems: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1783,7 +1842,7 @@ export def "0-organizations-preprodartifacts-size-analysis Retrieve-Size-Analysi
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/preprodartifacts/($artifact_id)/size-analysis/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve full details for a snapshot, including categorized image lists and comparison status.  When a comparison exists, images are categorized into `changed`, `added`, `removed`, `renamed`, `unchanged`, `errored`, and `skipped` lists with counts. Without a comparison, only the `images` list is populated.  Use `compact_metadata=1` to strip image objects down to `display_name`, `image_file_name`, `group`, and `description` only.  This endpoint requires a bearer token with `project:read` access.
@@ -1800,6 +1859,7 @@ export def "0-organizations-preprodartifacts-snapshots Retrieve-Snapshot-details
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --compact-metadata: string # Set to '1' or 'true' to strip image metadata to display_name, image_file_name, group, and description only.
 ]: nothing -> record<head_artifact_id: string, base_artifact_id: string, project_id: string, comparison_type: string, state: string, vcs_info: record<head_sha: string, base_sha: string, provider: string, head_repo_name: string, base_repo_name: string, head_ref: string, base_ref: string, pr_number: int>, app_id: string, is_selective: bool, images: table<key: string, display_name: string, group: string, image_file_name: string, width: int, height: int>, image_count: int, added: table<key: string, display_name: string, group: string, image_file_name: string, width: int, height: int>, added_count: int, removed: table<key: string, display_name: string, group: string, image_file_name: string, width: int, height: int>, removed_count: int, renamed: table<base_image: record, head_image: record, diff_image_key: string, diff: float>, renamed_count: int, changed: table<base_image: record, head_image: record, diff_image_key: string, diff: float>, changed_count: int, unchanged: table<key: string, display_name: string, group: string, image_file_name: string, width: int, height: int>, unchanged_count: int, errored: table<base_image: record, head_image: record, diff_image_key: string, diff: float>, errored_count: int, skipped: table<key: string, display_name: string, group: string, image_file_name: string, width: int, height: int>, skipped_count: int, diff_threshold: float, comparison_state: string, approval_status: string, comparison_error_message: string, approvers: table<id: string, name: string, email: string, username: string, avatar_url: string, approved_at: string, source: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1808,7 +1868,7 @@ export def "0-organizations-preprodartifacts-snapshots Retrieve-Snapshot-details
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/preprodartifacts/snapshots/($snapshot_id)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a snapshot and all associated data (images, comparisons, metrics).  This is a permanent, irreversible operation. The snapshot and its images will no longer be accessible after deletion.  This endpoint requires a bearer token with `project:write` access.
@@ -1825,13 +1885,14 @@ export def "0-organizations-preprodartifacts-snapshots Delete-a-Snapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/preprodartifacts/snapshots/($snapshot_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve detailed information for a single image within a snapshot.  The `image_identifier` can be either the image filename or its content hash. The response includes head and base image metadata, comparison status, diff image URL, diff percentage, and previous filename for renames.  This endpoint uses a flat response format with nullable fields designed for LLM/MCP consumers.  This endpoint requires a bearer token with `project:read` access.
@@ -1849,13 +1910,14 @@ export def "0-organizations-preprodartifacts-snapshots-images Retrieve-Snapshot-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<image_file_name: string, comparison_status: string, head_image: record<content_hash: string, display_name: string, group: string, image_file_name: string, width: int, height: int, diff_threshold: float, description: string, tags: record, image_url: string>, base_image: record<content_hash: string, display_name: string, group: string, image_file_name: string, width: int, height: int, diff_threshold: float, description: string, tags: record, image_url: string>, diff_image_url: string, diff_percentage: float, previous_image_file_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/preprodartifacts/snapshots/($snapshot_id)/images/($image_identifier)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the most recent base snapshot for a given app.  A base snapshot is one uploaded without a `base_sha` (i.e., a snapshot from a base branch like `main`). Use the optional `branch` and `project` parameters to narrow the search.  The response includes the full image list with download URLs. Use `compact_metadata=1` to reduce image metadata.  This endpoint requires a bearer token with `project:read` access.
@@ -1871,6 +1933,7 @@ export def "0-organizations-preprodartifacts-snapshots-latest-base Retrieve-late
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # App identifier to match.
   --branch: string # Git branch name to filter on.
   --project: int # Project ID to scope the lookup.
@@ -1882,7 +1945,7 @@ export def "0-organizations-preprodartifacts-snapshots-latest-base Retrieve-late
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/preprodartifacts/snapshots/latest-base/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve continuous profiling data for a profiler over a time range.  Exactly one project must be specified via the `project` query parameter.  Requires continuous profiling to be enabled for the organization.
@@ -1898,6 +1961,7 @@ export def "0-organizations-profiling-chunks Retrieve-Profile-Chunks-for-an-Orga
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --project: int # The ID of the project to fetch chunks for. Exactly one project must be specified.
   --profiler-id: string # The continuous-profiler ID to fetch chunks for.
   --statsPeriod: string # The period of time for the query, will override the start & end parameters, a number followed by one of: - `d` for days - `h` for hours - `m` for minutes - `s` for seconds - `w` for weeks  For example, `24h`, to mean query data starting from 24 hours ago to now.
@@ -1910,7 +1974,7 @@ export def "0-organizations-profiling-chunks Retrieve-Profile-Chunks-for-an-Orga
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/profiling/chunks/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve an aggregated flamegraph for the organization, built from the requested data source (transactions, profiles, functions, or spans).  Pass `expand=metrics` to include aggregated function metrics in the response.  Requires profiling to be enabled for the organization.
@@ -1926,7 +1990,8 @@ export def "0-organizations-profiling-flamegraph Retrieve-a-Flamegraph-for-an-Or
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --project: list # The IDs of projects to filter by. `-1` means all available projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=-1`
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --project: list # The IDs or slugs of projects to filter by. Project slugs are unique within each organization. Omit this parameter to include all accessible projects. `-1` is also accepted to include all accessible projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=android&project=javascript-react` - `/?project=-1`
   --environment: list # The name of environments to filter by.
   --statsPeriod: string # The period of time for the query, will override the start & end parameters, a number followed by one of: - `d` for days - `h` for hours - `m` for minutes - `s` for seconds - `w` for weeks  For example, `24h`, to mean query data starting from 24 hours ago to now.
   --start: string # The start of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
@@ -1942,7 +2007,7 @@ export def "0-organizations-profiling-flamegraph Retrieve-a-Flamegraph-for-an-Or
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/profiling/flamegraph/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a list of client keys (DSNs) for all projects in an organization.  This paginated endpoint lists client keys across all projects in an organization. Each key includes the project ID to identify which project it belongs to.  Query Parameters: - team: Filter by team slug or ID to get keys only for that team's projects - status: Filter by 'active' or 'inactive' to get keys with specific status
@@ -1958,6 +2023,7 @@ export def "0-organizations-project-keys List-an-Organizations-Client-Keys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
   --team: string # Filter keys by team slug or ID. If provided, only keys for projects belonging to this team will be returned.
   --status: string@status-completer-2 # Filter keys by status. Options are 'active' or 'inactive'.  * `active` * `inactive`
@@ -1968,7 +2034,7 @@ export def "0-organizations-project-keys List-an-Organizations-Client-Keys" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/project-keys/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a list of projects bound to a organization.
@@ -1984,6 +2050,7 @@ export def "0-organizations-projects List-an-Organizations-Projects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
   --per-page: int # Limit the number of rows to return in the result. Default and maximum allowed is 100.
   --qp-query: string # Filter projects by name or slug.
@@ -1994,7 +2061,7 @@ export def "0-organizations-projects List-an-Organizations-Projects" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/projects/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new project for an organization. A personal team (`team-{username}`) is automatically created for the caller with Team Admin role, and the project is bound to it. If the org has member project creation disabled (`disable_member_project_creation`), `org:write` scope is required.
@@ -2010,6 +2077,7 @@ export def "0-organizations-projects Create-a-Project-for-an-Organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name for the project.
   --slug: string # Uniquely identifies a project and is used for the interface.         If not provided, it is automatically generated from the name. (nullable)
   --platform: string # The platform for the project. (nullable)
@@ -2023,7 +2091,7 @@ export def "0-organizations-projects Create-a-Project-for-an-Organization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a Monitor for a project
@@ -2040,6 +2108,7 @@ export def "0-organizations-projects-detectors Create-a-Monitor-for-a-Project" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Name of the monitor.
   type: string # The type of monitor - `metric_issue`.
   --workflow-ids: list # The IDs of the alerts to connect this monitor to. Use the 'Fetch Alerts' endpoint to find the IDs.
@@ -2058,7 +2127,7 @@ export def "0-organizations-projects-detectors Create-a-Monitor-for-a-Project" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return a list of trusted relays bound to an organization.
@@ -2074,13 +2143,14 @@ export def "0-organizations-relay-usage List-an-Organizations-trusted-Relays" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<relayId: string, version: string, publicKey: string, firstSeen: string, lastSeen: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/relay_usage/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # **`[WARNING]`**: This API is an experimental Alpha feature and is subject to change!  List all derived statuses of releases that fall within the provided start/end datetimes.  Constructs a response key'd off \{`release_version`\}-\{`project_slug`\} that lists thresholds with their status for *specified* projects. Each returned enriched threshold will contain the full serialized `release_threshold` instance as well as it's derived health statuses.
@@ -2096,6 +2166,7 @@ export def "0-organizations-release-threshold-statuses Retrieve-Statuses-of-Rele
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # The start of the time series range as an explicit datetime, either in UTC ISO8601 or epoch seconds. Use along with `end`. (format: date-time)
   --end: string # The inclusive end of the time series range as an explicit datetime, either in UTC ISO8601 or epoch seconds. Use along with `start`. (format: date-time)
   --environment: list # A list of environment names to filter your results by.
@@ -2108,7 +2179,7 @@ export def "0-organizations-release-threshold-statuses Retrieve-Statuses-of-Rele
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/release-threshold-statuses/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return details on an individual release.
@@ -2125,6 +2196,7 @@ export def "0-organizations-releases Retrieve-an-Organizations-Release" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --project-id: string # The project ID to filter by.
   --health: oneof<nothing, bool> # Whether or not to include health data with the release. By default, this is false.
   --adoptionStages: oneof<nothing, bool> # Whether or not to include adoption stages with the release. By default, this is false.
@@ -2140,7 +2212,7 @@ export def "0-organizations-releases Retrieve-an-Organizations-Release" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/releases/($version)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a release. This can change some metadata associated with the release (the ref, url, and dates).
@@ -2159,6 +2231,7 @@ export def "0-organizations-releases Update-an-Organizations-Release" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ref: string # An optional commit reference. This is useful if a tagged version has been provided. (nullable)
   --body-url: string # A URL that points to the release. For instance, this can be the path to an online interface to the source code, such as a GitHub URL. (nullable, format: uri)
   --dateReleased: string # An optional date that indicates when the release went live.  If not provided the current time is used. (nullable, format: date-time)
@@ -2173,7 +2246,7 @@ export def "0-organizations-releases Update-an-Organizations-Release" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Permanently remove a release and all of its files.
@@ -2190,13 +2263,14 @@ export def "0-organizations-releases Delete-an-Organizations-Release" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/releases/($version)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of deploys based on the organization, version, and project.
@@ -2213,6 +2287,7 @@ export def "0-organizations-releases-deploys List-a-Releases-Deploys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<id: string, environment: string, dateStarted: string, dateFinished: string, name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2221,7 +2296,7 @@ export def "0-organizations-releases-deploys List-a-Releases-Deploys" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/releases/($version)/deploys/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a deploy for a given release.
@@ -2238,6 +2313,7 @@ export def "0-organizations-releases-deploys Create-a-Deploy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   environment: string # The environment you're deploying to
   --name: string # The optional name of the deploy (nullable)
   --body-url: string # The optional URL that points to the deploy (nullable, format: uri)
@@ -2253,7 +2329,7 @@ export def "0-organizations-releases-deploys Create-a-Deploy" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a Count of Replays for a Given Issue or Transaction
@@ -2269,12 +2345,13 @@ export def "0-organizations-replay-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --environment: list # The name of environments to filter by.
   --start: string # The start of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
   --end: string # The end of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
   --statsPeriod: string # The period of time for the query, will override the start & end parameters, a number followed by one of: - `d` for days - `h` for hours - `m` for minutes - `s` for seconds - `w` for weeks  For example, `24h`, to mean query data starting from 24 hours ago to now.
-  --project: list # The IDs of projects to filter by. `-1` means all available projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=-1`
-  --project-id-or-slug: list # The project slugs to filter by. Use `$all` to include all available projects. For example, the following are valid parameters: - `/?projectSlug=$all` - `/?projectSlug=android&projectSlug=javascript-react`
+  --project: list # The IDs or slugs of projects to filter by. Project slugs are unique within each organization. Omit this parameter to include all accessible projects. `-1` is also accepted to include all accessible projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=android&project=javascript-react` - `/?project=-1`
+  --project-id-or-slug: list # The legacy project slug filter. Prefer `project`, which accepts project IDs or slugs. Use `$all` to include all available projects. For example, the following are valid parameters: - `/?projectSlug=$all` - `/?projectSlug=android&projectSlug=javascript-react`
   --qp-query: string # Filters results by using [query syntax](/product/sentry-basics/search/).  Example: `query=(transaction:foo AND release:abc) OR (transaction:[bar,baz] AND release:def)`
   --data-source: string@data-source-completer # The data source to query replays from. Defaults to 'discover'.
   --returnIds: oneof<nothing, bool> # If true, return issue IDs rather than counts.
@@ -2285,7 +2362,7 @@ export def "0-organizations-replay-count get" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/replay-count/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List an Organization's Selectors
@@ -2301,6 +2378,7 @@ export def "0-organizations-replay-selectors listOrganizationReplaySelectors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --environment: list # The environment to filter by.
   --statsPeriod: string # This defines the range of the time series, relative to now. The range is given in a `<number><unit>` format. For example `1d` for a one day range. Possible units are `m` for minutes, `h` for hours, `d` for days and `w` for weeks.You must either provide a `statsPeriod`, or a `start` and `end`.
   --start: string # This defines the start of the time series range as an explicit datetime, either in UTC ISO8601 or epoch seconds.Use along with `end` instead of `statsPeriod`. (format: date-time)
@@ -2320,7 +2398,7 @@ export def "0-organizations-replay-selectors listOrganizationReplaySelectors" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/replay-selectors/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List an Organization's Replays
@@ -2336,6 +2414,7 @@ export def "0-organizations-replays listOrganizationReplays" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --statsPeriod: string #  This defines the range of the time series, relative to now. The range is given in a `<number><unit>` format. For example `1d` for a one day range. Possible units are `m` for minutes, `h` for hours, `d` for days and `w` for weeks. You must either provide a `statsPeriod`, or a `start` and `end`.
   --start: string #  This defines the start of the time series range as an explicit datetime, either in UTC ISO8601 or epoch seconds. Use along with `end` instead of `statsPeriod`.  (format: date-time)
   --end: string #  This defines the inclusive end of the time series range as an explicit datetime, either in UTC ISO8601 or epoch seconds. Use along with `start` instead of `statsPeriod`.  (format: date-time)
@@ -2356,7 +2435,7 @@ export def "0-organizations-replays listOrganizationReplays" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/replays/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a Replay Instance
@@ -2373,6 +2452,7 @@ export def "0-organizations-replays get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --statsPeriod: string #  This defines the range of the time series, relative to now. The range is given in a `<number><unit>` format. For example `1d` for a one day range. Possible units are `m` for minutes, `h` for hours, `d` for days and `w` for weeks. You must either provide a `statsPeriod`, or a `start` and `end`.
   --start: string #  This defines the start of the time series range as an explicit datetime, either in UTC ISO8601 or epoch seconds. Use along with `end` instead of `statsPeriod`.  (format: date-time)
   --end: string #  This defines the inclusive end of the time series range as an explicit datetime, either in UTC ISO8601 or epoch seconds. Use along with `start` instead of `statsPeriod`.  (format: date-time)
@@ -2393,7 +2473,7 @@ export def "0-organizations-replays get" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/replays/($replay_id)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a list of version control repositories for a given organization.
@@ -2409,6 +2489,7 @@ export def "0-organizations-repos List-an-Organizations-Repositories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # Filter repositories by name.
   --status: string@status-completer-4 # Filter repositories by status. Defaults to `active`.
   --integration-id: string # Filter repositories by integration ID.
@@ -2421,7 +2502,7 @@ export def "0-organizations-repos List-an-Organizations-Repositories" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/repos/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a Repository's Commits
@@ -2438,6 +2519,7 @@ export def "0-organizations-repos-commits List-a-Repositorys-Commits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<id: string, message: string, dateCreated: string, pullRequest: record<id: string, title: string, message: string, dateCreated: string, repository: record, author: any, externalUrl: string>, suspectCommitType: string, repository: record<url: string, provider: record, status: string, integrationId: string, externalSlug: string, externalId: string, settings: record, id: string, name: string, dateCreated: string>, author: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2446,7 +2528,7 @@ export def "0-organizations-repos-commits List-a-Repositorys-Commits" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/repos/($repo_id)/commits/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a paginated list of teams bound to a organization with a SCIM Groups GET Request.  Note that the members field will only contain up to 10,000 members.
@@ -2462,6 +2544,7 @@ export def "0-organizations-scim-groups List-an-Organizations-Paginated-Teams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startIndex: int # SCIM 1-offset based index for pagination. (default: 1)
   --count: int # The maximum number of results the query should return, maximum of 100. (default: 100)
   --filter: string # A SCIM filter expression. The only operator currently supported is `eq`.
@@ -2473,7 +2556,7 @@ export def "0-organizations-scim-groups List-an-Organizations-Paginated-Teams" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/scim/v2/Groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new team bound to an organization via a SCIM Groups POST Request. The slug will have a normalization of uppercases/spaces to lowercases and dashes.  Note that teams are always created with an empty member set.
@@ -2489,6 +2572,7 @@ export def "0-organizations-scim-groups Provision-a-New-Team" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   displayName: string # The slug of the team that is shown in the UI.
 ]: any -> record<schemas: list<string>, id: string, displayName: string, meta: record<resourceType: string>, members: table<value: string, display: string>> {
   let input = $in
@@ -2499,7 +2583,7 @@ export def "0-organizations-scim-groups Provision-a-New-Team" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Query an individual team with a SCIM Group GET Request. - Note that the members field will only contain up to 10000 members.
@@ -2516,13 +2600,14 @@ export def "0-organizations-scim-groups Query-an-Individual-Team" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<schemas: list<string>, id: string, displayName: string, meta: record<resourceType: string>, members: table<value: string, display: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/scim/v2/Groups/($team_id_or_slug)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a team's attributes with a SCIM Group PATCH Request.
@@ -2540,6 +2625,7 @@ export def "0-organizations-scim-groups Update-a-Teams-Attributes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Operations: list # The list of operations to perform. Valid operations are: * Renaming a team: ```json {     "Operations": [{         "op": "replace",         "value": {             "id": 23,             "displayName": "newName"         }     }] } ``` * Adding a member to a team: ```json {     "Operations": [{         "op": "add",         "path": "members",         "value": [             {                 "value": 23,                 "display": "testexample@example.com"             }         ]     }] } ``` * Removing a member from a team: ```json {     "Operations": [{         "op": "remove",         "path": "members[value eq "23"]"     }] } ``` * Replacing an entire member set of a team: ```json {     "Operations": [{         "op": "replace",         "path": "members",         "value": [             {                 "value": 23,                 "display": "testexample2@sentry.io"             },             {                 "value": 24,                 "display": "testexample3@sentry.io"             }         ]     }] } ``` — item shape: {op: string, value?: record, path?: string}
 ]: any -> any {
   let input = $in
@@ -2550,7 +2636,7 @@ export def "0-organizations-scim-groups Update-a-Teams-Attributes" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a team with a SCIM Group DELETE Request.
@@ -2567,13 +2653,14 @@ export def "0-organizations-scim-groups Delete-an-Individual-Team" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/scim/v2/Groups/($team_id_or_slug)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a paginated list of members bound to a organization with a SCIM Users GET Request.
@@ -2589,6 +2676,7 @@ export def "0-organizations-scim-users List-an-Organizations-SCIM-Members" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --startIndex: int # SCIM 1-offset based index for pagination. (default: 1)
   --count: int # The maximum number of results the query should return, maximum of 100. (default: 100)
   --filter: string # A SCIM filter expression. The only operator currently supported is `eq`.
@@ -2600,7 +2688,7 @@ export def "0-organizations-scim-users List-an-Organizations-SCIM-Members" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/scim/v2/Users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new Organization Member via a SCIM Users POST Request.  Note that this API does not support setting secondary emails.
@@ -2616,6 +2704,7 @@ export def "0-organizations-scim-users Provision-a-New-Organization-Member" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   userName: string # The SAML field used for email. (format: email)
   --sentryOrgRole: string@sentryOrgRole-completer # The organization role of the member. If unspecified, this will be                     set to the organization's default role. The options are:  * `billing` - Can manage payment and compliance details. * `member` - Can view and act on events, as well as view most other data within the organization. * `manager` - Has full management access to all teams and projects. Can also manage         the organization's membership. * `admin` - Can edit global integrations, manage projects, and add/remove teams.         They automatically assume the Team Admin role for teams they join.         Note: This role can no longer be assigned in Business and Enterprise plans. Use `TeamRoles` instead.         
 ]: any -> record<active: bool, schemas: list<string>, id: string, userName: string, name: record<givenName: string, familyName: string>, emails: table<primary: bool, value: string, type: string>, meta: record<resourceType: string>, sentryOrgRole: string> {
@@ -2627,7 +2716,7 @@ export def "0-organizations-scim-users Provision-a-New-Organization-Member" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Query an individual organization member with a SCIM User GET Request. - The `name` object will contain fields `firstName` and `lastName` with the values of `N/A`. Sentry's SCIM API does not currently support these fields but returns them for compatibility purposes.
@@ -2644,13 +2733,14 @@ export def "0-organizations-scim-users Query-an-Individual-Organization-Member" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<active: bool, schemas: list<string>, id: string, userName: string, name: record<givenName: string, familyName: string>, emails: table<primary: bool, value: string, type: string>, meta: record<resourceType: string>, sentryOrgRole: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/scim/v2/Users/($member_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an organization member's attributes with a SCIM PATCH Request.
@@ -2668,6 +2758,7 @@ export def "0-organizations-scim-users Update-an-Organization-Members-Attributes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Operations: list # A list of operations to perform. Currently, the only valid operation is setting a member's `active` attribute to false, after which the member will be permanently deleted. ```json {     "Operations": [{         "op": "replace",         "path": "active",         "value": False     }] } ``` — item shape: {op: string, value: any, path?: string}
 ]: any -> any {
   let input = $in
@@ -2678,7 +2769,7 @@ export def "0-organizations-scim-users Update-an-Organization-Members-Attributes
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an organization member with a SCIM User DELETE Request.
@@ -2695,13 +2786,14 @@ export def "0-organizations-scim-users Delete-an-Organization-Member-via-SCIM" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/scim/v2/Users/($member_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the custom integrations for an organization
@@ -2717,13 +2809,14 @@ export def "0-organizations-sentry-apps Retrieve-the-custom-integrations-created
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<allowedOrigins: list<string>, avatars: list<record>, events: list<string>, featureData: list<string>, isAlertable: bool, metadata: string, name: string, schema: string, scopes: list<string>, slug: string, status: string, uuid: string, verifyInstall: bool, isDisabled: bool, author: string, overview: string, popularity: int, redirectUrl: string, webhookUrl: string, clientSecret: string, datePublished: string, clientId: string, owner: record<id: int, slug: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/sentry-apps/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a time series of release health session statistics for projects bound to an organization.  The interval and date range are subject to certain restrictions and rounding rules.  The date range is rounded to align with the interval, and is rounded to at least one hour. The interval can at most be one day and at least one hour currently. It has to cleanly divide one day, for rounding reasons.  Because of technical limitations, this endpoint returns at most 10000 data points. For example, if you select a 90 day window grouped by releases, you will see at most `floor(10k / (90 + 1)) = 109` releases. To get more results, reduce the `statsPeriod`.
@@ -2739,12 +2832,13 @@ export def "0-organizations-sessions Retrieve-Release-Health-Session-Statistics"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --field: list # The list of fields to query.  The available fields are - `sum(session)` - `count_unique(user)` - `avg`, `p50`, `p75`, `p90`, `p95`, `p99`, `max` applied to `session.duration`. For example, `p99(session.duration)`. Session duration is [no longer being recorded](https://github.com/getsentry/sentry/discussions/42716) as of on Jan 12, 2023. Returned data may be incomplete. - `crash_rate`, `crash_free_rate` applied to `user` or `session`. For example, `crash_free_rate(user)`
   --start: string # The start of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
   --end: string # The end of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
   --environment: list # The name of environments to filter by.
   --statsPeriod: string # The period of time for the query, will override the start & end parameters, a number followed by one of: - `d` for days - `h` for hours - `m` for minutes - `s` for seconds - `w` for weeks  For example, `24h`, to mean query data starting from 24 hours ago to now.
-  --project: list # The IDs of projects to filter by. `-1` means all available projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=-1`
+  --project: list # The IDs or slugs of projects to filter by. Project slugs are unique within each organization. Omit this parameter to include all accessible projects. `-1` is also accepted to include all accessible projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=android&project=javascript-react` - `/?project=-1`
   --per-page: int # The number of groups to return per request.
   --interval: string # Resolution of the time series, given in the same format as `statsPeriod`.  The default and         the minimum interval is `1h`.
   --groupBy: list # The list of properties to group by.  The available groupBy conditions are `project`,         `release`, `environment` and `session.status`.
@@ -2759,7 +2853,7 @@ export def "0-organizations-sessions Retrieve-Release-Health-Session-Statistics"
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/sessions/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resolve a short ID to the project slug and group details.
@@ -2776,6 +2870,7 @@ export def "0-organizations-shortids Resolve-a-Short-ID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --collapse: list # Fields to remove from the response to improve query performance.
 ]: nothing -> record<organizationSlug: string, projectSlug: string, groupId: string, group: record<isUnhandled: bool, count: string, userCount: int, firstSeen: string, lastSeen: string, id: string, shareId: string, shortId: string, title: string, culprit: string, permalink: string, logger: string, level: string, status: string, statusDetails: record<autoResolved: bool, ignoreCount: int, ignoreUntil: string, ignoreUserCount: int, ignoreUserWindow: int, ignoreWindow: int, actor: record, inNextRelease: bool, inRelease: string, inCommit: string, pendingEvents: int, info: any>, substatus: string, isPublic: bool, platform: string, priority: string, priorityLockedAt: string, seerFixabilityScore: float, seerAutofixLastTriggered: string, seerExplorerAutofixLastTriggered: string, project: record<id: string, name: string, slug: string, platform: string>, type: string, issueType: string, issueCategory: string, metadata: record, numComments: int, assignedTo: record<type: string, id: string, name: string, email: string>, isBookmarked: bool, isSubscribed: bool, subscriptionDetails: record<disabled: bool, reason: string>, hasSeen: bool, annotations: list<record>>, shortId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2784,7 +2879,7 @@ export def "0-organizations-shortids Resolve-a-Short-ID" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/shortids/($issue_id)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query summarized event counts by project for your Organization. Also see https://docs.sentry.io/api/organizations/retrieve-event-counts-for-an-organization-v2/ for reference.
@@ -2800,6 +2895,7 @@ export def "0-organizations-stats-summary Retrieve-an-Organizations-Events-Count
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --field: string@field-completer # the `sum(quantity)` field is bytes for attachments, and all others the 'event' count for those types of events.  `sum(times_seen)` sums the number of times an event has been seen. For 'normal' event types, this will be equal to `sum(quantity)` for now. For sessions, quantity will sum the total number of events seen in a session, while `times_seen` will be the unique number of sessions. and for attachments, `times_seen` will be the total number of attachments, while quantity will be the total sum of attachment bytes.  * `sum(quantity)` * `sum(times_seen)`
   --statsPeriod: string # This defines the range of the time series, relative to now. The range is given in a `<number><unit>` format. For example `1d` for a one day range. Possible units are `m` for minutes, `h` for hours, `d` for days and `w` for weeks. You must either provide a `statsPeriod`, or a `start` and `end`.
   --interval: string # This is the resolution of the time series, given in the same format as `statsPeriod`. The default resolution is `1h` and the minimum resolution is currently restricted to `1h` as well. Intervals larger than `1d` are not supported, and the interval has to cleanly divide one day.
@@ -2817,7 +2913,7 @@ export def "0-organizations-stats-summary Retrieve-an-Organizations-Events-Count
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/stats-summary/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Query event counts for your Organization. Select a field, define a date range, and group or filter by columns.
@@ -2833,6 +2929,7 @@ export def "0-organizations-stats-v2 Retrieve-Event-Counts-for-an-Organization-v
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --groupBy: list # can pass multiple groupBy parameters to group by multiple, e.g. `groupBy=project&groupBy=outcome` to group by multiple dimensions. Note that grouping by project can cause missing rows if the number of projects / interval is large. If you have a large number of projects, we recommend filtering and querying by them individually.Also note that grouping by projects does not currently support timeseries interval responses and will instead be a sum of the projectover the entire period specified.
   --field: string@field-completer # the `sum(quantity)` field is bytes for attachments, and all others the 'event' count for those types of events.  `sum(times_seen)` sums the number of times an event has been seen. For 'normal' event types, this will be equal to `sum(quantity)` for now. For sessions, quantity will sum the total number of events seen in a session, while `times_seen` will be the unique number of sessions. and for attachments, `times_seen` will be the total number of attachments, while quantity will be the total sum of attachment bytes.  * `sum(quantity)` * `sum(times_seen)`
   --statsPeriod: string # This defines the range of the time series, relative to now. The range is given in a `<number><unit>` format. For example `1d` for a one day range. Possible units are `m` for minutes, `h` for hours, `d` for days and `w` for weeks. You must either provide a `statsPeriod`, or a `start` and `end`.
@@ -2850,7 +2947,7 @@ export def "0-organizations-stats-v2 Retrieve-Event-Counts-for-an-Organization-v
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/stats_v2/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a list of tag keys for the given organization.
@@ -2866,7 +2963,8 @@ export def "0-organizations-tags List-an-Organizations-Tags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --project: list # The IDs of projects to filter by. `-1` means all available projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=-1`
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --project: list # The IDs or slugs of projects to filter by. Project slugs are unique within each organization. Omit this parameter to include all accessible projects. `-1` is also accepted to include all accessible projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=android&project=javascript-react` - `/?project=-1`
   --environment: list # The name of environments to filter by.
   --statsPeriod: string # The period of time for the query, will override the start & end parameters, a number followed by one of: - `d` for days - `h` for hours - `m` for minutes - `s` for seconds - `w` for weeks  For example, `24h`, to mean query data starting from 24 hours ago to now.
   --start: string # The start of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
@@ -2881,7 +2979,7 @@ export def "0-organizations-tags List-an-Organizations-Tags" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/tags/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of teams bound to a organization.
@@ -2897,6 +2995,7 @@ export def "0-organizations-teams List-an-Organizations-Teams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --detailed: string #  Specify `"0"` to return team details that do not include projects.
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
   --per-page: int # Limit the number of rows to return in the result. Default and maximum allowed is 100.
@@ -2908,7 +3007,7 @@ export def "0-organizations-teams List-an-Organizations-Teams" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/teams/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new team bound to an organization. Requires at least one of the `name` or `slug` body params to be set.
@@ -2925,6 +3024,7 @@ export def "0-organizations-teams Create-a-New-Team" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --slug: string # Uniquely identifies a team and is used for the interface. If not         provided, it is automatically generated from the name. (nullable)
   --name: string # **`[DEPRECATED]`** The name for the team. If not provided, it is         automatically generated from the slug (DEPRECATED, nullable)
 ]: any -> record<id: string, slug: string, name: string, dateCreated: string, isMember: bool, teamRole: string, flags: record, access: list<string>, hasAccess: bool, isPending: bool, memberCount: int, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, externalTeams: table<externalId: string, userId: string, teamId: string, id: string, provider: string, externalName: string, integrationId: string>, organization: record<features: list<string>, extraOptions: record, access: list<string>, onboardingTasks: list<record>, id: string, slug: string, status: record<id: string, name: string>, name: string, dateCreated: string, isEarlyAdopter: bool, require2FA: bool, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, links: record<organizationUrl: string, regionUrl: string>, hasAuthProvider: bool, allowMemberInvite: bool, allowMemberProjectCreation: bool, allowSuperuserAccess: bool>, projects: table<stats: any, transactionStats: any, sessionStats: any, id: string, slug: string, name: string, platform: string, dateCreated: string, isBookmarked: bool, isMember: bool, features: list, firstEvent: string, firstTransactionEvent: bool, access: list, hasAccess: bool, hasFeedbacks: bool, hasFlags: bool, hasMinifiedStackTrace: bool, hasMonitors: bool, hasNewFeedbacks: bool, hasProfiles: bool, hasReplays: bool, hasSessions: bool, hasInsightsHttp: bool, hasInsightsDb: bool, hasInsightsAssets: bool, hasInsightsAppStart: bool, hasInsightsScreenLoad: bool, hasInsightsVitals: bool, hasInsightsCaches: bool, hasInsightsQueues: bool, hasInsightsAgentMonitoring: bool, hasInsightsMCP: bool, hasLogs: bool, hasTraceMetrics: bool, isInternal: bool, isPublic: bool, avatar: record, color: string, status: string>> {
@@ -2936,7 +3036,7 @@ export def "0-organizations-teams Create-a-New-Team" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # List the attribute keys available on a given trace item dataset (spans, logs, trace metrics, etc.), with optional substring and structured filtering.
@@ -2953,6 +3053,7 @@ export def "0-organizations-trace-items-attributes List-Trace-Item-Attributes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --statsPeriod: string # The period of time for the query, will override the start & end parameters, a number followed by one of: - `d` for days - `h` for hours - `m` for minutes - `s` for seconds - `w` for weeks  For example, `24h`, to mean query data starting from 24 hours ago to now.
   --start: string # The start of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
   --end: string # The end of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
@@ -2969,7 +3070,7 @@ export def "0-organizations-trace-items-attributes List-Trace-Item-Attributes" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/trace-items/attributes/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve aggregate metadata for a single trace, including counts of spans, errors, performance issues, logs, and metrics, along with per-span-operation and per-transaction child-count breakdowns.
@@ -2986,6 +3087,7 @@ export def "0-organizations-trace-meta Retrieve-Trace-Metadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --statsPeriod: string # The period of time for the query, will override the start & end parameters, a number followed by one of: - `d` for days - `h` for hours - `m` for minutes - `s` for seconds - `w` for weeks  For example, `24h`, to mean query data starting from 24 hours ago to now.
   --start: string # The start of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
   --end: string # The end of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
@@ -2997,7 +3099,7 @@ export def "0-organizations-trace-meta Retrieve-Trace-Metadata" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/trace-meta/($trace_id)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the spans, errors, and (optionally) uptime checks that make up a single trace.  The response is a list of top-level events; each item may have nested `children`, `errors`, and `occurrences` arrays representing related items. Top-level entries are spans by default and may also be uptime checks when `include_uptime=1` is passed.
@@ -3014,6 +3116,7 @@ export def "0-organizations-trace Retrieve-a-Trace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --statsPeriod: string # The period of time for the query, will override the start & end parameters, a number followed by one of: - `d` for days - `h` for hours - `m` for minutes - `s` for seconds - `w` for weeks  For example, `24h`, to mean query data starting from 24 hours ago to now.
   --start: string # The start of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
   --end: string # The end of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
@@ -3028,7 +3131,7 @@ export def "0-organizations-trace Retrieve-a-Trace" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/trace/($trace_id)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of teams the user has access to in the specified organization. Note that this endpoint is restricted to [user auth tokens](https://docs.sentry.io/account/auth-tokens/#user-auth-tokens).
@@ -3044,13 +3147,14 @@ export def "0-organizations-user-teams List-a-Users-Teams-for-an-Organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, slug: string, name: string, dateCreated: string, isMember: bool, teamRole: string, flags: record, access: list<string>, hasAccess: bool, isPending: bool, memberCount: int, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, externalTeams: list<record>, organization: record<features: list, extraOptions: record, access: list, onboardingTasks: list, id: string, slug: string, status: record, name: string, dateCreated: string, isEarlyAdopter: bool, require2FA: bool, avatar: record, links: record, hasAuthProvider: bool, allowMemberInvite: bool, allowMemberProjectCreation: bool, allowSuperuserAccess: bool>, projects: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/user-teams/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of alerts for a given organization
@@ -3066,10 +3170,11 @@ export def "0-organizations-workflows Fetch-Alerts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --sortBy: string # The field to sort results by. If not specified, the results are sorted by id.  Available fields are: - `name` - `id` - `dateCreated` - `dateUpdated` - `connectedDetectors` - `actions` - `priorityDetector`  Prefix with `-` to sort in descending order.     
   --qp-query: string # An optional search query for filtering alerts.
   --id: list # The ID of the alert you'd like to query.
-  --project: list # The IDs of projects to filter by. `-1` means all available projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=-1`
+  --project: list # The IDs or slugs of projects to filter by. Project slugs are unique within each organization. Omit this parameter to include all accessible projects. `-1` is also accepted to include all accessible projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=android&project=javascript-react` - `/?project=-1`
 ]: nothing -> table<id: string, name: string, organizationId: string, createdBy: string, dateCreated: string, dateUpdated: string, triggers: record<id: string, organizationId: string, logicType: string, conditions: any, actions: any>, actionFilters: list<record>, environment: string, config: record, detectorIds: list<string>, enabled: bool, lastTriggered: string, owner: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3077,7 +3182,7 @@ export def "0-organizations-workflows Fetch-Alerts" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/workflows/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates an alert for an organization
@@ -3093,6 +3198,7 @@ export def "0-organizations-workflows Create-an-Alert-for-an-Organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the alert
   --id: string # The ID of the existing alert
   --enabled: oneof<nothing, bool> # Whether the alert is enabled or disabled (default: true)
@@ -3111,7 +3217,7 @@ export def "0-organizations-workflows Create-an-Alert-for-an-Organization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk enable or disable alerts for a given Organization
@@ -3127,9 +3233,10 @@ export def "0-organizations-workflows Mutate-an-Organizations-Alerts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # An optional search query for filtering alerts.
   --id: list # The ID of the alert you'd like to query.
-  --project: list # The IDs of projects to filter by. `-1` means all available projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=-1`
+  --project: list # The IDs or slugs of projects to filter by. Project slugs are unique within each organization. Omit this parameter to include all accessible projects. `-1` is also accepted to include all accessible projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=android&project=javascript-react` - `/?project=-1`
   --enabled: oneof<nothing, bool> # Whether to enable or disable the alerts
 ]: any -> table<id: string, name: string, organizationId: string, createdBy: string, dateCreated: string, dateUpdated: string, triggers: record<id: string, organizationId: string, logicType: string, conditions: any, actions: any>, actionFilters: list<record>, environment: string, config: record, detectorIds: list<string>, enabled: bool, lastTriggered: string, owner: string> {
   let input = $in
@@ -3141,7 +3248,7 @@ export def "0-organizations-workflows Mutate-an-Organizations-Alerts" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Bulk delete alerts for a given organization
@@ -3157,9 +3264,10 @@ export def "0-organizations-workflows Bulk-Delete-Alerts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # An optional search query for filtering alerts.
   --id: list # The ID of the alert you'd like to query.
-  --project: list # The IDs of projects to filter by. `-1` means all available projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=-1`
+  --project: list # The IDs or slugs of projects to filter by. Project slugs are unique within each organization. Omit this parameter to include all accessible projects. `-1` is also accepted to include all accessible projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=android&project=javascript-react` - `/?project=-1`
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3167,7 +3275,7 @@ export def "0-organizations-workflows Bulk-Delete-Alerts" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/workflows/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns an alert.
@@ -3184,13 +3292,14 @@ export def "0-organizations-workflows Fetch-an-Alert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, organizationId: string, createdBy: string, dateCreated: string, dateUpdated: string, triggers: record<id: string, organizationId: string, logicType: string, conditions: any, actions: any>, actionFilters: table<id: string, organizationId: string, logicType: string, conditions: any, actions: any>, environment: string, config: record, detectorIds: list<string>, enabled: bool, lastTriggered: string, owner: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/workflows/($workflow_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates an alert.
@@ -3207,6 +3316,7 @@ export def "0-organizations-workflows Update-an-Alert-by-ID" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the alert
   --id: string # The ID of the existing alert
   --enabled: oneof<nothing, bool> # Whether the alert is enabled or disabled (default: true)
@@ -3225,7 +3335,7 @@ export def "0-organizations-workflows Update-an-Alert-by-ID" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes an alert.
@@ -3242,13 +3352,14 @@ export def "0-organizations-workflows Delete-an-Alert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/workflows/($workflow_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return details on an individual project.
@@ -3265,13 +3376,14 @@ export def "0-projects Retrieve-a-Project" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<stats: any, transactionStats: any, sessionStats: any, id: string, slug: string, name: string, platform: string, dateCreated: string, isBookmarked: bool, isMember: bool, features: list<string>, firstEvent: string, firstTransactionEvent: bool, access: list<string>, hasAccess: bool, hasFeedbacks: bool, hasFlags: bool, hasMinifiedStackTrace: bool, hasMonitors: bool, hasNewFeedbacks: bool, hasProfiles: bool, hasReplays: bool, hasSessions: bool, hasInsightsHttp: bool, hasInsightsDb: bool, hasInsightsAssets: bool, hasInsightsAppStart: bool, hasInsightsScreenLoad: bool, hasInsightsVitals: bool, hasInsightsCaches: bool, hasInsightsQueues: bool, hasInsightsAgentMonitoring: bool, hasInsightsMCP: bool, hasLogs: bool, hasTraceMetrics: bool, isInternal: bool, isPublic: bool, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, color: string, status: string, team: record<id: string, name: string, slug: string>, teams: table<id: string, name: string, slug: string>, latestRelease: record<version: string>, options: record, digestsMinDelay: int, digestsMaxDelay: int, subjectPrefix: string, allowedDomains: list<string>, resolveAge: int, dataScrubber: bool, dataScrubberDefaults: bool, safeFields: list<string>, storeCrashReports: int, sensitiveFields: list<string>, subjectTemplate: string, securityToken: string, securityTokenHeader: string, verifySSL: bool, scrubIPAddresses: bool, scrapeJavaScript: bool, highlightTags: list<string>, highlightContext: record, highlightPreset: record<tags: list<string>, context: record>, groupingConfig: string, derivedGroupingEnhancements: string, groupingEnhancements: string, secondaryGroupingExpiry: int, secondaryGroupingConfig: string, fingerprintingRules: string, organization: record<features: list<string>, extraOptions: record, access: list<string>, onboardingTasks: list<record>, id: string, slug: string, status: record<id: string, name: string>, name: string, dateCreated: string, isEarlyAdopter: bool, require2FA: bool, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, links: record<organizationUrl: string, regionUrl: string>, hasAuthProvider: bool, allowMemberInvite: bool, allowMemberProjectCreation: bool, allowSuperuserAccess: bool>, plugins: table<id: string, name: string, slug: string, shortName: string, type: string, canDisable: bool, isTestable: bool, hasConfiguration: bool, metadata: record, contexts: list, status: string, assets: list, doc: string, firstPartyAlternative: any, deprecationDate: any, altIsSentryApp: any, enabled: bool, version: string, author: record, isDeprecated: bool, isHidden: bool, description: string, features: list, featureDescriptions: list, resourceLinks: list>, platforms: list<string>, processingIssues: int, defaultEnvironment: string, relayPiiConfig: string, builtinSymbolSources: list<string>, dynamicSamplingBiases: list<record>, symbolSources: string, isDynamicallySampled: bool, tempestFetchScreenshots: bool, autofixAutomationTuning: string, seerScannerAutomation: bool, seerNightshiftTweaks: any, scmSourceContextEnabled: bool, debugFilesRole: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update various attributes and configurable settings for the given project.  Note that solely having the **`project:read`** scope restricts updatable settings to `isBookmarked`, `autofixAutomationTuning`, `seerScannerAutomation`, `preprodSizeStatusChecksEnabled`, `preprodSizeStatusChecksRules`, `preprodSizeEnabledQuery`, `preprodDistributionEnabledQuery`, `preprodSizeEnabledByCustomer`, `preprodDistributionEnabledByCustomer`, and `preprodDistributionPrCommentsEnabledByCustomer`.
@@ -3288,6 +3400,7 @@ export def "0-projects Update-a-Project" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isBookmarked: oneof<nothing, bool> # Enables starring the project within the projects tab. Can be updated with **`project:read`** permission.
   --name: string # The name for the project
   --slug: string # Uniquely identifies a project and is used for the interface.
@@ -3307,7 +3420,7 @@ export def "0-projects Update-a-Project" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Schedules a project for deletion.  Deletion happens asynchronously and therefore is not immediate. However once deletion has begun the state of a project changes and will be hidden from most public views.
@@ -3324,13 +3437,14 @@ export def "0-projects Delete-a-Project" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Lists a project's environments.
@@ -3347,6 +3461,7 @@ export def "0-projects-environments List-a-Projects-Environments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --visibility: string@visibility-completer # The visibility of the environments to filter by. Defaults to `visible`.
 ]: nothing -> table<id: string, name: string, isHidden: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3355,7 +3470,7 @@ export def "0-projects-environments List-a-Projects-Environments" [
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/environments/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk update the visibility for a project's environments.
@@ -3372,6 +3487,7 @@ export def "0-projects-environments Bulk-Update-Project-Environments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   environmentNames: list # List of environment names to update. Maximum 1000.
   --isHidden: oneof<nothing, bool> # Specify `true` to hide or `false` to show the specified environments.
 ]: any -> table<id: string, name: string, isHidden: bool> {
@@ -3383,7 +3499,7 @@ export def "0-projects-environments Bulk-Update-Project-Environments" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return details on a project environment.
@@ -3401,13 +3517,14 @@ export def "0-projects-environments Retrieve-a-Project-Environment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, isHidden: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/environments/($environment)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the visibility for a project environment.
@@ -3425,6 +3542,7 @@ export def "0-projects-environments Update-a-Project-Environment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --isHidden: oneof<nothing, bool> # Specify `true` to make the environment visible or `false` to make the environment hidden.
 ]: any -> record<id: string, name: string, isHidden: bool> {
   let input = $in
@@ -3435,7 +3553,7 @@ export def "0-projects-environments Update-a-Project-Environment" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return a list of events bound to a project.
@@ -3452,6 +3570,7 @@ export def "0-projects-events List-a-Projects-Error-Events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --statsPeriod: string # The period of time for the query, will override the start & end parameters, a number followed by one of: - `d` for days - `h` for hours - `m` for minutes - `s` for seconds - `w` for weeks  For example, `24h`, to mean query data starting from 24 hours ago to now.
   --start: string # The start of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
   --end: string # The end of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
@@ -3465,7 +3584,7 @@ export def "0-projects-events List-a-Projects-Error-Events" [
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/events/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return details on an individual event.
@@ -3483,6 +3602,7 @@ export def "0-projects-events Retrieve-an-Event-for-a-Project" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --environment: list # The name of environments to filter by.
 ]: nothing -> record<id: string, groupID: string, eventID: string, projectID: string, message: string, title: string, location: string, user: record<id: string, email: string, username: string, ip_address: string, name: string, geo: record, data: record>, tags: table<query: string, key: string, value: string>, platform: string, dateReceived: string, contexts: record, size: int, entries: list<any>, dist: string, sdk: record, context: record, packages: record, type: string, metadata: any, errors: list<any>, occurrence: any, _meta: record, crashFile: string, culprit: string, dateCreated: string, fingerprints: list<string>, groupingConfig: any, startTimestamp: string, endTimestamp: string, measurements: any, breakdowns: any, release: record<id: int, commitCount: int, data: record, dateCreated: string, dateReleased: string, deployCount: int, ref: string, lastCommit: record, lastDeploy: record<dateStarted: string, url: string, id: string, environment: string, dateFinished: string, name: string>, status: string, url: string, userAgent: string, version: string, versionInfo: record<description: string, package: string, version: record, buildHash: string>>, userReport: record<id: string, eventID: string, name: string, email: string, comments: string, dateCreated: string, user: record<id: string, username: string, email: string, name: string, ipAddress: string, avatarUrl: string>, event: record<id: string, eventID: string>>, sdkUpdates: list<record>, resolvedWith: list<string>, nextEventID: string, previousEventID: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3491,7 +3611,7 @@ export def "0-projects-events Retrieve-an-Event-for-a-Project" [
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/events/($event_id)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of attachments uploaded for a given event.  Requires the `event-attachments` organization feature.
@@ -3509,6 +3629,7 @@ export def "0-projects-events-attachments List-an-Events-Attachments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # Filter the attachments by name (substring match) or by attachment kind. Use `is:screenshot` to restrict the results to screenshot attachments.
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<id: string, event_id: string, type: string, name: string, mimetype: string, dateCreated: string, size: int, headers: record, sha1: string> {
@@ -3518,7 +3639,7 @@ export def "0-projects-events-attachments List-an-Events-Attachments" [
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/events/($event_id)/attachments/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve metadata for a single attachment on an event.  Requires the `event-attachments` organization feature.
@@ -3537,13 +3658,14 @@ export def "0-projects-events-attachments Retrieve-an-Event-Attachment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, event_id: string, type: string, name: string, mimetype: string, dateCreated: string, size: int, headers: record, sha1: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/events/($event_id)/attachments/($attachment_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a list of source map errors for a given event.
@@ -3561,13 +3683,14 @@ export def "0-projects-events-source-map-debug Get-Debug-Information-Related-to-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<dist: string, release: string, exceptions: table<frames: list>, has_debug_ids: bool, min_debug_id_sdk_version: string, sdk_version: string, project_has_some_artifact_bundle: bool, release_has_some_artifact: bool, has_uploaded_some_artifact_with_a_debug_id: bool, sdk_debug_id_support: string, has_scraping_data: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/events/($event_id)/source-map-debug/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of debug information files for a given project.
@@ -3584,6 +3707,7 @@ export def "0-projects-files-dsyms List-a-Projects-Debug-Information-Files" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # Substring filter matched against object name, debug ID, code ID, CPU name, and file headers.
   --debug-id: string # Filter results to debug information files matching the given debug ID.
   --code-id: string # Filter results to debug information files matching the given code ID.
@@ -3596,7 +3720,7 @@ export def "0-projects-files-dsyms List-a-Projects-Debug-Information-Files" [
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/files/dsyms/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of filters for a given project. `active` will be either a boolean or a list for the legacy browser filters.
@@ -3613,13 +3737,14 @@ export def "0-projects-filters List-a-Projects-Data-Filters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, active: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/filters/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update various inbound data filters for a project.
@@ -3637,6 +3762,7 @@ export def "0-projects-filters Update-an-Inbound-Data-Filter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Toggle the browser-extensions, localhost, filtered-transaction, or web-crawlers filter on or off.
   --subfilters: list #  Specifies which legacy browser filters should be active. Anything excluded from the list will be disabled. The options are: - `ie` - Internet Explorer Version 11 and lower - `edge` - Edge Version 110 and lower - `safari` - Safari Version 15 and lower - `firefox` - Firefox Version 110 and lower - `chrome` - Chrome Version 110 and lower - `opera` - Opera Version 99 and lower - `android` - Android Version 3 and lower - `opera_mini` - Opera Mini Version 34 and lower  Deprecated options: - `ie_pre_9` - Internet Explorer Version 8 and lower - `ie9` - Internet Explorer Version 9 - `ie10` - Internet Explorer Version 10 - `ie11` - Internet Explorer Version 11 - `safari_pre_6` - Safari Version 5 and lower - `opera_pre_15` - Opera Version 14 and lower - `opera_mini_pre_8` - Opera Mini Version 8 and lower - `android_pre_4` - Android Version 3 and lower - `edge_pre_79` - Edge Version 18 and lower (non Chromium based)
 ]: any -> any {
@@ -3648,7 +3774,7 @@ export def "0-projects-filters Update-an-Inbound-Data-Filter" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return a list of client keys bound to a project.
@@ -3665,6 +3791,7 @@ export def "0-projects-keys List-a-Projects-Client-Keys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
   --status: string #  Filter client keys by `active` or `inactive`. Defaults to returning all keys if not specified.
 ]: nothing -> table<id: string, name: string, label: string, public: string, secret: string, projectId: int, isActive: bool, rateLimit: record<window: int, count: int>, dsn: record<secret: string, public: string, csp: string, security: string, minidump: string, nel: string, unreal: string, crons: string, cdn: string, playstation: string, integration: string, otlp_traces: string, otlp_logs: string>, browserSdkVersion: string, browserSdk: record<choices: list>, dateCreated: string, dynamicSdkLoaderOptions: record<hasReplay: bool, hasPerformance: bool, hasDebug: bool, hasFeedback: bool, hasLogsAndMetrics: bool>, useCase: string> {
@@ -3674,7 +3801,7 @@ export def "0-projects-keys List-a-Projects-Client-Keys" [
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/keys/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new client key bound to a project.  The key's secret and public key are generated by the server.
@@ -3692,6 +3819,7 @@ export def "0-projects-keys Create-a-New-Client-Key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The optional name of the key. If not provided it will be automatically generated. (nullable)
   --rateLimit: record # Applies a rate limit to cap the number of errors accepted during a given time window. To disable entirely set `rateLimit` to null. ```json {     "rateLimit": {         "window": 7200, // time in seconds         "count": 1000 // error cap     } } ``` — shape: {count?: int, window?: int}
   --useCase: string@useCase-completer # * `user` * `profiling` * `tempest` * `demo` (default: user)
@@ -3704,7 +3832,7 @@ export def "0-projects-keys Create-a-New-Client-Key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return a client key bound to a project.
@@ -3722,13 +3850,14 @@ export def "0-projects-keys Retrieve-a-Client-Key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, label: string, public: string, secret: string, projectId: int, isActive: bool, rateLimit: record<window: int, count: int>, dsn: record<secret: string, public: string, csp: string, security: string, minidump: string, nel: string, unreal: string, crons: string, cdn: string, playstation: string, integration: string, otlp_traces: string, otlp_logs: string>, browserSdkVersion: string, browserSdk: record<choices: list<list>>, dateCreated: string, dynamicSdkLoaderOptions: record<hasReplay: bool, hasPerformance: bool, hasDebug: bool, hasFeedback: bool, hasLogsAndMetrics: bool>, useCase: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/keys/($key_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update various settings for a client key.
@@ -3748,6 +3877,7 @@ export def "0-projects-keys Update-a-Client-Key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name for the client key
   --isActive: oneof<nothing, bool> # Activate or deactivate the client key.
   --rateLimit: record # Applies a rate limit to cap the number of errors accepted during a given time window. To disable entirely set `rateLimit` to null. ```json {     "rateLimit": {         "window": 7200, // time in seconds         "count": 1000 // error cap     } } ``` — shape: {count?: int, window?: int}
@@ -3762,7 +3892,7 @@ export def "0-projects-keys Update-a-Client-Key" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a client key for a given project.
@@ -3780,13 +3910,14 @@ export def "0-projects-keys Delete-a-Client-Key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/keys/($key_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of active organization members that belong to any team assigned to the project.
@@ -3803,13 +3934,14 @@ export def "0-projects-members List-a-Projects-Organization-Members" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<externalUsers: list<record>, id: string, email: string, name: string, user: record<identities: list, avatar: record, authenticators: list, canReset2fa: bool, id: string, name: string, username: string, email: string, avatarUrl: string, isActive: bool, isSuspended: bool, hasPasswordAuth: bool, isManaged: bool, dateJoined: string, lastLogin: string, has2fa: bool, lastActive: string, isSuperuser: bool, isStaff: bool, experiments: record, emails: list>, orgRole: string, pending: bool, expired: bool, flags: record<idp_provisioned: bool, idp_role_restricted: bool, sso_linked: bool, sso_invalid: bool, member_limit_restricted: bool, partnership_restricted: bool>, dateCreated: string, inviteStatus: string, inviterName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/members/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves details for a monitor.
@@ -3827,13 +3959,14 @@ export def "0-projects-monitors Retrieve-a-Monitor-for-a-Project" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<alertRule: record<targets: list<record>, environment: string>, id: string, name: string, slug: string, status: string, isMuted: bool, isUpserting: bool, config: record<schedule_type: string, schedule: any, checkin_margin: int, max_runtime: int, timezone: string, failure_issue_threshold: int, recovery_threshold: int, alert_rule_id: int>, dateCreated: string, project: record<stats: any, transactionStats: any, sessionStats: any, id: string, slug: string, name: string, platform: string, dateCreated: string, isBookmarked: bool, isMember: bool, features: list<string>, firstEvent: string, firstTransactionEvent: bool, access: list<string>, hasAccess: bool, hasFeedbacks: bool, hasFlags: bool, hasMinifiedStackTrace: bool, hasMonitors: bool, hasNewFeedbacks: bool, hasProfiles: bool, hasReplays: bool, hasSessions: bool, hasInsightsHttp: bool, hasInsightsDb: bool, hasInsightsAssets: bool, hasInsightsAppStart: bool, hasInsightsScreenLoad: bool, hasInsightsVitals: bool, hasInsightsCaches: bool, hasInsightsQueues: bool, hasInsightsAgentMonitoring: bool, hasInsightsMCP: bool, hasLogs: bool, hasTraceMetrics: bool, isInternal: bool, isPublic: bool, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, color: string, status: string>, environments: record<name: string, status: string, isMuted: bool, dateCreated: string, lastCheckIn: string, nextCheckIn: string, nextCheckInLatest: string, activeIncident: record<startingTimestamp: string, resolvingTimestamp: string, brokenNotice: record>>, owner: record<type: string, id: string, name: string, email: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/monitors/($monitor_id_or_slug)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a monitor.
@@ -3851,6 +3984,7 @@ export def "0-projects-monitors Update-a-Monitor-for-a-Project" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   project: string # The project slug to associate the monitor to.
   name: string # Name of the monitor. Used for notifications. If not set the slug will be derived from your monitor name.
   config: any # The configuration for the monitor.
@@ -3867,7 +4001,7 @@ export def "0-projects-monitors Update-a-Monitor-for-a-Project" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a monitor or monitor environments.
@@ -3885,6 +4019,7 @@ export def "0-projects-monitors Delete-a-Monitor-or-Monitor-Environments-for-a-P
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --environment: list # The name of environments to filter by.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3893,7 +4028,7 @@ export def "0-projects-monitors Delete-a-Monitor-or-Monitor-Environments-for-a-P
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/monitors/($monitor_id_or_slug)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of check-ins for a monitor
@@ -3911,13 +4046,14 @@ export def "0-projects-monitors-checkins Retrieve-Check-Ins-for-a-Monitor-by-Pro
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<groups: list<string>, id: string, environment: string, status: string, duration: int, dateCreated: string, dateAdded: string, dateUpdated: string, dateInProgress: string, dateClock: string, expectedTime: string, monitorConfig: record<schedule_type: string, schedule: any, checkin_margin: int, max_runtime: int, timezone: string, failure_issue_threshold: int, recovery_threshold: int, alert_rule_id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/monitors/($monitor_id_or_slug)/checkins/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns details on a project's ownership configuration.
@@ -3934,13 +4070,14 @@ export def "0-projects-ownership Retrieve-Ownership-Configuration-for-a-Project"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<schema: record<_version: int, rules: list<record>>, raw: string, fallthrough: bool, dateCreated: string, lastUpdated: string, isActive: bool, autoAssignment: string, codeownersAutoSync: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/ownership/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates ownership configurations for a project. Note that only the attributes submitted are modified.
@@ -3957,6 +4094,7 @@ export def "0-projects-ownership Update-Ownership-Configuration-for-a-Project" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-raw: string # Raw input for ownership configuration. See the [Ownership Rules Documentation](/product/issues/ownership-rules/) to learn more.
   --fallthrough: oneof<nothing, bool> # A boolean determining who to assign ownership to when an ownership rule has no match. If set to `True`, all project members are made owners. Otherwise, no owners are set.
   --autoAssignment: string # Auto-assignment settings. The available options are: - Auto Assign to Issue Owner - Auto Assign to Suspect Commits - Turn off Auto-Assignment
@@ -3970,7 +4108,7 @@ export def "0-projects-ownership Update-Ownership-Configuration-for-a-Project" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve the current Size Analysis status check rules configured for a project.  Use this endpoint after receiving a `size_analysis.completed` webhook when you want external CI to evaluate the same Size Analysis status check thresholds that Sentry uses. The endpoint returns the current project configuration, not a historical snapshot from when the webhook was emitted.  The response includes whether status check enforcement is enabled and the normalized rule list Sentry uses when evaluating Size Analysis thresholds.  This endpoint requires a bearer token with `project:read` access. Project distribution tokens are not supported.  Response notes:  - `enabled: false` means status-check enforcement is disabled for the project. - `rules: []` means there are no configured thresholds to evaluate. - `value` is returned as a string. For `absolute` and `absolute_diff`   measurements it is a byte value; for `relative_diff` it is a percentage. - `filterQuery` is the original configured filter string. - `filters` is the machine-readable version of `filterQuery`. - `filters: []` means the rule has no filters and applies to all builds. - `filters: null` means the saved filter query could not be parsed; Sentry's   status check trigger treats that rule as non-matching.  Rule evaluation semantics:  - Threshold comparisons are strict: a rule triggers only when the computed value   is greater than the configured threshold, not greater than or equal to it. - `absolute_diff` and `relative_diff` require a matching base metric/build. - `relative_diff` does not trigger when the base size is zero. - `artifactType` identifies the artifact scope the rule evaluates.   `main_artifact`, `watch_artifact`, `android_dynamic_feature_artifact`,   and `app_clip_artifact` target their matching artifact metric.   `all_artifacts` evaluates all available artifact metrics. - Rule filters support the keys `app_id`, `git_head_ref`,   `build_configuration_name`, and `platform_name`. - Filter objects are combined with AND. Multiple `conditions` inside one   filter object are combined with OR. - Each condition uses `values`; single-value operators still return a   one-item array. - Values in `filters` are decoded literal values for exact/simple operators,   not query syntax. For example, `app_id:\*com` in `filterQuery` becomes   `values: ["*com"]` with `operator: "equals"`. - The same key can appear in more than one filter object when positive and   negative conditions both exist; those filter objects are still combined with   AND. - Supported filter operators are `equals`, `notEquals`, `in`, `notIn`,   `contains`, `notContains`, `startsWith`, `notStartsWith`, `endsWith`,   `notEndsWith`, `matches`, and `notMatches`. - `matches` and `notMatches` values use Sentry wildcard pattern syntax, not   regular expressions. `*` matches zero or more characters, escaped `\*`   matches a literal asterisk, and a pattern without `*` is an exact match. - `in` and `notIn` are evaluated as one condition against all values, matching   Sentry's status check trigger behavior. - A rule applies only when the build metadata matches all filters. If a   referenced metadata key is missing, the filter does not match, even for   negated operators.
@@ -3987,13 +4125,14 @@ export def "0-projects-preprod-size-analysis-status-check-rules Retrieve-Size-An
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<enabled: bool, rules: table<id: string, metric: string, measurement: string, value: string, filterQuery: string, filters: list, artifactType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/preprod/size-analysis/status-check-rules/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the current Snapshot status check rules configured for a project.  Use this endpoint when external CI needs to evaluate the same Snapshot change-type rules that Sentry uses. The endpoint returns the current project configuration, not a historical snapshot from when a build was processed.  The response includes whether status check enforcement is enabled and the Snapshot change types that fail the status check.  This endpoint requires a bearer token with `project:read` access. Project distribution tokens are not supported.  Response notes:  - `enabled: false` means status-check enforcement is disabled for the project. - `rules` contains one boolean per Snapshot change type. - `failOnAdded`, `failOnRemoved`, `failOnChanged`, and `failOnRenamed`   indicate which unapproved change types fail the status check.
@@ -4010,13 +4149,14 @@ export def "0-projects-preprod-snapshots-status-check-rules Retrieve-Snapshot-st
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<enabled: bool, rules: record<failOnAdded: bool, failOnRemoved: bool, failOnChanged: bool, failOnRenamed: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/preprod/snapshots/status-check-rules/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get the latest installable build for a project.  Returns the latest installable build matching filter criteria. When buildVersion is provided, also returns the current build and whether an update is available.
@@ -4033,6 +4173,7 @@ export def "0-projects-preprodartifacts-build-distribution-latest Get-the-latest
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --appId: string # App identifier (exact match).
   --platform: string # Platform: "apple" or "android".
   --buildVersion: string # Current build version. When provided, enables check-for-updates mode.
@@ -4048,7 +4189,7 @@ export def "0-projects-preprodartifacts-build-distribution-latest Get-the-latest
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/preprodartifacts/build-distribution/latest/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload a new snapshot with image metadata.  The request body is a JSON object containing `app_id` (required), `images` (required, a mapping of filenames to image metadata objects), and optional VCS fields (`head_sha`, `base_sha`, `provider`, `head_repo_name`, `head_ref`, `base_repo_name`, `base_ref`, `pr_number`).  When VCS info with a `base_sha` is provided and a matching base snapshot exists, a comparison is automatically triggered.  This endpoint requires a bearer token with `project:write` access.
@@ -4065,13 +4206,14 @@ export def "0-projects-preprodartifacts-snapshots Upload-a-Snapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<artifactId: string, snapshotMetricsId: string, imageCount: int, snapshotUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/preprodartifacts/snapshots/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a single profile by its ID.  The response includes the profile's metadata, its sampled stack data, and the associated release, when one is found.  Requires profiling to be enabled for the organization.
@@ -4089,13 +4231,14 @@ export def "0-projects-profiling-profiles Retrieve-a-Profile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/profiling/profiles/($profile_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of releases for a given project.
@@ -4112,6 +4255,7 @@ export def "0-projects-releases List-a-Projects-Releases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --environment: list # The name of environments to filter by.
   --qp-query: string # Case-insensitive substring match against the release version.
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
@@ -4122,7 +4266,7 @@ export def "0-projects-releases List-a-Projects-Releases" [
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/releases/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a Replay Instance
@@ -4140,13 +4284,14 @@ export def "0-projects-replays delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/replays/($replay_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Clicked Nodes
@@ -4164,6 +4309,7 @@ export def "0-projects-replays-clicks listProjectReplayClicks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
   --environment: list # The name of environments to filter by.
   --per-page: int # Limit the number of rows to return in the result. Default and maximum allowed is 100.
@@ -4175,7 +4321,7 @@ export def "0-projects-replays-clicks listProjectReplayClicks" [
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/replays/($replay_id)/clicks/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Recording Segments
@@ -4193,6 +4339,7 @@ export def "0-projects-replays-recording-segments listProjectReplayRecordingSegm
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
   --per-page: int # Limit the number of rows to return in the result. Default and maximum allowed is 100.
 ]: nothing -> list<list<record>> {
@@ -4202,7 +4349,7 @@ export def "0-projects-replays-recording-segments listProjectReplayRecordingSegm
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/replays/($replay_id)/recording-segments/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a Recording Segment
@@ -4221,13 +4368,14 @@ export def "0-projects-replays-recording-segments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<replayId: string, segmentId: int, projectId: string, dateAdded: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/replays/($replay_id)/recording-segments/($segment_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Users Who Have Viewed a Replay
@@ -4245,13 +4393,14 @@ export def "0-projects-replays-viewed-by listProjectReplayViewedBy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<viewed_by: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/replays/($replay_id)/viewed-by/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List Replay Batch-Deletion Jobs
@@ -4268,13 +4417,14 @@ export def "0-projects-replays-jobs-delete listProjectReplayDeletionJobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: table<id: int, dateCreated: string, dateUpdated: string, rangeStart: string, rangeEnd: string, environments: list, status: string, query: string, countDeleted: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/replays/jobs/delete/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create Replay Batch Deletion Job
@@ -4292,6 +4442,7 @@ export def "0-projects-replays-jobs-delete createProjectReplayDeletionJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   data: record # shape: {rangeStart: string, rangeEnd: string, environments: list, query: string}
 ]: any -> record<data: record<id: int, dateCreated: string, dateUpdated: string, rangeStart: string, rangeEnd: string, environments: list<string>, status: string, query: string, countDeleted: int>> {
   let input = $in
@@ -4302,7 +4453,7 @@ export def "0-projects-replays-jobs-delete createProjectReplayDeletionJob" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieve a Replay Batch-Deletion Job
@@ -4320,13 +4471,14 @@ export def "0-projects-replays-jobs-delete get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data: record<id: int, dateCreated: string, dateUpdated: string, rangeStart: string, rangeEnd: string, environments: list<string>, status: string, query: string, countDeleted: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/replays/jobs/delete/($job_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Link a repository to a project. The repository must already exist in the organization (connected via a VCS integration). Idempotent: returns 200 if the link already exists, 201 if created.
@@ -4343,6 +4495,7 @@ export def "0-projects-repo Link-a-Repository-to-a-Project" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   repositoryId: int # The ID of the repository to link.
 ]: any -> record<id: string, projectId: string, repositoryId: string, source: string, created: bool> {
   let input = $in
@@ -4353,7 +4506,7 @@ export def "0-projects-repo Link-a-Repository-to-a-Project" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return a set of points representing a normalized timestamp and the number of events seen in the period.  Query ranges are limited to Sentry's configured time-series resolutions. This endpoint may change in the future without notice.
@@ -4370,6 +4523,7 @@ export def "0-projects-stats Retrieve-Event-Counts-for-a-Project" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --stat: string@stat-completer # The name of the stat to query. Defaults to `received`.
   --since: float # A UNIX timestamp (in seconds) that sets the start of the query range. (format: double)
   --until: float # A UNIX timestamp (in seconds) that sets the end of the query range. (format: double)
@@ -4381,7 +4535,7 @@ export def "0-projects-stats Retrieve-Event-Counts-for-a-Project" [
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/stats/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List custom symbol sources configured for a project.
@@ -4398,6 +4552,7 @@ export def "0-projects-symbol-sources Retrieve-a-Projects-Symbol-Sources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The ID of the source to look up. If this is not provided, all sources are returned.
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4406,7 +4561,7 @@ export def "0-projects-symbol-sources Retrieve-a-Projects-Symbol-Sources" [
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/symbol-sources/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Add a custom symbol source to a project.
@@ -4425,6 +4580,7 @@ export def "0-projects-symbol-sources Add-a-Symbol-Source-to-a-Project" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer # The type of the source.  * `http` - SymbolServer (HTTP) * `gcs` - Google Cloud Storage * `s3` - Amazon S3
   name: string # The human-readable name of the source.
   --id: string # The internal ID of the source. Must be distinct from all other source IDs and cannot start with '`sentry:`'. If this is not provided, a new UUID will be generated.
@@ -4449,7 +4605,7 @@ export def "0-projects-symbol-sources Add-a-Symbol-Source-to-a-Project" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a custom symbol source in a project.
@@ -4468,6 +4624,7 @@ export def "0-projects-symbol-sources Update-a-Projects-Symbol-Source" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The ID of the source to update.
   type: string@type-completer # The type of the source.  * `http` - SymbolServer (HTTP) * `gcs` - Google Cloud Storage * `s3` - Amazon S3
   name: string # The human-readable name of the source.
@@ -4494,7 +4651,7 @@ export def "0-projects-symbol-sources Update-a-Projects-Symbol-Source" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a custom symbol source from a project.
@@ -4511,6 +4668,7 @@ export def "0-projects-symbol-sources Delete-a-Symbol-Source-from-a-Project" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # The ID of the source to delete.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4519,7 +4677,7 @@ export def "0-projects-symbol-sources Delete-a-Symbol-Source-from-a-Project" [
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/symbol-sources/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a list of teams that have access to this project.
@@ -4536,6 +4694,7 @@ export def "0-projects-teams List-a-Projects-Teams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<id: string, slug: string, name: string, dateCreated: string, isMember: bool, teamRole: string, flags: record, access: list<string>, hasAccess: bool, isPending: bool, memberCount: int, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4544,7 +4703,7 @@ export def "0-projects-teams List-a-Projects-Teams" [
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/teams/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Give a team access to a project.
@@ -4562,13 +4721,14 @@ export def "0-projects-teams Add-a-Team-to-a-Project" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<stats: any, transactionStats: any, sessionStats: any, id: string, slug: string, name: string, platform: string, dateCreated: string, isBookmarked: bool, isMember: bool, features: list<string>, firstEvent: string, firstTransactionEvent: bool, access: list<string>, hasAccess: bool, hasFeedbacks: bool, hasFlags: bool, hasMinifiedStackTrace: bool, hasMonitors: bool, hasNewFeedbacks: bool, hasProfiles: bool, hasReplays: bool, hasSessions: bool, hasInsightsHttp: bool, hasInsightsDb: bool, hasInsightsAssets: bool, hasInsightsAppStart: bool, hasInsightsScreenLoad: bool, hasInsightsVitals: bool, hasInsightsCaches: bool, hasInsightsQueues: bool, hasInsightsAgentMonitoring: bool, hasInsightsMCP: bool, hasLogs: bool, hasTraceMetrics: bool, isInternal: bool, isPublic: bool, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, color: string, status: string, team: record<id: string, name: string, slug: string>, teams: table<id: string, name: string, slug: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/teams/($team_id_or_slug)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Revoke a team's access to a project.  Note that Team Admins can only revoke access to teams they are admins of.
@@ -4586,13 +4746,14 @@ export def "0-projects-teams Delete-a-Team-from-a-Project" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<stats: any, transactionStats: any, sessionStats: any, id: string, slug: string, name: string, platform: string, dateCreated: string, isBookmarked: bool, isMember: bool, features: list<string>, firstEvent: string, firstTransactionEvent: bool, access: list<string>, hasAccess: bool, hasFeedbacks: bool, hasFlags: bool, hasMinifiedStackTrace: bool, hasMonitors: bool, hasNewFeedbacks: bool, hasProfiles: bool, hasReplays: bool, hasSessions: bool, hasInsightsHttp: bool, hasInsightsDb: bool, hasInsightsAssets: bool, hasInsightsAppStart: bool, hasInsightsScreenLoad: bool, hasInsightsVitals: bool, hasInsightsCaches: bool, hasInsightsQueues: bool, hasInsightsAgentMonitoring: bool, hasInsightsMCP: bool, hasLogs: bool, hasTraceMetrics: bool, isInternal: bool, isPublic: bool, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, color: string, status: string, team: record<id: string, name: string, slug: string>, teams: table<id: string, name: string, slug: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/teams/($team_id_or_slug)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a list of users seen within this project.
@@ -4609,6 +4770,7 @@ export def "0-projects-users List-a-Projects-Users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # Limit results to users matching the given query. Prefixes should be used to suggest the field to match on: `id`, `email`, `username`, `ip`. For example, `query=email:foo@example.com`.
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<id: string, tagValue: string, identifier: string, username: string, email: string, name: string, ipAddress: string, avatarUrl: string, hash: string, dateCreated: string> {
@@ -4618,7 +4780,7 @@ export def "0-projects-users List-a-Projects-Users" [
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/users/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get list of actively used LLM model names from Seer.  Returns the list of AI models that are currently used in production in Seer. This endpoint does not require authentication and can be used to discover which models Seer uses.  Requests to this endpoint should use the region-specific domain eg. `us.sentry.io` or `de.sentry.io`
@@ -4633,13 +4795,14 @@ export def "0-seer-models List-Seer-AI-Models" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<models: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://{region}.sentry.io")
   let full_url = (build-url $base "/api/0/seer/models/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a custom integration.
@@ -4655,13 +4818,14 @@ export def "0-sentry-apps Retrieve-a-custom-integration-by-ID-or-slug" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<allowedOrigins: list<string>, avatars: table<avatarType: string, avatarUuid: string, avatarUrl: string, color: bool, photoType: string>, events: list<string>, featureData: list<string>, isAlertable: bool, metadata: string, name: string, schema: string, scopes: list<string>, slug: string, status: string, uuid: string, verifyInstall: bool, isDisabled: bool, author: string, overview: string, popularity: int, redirectUrl: string, webhookUrl: string, clientSecret: string, datePublished: string, clientId: string, owner: record<id: int, slug: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/sentry-apps/($sentry_app_id_or_slug)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an existing custom integration.
@@ -4677,6 +4841,7 @@ export def "0-sentry-apps Update-an-existing-custom-integration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the custom integration.
   --scopes: list # The custom integration's permission scopes for API access. (nullable)
   --author: string # The custom integration's author. (nullable)
@@ -4698,7 +4863,7 @@ export def "0-sentry-apps Update-an-existing-custom-integration" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a custom integration.
@@ -4714,13 +4879,14 @@ export def "0-sentry-apps Delete-a-custom-integration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/sentry-apps/($sentry_app_id_or_slug)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return details on an individual team.
@@ -4737,6 +4903,7 @@ export def "0-teams Retrieve-a-Team" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string #  List of strings to opt in to additional data. Supports `projects`, `externalTeams`.
   --collapse: string #  List of strings to opt out of certain pieces of data. Supports `organization`.
 ]: nothing -> record<id: string, slug: string, name: string, dateCreated: string, isMember: bool, teamRole: string, flags: record, access: list<string>, hasAccess: bool, isPending: bool, memberCount: int, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, externalTeams: table<externalId: string, userId: string, teamId: string, id: string, provider: string, externalName: string, integrationId: string>, organization: record<features: list<string>, extraOptions: record, access: list<string>, onboardingTasks: list<record>, id: string, slug: string, status: record<id: string, name: string>, name: string, dateCreated: string, isEarlyAdopter: bool, require2FA: bool, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, links: record<organizationUrl: string, regionUrl: string>, hasAuthProvider: bool, allowMemberInvite: bool, allowMemberProjectCreation: bool, allowSuperuserAccess: bool>, projects: table<stats: any, transactionStats: any, sessionStats: any, id: string, slug: string, name: string, platform: string, dateCreated: string, isBookmarked: bool, isMember: bool, features: list, firstEvent: string, firstTransactionEvent: bool, access: list, hasAccess: bool, hasFeedbacks: bool, hasFlags: bool, hasMinifiedStackTrace: bool, hasMonitors: bool, hasNewFeedbacks: bool, hasProfiles: bool, hasReplays: bool, hasSessions: bool, hasInsightsHttp: bool, hasInsightsDb: bool, hasInsightsAssets: bool, hasInsightsAppStart: bool, hasInsightsScreenLoad: bool, hasInsightsVitals: bool, hasInsightsCaches: bool, hasInsightsQueues: bool, hasInsightsAgentMonitoring: bool, hasInsightsMCP: bool, hasLogs: bool, hasTraceMetrics: bool, isInternal: bool, isPublic: bool, avatar: record, color: string, status: string>> {
@@ -4746,7 +4913,7 @@ export def "0-teams Retrieve-a-Team" [
   let full_url = (build-url $base $"/api/0/teams/($organization_id_or_slug)/($team_id_or_slug)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update various attributes and configurable settings for the given team.
@@ -4763,6 +4930,7 @@ export def "0-teams Update-a-Team" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   slug: string # Uniquely identifies a team. This is must be available.
 ]: any -> record<id: string, slug: string, name: string, dateCreated: string, isMember: bool, teamRole: string, flags: record, access: list<string>, hasAccess: bool, isPending: bool, memberCount: int, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, externalTeams: table<externalId: string, userId: string, teamId: string, id: string, provider: string, externalName: string, integrationId: string>, organization: record<features: list<string>, extraOptions: record, access: list<string>, onboardingTasks: list<record>, id: string, slug: string, status: record<id: string, name: string>, name: string, dateCreated: string, isEarlyAdopter: bool, require2FA: bool, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, links: record<organizationUrl: string, regionUrl: string>, hasAuthProvider: bool, allowMemberInvite: bool, allowMemberProjectCreation: bool, allowSuperuserAccess: bool>, projects: table<stats: any, transactionStats: any, sessionStats: any, id: string, slug: string, name: string, platform: string, dateCreated: string, isBookmarked: bool, isMember: bool, features: list, firstEvent: string, firstTransactionEvent: bool, access: list, hasAccess: bool, hasFeedbacks: bool, hasFlags: bool, hasMinifiedStackTrace: bool, hasMonitors: bool, hasNewFeedbacks: bool, hasProfiles: bool, hasReplays: bool, hasSessions: bool, hasInsightsHttp: bool, hasInsightsDb: bool, hasInsightsAssets: bool, hasInsightsAppStart: bool, hasInsightsScreenLoad: bool, hasInsightsVitals: bool, hasInsightsCaches: bool, hasInsightsQueues: bool, hasInsightsAgentMonitoring: bool, hasInsightsMCP: bool, hasLogs: bool, hasTraceMetrics: bool, isInternal: bool, isPublic: bool, avatar: record, color: string, status: string>> {
   let input = $in
@@ -4773,7 +4941,7 @@ export def "0-teams Update-a-Team" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Schedules a team for deletion.  **Note:** Deletion happens asynchronously and therefore is not immediate. Teams will have their slug released while waiting for deletion.
@@ -4790,13 +4958,14 @@ export def "0-teams Delete-a-Team" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/teams/($organization_id_or_slug)/($team_id_or_slug)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Link a team from an external provider to a Sentry team.
@@ -4813,6 +4982,7 @@ export def "0-teams-external-teams Create-an-External-Team" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   external_name: string # The associated name for the provider.
   provider: string@provider-completer # The provider of the external actor.  * `github` * `github_enterprise` * `jira_server` * `slack` * `slack_staging` * `perforce` * `gitlab` * `msteams` * `custom_scm`
   integration_id: int # The Integration ID.
@@ -4826,7 +4996,7 @@ export def "0-teams-external-teams Create-an-External-Team" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Update a team in an external provider that is currently linked to a Sentry team.
@@ -4844,6 +5014,7 @@ export def "0-teams-external-teams Update-an-External-Team" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   external_name: string # The associated name for the provider.
   provider: string@provider-completer # The provider of the external actor.  * `github` * `github_enterprise` * `jira_server` * `slack` * `slack_staging` * `perforce` * `gitlab` * `msteams` * `custom_scm`
   integration_id: int # The Integration ID.
@@ -4857,7 +5028,7 @@ export def "0-teams-external-teams Update-an-External-Team" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete the link between a team from an external provider and a Sentry team.
@@ -4875,13 +5046,14 @@ export def "0-teams-external-teams Delete-an-External-Team" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/teams/($organization_id_or_slug)/($team_id_or_slug)/external-teams/($external_team_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all members on a team.  The response will not include members with pending invites.
@@ -4898,6 +5070,7 @@ export def "0-teams-members List-a-Teams-Members" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<externalUsers: list<record>, role: string, roleName: string, id: string, email: string, name: string, user: record<identities: list, avatar: record, authenticators: list, canReset2fa: bool, id: string, name: string, username: string, email: string, avatarUrl: string, isActive: bool, isSuspended: bool, hasPasswordAuth: bool, isManaged: bool, dateJoined: string, lastLogin: string, has2fa: bool, lastActive: string, isSuperuser: bool, isStaff: bool, experiments: record, emails: list>, orgRole: string, pending: bool, expired: bool, flags: record<idp_provisioned: bool, idp_role_restricted: bool, sso_linked: bool, sso_invalid: bool, member_limit_restricted: bool, partnership_restricted: bool>, dateCreated: string, inviteStatus: string, inviterName: string, teamRole: string, teamSlug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4906,7 +5079,7 @@ export def "0-teams-members List-a-Teams-Members" [
   let full_url = (build-url $base $"/api/0/teams/($organization_id_or_slug)/($team_id_or_slug)/members/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a list of projects bound to a team.
@@ -4923,6 +5096,7 @@ export def "0-teams-projects List-a-Teams-Projects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<latestDeploys: record, options: record, stats: any, transactionStats: any, sessionStats: any, id: string, slug: string, name: string, platform: string, dateCreated: string, isBookmarked: bool, isMember: bool, features: list<string>, firstEvent: string, firstTransactionEvent: bool, access: list<string>, hasAccess: bool, hasFeedbacks: bool, hasFlags: bool, hasMinifiedStackTrace: bool, hasMonitors: bool, hasNewFeedbacks: bool, hasProfiles: bool, hasReplays: bool, hasSessions: bool, hasInsightsHttp: bool, hasInsightsDb: bool, hasInsightsAssets: bool, hasInsightsAppStart: bool, hasInsightsScreenLoad: bool, hasInsightsVitals: bool, hasInsightsCaches: bool, hasInsightsQueues: bool, hasInsightsAgentMonitoring: bool, hasInsightsMCP: bool, hasLogs: bool, hasTraceMetrics: bool, team: record<id: string, name: string, slug: string>, teams: list<record>, platforms: list<string>, hasUserReports: bool, environments: list<string>, latestRelease: record<version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4931,7 +5105,7 @@ export def "0-teams-projects List-a-Teams-Projects" [
   let full_url = (build-url $base $"/api/0/teams/($organization_id_or_slug)/($team_id_or_slug)/projects/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new project bound to a team.          Note: If your organization has disabled member project creation, the `org:write` or `team:admin` scope is required.         
@@ -4948,6 +5122,7 @@ export def "0-teams-projects Create-a-New-Project" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name for the project.
   --slug: string # Uniquely identifies a project and is used for the interface.         If not provided, it is automatically generated from the name. (nullable)
   --platform: string # The platform for the project. (nullable)
@@ -4961,7 +5136,7 @@ export def "0-teams-projects Create-a-New-Project" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return a list of values associated with this key.  The `query` parameter can be used to to perform a "contains" match on values.   When [paginated](/api/pagination) can return at most 1000 values.
@@ -4979,6 +5154,7 @@ export def "0-projects-tags-values List-a-Tags-Values" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4987,7 +5163,7 @@ export def "0-projects-tags-values List-a-Tags-Values" [
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/tags/($key)/values/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a list of user feedback items within this project.  *This list does not include submissions from the [User Feedback Widget](https://docs.sentry.io/product/user-feedback/#user-feedback-widget). This is because it is based on an older format called User Reports - read more [here](https://develop.sentry.dev/application/feedback-architecture/#user-reports). To return a list of user feedback items from the widget, please use the [issue API](https://docs.sentry.io/api/events/list-a-projects-issues/) with the filter `issue.category:feedback`.*
@@ -5004,6 +5180,7 @@ export def "0-projects-user-feedback List-a-Projects-User-Feedback" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<comments: string, dateCreated: string, email: string, event: record<eventID: string, id: string>, eventID: string, id: string, issue: record, name: string, user: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5012,7 +5189,7 @@ export def "0-projects-user-feedback List-a-Projects-User-Feedback" [
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/user-feedback/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # *This endpoint is DEPRECATED. We document it here for older SDKs and users who are still migrating to the [User Feedback Widget](https://docs.sentry.io/product/user-feedback/#user-feedback-widget) or [API](https://docs.sentry.io/platforms/javascript/user-feedback/#user-feedback-api)(multi-platform). If you are a new user, do not use this endpoint - unless you don't have a JS frontend, and your platform's SDK does not offer a feedback API.*  Feedback must be received by the server no more than 30 minutes after the event was saved.  Additionally, within 5 minutes of submitting feedback it may also be overwritten. This is useful in situations where you may need to retry sending a request due to network failures.  If feedback is rejected due to a mutability threshold, a 409 status code will be returned.  Note: Feedback may be submitted with DSN authentication (see auth documentation).
@@ -5029,6 +5206,7 @@ export def "0-projects-user-feedback Submit-User-Feedback" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   event_id: string # The event ID. This can be retrieved from the [beforeSend callback](https://docs.sentry.io/platforms/javascript/configuration/filtering/#using-beforesend).
   name: string # User's name.
   email: string # User's email address.
@@ -5042,7 +5220,7 @@ export def "0-projects-user-feedback Submit-User-Feedback" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return a list of service hooks bound to a project.
@@ -5059,6 +5237,7 @@ export def "0-projects-hooks List-a-Projects-Service-Hooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<dateCreated: string, events: list<string>, id: string, secret: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5067,7 +5246,7 @@ export def "0-projects-hooks List-a-Projects-Service-Hooks" [
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/hooks/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Register a new service hook on a project.  Events include:  - event.alert: An alert is generated for an event (via rules). - event.created: A new event has been processed.  This endpoint requires the 'servicehooks' feature to be enabled for your project.
@@ -5084,6 +5263,7 @@ export def "0-projects-hooks Register-a-New-Service-Hook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-url: string # The URL for the webhook.
   events: list # The events to subscribe to.
 ]: any -> record<dateCreated: string, events: list<string>, id: string, secret: string, status: string, url: string> {
@@ -5095,7 +5275,7 @@ export def "0-projects-hooks Register-a-New-Service-Hook" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return a service hook bound to a project.
@@ -5113,13 +5293,14 @@ export def "0-projects-hooks Retrieve-a-Service-Hook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<dateCreated: string, events: list<string>, id: string, secret: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/hooks/($hook_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a service hook.
@@ -5137,6 +5318,7 @@ export def "0-projects-hooks Update-a-Service-Hook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-url: string # The URL for the webhook.
   events: list # The events to subscribe to.
 ]: any -> record<dateCreated: string, events: list<string>, id: string, secret: string, status: string, url: string> {
@@ -5148,7 +5330,7 @@ export def "0-projects-hooks Update-a-Service-Hook" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Remove a service hook.
@@ -5166,13 +5348,14 @@ export def "0-projects-hooks Remove-a-Service-Hook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/hooks/($hook_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # **Deprecated**: This endpoint has been replaced with the [Organization Issues endpoint](/api/events/list-an-organizations-issues/) which supports filtering on project and additional functionality.  Return a list of issues (groups) bound to a project.  All parameters are supplied as query string parameters.    A default query of ``is:unresolved`` is applied. To return results with other statuses send an new query value (i.e. ``?query=`` for all results).  The ``statsPeriod`` parameter can be used to select the timeline stats which should be present. Possible values are: ``""`` (disable),``"24h"`` (default), ``"14d"``  User feedback items from the [User Feedback Widget](https://docs.sentry.io/product/user-feedback/#user-feedback-widget) are built off the issue platform, so to return a list of user feedback items for a specific project, filter for `issue.category:feedback`.
@@ -5189,6 +5372,7 @@ export def "0-projects-issues List-a-Projects-Issues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --statsPeriod: string # An optional stat period (can be one of `"24h"`, `"14d"`, and `""`), defaults to "24h" if not provided.
   --shortIdLookup: oneof<nothing, bool> # If this is set to true then short IDs are looked up by this function as well. This can cause the return value of the function to return an event issue of a different project which is why this is an opt-in. Set to 1 to enable.
   --qp-query: string # An optional Sentry structured search query. If not provided an implied `"is:unresolved"` is assumed.
@@ -5201,7 +5385,7 @@ export def "0-projects-issues List-a-Projects-Issues" [
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/issues/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Bulk mutate various attributes on issues.  The list of issues to modify is given through the `id` query parameter.  It is repeated for each issue that should be modified.  - For non-status updates, the `id` query parameter is required. - For status updates, the `id` query parameter may be omitted for a batch "update all" query. - An optional `status` query parameter may be used to restrict mutations to only events with the given status.  The following attributes can be modified and are supplied as JSON object in the body:  If any IDs are out of scope this operation will succeed without any data mutation.
@@ -5219,6 +5403,7 @@ export def "0-projects-issues Bulk-Mutate-a-List-of-Issues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # A list of IDs of the issues to be mutated. This parameter shall be repeated for each issue. It is optional only if a status is mutated in which case an implicit update all is assumed.
   --status: string # Optionally limits the query to issues of the specified status. Valid values are `"resolved"`, `"reprocessing"`, `"unresolved"`, and `"ignored"`.
   --status: string # The new status for the issues. Valid values are `"resolved"`, `"resolvedInNextRelease"`, `"unresolved"`, and `"ignored"`.
@@ -5239,7 +5424,7 @@ export def "0-projects-issues Bulk-Mutate-a-List-of-Issues" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Permanently remove the given issues. The list of issues to modify is given through the `id` query parameter.  It is repeated for each issue that should be removed.  Only queries by 'id' are accepted.  If any IDs are out of scope this operation will succeed without any data mutation.
@@ -5256,6 +5441,7 @@ export def "0-projects-issues Bulk-Remove-a-List-of-Issues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # A list of IDs of the issues to be removed. This parameter shall be repeated for each issue, e.g. `?id=1&id=2&id=3`. If this parameter is not provided, it will attempt to remove the first 1000 issues.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5264,7 +5450,7 @@ export def "0-projects-issues Bulk-Remove-a-List-of-Issues" [
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/issues/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Returns a list of values associated with this key for an issue. Returns at most 1000 values when paginated.
@@ -5282,6 +5468,7 @@ export def "0-organizations-issues-tags-values List-a-Tags-Values-for-an-Issue" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string@sort-completer-2 # Sort order of the resulting tag values. Prefix with '-' for descending order. Default is '-id'.
   --environment: list # The name of environments to filter by.
 ]: nothing -> table<query: string, key: string, name: string, value: string, count: int, lastSeen: string, firstSeen: string> {
@@ -5291,7 +5478,7 @@ export def "0-organizations-issues-tags-values List-a-Tags-Values-for-an-Issue" 
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/issues/($issue_id)/tags/($key)/values/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a list of releases for a given organization.
@@ -5307,6 +5494,7 @@ export def "0-organizations-releases List-an-Organizations-Releases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --qp-query: string # This parameter can be used to create a "starts with" filter for the version.
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<id: int, authors: list<record>, commitCount: int, data: record, dateCreated: string, dateReleased: string, deployCount: int, firstEvent: string, lastCommit: record, lastDeploy: record, lastEvent: string, newGroups: int, owner: record, projects: list<record>, ref: string, shortVersion: string, version: string, url: string> {
@@ -5316,7 +5504,7 @@ export def "0-organizations-releases List-an-Organizations-Releases" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/releases/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new release for the given organization.  Releases are used by Sentry to improve its error reporting abilities by correlating first seen events with the release that might have introduced the problem. Releases are also necessary for source maps and other debug features that require manual upload for functioning well.
@@ -5334,6 +5522,7 @@ export def "0-organizations-releases Create-a-New-Release-for-an-Organization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   version: string # A version identifier for this release. Can be a version number, a commit hash, etc.
   projects: list # A list of project slugs that are involved in this release.
   --ref: string # An optional commit reference. This is useful if a tagged version has been provided.
@@ -5350,7 +5539,7 @@ export def "0-organizations-releases Create-a-New-Release-for-an-Organization" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return a list of files for a given release.
@@ -5367,6 +5556,7 @@ export def "0-organizations-releases-files List-an-Organizations-Release-Files" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<sha1: string, dist: string, name: string, dateCreated: string, headers: record<Content_Type: string>, id: string, size: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5375,7 +5565,7 @@ export def "0-organizations-releases-files List-an-Organizations-Release-Files" 
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/releases/($version)/files/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload a new file for the given release.  Unlike other API requests, files must be uploaded using the traditional multipart/form-data content-type.  Requests to this endpoint should use the region-specific domain eg. `us.sentry.io` or `de.sentry.io`.  The optional 'name' attribute should reflect the absolute path that this file will be referenced as. For example, in the case of JavaScript you might specify the full web URI.
@@ -5392,6 +5582,7 @@ export def "0-organizations-releases-files Upload-a-New-Organization-Release-Fil
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   file: string # The multipart encoded file. (format: binary)
   --name: string # The name (full path) of the file.
   --dist: string # The name of the dist.
@@ -5405,7 +5596,7 @@ export def "0-organizations-releases-files Upload-a-New-Organization-Release-Fil
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Return a list of files for a given release.
@@ -5423,6 +5614,7 @@ export def "0-projects-releases-files List-a-Projects-Release-Files" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<sha1: string, dist: string, name: string, dateCreated: string, headers: record<Content_Type: string>, id: string, size: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5431,7 +5623,7 @@ export def "0-projects-releases-files List-a-Projects-Release-Files" [
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/releases/($version)/files/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Upload a new file for the given release.  Unlike other API requests, files must be uploaded using the traditional multipart/form-data content-type.  Requests to this endpoint should use the region-specific domain eg. `us.sentry.io` or `de.sentry.io`  The optional 'name' attribute should reflect the absolute path that this file will be referenced as. For example, in the case of JavaScript you might specify the full web URI.
@@ -5449,6 +5641,7 @@ export def "0-projects-releases-files Upload-a-New-Project-Release-File" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   file: string # The multipart encoded file. (format: binary)
   --name: string # The name (full path) of the file.
   --dist: string # The name of the dist.
@@ -5462,7 +5655,7 @@ export def "0-projects-releases-files Upload-a-New-Project-Release-File" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
 }
 
 # Retrieve a file for a given release.
@@ -5480,6 +5673,7 @@ export def "0-organizations-releases-files Retrieve-an-Organization-Releases-Fil
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --download: oneof<nothing, bool> # If this is set to true, then the response payload will be the raw file contents. Otherwise, the response will be the file metadata as JSON.
 ]: nothing -> record<sha1: string, dist: string, name: string, dateCreated: string, headers: record<Content_Type: string>, id: string, size: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5488,7 +5682,7 @@ export def "0-organizations-releases-files Retrieve-an-Organization-Releases-Fil
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/releases/($version)/files/($file_id)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an organization release file.
@@ -5506,6 +5700,7 @@ export def "0-organizations-releases-files Update-an-Organization-Release-File" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The new name (full path) of the file.
   --dist: string # The new name of the dist.
 ]: any -> record<sha1: string, dist: string, name: string, dateCreated: string, headers: record<Content_Type: string>, id: string, size: int> {
@@ -5517,7 +5712,7 @@ export def "0-organizations-releases-files Update-an-Organization-Release-File" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a file for a given release.
@@ -5535,13 +5730,14 @@ export def "0-organizations-releases-files Delete-an-Organization-Releases-File"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/releases/($version)/files/($file_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a file for a given release.
@@ -5560,6 +5756,7 @@ export def "0-projects-releases-files Retrieve-a-Project-Releases-File" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --download: oneof<nothing, bool> # If this is set to true, then the response payload will be the raw file contents. Otherwise, the response will be the file metadata as JSON.
 ]: nothing -> record<sha1: string, dist: string, name: string, dateCreated: string, headers: record<Content_Type: string>, id: string, size: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5568,7 +5765,7 @@ export def "0-projects-releases-files Retrieve-a-Project-Releases-File" [
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/releases/($version)/files/($file_id)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a project release file.
@@ -5587,6 +5784,7 @@ export def "0-projects-releases-files Update-a-Project-Release-File" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The new name (full path) of the file.
   --dist: string # The new name of the dist.
 ]: any -> record<sha1: string, dist: string, name: string, dateCreated: string, headers: record<Content_Type: string>, id: string, size: int> {
@@ -5598,7 +5796,7 @@ export def "0-projects-releases-files Update-a-Project-Release-File" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete a file for a given release.
@@ -5617,13 +5815,14 @@ export def "0-projects-releases-files Delete-a-Project-Releases-File" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/releases/($version)/files/($file_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List an organization release's commits.
@@ -5640,6 +5839,7 @@ export def "0-organizations-releases-commits List-an-Organization-Releases-Commi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<dateCreated: string, id: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5648,7 +5848,7 @@ export def "0-organizations-releases-commits List-an-Organization-Releases-Commi
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/releases/($version)/commits/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List a project release's commits.
@@ -5666,6 +5866,7 @@ export def "0-projects-releases-commits List-a-Project-Releases-Commits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<dateCreated: string, id: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5674,7 +5875,7 @@ export def "0-projects-releases-commits List-a-Project-Releases-Commits" [
   let full_url = (build-url $base $"/api/0/projects/($organization_id_or_slug)/($project_id_or_slug)/releases/($version)/commits/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve files changed in a release's commits
@@ -5691,13 +5892,14 @@ export def "0-organizations-releases-commitfiles Retrieve-Files-Changed-in-a-Rel
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/releases/($version)/commitfiles/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a list of integration platform installations for a given organization.
@@ -5713,6 +5915,7 @@ export def "0-organizations-sentry-app-installations List-an-Organizations-Integ
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<app: record<uuid: string, slug: string, sentryAppId: int>, organization: record<slug: string>, uuid: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5721,7 +5924,7 @@ export def "0-organizations-sentry-app-installations List-an-Organizations-Integ
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/sentry-app-installations/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create or update an external issue from an integration platform integration.
@@ -5737,6 +5940,7 @@ export def "0-sentry-app-installations-external-issues Create-or-update-an-Exter
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   issueId: int # The ID of the Sentry issue to link the external issue to.
   webUrl: string # The URL of the external service to link the issue to.
   project: string # The external service's project.
@@ -5750,7 +5954,7 @@ export def "0-sentry-app-installations-external-issues Create-or-update-an-Exter
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete an external issue.
@@ -5767,13 +5971,14 @@ export def "0-sentry-app-installations-external-issues Delete-an-External-Issue"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/sentry-app-installations/($uuid)/external-issues/($external_issue_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Enables Spike Protection feature for some of the projects within the organization.
@@ -5789,6 +5994,7 @@ export def "0-organizations-spike-protections Enable-Spike-Protection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   projects: list # Slugs of projects to enable Spike Protection for. Set to `$all` to enable Spike Protection for all the projects in the organization.
 ]: any -> any {
   let input = $in
@@ -5799,7 +6005,7 @@ export def "0-organizations-spike-protections Enable-Spike-Protection" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Disables Spike Protection feature for some of the projects within the organization.
@@ -5815,6 +6021,7 @@ export def "0-organizations-spike-protections Disable-Spike-Protection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   projects: list # Slugs of projects to disable Spike Protection for. Set to `$all` to disable Spike Protection for all the projects in the organization.
 ]: any -> any {
   let input = $in
@@ -5825,7 +6032,7 @@ export def "0-organizations-spike-protections Disable-Spike-Protection" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return details on an individual issue, including its basic stats, comment and user-report counts, and a summary of the latest event.
@@ -5842,6 +6049,7 @@ export def "0-organizations-issues Retrieve-an-Issue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --environment: list # The name of environments to filter by.
   --expand: list # Additional data to include in the response.
   --collapse: list # Fields to remove from the response to improve query performance.
@@ -5852,7 +6060,7 @@ export def "0-organizations-issues Retrieve-an-Issue" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/issues/($issue_id)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an individual issue's attributes. Only the attributes submitted are modified.
@@ -5869,6 +6077,7 @@ export def "0-organizations-issues Update-an-Issue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --inbox: oneof<nothing, bool> # If true, marks the issue as reviewed by the requestor.
   status: string@status-completer # Limit mutations to only issues with the given status.  * `resolved` * `unresolved` * `ignored` * `resolvedInNextRelease` * `muted`
   statusDetails: any # Additional details about the resolution. Status detail updates that include release data are only allowed for issues within a single project.
@@ -5890,7 +6099,7 @@ export def "0-organizations-issues Update-an-Issue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Asynchronously queue an individual issue for deletion.
@@ -5907,13 +6116,14 @@ export def "0-organizations-issues Remove-an-Issue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/issues/($issue_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve the current detailed state of an issue fix process for a specific issue including:  - Current status - Steps performed and their outcomes - Repository information and permissions - Root Cause Analysis - Proposed Solution - Generated code changes  This endpoint although documented is still experimental and the payload may change in the future.
@@ -5930,13 +6140,14 @@ export def "0-organizations-issues-autofix Retrieve-Seer-Issue-Fix-State" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<autofix: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/issues/($issue_id)/autofix/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Trigger a Seer Issue Fix run for a specific issue.  The issue fix process can: - Identify the root cause of the issue - Propose a solution - Generate code changes - Create a pull request with the fix  The process runs asynchronously, and you can get the state using the GET endpoint.
@@ -5953,25 +6164,27 @@ export def "0-organizations-issues-autofix Start-Seer-Issue-Fix" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --step: string@step-completer # Which autofix step to run.  * `root_cause` * `solution` * `code_changes` * `open_pr` * `coding_agent_handoff` (default: root_cause)
   --stopping-point: string@stopping-point-completer # Where the issue fix process should stop. If not provided, will run to root cause.  * `root_cause` * `solution` * `code_changes` * `open_pr`
-  --run-id: int # Existing run ID to continue. If not provided, starts a new run.
+  --run-id: int # **Deprecated** in favor of sentry_run_id; retained for backward compatibility. The existing run's numeric Seer id to continue. If neither run_id nor sentry_run_id is provided, starts a new run.
+  --sentry-run-id: string # Existing run's UUID to continue. Preferred over run_id, and takes precedence when both are given. (format: uuid)
   --integration-id: int # Coding agent integration ID. Required for coding_agent_handoff step (unless provider is specified).
   --provider: string # Coding agent provider (e.g., 'github_copilot'). Alternative to integration_id for user-authenticated providers.
   --user-context: string # Optional user context to append to the step prompt.
   --repo-name: string # Optional repository name for which to create the pull request. Do not pass a repository name to create pull requests in all relevant repositories.
   --insert-index: int # Block index to insert at. When provided, truncates blocks after this point for retry-from-step.
   --referrer: string # Referrer identifying where the issue fix was triggered from.
-]: any -> record<run_id: int> {
+]: any -> record<run_id: int, sentry_run_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/issues/($issue_id)/autofix/")
-  let body = {step: $step, stopping_point: $stopping_point, run_id: $run_id, integration_id: $integration_id, provider: $provider, user_context: $user_context, repo_name: $repo_name, insert_index: $insert_index, referrer: $referrer} | compact
+  let body = {step: $step, stopping_point: $stopping_point, run_id: $run_id, sentry_run_id: $sentry_run_id, integration_id: $integration_id, provider: $provider, user_context: $user_context, repo_name: $repo_name, insert_index: $insert_index, referrer: $referrer} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Return a list of error events bound to an issue
@@ -5988,6 +6201,7 @@ export def "0-organizations-issues-events List-an-Issues-Events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # The start of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
   --end: string # The end of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
   --statsPeriod: string # The period of time for the query, will override the start & end parameters, a number followed by one of: - `d` for days - `h` for hours - `m` for minutes - `s` for seconds - `w` for weeks  For example, `24h`, to mean query data starting from 24 hours ago to now.
@@ -6003,7 +6217,7 @@ export def "0-organizations-issues-events List-an-Issues-Events" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/issues/($issue_id)/events/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of an issue event.
@@ -6021,6 +6235,7 @@ export def "0-organizations-issues-events Retrieve-an-Issue-Event" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --environment: list # The name of environments to filter by.
 ]: nothing -> record<id: string, groupID: string, eventID: string, projectID: string, message: string, title: string, location: string, user: record<id: string, email: string, username: string, ip_address: string, name: string, geo: record, data: record>, tags: table<query: string, key: string, value: string>, platform: string, dateReceived: string, contexts: record, size: int, entries: list<any>, dist: string, sdk: record, context: record, packages: record, type: string, metadata: any, errors: list<any>, occurrence: any, _meta: record, crashFile: string, culprit: string, dateCreated: string, fingerprints: list<string>, groupingConfig: any, startTimestamp: string, endTimestamp: string, measurements: any, breakdowns: any, release: record<id: int, commitCount: int, data: record, dateCreated: string, dateReleased: string, deployCount: int, ref: string, lastCommit: record, lastDeploy: record<dateStarted: string, url: string, id: string, environment: string, dateFinished: string, name: string>, status: string, url: string, userAgent: string, version: string, versionInfo: record<description: string, package: string, version: record, buildHash: string>>, userReport: record<id: string, eventID: string, name: string, email: string, comments: string, dateCreated: string, user: record<id: string, username: string, email: string, name: string, ipAddress: string, avatarUrl: string>, event: record<id: string, eventID: string>>, sdkUpdates: list<record>, resolvedWith: list<string>, nextEventID: string, previousEventID: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6029,7 +6244,7 @@ export def "0-organizations-issues-events Retrieve-an-Issue-Event" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/issues/($issue_id)/events/($event_id)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve custom integration issue links for the given Sentry issue
@@ -6046,13 +6261,14 @@ export def "0-organizations-issues-external-issues Retrieve-custom-integration-i
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, issueId: string, serviceType: string, displayName: string, webUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/issues/($issue_id)/external-issues/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List the hashes that make up an issue. Each hash represents a grouping signature used to aggregate individual events into this issue.
@@ -6069,6 +6285,7 @@ export def "0-organizations-issues-hashes List-an-Issues-Hashes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # Specify true to include the full event body, including the stacktrace, in the event payload. (default: true)
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<id: string, latestEvent: any, mergedBySeer: bool> {
@@ -6078,7 +6295,7 @@ export def "0-organizations-issues-hashes List-an-Issues-Hashes" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/issues/($issue_id)/hashes/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Return a list of values associated with this key for an issue. When paginated can return at most 1000 values.
@@ -6096,6 +6313,7 @@ export def "0-organizations-issues-tags Retrieve-Tag-Details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --environment: list # The name of environments to filter by.
 ]: nothing -> record<uniqueValues: int, totalValues: int, topValues: table<query: string, key: string, name: string, value: string, count: int, lastSeen: string, firstSeen: string>, key: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6104,5 +6322,5 @@ export def "0-organizations-issues-tags Retrieve-Tag-Details" [
   let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/issues/($issue_id)/tags/($key)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -111,7 +112,7 @@ def TriggerBy-completer [] { ["count" "price" "usage"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "2010-04-01-accountsjson CreateAccount" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -144,6 +145,7 @@ export def "2010-04-01-accountsjson CreateAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # A human readable description of the account to create, defaults to `SubAccount Created at {YYYY-MM-DD HH:MM meridian}`
 ]: any -> record<auth_token: string, date_created: string, date_updated: string, friendly_name: string, owner_account_sid: string, sid: string, status: string, subresource_uris: record, type: string, uri: string> {
   let input = $in
@@ -154,7 +156,7 @@ export def "2010-04-01-accountsjson CreateAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieves a collection of Accounts belonging to the account used to make the request
@@ -169,6 +171,7 @@ export def "2010-04-01-accountsjson ListAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # Only return the Account resources with friendly names that exactly match this name.
   --Status: string@Status-completer # Only return Account resources with the given status. Can be `closed`, `suspended` or `active`.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
@@ -181,7 +184,7 @@ export def "2010-04-01-accountsjson ListAccount" [
   let full_url = (build-url $base "/2010-04-01/Accounts.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch the account specified by the provided Account Sid
@@ -197,13 +200,14 @@ export def "2010-04-01-accounts FetchAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<auth_token: string, date_created: string, date_updated: string, friendly_name: string, owner_account_sid: string, sid: string, status: string, subresource_uris: record, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Modify the properties of a given Account
@@ -219,6 +223,7 @@ export def "2010-04-01-accounts UpdateAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # Update the human-readable description of this Account
   --Status: string@Status-completer # The status of this account. Usually `active`, but can be `suspended` or `closed`.
 ]: any -> record<auth_token: string, date_created: string, date_updated: string, friendly_name: string, owner_account_sid: string, sid: string, status: string, subresource_uris: record, type: string, uri: string> {
@@ -230,7 +235,7 @@ export def "2010-04-01-accounts UpdateAccount" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/Addresses.json
@@ -245,6 +250,7 @@ export def "2010-04-01-accounts-addressesjson CreateAddress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   CustomerName: string # The name to associate with the new address.
   Street: string # The number and street address of the new address.
   City: string # The city of the new address.
@@ -264,7 +270,7 @@ export def "2010-04-01-accounts-addressesjson CreateAddress" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Addresses.json
@@ -279,6 +285,7 @@ export def "2010-04-01-accounts-addressesjson ListAddress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --CustomerName: string # The `customer_name` of the Address resources to read.
   --FriendlyName: string # The string that identifies the Address resources to read.
   --EmergencyEnabled: oneof<nothing, bool> # Whether the address can be associated to a number for emergency calling.
@@ -293,7 +300,7 @@ export def "2010-04-01-accounts-addressesjson ListAddress" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Addresses.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE /2010-04-01/Accounts/{AccountSid}/Addresses/{Sid}.json
@@ -309,13 +316,14 @@ export def "2010-04-01-accounts-addresses DeleteAddress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Addresses/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Addresses/{Sid}.json
@@ -331,13 +339,14 @@ export def "2010-04-01-accounts-addresses FetchAddress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, city: string, customer_name: string, date_created: string, date_updated: string, friendly_name: string, iso_country: string, postal_code: string, region: string, sid: string, street: string, uri: string, emergency_enabled: bool, validated: bool, verified: bool, street_secondary: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Addresses/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/Addresses/{Sid}.json
@@ -353,6 +362,7 @@ export def "2010-04-01-accounts-addresses UpdateAddress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # A descriptive string that you create to describe the new address. It can be up to 64 characters long for Regulatory Compliance addresses and 32 characters long for Emergency addresses.
   --CustomerName: string # The name to associate with the address.
   --Street: string # The number and street address of the address.
@@ -371,7 +381,7 @@ export def "2010-04-01-accounts-addresses UpdateAddress" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a new application within your account
@@ -387,6 +397,7 @@ export def "2010-04-01-accounts-applicationsjson CreateApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ApiVersion: string # The API version to use to start a new TwiML session. Can be: `2010-04-01` or `2008-08-01`. The default value is the account's default API version.
   --VoiceUrl: string # The URL we should call when the phone number assigned to this application receives a call. (format: uri)
   --VoiceMethod: string@VoiceMethod-completer # The HTTP method we should use to call `voice_url`. Can be: `GET` or `POST`. (format: http-method)
@@ -412,7 +423,7 @@ export def "2010-04-01-accounts-applicationsjson CreateApplication" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a list of applications representing an application within the requesting account
@@ -428,6 +439,7 @@ export def "2010-04-01-accounts-applicationsjson ListApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # The string that identifies the Application resources to read.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
@@ -439,7 +451,7 @@ export def "2010-04-01-accounts-applicationsjson ListApplication" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Applications.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the application by the specified application sid
@@ -456,13 +468,14 @@ export def "2010-04-01-accounts-applications DeleteApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Applications/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch the application specified by the provided sid
@@ -479,13 +492,14 @@ export def "2010-04-01-accounts-applications FetchApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, message_status_callback: string, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_status_callback: string, sms_url: string, status_callback: string, status_callback_method: string, uri: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string, public_application_connect_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Applications/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the application's properties
@@ -502,6 +516,7 @@ export def "2010-04-01-accounts-applications UpdateApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
   --ApiVersion: string # The API version to use to start a new TwiML session. Can be: `2010-04-01` or `2008-08-01`. The default value is your account's default API version.
   --VoiceUrl: string # The URL we should call when the phone number assigned to this application receives a call. (format: uri)
@@ -527,7 +542,7 @@ export def "2010-04-01-accounts-applications UpdateApplication" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Fetch an instance of an authorized-connect-app
@@ -544,13 +559,14 @@ export def "2010-04-01-accounts-authorized-connect-apps FetchAuthorizedConnectAp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, connect_app_company_name: string, connect_app_description: string, connect_app_friendly_name: string, connect_app_homepage_url: string, connect_app_sid: string, permissions: list<string>, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/AuthorizedConnectApps/($ConnectAppSid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of authorized-connect-apps belonging to the account used to make the request
@@ -566,6 +582,7 @@ export def "2010-04-01-accounts-authorized-connect-appsjson ListAuthorizedConnec
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -576,7 +593,7 @@ export def "2010-04-01-accounts-authorized-connect-appsjson ListAuthorizedConnec
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/AuthorizedConnectApps.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers.json
@@ -591,6 +608,7 @@ export def "2010-04-01-accounts-available-phone-numbersjson ListAvailablePhoneNu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -601,7 +619,7 @@ export def "2010-04-01-accounts-available-phone-numbersjson ListAvailablePhoneNu
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/AvailablePhoneNumbers.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}.json
@@ -617,13 +635,14 @@ export def "2010-04-01-accounts-available-phone-numbers FetchAvailablePhoneNumbe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<country_code: string, country: string, uri: string, beta: bool, subresource_uris: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/AvailablePhoneNumbers/($CountryCode).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/Local.json
@@ -639,6 +658,7 @@ export def "2010-04-01-accounts-available-phone-numbers-localjson ListAvailableP
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --AreaCode: int # The area code of the phone numbers to read. Applies to only phone numbers in the US and Canada.
   --Contains: string # Matching pattern to identify phone numbers. This pattern can be between 2 and 16 characters long and allows all digits (0-9) and all non-diacritic latin alphabet letters (a-z, A-Z). It accepts four meta-characters: `*`, `%`, `+`, `$`. The `*` and `%` meta-characters can appear multiple times in the pattern. To match wildcards at the beginning or end of the pattern, use `*` to match any single character or `%` to match a sequence of characters. If you use the wildcard patterns, it must include at least two non-meta-characters, and wildcards cannot be used between non-meta-characters. To match the beginning of a pattern, start the pattern with `+`. To match the end of the pattern, append the pattern with `$`. These meta-characters can't be adjacent to each other.
   --SmsEnabled: oneof<nothing, bool> # Whether the phone numbers can receive text messages. Can be: `true` or `false`.
@@ -667,7 +687,7 @@ export def "2010-04-01-accounts-available-phone-numbers-localjson ListAvailableP
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/AvailablePhoneNumbers/($CountryCode)/Local.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/MachineToMachine.json
@@ -683,6 +703,7 @@ export def "2010-04-01-accounts-available-phone-numbers-machine-to-machinejson L
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --AreaCode: int # The area code of the phone numbers to read. Applies to only phone numbers in the US and Canada.
   --Contains: string # Matching pattern to identify phone numbers. This pattern can be between 2 and 16 characters long and allows all digits (0-9) and all non-diacritic latin alphabet letters (a-z, A-Z). It accepts four meta-characters: `*`, `%`, `+`, `$`. The `*` and `%` meta-characters can appear multiple times in the pattern. To match wildcards at the beginning or end of the pattern, use `*` to match any single character or `%` to match a sequence of characters. If you use the wildcard patterns, it must include at least two non-meta-characters, and wildcards cannot be used between non-meta-characters. To match the beginning of a pattern, start the pattern with `+`. To match the end of the pattern, append the pattern with `$`. These meta-characters can't be adjacent to each other.
   --SmsEnabled: oneof<nothing, bool> # Whether the phone numbers can receive text messages. Can be: `true` or `false`.
@@ -711,7 +732,7 @@ export def "2010-04-01-accounts-available-phone-numbers-machine-to-machinejson L
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/AvailablePhoneNumbers/($CountryCode)/MachineToMachine.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/Mobile.json
@@ -727,6 +748,7 @@ export def "2010-04-01-accounts-available-phone-numbers-mobilejson ListAvailable
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --AreaCode: int # The area code of the phone numbers to read. Applies to only phone numbers in the US and Canada.
   --Contains: string # Matching pattern to identify phone numbers. This pattern can be between 2 and 16 characters long and allows all digits (0-9) and all non-diacritic latin alphabet letters (a-z, A-Z). It accepts four meta-characters: `*`, `%`, `+`, `$`. The `*` and `%` meta-characters can appear multiple times in the pattern. To match wildcards at the beginning or end of the pattern, use `*` to match any single character or `%` to match a sequence of characters. If you use the wildcard patterns, it must include at least two non-meta-characters, and wildcards cannot be used between non-meta-characters. To match the beginning of a pattern, start the pattern with `+`. To match the end of the pattern, append the pattern with `$`. These meta-characters can't be adjacent to each other.
   --SmsEnabled: oneof<nothing, bool> # Whether the phone numbers can receive text messages. Can be: `true` or `false`.
@@ -755,7 +777,7 @@ export def "2010-04-01-accounts-available-phone-numbers-mobilejson ListAvailable
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/AvailablePhoneNumbers/($CountryCode)/Mobile.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/National.json
@@ -771,6 +793,7 @@ export def "2010-04-01-accounts-available-phone-numbers-nationaljson ListAvailab
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --AreaCode: int # The area code of the phone numbers to read. Applies to only phone numbers in the US and Canada.
   --Contains: string # Matching pattern to identify phone numbers. This pattern can be between 2 and 16 characters long and allows all digits (0-9) and all non-diacritic latin alphabet letters (a-z, A-Z). It accepts four meta-characters: `*`, `%`, `+`, `$`. The `*` and `%` meta-characters can appear multiple times in the pattern. To match wildcards at the beginning or end of the pattern, use `*` to match any single character or `%` to match a sequence of characters. If you use the wildcard patterns, it must include at least two non-meta-characters, and wildcards cannot be used between non-meta-characters. To match the beginning of a pattern, start the pattern with `+`. To match the end of the pattern, append the pattern with `$`. These meta-characters can't be adjacent to each other.
   --SmsEnabled: oneof<nothing, bool> # Whether the phone numbers can receive text messages. Can be: `true` or `false`.
@@ -799,7 +822,7 @@ export def "2010-04-01-accounts-available-phone-numbers-nationaljson ListAvailab
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/AvailablePhoneNumbers/($CountryCode)/National.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/SharedCost.json
@@ -815,6 +838,7 @@ export def "2010-04-01-accounts-available-phone-numbers-shared-costjson ListAvai
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --AreaCode: int # The area code of the phone numbers to read. Applies to only phone numbers in the US and Canada.
   --Contains: string # Matching pattern to identify phone numbers. This pattern can be between 2 and 16 characters long and allows all digits (0-9) and all non-diacritic latin alphabet letters (a-z, A-Z). It accepts four meta-characters: `*`, `%`, `+`, `$`. The `*` and `%` meta-characters can appear multiple times in the pattern. To match wildcards at the beginning or end of the pattern, use `*` to match any single character or `%` to match a sequence of characters. If you use the wildcard patterns, it must include at least two non-meta-characters, and wildcards cannot be used between non-meta-characters. To match the beginning of a pattern, start the pattern with `+`. To match the end of the pattern, append the pattern with `$`. These meta-characters can't be adjacent to each other.
   --SmsEnabled: oneof<nothing, bool> # Whether the phone numbers can receive text messages. Can be: `true` or `false`.
@@ -843,7 +867,7 @@ export def "2010-04-01-accounts-available-phone-numbers-shared-costjson ListAvai
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/AvailablePhoneNumbers/($CountryCode)/SharedCost.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/TollFree.json
@@ -859,6 +883,7 @@ export def "2010-04-01-accounts-available-phone-numbers-toll-freejson ListAvaila
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --AreaCode: int # The area code of the phone numbers to read. Applies to only phone numbers in the US and Canada.
   --Contains: string # Matching pattern to identify phone numbers. This pattern can be between 2 and 16 characters long and allows all digits (0-9) and all non-diacritic latin alphabet letters (a-z, A-Z). It accepts four meta-characters: `*`, `%`, `+`, `$`. The `*` and `%` meta-characters can appear multiple times in the pattern. To match wildcards at the beginning or end of the pattern, use `*` to match any single character or `%` to match a sequence of characters. If you use the wildcard patterns, it must include at least two non-meta-characters, and wildcards cannot be used between non-meta-characters. To match the beginning of a pattern, start the pattern with `+`. To match the end of the pattern, append the pattern with `$`. These meta-characters can't be adjacent to each other.
   --SmsEnabled: oneof<nothing, bool> # Whether the phone numbers can receive text messages. Can be: `true` or `false`.
@@ -887,7 +912,7 @@ export def "2010-04-01-accounts-available-phone-numbers-toll-freejson ListAvaila
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/AvailablePhoneNumbers/($CountryCode)/TollFree.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/AvailablePhoneNumbers/{CountryCode}/Voip.json
@@ -903,6 +928,7 @@ export def "2010-04-01-accounts-available-phone-numbers-voipjson ListAvailablePh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --AreaCode: int # The area code of the phone numbers to read. Applies to only phone numbers in the US and Canada.
   --Contains: string # Matching pattern to identify phone numbers. This pattern can be between 2 and 16 characters long and allows all digits (0-9) and all non-diacritic latin alphabet letters (a-z, A-Z). It accepts four meta-characters: `*`, `%`, `+`, `$`. The `*` and `%` meta-characters can appear multiple times in the pattern. To match wildcards at the beginning or end of the pattern, use `*` to match any single character or `%` to match a sequence of characters. If you use the wildcard patterns, it must include at least two non-meta-characters, and wildcards cannot be used between non-meta-characters. To match the beginning of a pattern, start the pattern with `+`. To match the end of the pattern, append the pattern with `$`. These meta-characters can't be adjacent to each other.
   --SmsEnabled: oneof<nothing, bool> # Whether the phone numbers can receive text messages. Can be: `true` or `false`.
@@ -931,7 +957,7 @@ export def "2010-04-01-accounts-available-phone-numbers-voipjson ListAvailablePh
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/AvailablePhoneNumbers/($CountryCode)/Voip.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch the balance for an Account based on Account Sid. Balance changes may not be reflected immediately. Child accounts do not contain balance information
@@ -947,13 +973,14 @@ export def "2010-04-01-accounts-balancejson FetchBalance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, balance: string, currency: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Balance.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new outgoing call to phones, SIP-enabled endpoints or Twilio Client connections
@@ -969,6 +996,7 @@ export def "2010-04-01-accounts-callsjson CreateCall" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   To: string # The phone number, SIP address, or client identifier to call. (format: endpoint)
   From: string # The phone number or client identifier to use as the caller id. If using a phone number, it must be a Twilio number or a Verified [outgoing caller id](https://www.twilio.com/docs/voice/api/outgoing-caller-ids) for your account. If the `to` parameter is a phone number, `From` must also be a phone number. (format: endpoint)
   --Method: string@Method-completer # The HTTP method we should use when calling the `url` parameter's value. Can be: `GET` or `POST` and the default is `POST`. If an `application_sid` parameter is present, this parameter is ignored. (format: http-method)
@@ -1015,7 +1043,7 @@ export def "2010-04-01-accounts-callsjson CreateCall" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieves a collection of calls made to and from your account
@@ -1031,6 +1059,7 @@ export def "2010-04-01-accounts-callsjson ListCall" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --To: string # Only show calls made to this phone number, SIP address, Client identifier or SIM SID. (format: phone-number)
   --From: string # Only include calls from this phone number, SIP address, Client identifier or SIM SID. (format: phone-number)
   --ParentCallSid: string # Only include calls spawned by calls with this SID.
@@ -1051,7 +1080,7 @@ export def "2010-04-01-accounts-callsjson ListCall" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Calls.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a Call record from your account. Once the record is deleted, it will no longer appear in the API and Account Portal logs.
@@ -1068,13 +1097,14 @@ export def "2010-04-01-accounts-calls DeleteCall" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Calls/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch the call specified by the provided Call SID
@@ -1091,13 +1121,14 @@ export def "2010-04-01-accounts-calls FetchCall" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<sid: string, date_created: string, date_updated: string, parent_call_sid: string, account_sid: string, to: string, to_formatted: string, from: string, from_formatted: string, phone_number_sid: string, status: string, start_time: string, end_time: string, duration: string, price: string, price_unit: string, direction: string, answered_by: string, api_version: string, forwarded_from: string, group_sid: string, caller_name: string, queue_time: string, trunk_sid: string, uri: string, subresource_uris: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Calls/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Initiates a call redirect or terminates a call
@@ -1114,6 +1145,7 @@ export def "2010-04-01-accounts-calls UpdateCall" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Url: string # The absolute URL that returns the TwiML instructions for the call. We will call this URL using the `method` when the call connects. For more information, see the [Url Parameter](https://www.twilio.com/docs/voice/make-calls#specify-a-url-parameter) section in [Making Calls](https://www.twilio.com/docs/voice/make-calls). (format: uri)
   --Method: string@Method-completer # The HTTP method we should use when calling the `url`. Can be: `GET` or `POST` and the default is `POST`. If an `application_sid` parameter is present, this parameter is ignored. (format: http-method)
   --Status: string@Status-completer-2
@@ -1132,7 +1164,7 @@ export def "2010-04-01-accounts-calls UpdateCall" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a list of all events for a call.
@@ -1149,6 +1181,7 @@ export def "2010-04-01-accounts-calls-eventsjson ListCallEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -1159,7 +1192,7 @@ export def "2010-04-01-accounts-calls-eventsjson ListCallEvent" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Calls/($CallSid)/Events.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Notifications/{Sid}.json
@@ -1176,13 +1209,14 @@ export def "2010-04-01-accounts-calls-notifications FetchCallNotification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, api_version: string, call_sid: string, date_created: string, date_updated: string, error_code: string, log: string, message_date: string, message_text: string, more_info: string, request_method: string, request_url: string, request_variables: string, response_body: string, response_headers: string, sid: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Calls/($CallSid)/Notifications/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Calls/{CallSid}/Notifications.json
@@ -1198,6 +1232,7 @@ export def "2010-04-01-accounts-calls-notificationsjson ListCallNotification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Log: int # Only read notifications of the specified log level. Can be:  `0` to read only ERROR notifications or `1` to read only WARNING notifications. By default, all notifications are read.
   --MessageDate: string # Only show notifications for the specified date, formatted as `YYYY-MM-DD`. You can also specify an inequality, such as `<=YYYY-MM-DD` for messages logged at or before midnight on a date, or `>=YYYY-MM-DD` for messages logged at or after midnight on a date. (format: date)
   --MessageDate<: string # Only show notifications for the specified date, formatted as `YYYY-MM-DD`. You can also specify an inequality, such as `<=YYYY-MM-DD` for messages logged at or before midnight on a date, or `>=YYYY-MM-DD` for messages logged at or after midnight on a date. (format: date)
@@ -1212,7 +1247,7 @@ export def "2010-04-01-accounts-calls-notificationsjson ListCallNotification" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Calls/($CallSid)/Notifications.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a recording for the call
@@ -1229,6 +1264,7 @@ export def "2010-04-01-accounts-calls-recordingsjson CreateCallRecording" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --RecordingStatusCallbackEvent: list # The recording status events on which we should call the `recording_status_callback` URL. Can be: `in-progress`, `completed` and `absent` and the default is `completed`. Separate multiple event values with a space.
   --RecordingStatusCallback: string # The URL we should call using the `recording_status_callback_method` on each recording event specified in  `recording_status_callback_event`. For more information, see [RecordingStatusCallback parameters](https://www.twilio.com/docs/voice/api/recording#recordingstatuscallback). (format: uri)
   --RecordingStatusCallbackMethod: string@RecordingStatusCallbackMethod-completer # The HTTP method we should use to call `recording_status_callback`. Can be: `GET` or `POST` and the default is `POST`. (format: http-method)
@@ -1245,7 +1281,7 @@ export def "2010-04-01-accounts-calls-recordingsjson CreateCallRecording" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a list of recordings belonging to the call used to make the request
@@ -1262,6 +1298,7 @@ export def "2010-04-01-accounts-calls-recordingsjson ListCallRecording" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --DateCreated: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. You can also specify inequality: `DateCreated<=YYYY-MM-DD` will return recordings generated at or before midnight on a given date, and `DateCreated>=YYYY-MM-DD` returns recordings generated at or after midnight on a date. (format: date)
   --DateCreated<: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. You can also specify inequality: `DateCreated<=YYYY-MM-DD` will return recordings generated at or before midnight on a given date, and `DateCreated>=YYYY-MM-DD` returns recordings generated at or after midnight on a date. (format: date)
   --DateCreated>: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. You can also specify inequality: `DateCreated<=YYYY-MM-DD` will return recordings generated at or before midnight on a given date, and `DateCreated>=YYYY-MM-DD` returns recordings generated at or after midnight on a date. (format: date)
@@ -1275,7 +1312,7 @@ export def "2010-04-01-accounts-calls-recordingsjson ListCallRecording" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Calls/($CallSid)/Recordings.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Changes the status of the recording to paused, stopped, or in-progress. Note: Pass `Twilio.CURRENT` instead of recording sid to reference current active recording.
@@ -1293,6 +1330,7 @@ export def "2010-04-01-accounts-calls-recordings UpdateCallRecording" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Status: string@Status-completer-3 # The status of the recording. Can be: `processing`, `completed` and `absent`. For more detailed statuses on in-progress recordings, check out how to [Update a Recording Resource](https://www.twilio.com/docs/voice/api/recording#update-a-recording-resource).
   --PauseBehavior: string # Whether to record during a pause. Can be: `skip` or `silence` and the default is `silence`. `skip` does not record during the pause period, while `silence` will replace the actual audio of the call with silence during the pause period. This parameter only applies when setting `status` is set to `paused`.
 ]: any -> record<account_sid: string, api_version: string, call_sid: string, conference_sid: string, date_created: string, date_updated: string, start_time: string, duration: string, sid: string, price: float, uri: string, encryption_details: any, price_unit: string, status: string, channels: int, source: string, error_code: int, track: string> {
@@ -1304,7 +1342,7 @@ export def "2010-04-01-accounts-calls-recordings UpdateCallRecording" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Fetch an instance of a recording for a call
@@ -1322,13 +1360,14 @@ export def "2010-04-01-accounts-calls-recordings FetchCallRecording" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, api_version: string, call_sid: string, conference_sid: string, date_created: string, date_updated: string, start_time: string, duration: string, sid: string, price: float, uri: string, encryption_details: any, price_unit: string, status: string, channels: int, source: string, error_code: int, track: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Calls/($CallSid)/Recordings/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a recording from your account
@@ -1346,13 +1385,14 @@ export def "2010-04-01-accounts-calls-recordings DeleteCallRecording" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Calls/($CallSid)/Recordings/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch an instance of a conference
@@ -1369,13 +1409,14 @@ export def "2010-04-01-accounts-conferences FetchConference" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, api_version: string, friendly_name: string, region: string, sid: string, status: string, uri: string, subresource_uris: record, reason_conference_ended: string, call_sid_ending_conference: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Conferences/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/Conferences/{Sid}.json
@@ -1391,6 +1432,7 @@ export def "2010-04-01-accounts-conferences UpdateConference" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Status: string@Status-completer-4
   --AnnounceUrl: string # The URL we should call to announce something into the conference. The URL may return an MP3 file, a WAV file, or a TwiML document that contains `<Play>`, `<Say>`, `<Pause>`, or `<Redirect>` verbs. (format: uri)
   --AnnounceMethod: string@AnnounceMethod-completer # The HTTP method used to call `announce_url`. Can be: `GET` or `POST` and the default is `POST` (format: http-method)
@@ -1403,7 +1445,7 @@ export def "2010-04-01-accounts-conferences UpdateConference" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a list of conferences belonging to the account used to make the request
@@ -1419,6 +1461,7 @@ export def "2010-04-01-accounts-conferencesjson ListConference" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --DateCreated: string # Only include conferences that were created on this date. Specify a date as `YYYY-MM-DD` in UTC, for example: `2009-07-06`, to read only conferences that were created on this date. You can also specify an inequality, such as `DateCreated<=YYYY-MM-DD`, to read conferences that were created on or before midnight of this date, and `DateCreated>=YYYY-MM-DD` to read conferences that were created on or after midnight of this date. (format: date)
   --DateCreated<: string # Only include conferences that were created on this date. Specify a date as `YYYY-MM-DD` in UTC, for example: `2009-07-06`, to read only conferences that were created on this date. You can also specify an inequality, such as `DateCreated<=YYYY-MM-DD`, to read conferences that were created on or before midnight of this date, and `DateCreated>=YYYY-MM-DD` to read conferences that were created on or after midnight of this date. (format: date)
   --DateCreated>: string # Only include conferences that were created on this date. Specify a date as `YYYY-MM-DD` in UTC, for example: `2009-07-06`, to read only conferences that were created on this date. You can also specify an inequality, such as `DateCreated<=YYYY-MM-DD`, to read conferences that were created on or before midnight of this date, and `DateCreated>=YYYY-MM-DD` to read conferences that were created on or after midnight of this date. (format: date)
@@ -1437,7 +1480,7 @@ export def "2010-04-01-accounts-conferencesjson ListConference" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Conferences.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of recordings belonging to the call used to make the request
@@ -1454,6 +1497,7 @@ export def "2010-04-01-accounts-conferences-recordingsjson ListConferenceRecordi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --DateCreated: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. You can also specify inequality: `DateCreated<=YYYY-MM-DD` will return recordings generated at or before midnight on a given date, and `DateCreated>=YYYY-MM-DD` returns recordings generated at or after midnight on a date. (format: date)
   --DateCreated<: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. You can also specify inequality: `DateCreated<=YYYY-MM-DD` will return recordings generated at or before midnight on a given date, and `DateCreated>=YYYY-MM-DD` returns recordings generated at or after midnight on a date. (format: date)
   --DateCreated>: string # The `date_created` value, specified as `YYYY-MM-DD`, of the resources to read. You can also specify inequality: `DateCreated<=YYYY-MM-DD` will return recordings generated at or before midnight on a given date, and `DateCreated>=YYYY-MM-DD` returns recordings generated at or after midnight on a date. (format: date)
@@ -1467,7 +1511,7 @@ export def "2010-04-01-accounts-conferences-recordingsjson ListConferenceRecordi
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Conferences/($ConferenceSid)/Recordings.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Changes the status of the recording to paused, stopped, or in-progress. Note: To use `Twilio.CURRENT`, pass it as recording sid.
@@ -1485,6 +1529,7 @@ export def "2010-04-01-accounts-conferences-recordings UpdateConferenceRecording
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Status: string@Status-completer-3 # The status of the recording. Can be: `processing`, `completed` and `absent`. For more detailed statuses on in-progress recordings, check out how to [Update a Recording Resource](https://www.twilio.com/docs/voice/api/recording#update-a-recording-resource).
   --PauseBehavior: string # Whether to record during a pause. Can be: `skip` or `silence` and the default is `silence`. `skip` does not record during the pause period, while `silence` will replace the actual audio of the call with silence during the pause period. This parameter only applies when setting `status` is set to `paused`.
 ]: any -> record<account_sid: string, api_version: string, call_sid: string, conference_sid: string, date_created: string, date_updated: string, start_time: string, duration: string, sid: string, price: string, price_unit: string, status: string, channels: int, source: string, error_code: int, encryption_details: any, uri: string> {
@@ -1496,7 +1541,7 @@ export def "2010-04-01-accounts-conferences-recordings UpdateConferenceRecording
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Fetch an instance of a recording for a call
@@ -1514,13 +1559,14 @@ export def "2010-04-01-accounts-conferences-recordings FetchConferenceRecording"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, api_version: string, call_sid: string, conference_sid: string, date_created: string, date_updated: string, start_time: string, duration: string, sid: string, price: string, price_unit: string, status: string, channels: int, source: string, error_code: int, encryption_details: any, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Conferences/($ConferenceSid)/Recordings/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a recording from your account
@@ -1538,13 +1584,14 @@ export def "2010-04-01-accounts-conferences-recordings DeleteConferenceRecording
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Conferences/($ConferenceSid)/Recordings/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch an instance of a connect-app
@@ -1561,13 +1608,14 @@ export def "2010-04-01-accounts-connect-apps FetchConnectApp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, authorize_redirect_url: string, company_name: string, deauthorize_callback_method: string, deauthorize_callback_url: string, description: string, friendly_name: string, homepage_url: string, permissions: list<string>, sid: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/ConnectApps/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a connect-app with the specified parameters
@@ -1584,6 +1632,7 @@ export def "2010-04-01-accounts-connect-apps UpdateConnectApp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --AuthorizeRedirectUrl: string # The URL to redirect the user to after we authenticate the user and obtain authorization to access the Connect App. (format: uri)
   --CompanyName: string # The company name to set for the Connect App.
   --DeauthorizeCallbackMethod: string@DeauthorizeCallbackMethod-completer # The HTTP method to use when calling `deauthorize_callback_url`. (format: http-method)
@@ -1601,7 +1650,7 @@ export def "2010-04-01-accounts-connect-apps UpdateConnectApp" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete an instance of a connect-app
@@ -1618,13 +1667,14 @@ export def "2010-04-01-accounts-connect-apps DeleteConnectApp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/ConnectApps/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of connect-apps belonging to the account used to make the request
@@ -1640,6 +1690,7 @@ export def "2010-04-01-accounts-connect-appsjson ListConnectApp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -1650,7 +1701,7 @@ export def "2010-04-01-accounts-connect-appsjson ListConnectApp" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/ConnectApps.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Addresses/{AddressSid}/DependentPhoneNumbers.json
@@ -1666,6 +1717,7 @@ export def "2010-04-01-accounts-addresses-dependent-phone-numbersjson ListDepend
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -1676,7 +1728,7 @@ export def "2010-04-01-accounts-addresses-dependent-phone-numbersjson ListDepend
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Addresses/($AddressSid)/DependentPhoneNumbers.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an incoming-phone-number instance.
@@ -1693,6 +1745,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers UpdateIncomingPhoneNumber
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-AccountSid: string # The SID of the [Account](https://www.twilio.com/docs/iam/api/account) that created the IncomingPhoneNumber resource to update.  For more information, see [Exchanging Numbers Between Subaccounts](https://www.twilio.com/docs/iam/api/subaccounts#exchanging-numbers).
   --ApiVersion: string # The API version to use for incoming calls made to the phone number. The default is `2010-04-01`.
   --FriendlyName: string # A descriptive string that you created to describe this phone number. It can be up to 64 characters long. By default, this is a formatted version of the phone number.
@@ -1725,7 +1778,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers UpdateIncomingPhoneNumber
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Fetch an incoming-phone-number belonging to the account used to make the request.
@@ -1742,13 +1795,14 @@ export def "2010-04-01-accounts-incoming-phone-numbers FetchIncomingPhoneNumber"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, address_sid: string, address_requirements: string, api_version: string, beta: bool, capabilities: record<mms: bool, sms: bool, voice: bool, fax: bool>, date_created: string, date_updated: string, friendly_name: string, identity_sid: string, phone_number: string, origin: string, sid: string, sms_application_sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, status_callback: string, status_callback_method: string, trunk_sid: string, uri: string, voice_receive_mode: string, voice_application_sid: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string, emergency_status: string, emergency_address_sid: string, emergency_address_status: string, bundle_sid: string, status: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/IncomingPhoneNumbers/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a phone-numbers belonging to the account used to make the request.
@@ -1765,13 +1819,14 @@ export def "2010-04-01-accounts-incoming-phone-numbers DeleteIncomingPhoneNumber
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/IncomingPhoneNumbers/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of incoming-phone-numbers belonging to the account used to make the request.
@@ -1787,6 +1842,7 @@ export def "2010-04-01-accounts-incoming-phone-numbersjson ListIncomingPhoneNumb
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Beta: oneof<nothing, bool> # Whether to include phone numbers new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
   --FriendlyName: string # A string that identifies the IncomingPhoneNumber resources to read.
   --PhoneNumber: string # The phone numbers of the IncomingPhoneNumber resources to read. You can specify partial numbers and use '*' as a wildcard for any digit. (format: phone-number)
@@ -1801,7 +1857,7 @@ export def "2010-04-01-accounts-incoming-phone-numbersjson ListIncomingPhoneNumb
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/IncomingPhoneNumbers.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Purchase a phone-number for the account.
@@ -1817,6 +1873,7 @@ export def "2010-04-01-accounts-incoming-phone-numbersjson CreateIncomingPhoneNu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --ApiVersion: string # The API version to use for incoming calls made to the new phone number. The default is `2010-04-01`.
   --FriendlyName: string # A descriptive string that you created to describe the new phone number. It can be up to 64 characters long. By default, this is a formatted version of the new phone number.
   --SmsApplicationSid: string # The SID of the application that should handle SMS messages sent to the new phone number. If an `sms_application_sid` is present, we ignore all of the `sms_*_url` urls and use those set on the application.
@@ -1850,7 +1907,7 @@ export def "2010-04-01-accounts-incoming-phone-numbersjson CreateIncomingPhoneNu
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Fetch an instance of an Add-on installation currently assigned to this Number.
@@ -1868,13 +1925,14 @@ export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons FetchInc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<sid: string, account_sid: string, resource_sid: string, friendly_name: string, description: string, configuration: any, unique_name: string, date_created: string, date_updated: string, uri: string, subresource_uris: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/IncomingPhoneNumbers/($ResourceSid)/AssignedAddOns/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Remove the assignment of an Add-on installation from the Number specified.
@@ -1892,13 +1950,14 @@ export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons DeleteIn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/IncomingPhoneNumbers/($ResourceSid)/AssignedAddOns/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of Add-on installations currently assigned to this Number.
@@ -1915,6 +1974,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-onsjson List
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -1925,7 +1985,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-onsjson List
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/IncomingPhoneNumbers/($ResourceSid)/AssignedAddOns.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Assign an Add-on installation to the Number specified.
@@ -1942,6 +2002,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-onsjson Crea
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   InstalledAddOnSid: string # The SID that identifies the Add-on installation.
 ]: any -> record<sid: string, account_sid: string, resource_sid: string, friendly_name: string, description: string, configuration: any, unique_name: string, date_created: string, date_updated: string, uri: string, subresource_uris: record> {
   let input = $in
@@ -1952,7 +2013,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-onsjson Crea
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Fetch an instance of an Extension for the Assigned Add-on.
@@ -1971,13 +2032,14 @@ export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons-extensio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<sid: string, account_sid: string, resource_sid: string, assigned_add_on_sid: string, friendly_name: string, product_name: string, unique_name: string, uri: string, enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/IncomingPhoneNumbers/($ResourceSid)/AssignedAddOns/($AssignedAddOnSid)/Extensions/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of Extensions for the Assigned Add-on.
@@ -1995,6 +2057,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons-extensio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -2005,7 +2068,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-assigned-add-ons-extensio
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/IncomingPhoneNumbers/($ResourceSid)/AssignedAddOns/($AssignedAddOnSid)/Extensions.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/Local.json
@@ -2020,6 +2083,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-localjson ListIncomingPho
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Beta: oneof<nothing, bool> # Whether to include phone numbers new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
   --FriendlyName: string # A string that identifies the resources to read.
   --PhoneNumber: string # The phone numbers of the IncomingPhoneNumber resources to read. You can specify partial numbers and use '*' as a wildcard for any digit. (format: phone-number)
@@ -2034,7 +2098,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-localjson ListIncomingPho
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/IncomingPhoneNumbers/Local.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/Local.json
@@ -2049,6 +2113,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-localjson CreateIncomingP
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   PhoneNumber: string # The phone number to purchase specified in [E.164](https://www.twilio.com/docs/glossary/what-e164) format.  E.164 phone numbers consist of a + followed by the country code and subscriber number without punctuation characters. For example, +14155551234. (format: phone-number)
   --ApiVersion: string # The API version to use for incoming calls made to the new phone number. The default is `2010-04-01`.
   --FriendlyName: string # A descriptive string that you created to describe the new phone number. It can be up to 64 characters long. By default, this is a formatted version of the phone number.
@@ -2081,7 +2146,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-localjson CreateIncomingP
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/Mobile.json
@@ -2096,6 +2161,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-mobilejson ListIncomingPh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Beta: oneof<nothing, bool> # Whether to include phone numbers new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
   --FriendlyName: string # A string that identifies the resources to read.
   --PhoneNumber: string # The phone numbers of the IncomingPhoneNumber resources to read. You can specify partial numbers and use '*' as a wildcard for any digit. (format: phone-number)
@@ -2110,7 +2176,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-mobilejson ListIncomingPh
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/IncomingPhoneNumbers/Mobile.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/Mobile.json
@@ -2125,6 +2191,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-mobilejson CreateIncoming
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   PhoneNumber: string # The phone number to purchase specified in [E.164](https://www.twilio.com/docs/glossary/what-e164) format.  E.164 phone numbers consist of a + followed by the country code and subscriber number without punctuation characters. For example, +14155551234. (format: phone-number)
   --ApiVersion: string # The API version to use for incoming calls made to the new phone number. The default is `2010-04-01`.
   --FriendlyName: string # A descriptive string that you created to describe the new phone number. It can be up to 64 characters long. By default, the is a formatted version of the phone number.
@@ -2157,7 +2224,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-mobilejson CreateIncoming
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/TollFree.json
@@ -2172,6 +2239,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-toll-freejson ListIncomin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Beta: oneof<nothing, bool> # Whether to include phone numbers new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
   --FriendlyName: string # A string that identifies the resources to read.
   --PhoneNumber: string # The phone numbers of the IncomingPhoneNumber resources to read. You can specify partial numbers and use '*' as a wildcard for any digit. (format: phone-number)
@@ -2186,7 +2254,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-toll-freejson ListIncomin
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/IncomingPhoneNumbers/TollFree.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/TollFree.json
@@ -2201,6 +2269,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-toll-freejson CreateIncom
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   PhoneNumber: string # The phone number to purchase specified in [E.164](https://www.twilio.com/docs/glossary/what-e164) format.  E.164 phone numbers consist of a + followed by the country code and subscriber number without punctuation characters. For example, +14155551234. (format: phone-number)
   --ApiVersion: string # The API version to use for incoming calls made to the new phone number. The default is `2010-04-01`.
   --FriendlyName: string # A descriptive string that you created to describe the new phone number. It can be up to 64 characters long. By default, this is a formatted version of the phone number.
@@ -2233,7 +2302,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-toll-freejson CreateIncom
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Keys/{Sid}.json
@@ -2249,13 +2318,14 @@ export def "2010-04-01-accounts-keys FetchKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<sid: string, friendly_name: string, date_created: string, date_updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Keys/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/Keys/{Sid}.json
@@ -2271,6 +2341,7 @@ export def "2010-04-01-accounts-keys UpdateKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
 ]: any -> record<sid: string, friendly_name: string, date_created: string, date_updated: string> {
   let input = $in
@@ -2281,7 +2352,7 @@ export def "2010-04-01-accounts-keys UpdateKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # DELETE /2010-04-01/Accounts/{AccountSid}/Keys/{Sid}.json
@@ -2297,13 +2368,14 @@ export def "2010-04-01-accounts-keys DeleteKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Keys/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Keys.json
@@ -2318,6 +2390,7 @@ export def "2010-04-01-accounts-keysjson ListKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -2328,7 +2401,7 @@ export def "2010-04-01-accounts-keysjson ListKey" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Keys.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/Keys.json
@@ -2343,6 +2416,7 @@ export def "2010-04-01-accounts-keysjson CreateNewKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
 ]: any -> record<sid: string, friendly_name: string, date_created: string, date_updated: string, secret: string> {
   let input = $in
@@ -2353,7 +2427,7 @@ export def "2010-04-01-accounts-keysjson CreateNewKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete the Media resource.
@@ -2371,13 +2445,14 @@ export def "2010-04-01-accounts-messages-media DeleteMedia" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Messages/($MessageSid)/Media/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a single Media resource associated with a specific Message resource
@@ -2395,13 +2470,14 @@ export def "2010-04-01-accounts-messages-media FetchMedia" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, content_type: string, date_created: string, date_updated: string, parent_sid: string, sid: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Messages/($MessageSid)/Media/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Read a list of Media resources associated with a specific Message resource
@@ -2418,6 +2494,7 @@ export def "2010-04-01-accounts-messages-mediajson ListMedia" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --DateCreated: string # Only include Media resources that were created on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read Media that were created on this date. You can also specify an inequality, such as `StartTime<=YYYY-MM-DD`, to read Media that were created on or before midnight of this date, and `StartTime>=YYYY-MM-DD` to read Media that were created on or after midnight of this date. (format: date-time)
   --DateCreated<: string # Only include Media resources that were created on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read Media that were created on this date. You can also specify an inequality, such as `StartTime<=YYYY-MM-DD`, to read Media that were created on or before midnight of this date, and `StartTime>=YYYY-MM-DD` to read Media that were created on or after midnight of this date. (format: date-time)
   --DateCreated>: string # Only include Media resources that were created on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read Media that were created on this date. You can also specify an inequality, such as `StartTime<=YYYY-MM-DD`, to read Media that were created on or before midnight of this date, and `StartTime>=YYYY-MM-DD` to read Media that were created on or after midnight of this date. (format: date-time)
@@ -2431,7 +2508,7 @@ export def "2010-04-01-accounts-messages-mediajson ListMedia" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Messages/($MessageSid)/Media.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a specific member from the queue
@@ -2449,13 +2526,14 @@ export def "2010-04-01-accounts-queues-members FetchMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<call_sid: string, date_enqueued: string, position: int, uri: string, wait_time: int, queue_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Queues/($QueueSid)/Members/($CallSid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Dequeue a member from a queue and have the member's call begin executing the TwiML document at that URL
@@ -2473,6 +2551,7 @@ export def "2010-04-01-accounts-queues-members UpdateMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Url: string # The absolute URL of the Queue resource. (format: uri)
   --Method: string@Method-completer # How to pass the update request data. Can be `GET` or `POST` and the default is `POST`. `POST` sends the data as encoded form data and `GET` sends the data as query parameters. (format: http-method)
 ]: any -> record<call_sid: string, date_enqueued: string, position: int, uri: string, wait_time: int, queue_sid: string> {
@@ -2484,7 +2563,7 @@ export def "2010-04-01-accounts-queues-members UpdateMember" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve the members of the queue
@@ -2501,6 +2580,7 @@ export def "2010-04-01-accounts-queues-membersjson ListMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -2511,7 +2591,7 @@ export def "2010-04-01-accounts-queues-membersjson ListMember" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Queues/($QueueSid)/Members.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Send a message
@@ -2527,6 +2607,7 @@ export def "2010-04-01-accounts-messagesjson CreateMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   To: string # The recipient's phone number in [E.164](https://www.twilio.com/docs/glossary/what-e164) format (for SMS/MMS) or [channel address](https://www.twilio.com/docs/messaging/channels), e.g. `whatsapp:+15552229999`. (format: phone-number)
   --StatusCallback: string # The URL of the endpoint to which Twilio sends [Message status callback requests](https://www.twilio.com/docs/sms/api/message-resource#twilios-request-to-the-statuscallback-url). URL must contain a valid hostname and underscores are not allowed. If you include this parameter with the `messaging_service_sid`, Twilio uses this URL instead of the Status Callback URL of the [Messaging Service](https://www.twilio.com/docs/messaging/api/service-resource).  (format: uri)
   --ApplicationSid: string # The SID of the associated [TwiML Application](https://www.twilio.com/docs/usage/api/applications). [Message status callback requests](https://www.twilio.com/docs/sms/api/message-resource#twilios-request-to-the-statuscallback-url) are sent to the TwiML App's `message_status_callback` URL. Note that the `status_callback` parameter of a request takes priority over the `application_sid` parameter; if both are included `application_sid` is ignored.
@@ -2561,7 +2642,7 @@ export def "2010-04-01-accounts-messagesjson CreateMessage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a list of Message resources associated with a Twilio Account
@@ -2577,6 +2658,7 @@ export def "2010-04-01-accounts-messagesjson ListMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --To: string # Filter by recipient. For example: Set this parameter to `+15558881111` to retrieve a list of Message resources sent to `+15558881111`. (format: phone-number)
   --From: string # Filter by sender. For example: Set this parameter to `+15552229999` to retrieve a list of Message resources sent by `+15552229999`. (format: phone-number)
   --DateSent: string # Filter by Message `sent_date`. Accepts GMT dates in the following formats: `YYYY-MM-DD` (to find Messages with a specific `sent_date`), `<=YYYY-MM-DD` (to find Messages with `sent_date`s on and before a specific date), and `>=YYYY-MM-DD` (to find Messages with `sent_dates` on and after a specific date). (format: date-time)
@@ -2592,7 +2674,7 @@ export def "2010-04-01-accounts-messagesjson ListMessage" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Messages.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes a Message resource from your account
@@ -2609,13 +2691,14 @@ export def "2010-04-01-accounts-messages DeleteMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Messages/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a specific Message
@@ -2632,13 +2715,14 @@ export def "2010-04-01-accounts-messages FetchMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<body: string, num_segments: string, direction: string, from: string, to: string, date_updated: string, price: string, error_message: string, uri: string, account_sid: string, num_media: string, status: string, messaging_service_sid: string, sid: string, date_sent: string, date_created: string, error_code: int, price_unit: string, api_version: string, subresource_uris: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Messages/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Message resource (used to redact Message `body` text and to cancel not-yet-sent messages)
@@ -2655,6 +2739,7 @@ export def "2010-04-01-accounts-messages UpdateMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Body: string # The new `body` of the Message resource. To redact the text content of a Message, this parameter's value must be an empty string
   --Status: string@Status-completer-6
 ]: any -> record<body: string, num_segments: string, direction: string, from: string, to: string, date_updated: string, price: string, error_message: string, uri: string, account_sid: string, num_media: string, status: string, messaging_service_sid: string, sid: string, date_sent: string, date_created: string, error_code: int, price_unit: string, api_version: string, subresource_uris: record> {
@@ -2666,7 +2751,7 @@ export def "2010-04-01-accounts-messages UpdateMessage" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create Message Feedback to confirm a tracked user action was performed by the recipient of the associated Message
@@ -2683,6 +2768,7 @@ export def "2010-04-01-accounts-messages-feedbackjson CreateMessageFeedback" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Outcome: string@Outcome-completer # Reported outcome indicating whether there is confirmation that the Message recipient performed a tracked user action. Can be: `unconfirmed` or `confirmed`. For more details see [How to Optimize Message Deliverability with Message Feedback](https://www.twilio.com/docs/messaging/guides/send-message-feedback-to-twilio).
 ]: any -> record<account_sid: string, message_sid: string, outcome: string, date_created: string, date_updated: string, uri: string> {
   let input = $in
@@ -2693,7 +2779,7 @@ export def "2010-04-01-accounts-messages-feedbackjson CreateMessageFeedback" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a new Signing Key for the account making the request.
@@ -2709,6 +2795,7 @@ export def "2010-04-01-accounts-signing-keysjson CreateNewSigningKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
 ]: any -> record<sid: string, friendly_name: string, date_created: string, date_updated: string, secret: string> {
   let input = $in
@@ -2719,7 +2806,7 @@ export def "2010-04-01-accounts-signing-keysjson CreateNewSigningKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/SigningKeys.json
@@ -2734,6 +2821,7 @@ export def "2010-04-01-accounts-signing-keysjson ListSigningKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -2744,7 +2832,7 @@ export def "2010-04-01-accounts-signing-keysjson ListSigningKey" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SigningKeys.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a notification belonging to the account used to make the request
@@ -2761,13 +2849,14 @@ export def "2010-04-01-accounts-notifications FetchNotification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, api_version: string, call_sid: string, date_created: string, date_updated: string, error_code: string, log: string, message_date: string, message_text: string, more_info: string, request_method: string, request_url: string, request_variables: string, response_body: string, response_headers: string, sid: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Notifications/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of notifications belonging to the account used to make the request
@@ -2783,6 +2872,7 @@ export def "2010-04-01-accounts-notificationsjson ListNotification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Log: int # Only read notifications of the specified log level. Can be:  `0` to read only ERROR notifications or `1` to read only WARNING notifications. By default, all notifications are read.
   --MessageDate: string # Only show notifications for the specified date, formatted as `YYYY-MM-DD`. You can also specify an inequality, such as `<=YYYY-MM-DD` for messages logged at or before midnight on a date, or `>=YYYY-MM-DD` for messages logged at or after midnight on a date. (format: date)
   --MessageDate<: string # Only show notifications for the specified date, formatted as `YYYY-MM-DD`. You can also specify an inequality, such as `<=YYYY-MM-DD` for messages logged at or before midnight on a date, or `>=YYYY-MM-DD` for messages logged at or after midnight on a date. (format: date)
@@ -2797,7 +2887,7 @@ export def "2010-04-01-accounts-notificationsjson ListNotification" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Notifications.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch an outgoing-caller-id belonging to the account used to make the request
@@ -2814,13 +2904,14 @@ export def "2010-04-01-accounts-outgoing-caller-ids FetchOutgoingCallerId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<sid: string, date_created: string, date_updated: string, friendly_name: string, account_sid: string, phone_number: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/OutgoingCallerIds/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the caller-id
@@ -2837,6 +2928,7 @@ export def "2010-04-01-accounts-outgoing-caller-ids UpdateOutgoingCallerId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
 ]: any -> record<sid: string, date_created: string, date_updated: string, friendly_name: string, account_sid: string, phone_number: string, uri: string> {
   let input = $in
@@ -2847,7 +2939,7 @@ export def "2010-04-01-accounts-outgoing-caller-ids UpdateOutgoingCallerId" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete the caller-id specified from the account
@@ -2864,13 +2956,14 @@ export def "2010-04-01-accounts-outgoing-caller-ids DeleteOutgoingCallerId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/OutgoingCallerIds/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of outgoing-caller-ids belonging to the account used to make the request
@@ -2886,6 +2979,7 @@ export def "2010-04-01-accounts-outgoing-caller-idsjson ListOutgoingCallerId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PhoneNumber: string # The phone number of the OutgoingCallerId resources to read. (format: phone-number)
   --FriendlyName: string # The string that identifies the OutgoingCallerId resources to read.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
@@ -2898,7 +2992,7 @@ export def "2010-04-01-accounts-outgoing-caller-idsjson ListOutgoingCallerId" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/OutgoingCallerIds.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/OutgoingCallerIds.json
@@ -2913,6 +3007,7 @@ export def "2010-04-01-accounts-outgoing-caller-idsjson CreateValidationRequest"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   PhoneNumber: string # The phone number to verify in [E.164](https://www.twilio.com/docs/glossary/what-e164) format, which consists of a + followed by the country code and subscriber number. (format: phone-number)
   --FriendlyName: string # A descriptive string that you create to describe the new caller ID resource. It can be up to 64 characters long. The default value is a formatted version of the phone number.
   --CallDelay: int # The number of seconds to delay before initiating the verification call. Can be an integer between `0` and `60`, inclusive. The default is `0`.
@@ -2928,7 +3023,7 @@ export def "2010-04-01-accounts-outgoing-caller-idsjson CreateValidationRequest"
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Fetch an instance of a participant
@@ -2946,13 +3041,14 @@ export def "2010-04-01-accounts-conferences-participants FetchParticipant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, call_sid: string, label: string, call_sid_to_coach: string, coaching: bool, conference_sid: string, date_created: string, date_updated: string, end_conference_on_exit: bool, muted: bool, hold: bool, start_conference_on_enter: bool, status: string, queue_time: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Conferences/($ConferenceSid)/Participants/($CallSid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the properties of the participant
@@ -2970,6 +3066,7 @@ export def "2010-04-01-accounts-conferences-participants UpdateParticipant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Muted: oneof<nothing, bool> # Whether the participant should be muted. Can be `true` or `false`. `true` will mute the participant, and `false` will un-mute them. Anything value other than `true` or `false` is interpreted as `false`.
   --Hold: oneof<nothing, bool> # Whether the participant should be on hold. Can be: `true` or `false`. `true` puts the participant on hold, and `false` lets them rejoin the conference.
   --HoldUrl: string # The URL we call using the `hold_method` for music that plays when the participant is on hold. The URL may return an MP3 file, a WAV file, or a TwiML document that contains `<Play>`, `<Say>`, `<Pause>`, or `<Redirect>` verbs. (format: uri)
@@ -2991,7 +3088,7 @@ export def "2010-04-01-accounts-conferences-participants UpdateParticipant" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Kick a participant from a given conference
@@ -3009,13 +3106,14 @@ export def "2010-04-01-accounts-conferences-participants DeleteParticipant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Conferences/($ConferenceSid)/Participants/($CallSid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/Conferences/{ConferenceSid}/Participants.json
@@ -3031,6 +3129,7 @@ export def "2010-04-01-accounts-conferences-participantsjson CreateParticipant" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   From: string # The phone number, Client identifier, or username portion of SIP address that made this call. Phone numbers are in [E.164](https://www.twilio.com/docs/glossary/what-e164) format (e.g., +16175551212). Client identifiers are formatted `client:name`. If using a phone number, it must be a Twilio number or a Verified [outgoing caller id](https://www.twilio.com/docs/voice/api/outgoing-caller-ids) for your account. If the `to` parameter is a phone number, `from` must also be a phone number. If `to` is sip address, this value of `from` should be a username portion to be used to populate the P-Asserted-Identity header that is passed to the SIP endpoint. (format: endpoint)
   To: string # The phone number, SIP address, Client, TwiML App identifier that received this call. Phone numbers are in [E.164](https://www.twilio.com/docs/glossary/what-e164) format (e.g., +16175551212). SIP addresses are formatted as `sip:name@company.com`. Client identifiers are formatted `client:name`. TwiML App identifiers are formatted `app:<APP_SID>`. [Custom parameters](https://www.twilio.com/docs/voice/api/conference-participant-resource#custom-parameters) may also be specified. (format: endpoint)
   --StatusCallback: string # The URL we should call using the `status_callback_method` to send status information to your application. (format: uri)
@@ -3091,7 +3190,7 @@ export def "2010-04-01-accounts-conferences-participantsjson CreateParticipant" 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a list of participants belonging to the account used to make the request
@@ -3108,6 +3207,7 @@ export def "2010-04-01-accounts-conferences-participantsjson ListParticipant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Muted: oneof<nothing, bool> # Whether to return only participants that are muted. Can be: `true` or `false`.
   --Hold: oneof<nothing, bool> # Whether to return only participants that are on hold. Can be: `true` or `false`.
   --Coaching: oneof<nothing, bool> # Whether to return only participants who are coaching another call. Can be: `true` or `false`.
@@ -3121,7 +3221,7 @@ export def "2010-04-01-accounts-conferences-participantsjson ListParticipant" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Conferences/($ConferenceSid)/Participants.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # create an instance of payments. This will start a new payments session
@@ -3138,6 +3238,7 @@ export def "2010-04-01-accounts-calls-paymentsjson CreatePayments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   IdempotencyKey: string # A unique token that will be used to ensure that multiple API calls with the same information do not result in multiple transactions. This should be a unique string value per API call and can be a randomly generated.
   StatusCallback: string # Provide an absolute or relative URL to receive status updates regarding your Pay session. Read more about the [expected StatusCallback values](https://www.twilio.com/docs/voice/api/payment-resource#statuscallback) (format: uri)
   --BankAccountType: string@BankAccountType-completer # Type of bank account if payment source is ACH. One of `consumer-checking`, `consumer-savings`, or `commercial-checking`. The default value is `consumer-checking`.
@@ -3165,7 +3266,7 @@ export def "2010-04-01-accounts-calls-paymentsjson CreatePayments" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # update an instance of payments with different phases of payment flows.
@@ -3183,6 +3284,7 @@ export def "2010-04-01-accounts-calls-payments UpdatePayments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   IdempotencyKey: string # A unique token that will be used to ensure that multiple API calls with the same information do not result in multiple transactions. This should be a unique string value per API call and can be a randomly generated.
   StatusCallback: string # Provide an absolute or relative URL to receive status updates regarding your Pay session. Read more about the [Update](https://www.twilio.com/docs/voice/api/payment-resource#statuscallback-update) and [Complete/Cancel](https://www.twilio.com/docs/voice/api/payment-resource#statuscallback-cancelcomplete) POST requests. (format: uri)
   --Capture: string@Capture-completer # The piece of payment information that you wish the caller to enter. Must be one of `payment-card-number`, `expiration-date`, `security-code`, `postal-code`, `bank-routing-number`, `bank-account-number`, or their `-matcher` variants for input confirmation when `RequireMatchingInputs` is enabled.
@@ -3196,7 +3298,7 @@ export def "2010-04-01-accounts-calls-payments UpdatePayments" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Fetch an instance of a queue identified by the QueueSid
@@ -3213,13 +3315,14 @@ export def "2010-04-01-accounts-queues FetchQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<date_updated: string, current_size: int, friendly_name: string, uri: string, account_sid: string, average_wait_time: int, sid: string, date_created: string, max_size: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Queues/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the queue with the new parameters
@@ -3236,6 +3339,7 @@ export def "2010-04-01-accounts-queues UpdateQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # A descriptive string that you created to describe this resource. It can be up to 64 characters long.
   --MaxSize: int # The maximum number of calls allowed to be in the queue. The default is 1000. The maximum is 5000.
 ]: any -> record<date_updated: string, current_size: int, friendly_name: string, uri: string, account_sid: string, average_wait_time: int, sid: string, date_created: string, max_size: int> {
@@ -3247,7 +3351,7 @@ export def "2010-04-01-accounts-queues UpdateQueue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Remove an empty queue
@@ -3264,13 +3368,14 @@ export def "2010-04-01-accounts-queues DeleteQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Queues/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of queues belonging to the account used to make the request
@@ -3286,6 +3391,7 @@ export def "2010-04-01-accounts-queuesjson ListQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -3296,7 +3402,7 @@ export def "2010-04-01-accounts-queuesjson ListQueue" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Queues.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a queue
@@ -3312,6 +3418,7 @@ export def "2010-04-01-accounts-queuesjson CreateQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   FriendlyName: string # A descriptive string that you created to describe this resource. It can be up to 64 characters long.
   --MaxSize: int # The maximum number of calls allowed to be in the queue. The default is 1000. The maximum is 5000.
 ]: any -> record<date_updated: string, current_size: int, friendly_name: string, uri: string, account_sid: string, average_wait_time: int, sid: string, date_created: string, max_size: int> {
@@ -3323,7 +3430,7 @@ export def "2010-04-01-accounts-queuesjson CreateQueue" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a Transcription
@@ -3340,6 +3447,7 @@ export def "2010-04-01-accounts-calls-transcriptionsjson CreateRealtimeTranscrip
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Name: string # The user-specified name of this Transcription, if one was given when the Transcription was created. This may be used to stop the Transcription.
   --Track: string@Track-completer # One of `inbound_track`, `outbound_track`, `both_tracks`.
   --StatusCallbackUrl: string # Absolute URL of the status callback. (format: uri)
@@ -3367,7 +3475,7 @@ export def "2010-04-01-accounts-calls-transcriptionsjson CreateRealtimeTranscrip
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Stop a Transcription using either the SID of the Transcription resource or the `name` used when creating the resource
@@ -3385,6 +3493,7 @@ export def "2010-04-01-accounts-calls-transcriptions UpdateRealtimeTranscription
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Status: string@Status-completer-8
 ]: any -> record<sid: string, account_sid: string, call_sid: string, name: string, status: string, date_updated: string, uri: string> {
   let input = $in
@@ -3395,7 +3504,7 @@ export def "2010-04-01-accounts-calls-transcriptions UpdateRealtimeTranscription
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Fetch an instance of a recording
@@ -3412,6 +3521,7 @@ export def "2010-04-01-accounts-recordings FetchRecording" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --IncludeSoftDeleted: oneof<nothing, bool> # A boolean parameter indicating whether to retrieve soft deleted recordings or not. Recordings metadata are kept after deletion for a retention period of 40 days.
 ]: nothing -> record<account_sid: string, api_version: string, call_sid: string, conference_sid: string, date_created: string, date_updated: string, start_time: string, duration: string, sid: string, price: string, price_unit: string, status: string, channels: int, source: string, error_code: int, uri: string, encryption_details: any, subresource_uris: record, media_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3420,7 +3530,7 @@ export def "2010-04-01-accounts-recordings FetchRecording" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Recordings/($Sid).json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a recording from your account
@@ -3437,13 +3547,14 @@ export def "2010-04-01-accounts-recordings DeleteRecording" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Recordings/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of recordings belonging to the account used to make the request
@@ -3459,6 +3570,7 @@ export def "2010-04-01-accounts-recordingsjson ListRecording" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --DateCreated: string # Only include recordings that were created on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read recordings that were created on this date. You can also specify an inequality, such as `DateCreated<=YYYY-MM-DD`, to read recordings that were created on or before midnight of this date, and `DateCreated>=YYYY-MM-DD` to read recordings that were created on or after midnight of this date. (format: date-time)
   --DateCreated<: string # Only include recordings that were created on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read recordings that were created on this date. You can also specify an inequality, such as `DateCreated<=YYYY-MM-DD`, to read recordings that were created on or before midnight of this date, and `DateCreated>=YYYY-MM-DD` to read recordings that were created on or after midnight of this date. (format: date-time)
   --DateCreated>: string # Only include recordings that were created on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read recordings that were created on this date. You can also specify an inequality, such as `DateCreated<=YYYY-MM-DD`, to read recordings that were created on or before midnight of this date, and `DateCreated>=YYYY-MM-DD` to read recordings that were created on or after midnight of this date. (format: date-time)
@@ -3475,7 +3587,7 @@ export def "2010-04-01-accounts-recordingsjson ListRecording" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Recordings.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch an instance of an AddOnResult
@@ -3493,13 +3605,14 @@ export def "2010-04-01-accounts-recordings-add-on-results FetchRecordingAddOnRes
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<sid: string, account_sid: string, status: string, add_on_sid: string, add_on_configuration_sid: string, date_created: string, date_updated: string, date_completed: string, reference_sid: string, subresource_uris: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Recordings/($ReferenceSid)/AddOnResults/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a result and purge all associated Payloads
@@ -3517,13 +3630,14 @@ export def "2010-04-01-accounts-recordings-add-on-results DeleteRecordingAddOnRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Recordings/($ReferenceSid)/AddOnResults/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of results belonging to the recording
@@ -3540,6 +3654,7 @@ export def "2010-04-01-accounts-recordings-add-on-resultsjson ListRecordingAddOn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -3550,7 +3665,7 @@ export def "2010-04-01-accounts-recordings-add-on-resultsjson ListRecordingAddOn
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Recordings/($ReferenceSid)/AddOnResults.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch an instance of a result payload
@@ -3569,13 +3684,14 @@ export def "2010-04-01-accounts-recordings-add-on-results-payloads FetchRecordin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<sid: string, add_on_result_sid: string, account_sid: string, label: string, add_on_sid: string, add_on_configuration_sid: string, content_type: string, date_created: string, date_updated: string, reference_sid: string, subresource_uris: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Recordings/($ReferenceSid)/AddOnResults/($AddOnResultSid)/Payloads/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a payload from the result along with all associated Data
@@ -3594,13 +3710,14 @@ export def "2010-04-01-accounts-recordings-add-on-results-payloads DeleteRecordi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Recordings/($ReferenceSid)/AddOnResults/($AddOnResultSid)/Payloads/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of payloads belonging to the AddOnResult
@@ -3618,6 +3735,7 @@ export def "2010-04-01-accounts-recordings-add-on-results-payloadsjson ListRecor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -3628,7 +3746,7 @@ export def "2010-04-01-accounts-recordings-add-on-results-payloadsjson ListRecor
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Recordings/($ReferenceSid)/AddOnResults/($AddOnResultSid)/Payloads.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch an instance of a result payload
@@ -3647,13 +3765,14 @@ export def "2010-04-01-accounts-recordings-add-on-results-payloads-datajson Fetc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Recordings/($ReferenceSid)/AddOnResults/($AddOnResultSid)/Payloads/($PayloadSid)/Data.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Recordings/{RecordingSid}/Transcriptions/{Sid}.json
@@ -3670,13 +3789,14 @@ export def "2010-04-01-accounts-recordings-transcriptions FetchRecordingTranscri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, api_version: string, date_created: string, date_updated: string, duration: string, price: float, price_unit: string, recording_sid: string, sid: string, status: string, transcription_text: string, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Recordings/($RecordingSid)/Transcriptions/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # DELETE /2010-04-01/Accounts/{AccountSid}/Recordings/{RecordingSid}/Transcriptions/{Sid}.json
@@ -3693,13 +3813,14 @@ export def "2010-04-01-accounts-recordings-transcriptions DeleteRecordingTranscr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Recordings/($RecordingSid)/Transcriptions/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Recordings/{RecordingSid}/Transcriptions.json
@@ -3715,6 +3836,7 @@ export def "2010-04-01-accounts-recordings-transcriptionsjson ListRecordingTrans
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -3725,7 +3847,7 @@ export def "2010-04-01-accounts-recordings-transcriptionsjson ListRecordingTrans
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Recordings/($RecordingSid)/Transcriptions.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch an instance of a short code
@@ -3742,13 +3864,14 @@ export def "2010-04-01-accounts-sms-short-codes FetchShortCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, short_code: string, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_url: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SMS/ShortCodes/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a short code with the following parameters
@@ -3765,6 +3888,7 @@ export def "2010-04-01-accounts-sms-short-codes UpdateShortCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # A descriptive string that you created to describe this resource. It can be up to 64 characters long. By default, the `FriendlyName` is the short code.
   --ApiVersion: string # The API version to use to start a new TwiML session. Can be: `2010-04-01` or `2008-08-01`.
   --SmsUrl: string # The URL we should call when receiving an incoming SMS message to this short code. (format: uri)
@@ -3780,7 +3904,7 @@ export def "2010-04-01-accounts-sms-short-codes UpdateShortCode" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a list of short-codes belonging to the account used to make the request
@@ -3796,6 +3920,7 @@ export def "2010-04-01-accounts-sms-short-codesjson ListShortCode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # The string that identifies the ShortCode resources to read.
   --ShortCode: string # Only show the ShortCode resources that match this pattern. You can specify partial numbers and use '*' as a wildcard for any digit.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
@@ -3808,7 +3933,7 @@ export def "2010-04-01-accounts-sms-short-codesjson ListShortCode" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SMS/ShortCodes.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/SigningKeys/{Sid}.json
@@ -3824,13 +3949,14 @@ export def "2010-04-01-accounts-signing-keys FetchSigningKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<sid: string, friendly_name: string, date_created: string, date_updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SigningKeys/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /2010-04-01/Accounts/{AccountSid}/SigningKeys/{Sid}.json
@@ -3846,6 +3972,7 @@ export def "2010-04-01-accounts-signing-keys UpdateSigningKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string
 ]: any -> record<sid: string, friendly_name: string, date_created: string, date_updated: string> {
   let input = $in
@@ -3856,7 +3983,7 @@ export def "2010-04-01-accounts-signing-keys UpdateSigningKey" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # DELETE /2010-04-01/Accounts/{AccountSid}/SigningKeys/{Sid}.json
@@ -3872,13 +3999,14 @@ export def "2010-04-01-accounts-signing-keys DeleteSigningKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SigningKeys/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new credential list mapping resource
@@ -3895,6 +4023,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappingsj
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   CredentialListSid: string # The SID of the CredentialList resource to map to the SIP domain.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string> {
   let input = $in
@@ -3905,7 +4034,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappingsj
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a list of credential list mappings belonging to the domain used in the request
@@ -3922,6 +4051,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappingsj
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -3932,7 +4062,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappingsj
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/Domains/($DomainSid)/Auth/Calls/CredentialListMappings.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a specific instance of a credential list mapping
@@ -3950,13 +4080,14 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappings 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/Domains/($DomainSid)/Auth/Calls/CredentialListMappings/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a credential list mapping from the requested domain
@@ -3974,13 +4105,14 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-credential-list-mappings 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/Domains/($DomainSid)/Auth/Calls/CredentialListMappings/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new IP Access Control List mapping
@@ -3997,6 +4129,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-ma
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   IpAccessControlListSid: string # The SID of the IpAccessControlList resource to map to the SIP domain.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string> {
   let input = $in
@@ -4007,7 +4140,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-ma
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a list of IP Access Control List mappings belonging to the domain used in the request
@@ -4024,6 +4157,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-ma
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -4034,7 +4168,7 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-ma
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/Domains/($DomainSid)/Auth/Calls/IpAccessControlListMappings.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a specific instance of an IP Access Control List mapping
@@ -4052,13 +4186,14 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-ma
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/Domains/($DomainSid)/Auth/Calls/IpAccessControlListMappings/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an IP Access Control List mapping from the requested domain
@@ -4076,13 +4211,14 @@ export def "2010-04-01-accounts-sip-domains-auth-calls-ip-access-control-list-ma
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/Domains/($DomainSid)/Auth/Calls/IpAccessControlListMappings/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new credential list mapping resource
@@ -4099,6 +4235,7 @@ export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-m
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   CredentialListSid: string # The SID of the CredentialList resource to map to the SIP domain.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string> {
   let input = $in
@@ -4109,7 +4246,7 @@ export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-m
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a list of credential list mappings belonging to the domain used in the request
@@ -4126,6 +4263,7 @@ export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-m
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -4136,7 +4274,7 @@ export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-m
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/Domains/($DomainSid)/Auth/Registrations/CredentialListMappings.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a specific instance of a credential list mapping
@@ -4154,13 +4292,14 @@ export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-m
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/Domains/($DomainSid)/Auth/Registrations/CredentialListMappings/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a credential list mapping from the requested domain
@@ -4178,13 +4317,14 @@ export def "2010-04-01-accounts-sip-domains-auth-registrations-credential-list-m
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/Domains/($DomainSid)/Auth/Registrations/CredentialListMappings/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of credentials.
@@ -4201,6 +4341,7 @@ export def "2010-04-01-accounts-sip-credential-lists-credentialsjson ListSipCred
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -4211,7 +4352,7 @@ export def "2010-04-01-accounts-sip-credential-lists-credentialsjson ListSipCred
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/CredentialLists/($CredentialListSid)/Credentials.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new credential resource.
@@ -4228,6 +4369,7 @@ export def "2010-04-01-accounts-sip-credential-lists-credentialsjson CreateSipCr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Username: string # The username that will be passed when authenticating SIP requests. The username should be sent in response to Twilio's challenge of the initial INVITE. It can be up to 32 characters long.
   Password: string # The password that the username will use when authenticating SIP requests. The password must be a minimum of 12 characters, contain at least 1 digit, and have mixed case. (eg `IWasAtSignal2018`)
 ]: any -> record<sid: string, account_sid: string, credential_list_sid: string, username: string, date_created: string, date_updated: string, uri: string> {
@@ -4239,7 +4381,7 @@ export def "2010-04-01-accounts-sip-credential-lists-credentialsjson CreateSipCr
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Fetch a single credential.
@@ -4257,13 +4399,14 @@ export def "2010-04-01-accounts-sip-credential-lists-credentials FetchSipCredent
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<sid: string, account_sid: string, credential_list_sid: string, username: string, date_created: string, date_updated: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/CredentialLists/($CredentialListSid)/Credentials/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a credential resource.
@@ -4281,6 +4424,7 @@ export def "2010-04-01-accounts-sip-credential-lists-credentials UpdateSipCreden
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Password: string # The password that the username will use when authenticating SIP requests. The password must be a minimum of 12 characters, contain at least 1 digit, and have mixed case. (eg `IWasAtSignal2018`)
 ]: any -> record<sid: string, account_sid: string, credential_list_sid: string, username: string, date_created: string, date_updated: string, uri: string> {
   let input = $in
@@ -4291,7 +4435,7 @@ export def "2010-04-01-accounts-sip-credential-lists-credentials UpdateSipCreden
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a credential resource.
@@ -4309,13 +4453,14 @@ export def "2010-04-01-accounts-sip-credential-lists-credentials DeleteSipCreden
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/CredentialLists/($CredentialListSid)/Credentials/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Get All Credential Lists
@@ -4331,6 +4476,7 @@ export def "2010-04-01-accounts-sip-credential-listsjson ListSipCredentialList" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -4341,7 +4487,7 @@ export def "2010-04-01-accounts-sip-credential-listsjson ListSipCredentialList" 
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/CredentialLists.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Credential List
@@ -4357,6 +4503,7 @@ export def "2010-04-01-accounts-sip-credential-listsjson CreateSipCredentialList
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   FriendlyName: string # A human readable descriptive text that describes the CredentialList, up to 64 characters long.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string> {
   let input = $in
@@ -4367,7 +4514,7 @@ export def "2010-04-01-accounts-sip-credential-listsjson CreateSipCredentialList
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Get a Credential List
@@ -4384,13 +4531,14 @@ export def "2010-04-01-accounts-sip-credential-lists FetchSipCredentialList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/CredentialLists/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update a Credential List
@@ -4407,6 +4555,7 @@ export def "2010-04-01-accounts-sip-credential-lists UpdateSipCredentialList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   FriendlyName: string # A human readable descriptive text for a CredentialList, up to 64 characters long.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, subresource_uris: record, uri: string> {
   let input = $in
@@ -4417,7 +4566,7 @@ export def "2010-04-01-accounts-sip-credential-lists UpdateSipCredentialList" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a Credential List
@@ -4434,13 +4583,14 @@ export def "2010-04-01-accounts-sip-credential-lists DeleteSipCredentialList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/CredentialLists/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a CredentialListMapping resource for an account.
@@ -4457,6 +4607,7 @@ export def "2010-04-01-accounts-sip-domains-credential-list-mappingsjson CreateS
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   CredentialListSid: string # A 34 character string that uniquely identifies the CredentialList resource to map to the SIP domain.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string> {
   let input = $in
@@ -4467,7 +4618,7 @@ export def "2010-04-01-accounts-sip-domains-credential-list-mappingsjson CreateS
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Read multiple CredentialListMapping resources from an account.
@@ -4484,6 +4635,7 @@ export def "2010-04-01-accounts-sip-domains-credential-list-mappingsjson ListSip
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -4494,7 +4646,7 @@ export def "2010-04-01-accounts-sip-domains-credential-list-mappingsjson ListSip
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/Domains/($DomainSid)/CredentialListMappings.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch a single CredentialListMapping resource from an account.
@@ -4512,13 +4664,14 @@ export def "2010-04-01-accounts-sip-domains-credential-list-mappings FetchSipCre
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/Domains/($DomainSid)/CredentialListMappings/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a CredentialListMapping resource from an account.
@@ -4536,13 +4689,14 @@ export def "2010-04-01-accounts-sip-domains-credential-list-mappings DeleteSipCr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/Domains/($DomainSid)/CredentialListMappings/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of domains belonging to the account used to make the request
@@ -4558,6 +4712,7 @@ export def "2010-04-01-accounts-sip-domainsjson ListSipDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -4568,7 +4723,7 @@ export def "2010-04-01-accounts-sip-domainsjson ListSipDomain" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/Domains.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new Domain
@@ -4584,6 +4739,7 @@ export def "2010-04-01-accounts-sip-domainsjson CreateSipDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   DomainName: string # The unique address you reserve on Twilio to which you route your SIP traffic. Domain names can contain letters, digits, and "-" and must end with `sip.twilio.com`.
   --FriendlyName: string # A descriptive string that you created to describe the resource. It can be up to 64 characters long.
   --VoiceUrl: string # The URL we should when the domain receives a call. (format: uri)
@@ -4606,7 +4762,7 @@ export def "2010-04-01-accounts-sip-domainsjson CreateSipDomain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Fetch an instance of a Domain
@@ -4623,13 +4779,14 @@ export def "2010-04-01-accounts-sip-domains FetchSipDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, api_version: string, auth_type: string, date_created: string, date_updated: string, domain_name: string, friendly_name: string, sid: string, uri: string, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_status_callback_method: string, voice_status_callback_url: string, voice_url: string, subresource_uris: record, sip_registration: bool, emergency_calling_enabled: bool, secure: bool, byoc_trunk_sid: string, emergency_caller_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/Domains/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the attributes of a domain
@@ -4646,6 +4803,7 @@ export def "2010-04-01-accounts-sip-domains UpdateSipDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --FriendlyName: string # A descriptive string that you created to describe the resource. It can be up to 64 characters long.
   --VoiceFallbackMethod: string@VoiceFallbackMethod-completer # The HTTP method we should use to call `voice_fallback_url`. Can be: `GET` or `POST`. (format: http-method)
   --VoiceFallbackUrl: string # The URL that we should call when an error occurs while retrieving or executing the TwiML requested by `voice_url`. (format: uri)
@@ -4668,7 +4826,7 @@ export def "2010-04-01-accounts-sip-domains UpdateSipDomain" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete an instance of a Domain
@@ -4685,13 +4843,14 @@ export def "2010-04-01-accounts-sip-domains DeleteSipDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/Domains/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of IpAccessControlLists that belong to the account used to make the request
@@ -4707,6 +4866,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-listsjson ListSipIpAccessC
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -4717,7 +4877,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-listsjson ListSipIpAccessC
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/IpAccessControlLists.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new IpAccessControlList resource
@@ -4733,6 +4893,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-listsjson CreateSipIpAcces
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   FriendlyName: string # A human readable descriptive text that describes the IpAccessControlList, up to 255 characters long.
 ]: any -> record<sid: string, account_sid: string, friendly_name: string, date_created: string, date_updated: string, subresource_uris: record, uri: string> {
   let input = $in
@@ -4743,7 +4904,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-listsjson CreateSipIpAcces
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Fetch a specific instance of an IpAccessControlList
@@ -4760,13 +4921,14 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists FetchSipIpAccessCont
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<sid: string, account_sid: string, friendly_name: string, date_created: string, date_updated: string, subresource_uris: record, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/IpAccessControlLists/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Rename an IpAccessControlList
@@ -4783,6 +4945,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists UpdateSipIpAccessCon
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   FriendlyName: string # A human readable descriptive text, up to 255 characters long.
 ]: any -> record<sid: string, account_sid: string, friendly_name: string, date_created: string, date_updated: string, subresource_uris: record, uri: string> {
   let input = $in
@@ -4793,7 +4956,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists UpdateSipIpAccessCon
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete an IpAccessControlList from the requested account
@@ -4810,13 +4973,14 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists DeleteSipIpAccessCon
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/IpAccessControlLists/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch an IpAccessControlListMapping resource.
@@ -4834,13 +4998,14 @@ export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappings Fetc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/Domains/($DomainSid)/IpAccessControlListMappings/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an IpAccessControlListMapping resource.
@@ -4858,13 +5023,14 @@ export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappings Dele
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/Domains/($DomainSid)/IpAccessControlListMappings/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new IpAccessControlListMapping resource.
@@ -4881,6 +5047,7 @@ export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappingsjson 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   IpAccessControlListSid: string # The unique id of the IP access control list to map to the SIP domain.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, domain_sid: string, friendly_name: string, sid: string, uri: string> {
   let input = $in
@@ -4891,7 +5058,7 @@ export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappingsjson 
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a list of IpAccessControlListMapping resources.
@@ -4908,6 +5075,7 @@ export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappingsjson 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -4918,7 +5086,7 @@ export def "2010-04-01-accounts-sip-domains-ip-access-control-list-mappingsjson 
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/Domains/($DomainSid)/IpAccessControlListMappings.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Read multiple IpAddress resources.
@@ -4935,6 +5103,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addressesjson Lis
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -4945,7 +5114,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addressesjson Lis
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/IpAccessControlLists/($IpAccessControlListSid)/IpAddresses.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new IpAddress resource.
@@ -4962,6 +5131,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addressesjson Cre
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   FriendlyName: string # A human readable descriptive text for this resource, up to 255 characters long.
   IpAddress: string # An IP address in dotted decimal notation from which you want to accept traffic. Any SIP requests from this IP address will be allowed by Twilio. IPv4 only supported today.
   --CidrPrefixLength: int # An integer representing the length of the CIDR prefix to use with this IP address when accepting traffic. By default the entire IP address is used.
@@ -4974,7 +5144,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addressesjson Cre
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Read one IpAddress resource.
@@ -4992,13 +5162,14 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses FetchSi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<sid: string, account_sid: string, friendly_name: string, ip_address: string, cidr_prefix_length: int, ip_access_control_list_sid: string, date_created: string, date_updated: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/IpAccessControlLists/($IpAccessControlListSid)/IpAddresses/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an IpAddress resource.
@@ -5016,6 +5187,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses UpdateS
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --IpAddress: string # An IP address in dotted decimal notation from which you want to accept traffic. Any SIP requests from this IP address will be allowed by Twilio. IPv4 only supported today.
   --FriendlyName: string # A human readable descriptive text for this resource, up to 255 characters long.
   --CidrPrefixLength: int # An integer representing the length of the CIDR prefix to use with this IP address when accepting traffic. By default the entire IP address is used.
@@ -5028,7 +5200,7 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses UpdateS
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete an IpAddress resource.
@@ -5046,13 +5218,14 @@ export def "2010-04-01-accounts-sip-ip-access-control-lists-ip-addresses DeleteS
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/SIP/IpAccessControlLists/($IpAccessControlListSid)/IpAddresses/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a Siprec
@@ -5069,6 +5242,7 @@ export def "2010-04-01-accounts-calls-siprecjson CreateSiprec" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Name: string # The user-specified name of this Siprec, if one was given when the Siprec was created. This may be used to stop the Siprec.
   --ConnectorName: string # Unique name used when configuring the connector via Marketplace Add-on.
   --Track: string@Track-completer # One of `inbound_track`, `outbound_track`, `both_tracks`.
@@ -5281,7 +5455,7 @@ export def "2010-04-01-accounts-calls-siprecjson CreateSiprec" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Stop a Siprec using either the SID of the Siprec resource or the `name` used when creating the resource
@@ -5299,6 +5473,7 @@ export def "2010-04-01-accounts-calls-siprec UpdateSiprec" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Status: string@Status-completer-8
 ]: any -> record<sid: string, account_sid: string, call_sid: string, name: string, status: string, date_updated: string, uri: string> {
   let input = $in
@@ -5309,7 +5484,7 @@ export def "2010-04-01-accounts-calls-siprec UpdateSiprec" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a Stream
@@ -5326,6 +5501,7 @@ export def "2010-04-01-accounts-calls-streamsjson CreateStream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Url: string # Relative or absolute URL where WebSocket connection will be established. (format: uri)
   --Name: string # The user-specified name of this Stream, if one was given when the Stream was created. This can be used to stop the Stream.
   --Track: string@Track-completer # The tracks to be included in the Stream. Possible values are `inbound_track`, `outbound_track`, `both_tracks`. Default value is `inbound_track`.
@@ -5538,7 +5714,7 @@ export def "2010-04-01-accounts-calls-streamsjson CreateStream" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Stop a Stream using either the SID of the Stream resource or the `name` used when creating the resource
@@ -5556,6 +5732,7 @@ export def "2010-04-01-accounts-calls-streams UpdateStream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Status: string@Status-completer-8
 ]: any -> record<sid: string, account_sid: string, call_sid: string, name: string, status: string, date_updated: string, uri: string> {
   let input = $in
@@ -5566,7 +5743,7 @@ export def "2010-04-01-accounts-calls-streams UpdateStream" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Create a new token for ICE servers
@@ -5582,6 +5759,7 @@ export def "2010-04-01-accounts-tokensjson CreateToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Ttl: int # The duration in seconds for which the generated credentials are valid. The default value is 86400 (24 hours).
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, ice_servers: table<credential: string, username: string, url: string, urls: string>, password: string, ttl: string, username: string> {
   let input = $in
@@ -5592,7 +5770,7 @@ export def "2010-04-01-accounts-tokensjson CreateToken" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Fetch an instance of a Transcription
@@ -5609,13 +5787,14 @@ export def "2010-04-01-accounts-transcriptions FetchTranscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, api_version: string, date_created: string, date_updated: string, duration: string, price: float, price_unit: string, recording_sid: string, sid: string, status: string, transcription_text: string, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Transcriptions/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete a transcription from the account used to make the request
@@ -5632,13 +5811,14 @@ export def "2010-04-01-accounts-transcriptions DeleteTranscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Transcriptions/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of transcriptions belonging to the account used to make the request
@@ -5654,6 +5834,7 @@ export def "2010-04-01-accounts-transcriptionsjson ListTranscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -5664,7 +5845,7 @@ export def "2010-04-01-accounts-transcriptionsjson ListTranscription" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Transcriptions.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieve a list of usage-records belonging to the account used to make the request
@@ -5680,6 +5861,7 @@ export def "2010-04-01-accounts-usage-recordsjson ListUsageRecord" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Category: string # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --StartDate: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
   --EndDate: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
@@ -5694,7 +5876,7 @@ export def "2010-04-01-accounts-usage-recordsjson ListUsageRecord" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Usage/Records.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/AllTime.json
@@ -5709,6 +5891,7 @@ export def "2010-04-01-accounts-usage-records-all-timejson ListUsageRecordAllTim
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Category: string # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --StartDate: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
   --EndDate: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
@@ -5723,7 +5906,7 @@ export def "2010-04-01-accounts-usage-records-all-timejson ListUsageRecordAllTim
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Usage/Records/AllTime.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/Daily.json
@@ -5738,6 +5921,7 @@ export def "2010-04-01-accounts-usage-records-dailyjson ListUsageRecordDaily" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Category: string # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --StartDate: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
   --EndDate: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
@@ -5752,7 +5936,7 @@ export def "2010-04-01-accounts-usage-records-dailyjson ListUsageRecordDaily" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Usage/Records/Daily.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/LastMonth.json
@@ -5767,6 +5951,7 @@ export def "2010-04-01-accounts-usage-records-last-monthjson ListUsageRecordLast
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Category: string # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --StartDate: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
   --EndDate: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
@@ -5781,7 +5966,7 @@ export def "2010-04-01-accounts-usage-records-last-monthjson ListUsageRecordLast
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Usage/Records/LastMonth.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/Monthly.json
@@ -5796,6 +5981,7 @@ export def "2010-04-01-accounts-usage-records-monthlyjson ListUsageRecordMonthly
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Category: string # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --StartDate: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
   --EndDate: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
@@ -5810,7 +5996,7 @@ export def "2010-04-01-accounts-usage-records-monthlyjson ListUsageRecordMonthly
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Usage/Records/Monthly.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/ThisMonth.json
@@ -5825,6 +6011,7 @@ export def "2010-04-01-accounts-usage-records-this-monthjson ListUsageRecordThis
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Category: string # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --StartDate: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
   --EndDate: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
@@ -5839,7 +6026,7 @@ export def "2010-04-01-accounts-usage-records-this-monthjson ListUsageRecordThis
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Usage/Records/ThisMonth.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/Today.json
@@ -5854,6 +6041,7 @@ export def "2010-04-01-accounts-usage-records-todayjson ListUsageRecordToday" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Category: string # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --StartDate: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
   --EndDate: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
@@ -5868,7 +6056,7 @@ export def "2010-04-01-accounts-usage-records-todayjson ListUsageRecordToday" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Usage/Records/Today.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/Yearly.json
@@ -5883,6 +6071,7 @@ export def "2010-04-01-accounts-usage-records-yearlyjson ListUsageRecordYearly" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Category: string # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --StartDate: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
   --EndDate: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
@@ -5897,7 +6086,7 @@ export def "2010-04-01-accounts-usage-records-yearlyjson ListUsageRecordYearly" 
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Usage/Records/Yearly.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /2010-04-01/Accounts/{AccountSid}/Usage/Records/Yesterday.json
@@ -5912,6 +6101,7 @@ export def "2010-04-01-accounts-usage-records-yesterdayjson ListUsageRecordYeste
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Category: string # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --StartDate: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
   --EndDate: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
@@ -5926,7 +6116,7 @@ export def "2010-04-01-accounts-usage-records-yesterdayjson ListUsageRecordYeste
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Usage/Records/Yesterday.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Fetch and instance of a usage-trigger
@@ -5943,13 +6133,14 @@ export def "2010-04-01-accounts-usage-triggers FetchUsageTrigger" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_sid: string, api_version: string, callback_method: string, callback_url: string, current_value: string, date_created: string, date_fired: string, date_updated: string, friendly_name: string, recurring: string, sid: string, trigger_by: string, trigger_value: string, uri: string, usage_category: string, usage_record_uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Usage/Triggers/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update an instance of a usage trigger
@@ -5966,6 +6157,7 @@ export def "2010-04-01-accounts-usage-triggers UpdateUsageTrigger" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --CallbackMethod: string@CallbackMethod-completer # The HTTP method we should use to call `callback_url`. Can be: `GET` or `POST` and the default is `POST`. (format: http-method)
   --CallbackUrl: string # The URL we should call using `callback_method` when the trigger fires. (format: uri)
   --FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
@@ -5978,7 +6170,7 @@ export def "2010-04-01-accounts-usage-triggers UpdateUsageTrigger" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # DELETE /2010-04-01/Accounts/{AccountSid}/Usage/Triggers/{Sid}.json
@@ -5994,13 +6186,14 @@ export def "2010-04-01-accounts-usage-triggers DeleteUsageTrigger" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Usage/Triggers/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new UsageTrigger
@@ -6016,6 +6209,7 @@ export def "2010-04-01-accounts-usage-triggersjson CreateUsageTrigger" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   CallbackUrl: string # The URL we should call using `callback_method` when the trigger fires. (format: uri)
   TriggerValue: string # The usage value at which the trigger should fire.  For convenience, you can use an offset value such as `+30` to specify a trigger_value that is 30 units more than the current usage value. Be sure to urlencode a `+` as `%2B`.
   UsageCategory: string # The usage category that the trigger should watch.  Use one of the supported [usage categories](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) for this value.
@@ -6032,7 +6226,7 @@ export def "2010-04-01-accounts-usage-triggersjson CreateUsageTrigger" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Retrieve a list of usage-triggers belonging to the account used to make the request
@@ -6048,6 +6242,7 @@ export def "2010-04-01-accounts-usage-triggersjson ListUsageTrigger" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --Recurring: string@Recurring-completer # The frequency of recurring UsageTriggers to read. Can be: `daily`, `monthly`, or `yearly` to read recurring UsageTriggers. An empty value or a value of `alltime` reads non-recurring UsageTriggers.
   --TriggerBy: string@TriggerBy-completer # The trigger field of the UsageTriggers to read.  Can be: `count`, `usage`, or `price` as described in the [UsageRecords documentation](https://www.twilio.com/docs/usage/api/usage-record#usage-count-price).
   --UsageCategory: string # The usage category of the UsageTriggers to read. Must be a supported [usage categories](https://www.twilio.com/docs/usage/api/usage-record#usage-categories).
@@ -6061,7 +6256,7 @@ export def "2010-04-01-accounts-usage-triggersjson ListUsageTrigger" [
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Usage/Triggers.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new User Defined Message for the given Call SID.
@@ -6078,6 +6273,7 @@ export def "2010-04-01-accounts-calls-user-defined-messagesjson CreateUserDefine
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Content: string # The User Defined Message in the form of URL-encoded JSON string.
   --IdempotencyKey: string # A unique string value to identify API call. This should be a unique string value per API call and can be a randomly generated.
 ]: any -> record<account_sid: string, call_sid: string, sid: string, date_created: string> {
@@ -6089,7 +6285,7 @@ export def "2010-04-01-accounts-calls-user-defined-messagesjson CreateUserDefine
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Subscribe to User Defined Messages for a given Call SID.
@@ -6106,6 +6302,7 @@ export def "2010-04-01-accounts-calls-user-defined-message-subscriptionsjson Cre
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   Callback: string # The URL we should call using the `method` to send user defined events to your application. URLs must contain a valid hostname (underscores are not permitted). (format: uri)
   --IdempotencyKey: string # A unique string value to identify API call. This should be a unique string value per API call and can be a randomly generated.
   --Method: string@Method-completer # The HTTP method Twilio will use when requesting the above `Url`. Either `GET` or `POST`. Default is `POST`. (format: http-method)
@@ -6118,7 +6315,7 @@ export def "2010-04-01-accounts-calls-user-defined-message-subscriptionsjson Cre
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
 }
 
 # Delete a specific User Defined Message Subscription.
@@ -6136,11 +6333,12 @@ export def "2010-04-01-accounts-calls-user-defined-message-subscriptions DeleteU
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
   let full_url = (build-url $base $"/2010-04-01/Accounts/($AccountSid)/Calls/($CallSid)/UserDefinedMessageSubscriptions/($Sid).json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

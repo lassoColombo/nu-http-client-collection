@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -91,7 +92,7 @@ def platform-completer [] { ["aws" "aws-classic" "aws-hosted-cp" "gcp" "hostedcl
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "clusters-mgmt get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -123,13 +124,14 @@ export def "clusters-mgmt get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<server_version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/clusters_mgmt/v1")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new add-on and add it to the collection of add-ons.
@@ -150,6 +152,7 @@ export def "clusters-mgmt-addons post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'AddOn' if this is a complete object or 'AddOnLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -185,7 +188,7 @@ export def "clusters-mgmt-addons post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of add-ons.
@@ -199,6 +202,7 @@ export def "clusters-mgmt-addons list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the add-on instead of the names of the columns of a table. For example, in order to sort the add-ons descending by name the value should be:  ```sql name desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, but using the names of the attributes of the add-on instead of the names of the columns of a table. For example, in order to retrieve all the add-ons with a name starting with `my` the value should be:  ```sql name like 'my%' ```  If the parameter isn't provided, or if the value is empty, then all the add-ons that the user has permission to see will be returned.
@@ -210,7 +214,7 @@ export def "clusters-mgmt-addons list" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/addons" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the add-on.
@@ -225,13 +229,14 @@ export def "clusters-mgmt-addons delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/addons/($addon_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the add-on.
@@ -246,13 +251,14 @@ export def "clusters-mgmt-addons get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, common_annotations: record, common_labels: record, config: record<kind: string, id: string, href: string, add_on_environment_variables: list<record>, secret_propagations: list<record>>, credentials_requests: table<name: string, namespace: string, policy_permissions: list, service_account: string>, description: string, docs_link: string, enabled: bool, has_external_resources: bool, hidden: bool, icon: string, install_mode: string, label: string, managed_service: bool, name: string, namespaces: table<kind: string, id: string, href: string, annotations: record, labels: record, name: string>, operator_name: string, parameters: table<kind: string, id: string, href: string, addon: any, conditions: list, default_value: string, description: string, editable: bool, editable_direction: string, enabled: bool, name: string, options: list, required: bool, validation: string, validation_err_msg: string, value_type: string>, requirements: table<id: string, data: record, enabled: bool, resource: string, status: record>, resource_cost: float, resource_name: string, sub_operators: table<enabled: bool, operator_name: string, operator_namespace: string>, target_namespace: string, version: record<kind: string, id: string, href: string, additional_catalog_sources: list<record>, available_upgrades: list<string>, channel: string, config: record<kind: string, id: string, href: string, add_on_environment_variables: list, secret_propagations: list>, enabled: bool, package_image: string, parameters: list<record>, pull_secret_name: string, requirements: list<record>, source_image: string, sub_operators: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/addons/($addon_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the add-on.
@@ -274,6 +280,7 @@ export def "clusters-mgmt-addons patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'AddOn' if this is a complete object or 'AddOnLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -309,7 +316,7 @@ export def "clusters-mgmt-addons patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new add-on version and add it to the collection of add-ons.
@@ -329,6 +336,7 @@ export def "clusters-mgmt-addons-versions post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'AddOnVersion' if this is a complete object or 'AddOnVersionLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -352,7 +360,7 @@ export def "clusters-mgmt-addons-versions post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of add-on versions.
@@ -367,6 +375,7 @@ export def "clusters-mgmt-addons-versions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the add-on instead of the names of the columns of a table. For example, in order to sort the add-on versions descending by id the value should be:  ```sql id desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, but using the names of the attributes of the add-on version instead of the names of the columns of a table. For example, in order to retrieve all the add-on versions with an id starting with `0.1` the value should be:  ```sql id like '0.1.%' ```  If the parameter isn't provided, or if the value is empty, then all the add-on versions that the user has permission to see will be returned.
@@ -378,7 +387,7 @@ export def "clusters-mgmt-addons-versions list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/addons/($addon_id)/versions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the add-on version.
@@ -394,13 +403,14 @@ export def "clusters-mgmt-addons-versions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/addons/($addon_id)/versions/($version_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the add-on version.
@@ -416,13 +426,14 @@ export def "clusters-mgmt-addons-versions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, additional_catalog_sources: table<id: string, enabled: bool, image: string, name: string>, available_upgrades: list<string>, channel: string, config: record<kind: string, id: string, href: string, add_on_environment_variables: list<record>, secret_propagations: list<record>>, enabled: bool, package_image: string, parameters: table<kind: string, id: string, href: string, addon: record, conditions: list, default_value: string, description: string, editable: bool, editable_direction: string, enabled: bool, name: string, options: list, required: bool, validation: string, validation_err_msg: string, value_type: string>, pull_secret_name: string, requirements: table<id: string, data: record, enabled: bool, resource: string, status: record>, source_image: string, sub_operators: table<enabled: bool, operator_name: string, operator_namespace: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/addons/($addon_id)/versions/($version_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the add-on version.
@@ -443,6 +454,7 @@ export def "clusters-mgmt-addons-versions patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'AddOnVersion' if this is a complete object or 'AddOnVersionLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -466,7 +478,7 @@ export def "clusters-mgmt-addons-versions patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/clusters_mgmt/v1/aws_infrastructure_access_roles
@@ -478,6 +490,7 @@ export def "clusters-mgmt-aws-infrastructure-access-roles list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the role instead of the names of the columns of a table. For example, in order to sort the roles descending by dislay_name the value should be:  ```sql display_name desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, but using the names of the attributes of the role instead of the names of the columns of a table. For example, in order to retrieve all the role with a name starting with `my`the value should be:  ```sql display_name like 'my%' ```  If the parameter isn't provided, or if the value is empty, then all the roles that the user has permission to see will be returned.
@@ -489,7 +502,7 @@ export def "clusters-mgmt-aws-infrastructure-access-roles list" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/aws_infrastructure_access_roles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the aws infrastructure access role.
@@ -504,13 +517,14 @@ export def "clusters-mgmt-aws-infrastructure-access-roles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, description: string, display_name: string, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/aws_infrastructure_access_roles/($aws_infrastructure_access_role_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the list of machine types in the provided region.
@@ -528,6 +542,7 @@ export def "clusters-mgmt-aws-inquiries-machine-types post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Maximum number of items that will be contained in the returned page. (format: int32)
   --aws: any # _Amazon Web Services_ specific settings of a cluster. — shape: {kms_key_arn?: string, sts?: any, access_key_id?: string, account_id?: string, additional_allowed_principals?: list, additional_compute_security_group_ids?: list, additional_control_plane_security_group_ids?: list, additional_infra_security_group_ids?: list, audit_log?: any, auto_node?: any, billing_account_id?: string, ec2_metadata_http_tokens?: "optional"|"required", etcd_encryption?: any, hcp_internal_communication_hosted_zone_id?: string, private_hosted_zone_id?: string, private_hosted_zone_role_arn?: string, private_link?: bool, private_link_configuration?: any, secret_access_key?: string, subnet_ids?: list, tags?: record, vpc_endpoint_role_arn?: string, zero_egress?: any}
@@ -549,7 +564,7 @@ export def "clusters-mgmt-aws-inquiries-machine-types post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Fetches/creates an OIDC Config Thumbprint from either a cluster ID, or an oidc config ID.
@@ -563,6 +578,7 @@ export def "clusters-mgmt-aws-inquiries-oidc-thumbprint post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cluster-id: string # ClusterId is the for the cluster used, exclusive from OidcConfigId.
   --oidc-config-id: string # OidcConfigId is the ID for the oidc config used, exclusive from ClusterId.
 ]: any -> record<href: string, cluster_id: string, kind: string, oidc_config_id: string, thumbprint: string> {
@@ -574,7 +590,7 @@ export def "clusters-mgmt-aws-inquiries-oidc-thumbprint post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of available regions of the cloud provider. IMPORTANT: This list doesn't currently support paging or searching, so the returned `page` will always be 1 and `size` and `total` will always be the total number of available regions of the provider.
@@ -592,6 +608,7 @@ export def "clusters-mgmt-aws-inquiries-regions post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the returned page, where one corresponds to the first page. As this collection doesn't support paging the result will always be `1`. (format: int32)
   --size: int # Number of items that will be contained in the returned page. As this collection doesn't support paging or searching the result will always be the total number of regions of the provider. (format: int32)
   --aws: any # _Amazon Web Services_ specific settings of a cluster. — shape: {kms_key_arn?: string, sts?: any, access_key_id?: string, account_id?: string, additional_allowed_principals?: list, additional_compute_security_group_ids?: list, additional_control_plane_security_group_ids?: list, additional_infra_security_group_ids?: list, audit_log?: any, auto_node?: any, billing_account_id?: string, ec2_metadata_http_tokens?: "optional"|"required", etcd_encryption?: any, hcp_internal_communication_hosted_zone_id?: string, private_hosted_zone_id?: string, private_hosted_zone_role_arn?: string, private_link?: bool, private_link_configuration?: any, secret_access_key?: string, subnet_ids?: list, tags?: record, vpc_endpoint_role_arn?: string, zero_egress?: any}
@@ -613,7 +630,7 @@ export def "clusters-mgmt-aws-inquiries-regions post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /api/clusters_mgmt/v1/aws_inquiries/sts_account_roles
@@ -632,6 +649,7 @@ export def "clusters-mgmt-aws-inquiries-sts-account-roles post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the returned page, where one corresponds to the first page. As this collection doesn't support paging the result will always be `1`. (format: int32)
   --size: int # Number of items that will be contained in the returned page. As this collection doesn't support paging or searching the result will always be the total number of be the total number of STS account roles. (format: int32)
   --kms-key-arn: string # Customer Managed Key to encrypt EBS Volume
@@ -667,7 +685,7 @@ export def "clusters-mgmt-aws-inquiries-sts-account-roles post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of policies.
@@ -681,6 +699,7 @@ export def "clusters-mgmt-aws-inquiries-sts-credential-requests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Maximum number of items that will be contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<name: string, operator: record>, page: int, size: int, total: int> {
@@ -690,7 +709,7 @@ export def "clusters-mgmt-aws-inquiries-sts-credential-requests get" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/aws_inquiries/sts_credential_requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the list of policies.
@@ -704,6 +723,7 @@ export def "clusters-mgmt-aws-inquiries-sts-policies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the awsstspolicies instead of the names of the columns of a table. For example, in order to sort the policies descending by operator type identifier the value should be:  ```sql orderBy id desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of a SQL statement, but using the names of the attributes of the awsstspolicies instead of the names of the columns of a table. For example, in order to retrieve all the policies of type  `operatorrole` should be:  ```sql policy_type like 'OperatorRole%' ```  If the parameter isn't provided, or if the value is empty, then all the policies  will be returned.
@@ -715,7 +735,7 @@ export def "clusters-mgmt-aws-inquiries-sts-policies get" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/aws_inquiries/sts_policies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Manages aws creds validation.
@@ -733,6 +753,7 @@ export def "clusters-mgmt-aws-inquiries-validate-credentials post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --aws: any # _Amazon Web Services_ specific settings of a cluster. — shape: {kms_key_arn?: string, sts?: any, access_key_id?: string, account_id?: string, additional_allowed_principals?: list, additional_compute_security_group_ids?: list, additional_control_plane_security_group_ids?: list, additional_infra_security_group_ids?: list, audit_log?: any, auto_node?: any, billing_account_id?: string, ec2_metadata_http_tokens?: "optional"|"required", etcd_encryption?: any, hcp_internal_communication_hosted_zone_id?: string, private_hosted_zone_id?: string, private_hosted_zone_role_arn?: string, private_link?: bool, private_link_configuration?: any, secret_access_key?: string, subnet_ids?: list, tags?: record, vpc_endpoint_role_arn?: string, zero_egress?: any}
   --gcp: any # Google cloud platform settings of a cluster. — shape: {auth_uri?: string, auth_provider_x509_cert_url?: string, authentication?: any, client_id?: string, client_x509_cert_url?: string, client_email?: string, private_key?: string, private_key_id?: string, private_service_connect?: any, project_id?: string, security?: any, token_uri?: string, type?: string}
   --availability-zones: list # Availability zone
@@ -751,7 +772,7 @@ export def "clusters-mgmt-aws-inquiries-validate-credentials post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of available vpcs of the cloud provider for specific region. IMPORTANT: This collection doesn't currently support paging or searching, so the returned `page` will always be 1 and `size` and `total` will always be the total number of available vpcs of the provider.
@@ -769,6 +790,7 @@ export def "clusters-mgmt-aws-inquiries-vpcs post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the returned page, where one corresponds to the first page. As this collection doesn't support paging the result will always be `1`. (format: int32)
   --size: int # Number of items that will be contained in the returned page. As this collection doesn't support paging or searching the result will always be the total number of vpcs of the provider. (format: int32)
   --aws: any # _Amazon Web Services_ specific settings of a cluster. — shape: {kms_key_arn?: string, sts?: any, access_key_id?: string, account_id?: string, additional_allowed_principals?: list, additional_compute_security_group_ids?: list, additional_control_plane_security_group_ids?: list, additional_infra_security_group_ids?: list, audit_log?: any, auto_node?: any, billing_account_id?: string, ec2_metadata_http_tokens?: "optional"|"required", etcd_encryption?: any, hcp_internal_communication_hosted_zone_id?: string, private_hosted_zone_id?: string, private_hosted_zone_role_arn?: string, private_link?: bool, private_link_configuration?: any, secret_access_key?: string, subnet_ids?: list, tags?: record, vpc_endpoint_role_arn?: string, zero_egress?: any}
@@ -790,7 +812,7 @@ export def "clusters-mgmt-aws-inquiries-vpcs post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of cloud providers.
@@ -804,6 +826,7 @@ export def "clusters-mgmt-cloud-providers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fetchRegions: oneof<nothing, bool> # If true, includes the regions on each provider in the output. Could slow request response time.
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the cloud provider instead of the names of the columns of a table. For example, in order to sort the clusters descending by name identifier the value should be:  ```sql name desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
@@ -816,7 +839,7 @@ export def "clusters-mgmt-cloud-providers list" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/cloud_providers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the cloud provider.
@@ -831,13 +854,14 @@ export def "clusters-mgmt-cloud-providers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, display_name: string, name: string, regions: table<kind: string, id: string, href: string, ccs_only: bool, kms_location_id: string, kms_location_name: string, cloud_provider: any, display_name: string, enabled: bool, govcloud: bool, name: string, supports_hypershift: bool, supports_multi_az: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/cloud_providers/($cloud_provider_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the list of available regions of the cloud provider.  IMPORTANT: This collection doesn't currently support paging or searching, so the returned `page` will always be 1 and `size` and `total` will always be the total number of available regions of the provider.
@@ -858,6 +882,7 @@ export def "clusters-mgmt-cloud-providers-available-regions post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the returned page, where one corresponds to the first page. As this collection doesn't support paging the result will always be `1`. (format: int32)
   --size: int # Number of items that will be contained in the returned page. As this collection doesn't support paging or searching the result will always be the total number of regions of the provider. (format: int32)
   --kms-key-arn: string # Customer Managed Key to encrypt EBS Volume
@@ -893,7 +918,7 @@ export def "clusters-mgmt-cloud-providers-available-regions post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds a cloud region to the database.
@@ -909,6 +934,7 @@ export def "clusters-mgmt-cloud-providers-regions post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'CloudRegion' if this is a complete object or 'CloudRegionLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -931,7 +957,7 @@ export def "clusters-mgmt-cloud-providers-regions post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of regions of the cloud provider.  IMPORTANT: This collection doesn't currently support paging or searching, so the returned `page` will always be 1 and `size` and `total` will always be the total number of regions of the provider.
@@ -946,6 +972,7 @@ export def "clusters-mgmt-cloud-providers-regions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the returned page, where one corresponds to the first page. As this collection doesn't support paging the result will always be `1`. (format: int32)
   --size: int # Number of items that will be contained in the returned page. As this collection doesn't support paging or searching the result will always be the total number of regions of the provider. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, ccs_only: bool, kms_location_id: string, kms_location_name: string, cloud_provider: record, display_name: string, enabled: bool, govcloud: bool, name: string, supports_hypershift: bool, supports_multi_az: bool>, page: int, size: int, total: int> {
@@ -955,7 +982,7 @@ export def "clusters-mgmt-cloud-providers-regions list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/cloud_providers/($cloud_provider_id)/regions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the region.
@@ -971,13 +998,14 @@ export def "clusters-mgmt-cloud-providers-regions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/cloud_providers/($cloud_provider_id)/regions/($region_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the region.
@@ -993,13 +1021,14 @@ export def "clusters-mgmt-cloud-providers-regions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, ccs_only: bool, kms_location_id: string, kms_location_name: string, cloud_provider: record<kind: string, id: string, href: string, display_name: string, name: string, regions: list<any>>, display_name: string, enabled: bool, govcloud: bool, name: string, supports_hypershift: bool, supports_multi_az: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/cloud_providers/($cloud_provider_id)/regions/($region_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the region.
@@ -1016,6 +1045,7 @@ export def "clusters-mgmt-cloud-providers-regions patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'CloudRegion' if this is a complete object or 'CloudRegionLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -1038,7 +1068,7 @@ export def "clusters-mgmt-cloud-providers-regions patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Provision a new cluster and add it to the collection of clusters.  See the `register_cluster` method for adding an existing cluster.
@@ -1095,6 +1125,7 @@ export def "clusters-mgmt-clusters post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'Cluster' if this is a complete object or 'ClusterLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -1170,7 +1201,7 @@ export def "clusters-mgmt-clusters post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of clusters.
@@ -1184,6 +1215,7 @@ export def "clusters-mgmt-clusters list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the cluster instead of the names of the columns of a table. For example, in order to sort the clusters descending by region identifier the value should be:  ```sql region.id desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of a SQL statement, but using the names of the attributes of the cluster instead of the names of the columns of a table. For example, in order to retrieve all the clusters with a name starting with `my` in the `us-east-1` region the value should be:  ```sql name like 'my%' and region.id = 'us-east-1' ```  If the parameter isn't provided, or if the value is empty, then all the clusters that the user has permission to see will be returned.
@@ -1195,7 +1227,7 @@ export def "clusters-mgmt-clusters list" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/clusters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the cluster.
@@ -1210,17 +1242,18 @@ export def "clusters-mgmt-clusters delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --best-effort: oneof<nothing, bool> # BestEffort flag is used to check if the cluster deletion should be best-effort mode or not.
   --deprovision: oneof<nothing, bool> # If false it will only delete from OCM but not the actual cluster resources. false is only allowed for OCP clusters. true by default.
-  --dry-run: oneof<nothing, bool> # Dry run flag is used to check if the operation can be completed, but won't delete.
+  --qp-dry-run: oneof<nothing, bool> # Dry run flag is used to check if the operation can be completed, but won't delete.
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "best_effort" $best_effort "scalar") (serialize-qp "deprovision" $deprovision "scalar") (serialize-qp "dry_run" $dry_run "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "best_effort" $best_effort "scalar") (serialize-qp "deprovision" $deprovision "scalar") (serialize-qp "dry_run" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the cluster.
@@ -1235,13 +1268,14 @@ export def "clusters-mgmt-clusters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, api: record<cidr_block_access: record<allow: record>, url: string, listening: string>, aws: record<kms_key_arn: string, sts: record<oidc_endpoint_url: string, auto_mode: bool, enabled: bool, external_id: string, instance_iam_roles: record, managed_policies: bool, oidc_config: record, operator_iam_roles: list, operator_role_prefix: string, permission_boundary: string, role_arn: string, support_role_arn: string>, access_key_id: string, account_id: string, additional_allowed_principals: list<string>, additional_compute_security_group_ids: list<string>, additional_control_plane_security_group_ids: list<string>, additional_infra_security_group_ids: list<string>, audit_log: record<role_arn: string>, auto_node: record<role_arn: string>, billing_account_id: string, ec2_metadata_http_tokens: string, etcd_encryption: record<kms_key_arn: string>, hcp_internal_communication_hosted_zone_id: string, private_hosted_zone_id: string, private_hosted_zone_role_arn: string, private_link: bool, private_link_configuration: record<principals: list>, secret_access_key: string, subnet_ids: list<string>, tags: record, vpc_endpoint_role_arn: string, zero_egress: record<enabled: bool, no_proxy_default_domains: list>>, aws_infrastructure_access_role_grants: table<kind: string, id: string, href: string, console_url: string, role: record, state: string, state_description: string, user_arn: string>, ccs: record<kind: string, id: string, href: string, disable_scp_checks: bool, enabled: bool>, dns: record<base_domain: string>, fips: bool, gcp: record<auth_uri: string, auth_provider_x509_cert_url: string, authentication: record<href: string, id: string, kind: string>, client_id: string, client_x509_cert_url: string, client_email: string, private_key: string, private_key_id: string, private_service_connect: record<service_attachment_subnet: string>, project_id: string, security: record<secure_boot: bool>, token_uri: string, type: string>, gcp_encryption_key: record<kms_key_service_account: string, key_location: string, key_name: string, key_ring: string>, gcp_network: record<vpc_name: string, vpc_project_id: string, compute_subnet: string, control_plane_subnet: string>, additional_trust_bundle: string, addons: table<kind: string, id: string, href: string, addon: record, addon_version: record, billing: record, creation_timestamp: string, operator_version: string, parameters: list, state: string, state_description: string, updated_timestamp: string>, auto_node: record<mode: string, status: record<message: string, node_count: int>>, autoscaler: record<kind: string, id: string, href: string, balance_similar_node_groups: bool, balancing_ignored_labels: list<string>, ignore_daemonsets_utilization: bool, log_verbosity: int, max_node_provision_time: string, max_pod_grace_period: int, pod_priority_threshold: int, resource_limits: record<gpus: list, cores: record, max_nodes_total: int, memory: record>, scale_down: record<delay_after_add: string, delay_after_delete: string, delay_after_failure: string, enabled: bool, unneeded_time: string, utilization_threshold: string>, skip_nodes_with_local_storage: bool>, azure: record<etcd_encryption: record<data_encryption: record>, managed_resource_group_name: string, network_security_group_resource_id: string, nodes_outbound_connectivity: record<outbound_type: string>, operators_authentication: record<managed_identities: record>, resource_group_name: string, resource_name: string, subnet_resource_id: string, subscription_id: string, tenant_id: string>, billing_model: string, byo_oidc: record<enabled: bool>, channel: string, cloud_provider: record<kind: string, id: string, href: string, display_name: string, name: string, regions: list<record>>, console: record<url: string>, control_plane: record<backup: record<state: string>, log_forwarders: list<record>>, creation_timestamp: string, delete_protection: record<enabled: bool>, disable_user_workload_monitoring: bool, domain_prefix: string, etcd_encryption: bool, expiration_timestamp: string, external_id: string, external_auth_config: record<kind: string, id: string, href: string, enabled: bool, external_auths: list<record>, state: string>, external_configuration: record<labels: list<record>, manifests: list<record>, syncsets: list<record>>, flavour: record<kind: string, id: string, href: string, aws: record<compute_instance_type: string, infra_instance_type: string, infra_volume: record, master_instance_type: string, master_volume: record, worker_volume: record>, gcp: record<compute_instance_type: string, infra_instance_type: string, infra_volume: record, master_instance_type: string, master_volume: record, worker_volume: record>, name: string, network: record<host_prefix: int, machine_cidr: string, pod_cidr: string, service_cidr: string, type: string>, nodes: record<master: int>>, groups: table<kind: string, id: string, href: string, users: list>, health_state: string, htpasswd: record<password: string, username: string, users: list<record>>, hypershift: record<enabled: bool>, identity_providers: table<kind: string, id: string, href: string, ldap: record, challenge: bool, github: record, gitlab: record, google: record, htpasswd: record, login: bool, mapping_method: string, name: string, open_id: record, type: string>, image_registry: record<state: string>, inflight_checks: table<kind: string, id: string, href: string, details: record, ended_at: string, name: string, restarts: int, started_at: string, state: string>, infra_id: string, ingresses: table<kind: string, id: string, href: string, dns_name: string, cluster_routes_hostname: string, cluster_routes_tls_secret_ref: string, component_routes: record, default: bool, excluded_namespace_selectors: list, excluded_namespaces: list, listening: string, load_balancer_type: string, route_namespace_ownership_policy: string, route_selectors: record, route_wildcard_policy: string>, kubelet_config: record<kind: string, id: string, href: string, name: string, pod_pids_limit: int>, load_balancer_quota: int, machine_pools: table<kind: string, id: string, href: string, aws: record, gcp: record, autoscaling: record, availability_zones: list, instance_type: string, labels: record, replicas: int, root_volume: record, security_group_filters: list, subnets: list, taints: list>, managed: bool, managed_service: record<enabled: bool>, multi_az: bool, multi_arch_enabled: bool, name: string, network: record<host_prefix: int, machine_cidr: string, pod_cidr: string, service_cidr: string, type: string>, node_drain_grace_period: record<unit: string, value: float>, node_pools: table<kind: string, id: string, href: string, aws_node_pool: record, auto_repair: bool, autoscaling: record, availability_zone: string, azure_node_pool: record, image_type: string, kubelet_configs: list, labels: record, management_upgrade: record, node_drain_grace_period: record, replicas: int, status: record, subnet: string, taints: list, tuning_configs: list, version: record>, nodes: record<autoscale_compute: record<kind: string, id: string, href: string, max_replicas: int, min_replicas: int>, availability_zones: list<string>, compute: int, compute_labels: record, compute_machine_type: record<kind: string, id: string, href: string, ccs_only: bool, cpu: record, architecture: string, category: string, cloud_provider: record, features: record, generic_name: string, memory: record, name: string, size: string>, compute_root_volume: record<aws: record, gcp: record>, infra: int, infra_machine_type: record<kind: string, id: string, href: string, ccs_only: bool, cpu: record, architecture: string, category: string, cloud_provider: record, features: record, generic_name: string, memory: record, name: string, size: string>, master: int, master_machine_type: record<kind: string, id: string, href: string, ccs_only: bool, cpu: record, architecture: string, category: string, cloud_provider: record, features: record, generic_name: string, memory: record, name: string, size: string>, security_group_filters: list<record>, total: int>, openshift_version: string, product: record<kind: string, id: string, href: string, name: string>, properties: record, provision_shard: record<kind: string, id: string, href: string, aws_account_operator_config: record<kind: string, id: string, href: string, aws_shard: record, kubeconfig: string, server: string, topology: string>, aws_base_domain: string, gcp_base_domain: string, gcp_project_operator: record<kind: string, id: string, href: string, aws_shard: record, kubeconfig: string, server: string, topology: string>, cloud_provider: record<kind: string, id: string, href: string, display_name: string, name: string, regions: list>, creation_timestamp: string, hive_config: record<kind: string, id: string, href: string, aws_shard: record, kubeconfig: string, server: string, topology: string>, hypershift_config: record<kind: string, id: string, href: string, aws_shard: record, kubeconfig: string, server: string, topology: string>, last_update_timestamp: string, management_cluster: string, region: record<kind: string, id: string, href: string, ccs_only: bool, kms_location_id: string, kms_location_name: string, cloud_provider: record, display_name: string, enabled: bool, govcloud: bool, name: string, supports_hypershift: bool, supports_multi_az: bool>, status: string>, proxy: record<http_proxy: string, https_proxy: string, no_proxy: string>, region: record<kind: string, id: string, href: string, ccs_only: bool, kms_location_id: string, kms_location_name: string, cloud_provider: record<kind: string, id: string, href: string, display_name: string, name: string, regions: list>, display_name: string, enabled: bool, govcloud: bool, name: string, supports_hypershift: bool, supports_multi_az: bool>, registry_config: record<additional_trusted_ca: record, allowed_registries_for_import: list<record>, platform_allowlist: record<kind: string, id: string, href: string, cloud_provider: record, creation_timestamp: string, registries: list>, registry_sources: record<allowed_registries: list, blocked_registries: list, insecure_registries: list>>, state: string, status: record<kind: string, id: string, href: string, dns_ready: bool, oidc_ready: bool, configuration_mode: string, current_compute: int, description: string, limited_support_reason_count: int, provision_error_code: string, provision_error_message: string, state: string>, storage_quota: record<unit: string, value: float>, subscription: record<kind: string, id: string, href: string>, version: record<kind: string, id: string, href: string, gcp_marketplace_enabled: bool, rosa_enabled: bool, available_channels: list<string>, available_upgrades: list<string>, channel_group: string, default: bool, enabled: bool, end_of_life_timestamp: string, hosted_control_plane_default: bool, hosted_control_plane_enabled: bool, image_overrides: record<kind: string, id: string, href: string, aws: list, gcp: list>, raw_id: string, release_image: string, release_images: record<arm64: record, multi: record>, wif_enabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the cluster.
@@ -1299,6 +1333,7 @@ export def "clusters-mgmt-clusters patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'Cluster' if this is a complete object or 'ClusterLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -1374,7 +1409,7 @@ export def "clusters-mgmt-clusters patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Initiates cluster hibernation. While hibernating a cluster will not consume any cloud provider infrastructure but will be counted for quota.
@@ -1389,13 +1424,14 @@ export def "clusters-mgmt-clusters-hibernate post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/hibernate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Resumes from Hibernation.
@@ -1410,13 +1446,14 @@ export def "clusters-mgmt-clusters-resume post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/resume")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/clusters_mgmt/v1/clusters/{cluster_id}/addon_inquiries
@@ -1429,6 +1466,7 @@ export def "clusters-mgmt-clusters-addon-inquiries list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the add-on instead of the names of the columns of a table. For example, in order to sort the add-ons descending by name the value should be:  ```sql name desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, but using the names of the attributes of the add-on instead of the names of the columns of a table. For example, in order to retrieve all the add-ons with a name starting with `my` the value should be:  ```sql name like 'my%' ```  If the parameter isn't provided, or if the value is empty, then all the add-ons that the user has permission to see will be returned.
@@ -1440,7 +1478,7 @@ export def "clusters-mgmt-clusters-addon-inquiries list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/addon_inquiries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/clusters_mgmt/v1/clusters/{cluster_id}/addon_inquiries/{addon_inquiry_id}
@@ -1454,13 +1492,14 @@ export def "clusters-mgmt-clusters-addon-inquiries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, common_annotations: record, common_labels: record, config: record<kind: string, id: string, href: string, add_on_environment_variables: list<record>, secret_propagations: list<record>>, credentials_requests: table<name: string, namespace: string, policy_permissions: list, service_account: string>, description: string, docs_link: string, enabled: bool, has_external_resources: bool, hidden: bool, icon: string, install_mode: string, label: string, managed_service: bool, name: string, namespaces: table<kind: string, id: string, href: string, annotations: record, labels: record, name: string>, operator_name: string, parameters: table<kind: string, id: string, href: string, addon: any, conditions: list, default_value: string, description: string, editable: bool, editable_direction: string, enabled: bool, name: string, options: list, required: bool, validation: string, validation_err_msg: string, value_type: string>, requirements: table<id: string, data: record, enabled: bool, resource: string, status: record>, resource_cost: float, resource_name: string, sub_operators: table<enabled: bool, operator_name: string, operator_namespace: string>, target_namespace: string, version: record<kind: string, id: string, href: string, additional_catalog_sources: list<record>, available_upgrades: list<string>, channel: string, config: record<kind: string, id: string, href: string, add_on_environment_variables: list, secret_propagations: list>, enabled: bool, package_image: string, parameters: list<record>, pull_secret_name: string, requirements: list<record>, source_image: string, sub_operators: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/addon_inquiries/($addon_inquiry_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a new addon upgrade policy to the cluster.
@@ -1475,6 +1514,7 @@ export def "clusters-mgmt-clusters-addon-upgrade-policies post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'AddonUpgradePolicy' if this is a complete object or 'AddonUpgradePolicyLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -1494,7 +1534,7 @@ export def "clusters-mgmt-clusters-addon-upgrade-policies post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of addon upgrade policies.
@@ -1509,6 +1549,7 @@ export def "clusters-mgmt-clusters-addon-upgrade-policies list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, addon_id: string, cluster_id: string, next_run: string, schedule: string, schedule_type: string, upgrade_type: string, version: string>, page: int, size: int, total: int> {
@@ -1518,7 +1559,7 @@ export def "clusters-mgmt-clusters-addon-upgrade-policies list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/addon_upgrade_policies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the addon upgrade policy.
@@ -1534,13 +1575,14 @@ export def "clusters-mgmt-clusters-addon-upgrade-policies delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/addon_upgrade_policies/($addon_upgrade_policy_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the addon upgrade policy.
@@ -1556,13 +1598,14 @@ export def "clusters-mgmt-clusters-addon-upgrade-policies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, addon_id: string, cluster_id: string, next_run: string, schedule: string, schedule_type: string, upgrade_type: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/addon_upgrade_policies/($addon_upgrade_policy_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the addon upgrade policy.
@@ -1578,6 +1621,7 @@ export def "clusters-mgmt-clusters-addon-upgrade-policies patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'AddonUpgradePolicy' if this is a complete object or 'AddonUpgradePolicyLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -1597,7 +1641,7 @@ export def "clusters-mgmt-clusters-addon-upgrade-policies patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the details of the upgrade policy state.
@@ -1613,13 +1657,14 @@ export def "clusters-mgmt-clusters-addon-upgrade-policies-state get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, description: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/addon_upgrade_policies/($addon_upgrade_policy_id)/state")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the upgrade policy state.
@@ -1635,6 +1680,7 @@ export def "clusters-mgmt-clusters-addon-upgrade-policies-state patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'AddonUpgradePolicyState' if this is a complete object or 'AddonUpgradePolicyStateLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -1649,7 +1695,7 @@ export def "clusters-mgmt-clusters-addon-upgrade-policies-state patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Create a new add-on installation and add it to the collection of add-on installations on the cluster.
@@ -1668,6 +1714,7 @@ export def "clusters-mgmt-clusters-addons post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'AddOnInstallation' if this is a complete object or 'AddOnInstallationLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -1689,7 +1736,7 @@ export def "clusters-mgmt-clusters-addons post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of add-on installations.
@@ -1704,6 +1751,7 @@ export def "clusters-mgmt-clusters-addons list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the add-on installation instead of the names of the columns of a table. For example, in order to sort the add-on installations descending by name the value should be:  ```sql name desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, but using the names of the attributes of the add-on installation instead of the names of the columns of a table. For example, in order to retrieve all the add-on installations with a name starting with `my` the value should be:  ```sql name like 'my%' ```  If the parameter isn't provided, or if the value is empty, then all the add-on installations that the user has permission to see will be returned.
@@ -1715,7 +1763,7 @@ export def "clusters-mgmt-clusters-addons list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/addons" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete an add-on installation and remove it from the collection of add-on installations on the cluster.
@@ -1731,13 +1779,14 @@ export def "clusters-mgmt-clusters-addons delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/addons/($addoninstallation_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the add-on installation.
@@ -1753,13 +1802,14 @@ export def "clusters-mgmt-clusters-addons get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, addon: record<kind: string, id: string, href: string, common_annotations: record, common_labels: record, config: record<kind: string, id: string, href: string, add_on_environment_variables: list, secret_propagations: list>, credentials_requests: list<record>, description: string, docs_link: string, enabled: bool, has_external_resources: bool, hidden: bool, icon: string, install_mode: string, label: string, managed_service: bool, name: string, namespaces: list<record>, operator_name: string, parameters: list<record>, requirements: list<record>, resource_cost: float, resource_name: string, sub_operators: list<record>, target_namespace: string, version: record<kind: string, id: string, href: string, additional_catalog_sources: list, available_upgrades: list, channel: string, config: record, enabled: bool, package_image: string, parameters: list, pull_secret_name: string, requirements: list, source_image: string, sub_operators: list>>, addon_version: record<kind: string, id: string, href: string, additional_catalog_sources: list<record>, available_upgrades: list<string>, channel: string, config: record<kind: string, id: string, href: string, add_on_environment_variables: list, secret_propagations: list>, enabled: bool, package_image: string, parameters: list<record>, pull_secret_name: string, requirements: list<record>, source_image: string, sub_operators: list<record>>, billing: record<kind: string, id: string, href: string, billing_marketplace_account: string, billing_model: string>, creation_timestamp: string, operator_version: string, parameters: table<kind: string, id: string, href: string, value: string>, state: string, state_description: string, updated_timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/addons/($addoninstallation_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the add-on installation.
@@ -1779,6 +1829,7 @@ export def "clusters-mgmt-clusters-addons patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'AddOnInstallation' if this is a complete object or 'AddOnInstallationLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -1800,7 +1851,7 @@ export def "clusters-mgmt-clusters-addons patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the cluster autoscaler.
@@ -1815,13 +1866,14 @@ export def "clusters-mgmt-clusters-autoscaler delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/autoscaler")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the autoscaler of a cluster.
@@ -1836,13 +1888,14 @@ export def "clusters-mgmt-clusters-autoscaler get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, balance_similar_node_groups: bool, balancing_ignored_labels: list<string>, ignore_daemonsets_utilization: bool, log_verbosity: int, max_node_provision_time: string, max_pod_grace_period: int, pod_priority_threshold: int, resource_limits: record<gpus: list<record>, cores: record<max: int, min: int>, max_nodes_total: int, memory: record<max: int, min: int>>, scale_down: record<delay_after_add: string, delay_after_delete: string, delay_after_failure: string, enabled: bool, unneeded_time: string, utilization_threshold: string>, skip_nodes_with_local_storage: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/autoscaler")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new cluster autoscaler object.
@@ -1859,6 +1912,7 @@ export def "clusters-mgmt-clusters-autoscaler post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'ClusterAutoscaler' if this is a complete object or 'ClusterAutoscalerLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -1881,7 +1935,7 @@ export def "clusters-mgmt-clusters-autoscaler post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the cluster autoscaler.
@@ -1898,6 +1952,7 @@ export def "clusters-mgmt-clusters-autoscaler patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'ClusterAutoscaler' if this is a complete object or 'ClusterAutoscalerLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -1920,7 +1975,7 @@ export def "clusters-mgmt-clusters-autoscaler patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the details of the configuration for the Private Link.
@@ -1935,13 +1990,14 @@ export def "clusters-mgmt-clusters-aws-private-link-configuration get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<principals: record<kind: string, id: string, href: string, principals: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/aws/private_link_configuration")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a new principal for the Private Link.
@@ -1956,6 +2012,7 @@ export def "clusters-mgmt-clusters-aws-private-link-configuration-principals pos
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'PrivateLinkPrincipal' if this is a complete object or 'PrivateLinkPrincipalLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -1969,7 +2026,7 @@ export def "clusters-mgmt-clusters-aws-private-link-configuration-principals pos
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of principals.
@@ -1984,6 +2041,7 @@ export def "clusters-mgmt-clusters-aws-private-link-configuration-principals lis
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, but using the names of the attributes of the role binding instead of the names of the columns of a table. For example, in order to retrieve role bindings with role_id AuthenticatedUser:  ```sql role_id = 'AuthenticatedUser' ```  If the parameter isn't provided, or if the value is empty, then all the items that the user has permission to see will be returned.
   --size: int # Number of items contained in the returned page. (format: int32)
@@ -1994,7 +2052,7 @@ export def "clusters-mgmt-clusters-aws-private-link-configuration-principals lis
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/aws/private_link_configuration/principals" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the principal.
@@ -2010,13 +2068,14 @@ export def "clusters-mgmt-clusters-aws-private-link-configuration-principals del
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/aws/private_link_configuration/principals/($principal_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the principal.
@@ -2032,13 +2091,14 @@ export def "clusters-mgmt-clusters-aws-private-link-configuration-principals get
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, principal: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/aws/private_link_configuration/principals/($principal_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/clusters_mgmt/v1/clusters/{cluster_id}/aws/role_policy_bindings
@@ -2051,6 +2111,7 @@ export def "clusters-mgmt-clusters-aws-role-policy-bindings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fetchCurrent: oneof<nothing, bool> # If true, retrieves role policy binding states from AWS.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
@@ -2061,7 +2122,7 @@ export def "clusters-mgmt-clusters-aws-role-policy-bindings get" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/aws/role_policy_bindings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Create a new AWS infrastructure access role grant and add it to the collection of AWS infrastructure access role grants on the cluster.
@@ -2077,6 +2138,7 @@ export def "clusters-mgmt-clusters-aws-infrastructure-access-role-grants post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'AWSInfrastructureAccessRoleGrant' if this is a complete object or 'AWSInfrastructureAccessRoleGrantLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -2094,7 +2156,7 @@ export def "clusters-mgmt-clusters-aws-infrastructure-access-role-grants post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of AWS infrastructure access role grants.
@@ -2109,6 +2171,7 @@ export def "clusters-mgmt-clusters-aws-infrastructure-access-role-grants list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the AWS infrastructure access role grant instead of the names of the columns of a table. For example, in order to sort the AWS infrastructure access role grants descending by user ARN the value should be:  ```sql user_arn desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, but using the names of the attributes of the AWS infrastructure access role grant instead of the names of the columns of a table. For example, in order to retrieve all the AWS infrastructure access role grants with a user ARN starting with `user` the value should be:  ```sql user_arn like '%user' ```  If the parameter isn't provided, or if the value is empty, then all the AWS infrastructure access role grants that the user has permission to see will be returned.
@@ -2120,7 +2183,7 @@ export def "clusters-mgmt-clusters-aws-infrastructure-access-role-grants list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/aws_infrastructure_access_role_grants" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the AWS infrastructure access role grant.
@@ -2136,13 +2199,14 @@ export def "clusters-mgmt-clusters-aws-infrastructure-access-role-grants delete"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/aws_infrastructure_access_role_grants/($aws_infrastructure_access_role_grant_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the AWS infrastructure access role grant.
@@ -2158,13 +2222,14 @@ export def "clusters-mgmt-clusters-aws-infrastructure-access-role-grants get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, console_url: string, role: record<kind: string, id: string, href: string, description: string, display_name: string, state: string>, state: string, state_description: string, user_arn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/aws_infrastructure_access_role_grants/($aws_infrastructure_access_role_grant_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a new break glass credential to the cluster.
@@ -2179,6 +2244,7 @@ export def "clusters-mgmt-clusters-break-glass-credentials post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'BreakGlassCredential' if this is a complete object or 'BreakGlassCredentialLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -2196,7 +2262,7 @@ export def "clusters-mgmt-clusters-break-glass-credentials post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Revokes all the break glass certificates signed by a specific signer.
@@ -2211,13 +2277,14 @@ export def "clusters-mgmt-clusters-break-glass-credentials delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/break_glass_credentials")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the list of break glass credentials.
@@ -2232,6 +2299,7 @@ export def "clusters-mgmt-clusters-break-glass-credentials list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the break glass credentials instead of the the names of the columns of a table. For example, in order to sort the credentials descending by identifier the value should be:  ```sql id desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of a SQL statement, but using the names of the attributes of the break glass credentials instead of the names of the columns of a table. For example, in order to retrieve all the credentials with a specific username and status the following is required:  ```sql username='user1' AND status='expired' ```  If the parameter isn't provided, or if the value is empty, then all the break glass credentials that the user has permission to see will be returned.
@@ -2243,7 +2311,7 @@ export def "clusters-mgmt-clusters-break-glass-credentials list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/break_glass_credentials" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the break glass credential.
@@ -2259,13 +2327,14 @@ export def "clusters-mgmt-clusters-break-glass-credentials get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, expiration_timestamp: string, kubeconfig: string, revocation_timestamp: string, status: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/break_glass_credentials/($break_glass_credential_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the clusterdeployment.
@@ -2280,13 +2349,14 @@ export def "clusters-mgmt-clusters-clusterdeployment delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/clusterdeployment")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the control plane
@@ -2301,13 +2371,14 @@ export def "clusters-mgmt-clusters-control-plane get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<backup: record<state: string>, log_forwarders: table<kind: string, id: string, href: string, s3: record, applications: list, cloudwatch: record, cluster_id: string, groups: list, status: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/control_plane")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the control plane
@@ -2324,6 +2395,7 @@ export def "clusters-mgmt-clusters-control-plane patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --backup: any # Representation of a Backup. — shape: {state?: string}
   --log-forwarders: list # Control plane log forwarders configuration. This can be set during cluster creation to configure control plane log forwarders. — item shape: {kind?: string, id?: string, href?: string, s3?: any, applications?: list, cloudwatch?: any, cluster_id?: string, groups?: list, status?: any}
 ]: any -> record<backup: record<state: string>, log_forwarders: table<kind: string, id: string, href: string, s3: record, applications: list, cloudwatch: record, cluster_id: string, groups: list, status: record>> {
@@ -2335,7 +2407,7 @@ export def "clusters-mgmt-clusters-control-plane patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a new log forwarder.
@@ -2354,6 +2426,7 @@ export def "clusters-mgmt-clusters-control-plane-log-forwarders post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'LogForwarder' if this is a complete object or 'LogForwarderLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -2372,7 +2445,7 @@ export def "clusters-mgmt-clusters-control-plane-log-forwarders post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of log forwarders.
@@ -2387,6 +2460,7 @@ export def "clusters-mgmt-clusters-control-plane-log-forwarders list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, s3: record, applications: list, cloudwatch: record, cluster_id: string, groups: list, status: record>, page: int, size: int, total: int> {
@@ -2396,7 +2470,7 @@ export def "clusters-mgmt-clusters-control-plane-log-forwarders list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/control_plane/log_forwarders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the log forwarder.
@@ -2412,13 +2486,14 @@ export def "clusters-mgmt-clusters-control-plane-log-forwarders delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/control_plane/log_forwarders/($log_forwarder_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the log forwarder.
@@ -2434,13 +2509,14 @@ export def "clusters-mgmt-clusters-control-plane-log-forwarders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, s3: record<bucket_name: string, bucket_prefix: string>, applications: list<string>, cloudwatch: record<log_distribution_role_arn: string, log_group_name: string>, cluster_id: string, groups: table<id: string, version: string>, status: record<message: string, resolved_applications: list<string>, state: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/control_plane/log_forwarders/($log_forwarder_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the log forwarder.
@@ -2460,6 +2536,7 @@ export def "clusters-mgmt-clusters-control-plane-log-forwarders patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'LogForwarder' if this is a complete object or 'LogForwarderLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -2478,7 +2555,7 @@ export def "clusters-mgmt-clusters-control-plane-log-forwarders patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds a new upgrade policy to the control plane of the cluster.
@@ -2494,6 +2571,7 @@ export def "clusters-mgmt-clusters-control-plane-upgrade-policies post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'ControlPlaneUpgradePolicy' if this is a complete object or 'ControlPlaneUpgradePolicyLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -2516,7 +2594,7 @@ export def "clusters-mgmt-clusters-control-plane-upgrade-policies post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of upgrade policies for the control plane.
@@ -2531,6 +2609,7 @@ export def "clusters-mgmt-clusters-control-plane-upgrade-policies list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, cluster_id: string, creation_timestamp: string, enable_minor_version_upgrades: bool, last_update_timestamp: string, next_run: string, schedule: string, schedule_type: string, state: record, upgrade_type: string, version: string>, page: int, size: int, total: int> {
@@ -2540,7 +2619,7 @@ export def "clusters-mgmt-clusters-control-plane-upgrade-policies list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/control_plane/upgrade_policies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the upgrade policy for the control plane.
@@ -2556,13 +2635,14 @@ export def "clusters-mgmt-clusters-control-plane-upgrade-policies delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/control_plane/upgrade_policies/($control_plane_upgrade_policy_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the upgrade policy for the control plane.
@@ -2578,13 +2658,14 @@ export def "clusters-mgmt-clusters-control-plane-upgrade-policies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, cluster_id: string, creation_timestamp: string, enable_minor_version_upgrades: bool, last_update_timestamp: string, next_run: string, schedule: string, schedule_type: string, state: record<kind: string, id: string, href: string, description: string, value: string>, upgrade_type: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/control_plane/upgrade_policies/($control_plane_upgrade_policy_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the upgrade policy for the control plane.
@@ -2601,6 +2682,7 @@ export def "clusters-mgmt-clusters-control-plane-upgrade-policies patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'ControlPlaneUpgradePolicy' if this is a complete object or 'ControlPlaneUpgradePolicyLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -2623,7 +2705,7 @@ export def "clusters-mgmt-clusters-control-plane-upgrade-policies patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the details of the credentials of a cluster.
@@ -2638,13 +2720,14 @@ export def "clusters-mgmt-clusters-credentials get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, kubeconfig: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/credentials")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/clusters_mgmt/v1/clusters/{cluster_id}/delete_protection
@@ -2657,13 +2740,14 @@ export def "clusters-mgmt-clusters-delete-protection get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/delete_protection")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PATCH /api/clusters_mgmt/v1/clusters/{cluster_id}/delete_protection
@@ -2676,6 +2760,7 @@ export def "clusters-mgmt-clusters-delete-protection patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Boolean flag indicating if the cluster should be be using _DeleteProtection_.  By default this is `false`.  To enable it a SREP needs to patch the value through OCM API
 ]: any -> record<enabled: bool> {
   let input = $in
@@ -2686,7 +2771,7 @@ export def "clusters-mgmt-clusters-delete-protection patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/clusters_mgmt/v1/clusters/{cluster_id}/external_auth_config
@@ -2699,13 +2784,14 @@ export def "clusters-mgmt-clusters-external-auth-config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, enabled: bool, external_auths: table<kind: string, id: string, href: string, claim: record, clients: list, issuer: record, status: record>, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/external_auth_config")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a new authentication to the cluster.
@@ -2724,6 +2810,7 @@ export def "clusters-mgmt-clusters-external-auth-config-external-auths post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'ExternalAuth' if this is a complete object or 'ExternalAuthLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -2740,7 +2827,7 @@ export def "clusters-mgmt-clusters-external-auth-config-external-auths post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/clusters_mgmt/v1/clusters/{cluster_id}/external_auth_config/external_auths
@@ -2753,6 +2840,7 @@ export def "clusters-mgmt-clusters-external-auth-config-external-auths list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, claim: record, clients: list, issuer: record, status: record>, page: int, size: int, total: int> {
@@ -2762,7 +2850,7 @@ export def "clusters-mgmt-clusters-external-auth-config-external-auths list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/external_auth_config/external_auths" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the external authentication.
@@ -2778,13 +2866,14 @@ export def "clusters-mgmt-clusters-external-auth-config-external-auths delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/external_auth_config/external_auths/($external_auth_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of an external authentication.
@@ -2800,13 +2889,14 @@ export def "clusters-mgmt-clusters-external-auth-config-external-auths get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, claim: record<mappings: record<groups: record, username: record>, validation_rules: list<record>>, clients: table<id: string, component: record, extra_scopes: list, secret: string, type: string>, issuer: record<ca: string, url: string, audiences: list<string>>, status: record<message: string, state: record<last_updated_timestamp: string, value: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/external_auth_config/external_auths/($external_auth_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the external authentication.
@@ -2826,6 +2916,7 @@ export def "clusters-mgmt-clusters-external-auth-config-external-auths patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'ExternalAuth' if this is a complete object or 'ExternalAuthLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -2842,7 +2933,7 @@ export def "clusters-mgmt-clusters-external-auth-config-external-auths patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the details of the external configuration.
@@ -2857,13 +2948,14 @@ export def "clusters-mgmt-clusters-external-configuration get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<labels: table<kind: string, id: string, href: string, key: string, value: string>, manifests: table<kind: string, id: string, href: string, creation_timestamp: string, live_resource: record, spec: record, updated_timestamp: string, workloads: list>, syncsets: table<kind: string, id: string, href: string, resources: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/external_configuration")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a new label to the cluster.
@@ -2878,6 +2970,7 @@ export def "clusters-mgmt-clusters-external-configuration-labels post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'Label' if this is a complete object or 'LabelLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -2892,7 +2985,7 @@ export def "clusters-mgmt-clusters-external-configuration-labels post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of labels.
@@ -2907,6 +3000,7 @@ export def "clusters-mgmt-clusters-external-configuration-labels list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, key: string, value: string>, page: int, size: int, total: int> {
@@ -2916,7 +3010,7 @@ export def "clusters-mgmt-clusters-external-configuration-labels list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/external_configuration/labels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the label.
@@ -2932,13 +3026,14 @@ export def "clusters-mgmt-clusters-external-configuration-labels delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/external_configuration/labels/($label_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the label.
@@ -2954,13 +3049,14 @@ export def "clusters-mgmt-clusters-external-configuration-labels get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/external_configuration/labels/($label_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the label.
@@ -2976,6 +3072,7 @@ export def "clusters-mgmt-clusters-external-configuration-labels patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'Label' if this is a complete object or 'LabelLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -2990,7 +3087,7 @@ export def "clusters-mgmt-clusters-external-configuration-labels patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds a new manifest to a cluster.
@@ -3005,6 +3102,7 @@ export def "clusters-mgmt-clusters-external-configuration-manifests post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'Manifest' if this is a complete object or 'ManifestLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -3022,7 +3120,7 @@ export def "clusters-mgmt-clusters-external-configuration-manifests post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of manifests.
@@ -3037,6 +3135,7 @@ export def "clusters-mgmt-clusters-external-configuration-manifests list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, creation_timestamp: string, live_resource: record, spec: record, updated_timestamp: string, workloads: list>, page: int, size: int, total: int> {
@@ -3046,7 +3145,7 @@ export def "clusters-mgmt-clusters-external-configuration-manifests list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/external_configuration/manifests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the manifest.
@@ -3062,13 +3161,14 @@ export def "clusters-mgmt-clusters-external-configuration-manifests delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/external_configuration/manifests/($manifest_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the manifest.
@@ -3084,13 +3184,14 @@ export def "clusters-mgmt-clusters-external-configuration-manifests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, creation_timestamp: string, live_resource: record, spec: record, updated_timestamp: string, workloads: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/external_configuration/manifests/($manifest_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the manifest.
@@ -3106,6 +3207,7 @@ export def "clusters-mgmt-clusters-external-configuration-manifests patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'Manifest' if this is a complete object or 'ManifestLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -3123,7 +3225,7 @@ export def "clusters-mgmt-clusters-external-configuration-manifests patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds a new syncset to the cluster.
@@ -3138,6 +3240,7 @@ export def "clusters-mgmt-clusters-external-configuration-syncsets post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'Syncset' if this is a complete object or 'SyncsetLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -3151,7 +3254,7 @@ export def "clusters-mgmt-clusters-external-configuration-syncsets post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of syncsets.
@@ -3166,6 +3269,7 @@ export def "clusters-mgmt-clusters-external-configuration-syncsets list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, resources: list>, page: int, size: int, total: int> {
@@ -3175,7 +3279,7 @@ export def "clusters-mgmt-clusters-external-configuration-syncsets list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/external_configuration/syncsets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the syncset.
@@ -3191,13 +3295,14 @@ export def "clusters-mgmt-clusters-external-configuration-syncsets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/external_configuration/syncsets/($syncset_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the syncset.
@@ -3213,13 +3318,14 @@ export def "clusters-mgmt-clusters-external-configuration-syncsets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, resources: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/external_configuration/syncsets/($syncset_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the syncset.
@@ -3235,6 +3341,7 @@ export def "clusters-mgmt-clusters-external-configuration-syncsets patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'Syncset' if this is a complete object or 'SyncsetLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -3248,7 +3355,7 @@ export def "clusters-mgmt-clusters-external-configuration-syncsets patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds a new agreed version gate to the cluster.
@@ -3264,6 +3371,7 @@ export def "clusters-mgmt-clusters-gate-agreements post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'VersionGateAgreement' if this is a complete object or 'VersionGateAgreementLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -3278,7 +3386,7 @@ export def "clusters-mgmt-clusters-gate-agreements post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of reasons.
@@ -3293,6 +3401,7 @@ export def "clusters-mgmt-clusters-gate-agreements list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, agreed_timestamp: string, version_gate: record>, page: int, size: int, total: int> {
@@ -3302,7 +3411,7 @@ export def "clusters-mgmt-clusters-gate-agreements list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/gate_agreements" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the version gate agreement.
@@ -3318,13 +3427,14 @@ export def "clusters-mgmt-clusters-gate-agreements delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/gate_agreements/($version_gate_agreement_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the version gate agreement.
@@ -3340,13 +3450,14 @@ export def "clusters-mgmt-clusters-gate-agreements get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, agreed_timestamp: string, version_gate: record<kind: string, id: string, href: string, sts_only: bool, cluster_condition: string, creation_timestamp: string, description: string, documentation_url: string, label: string, value: string, version_raw_id_prefix: string, warning_message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/gate_agreements/($version_gate_agreement_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the list of groups.
@@ -3361,6 +3472,7 @@ export def "clusters-mgmt-clusters-groups list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, users: list>, page: int, size: int, total: int> {
@@ -3370,7 +3482,7 @@ export def "clusters-mgmt-clusters-groups list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the group.
@@ -3386,13 +3498,14 @@ export def "clusters-mgmt-clusters-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, users: table<kind: string, id: string, href: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/groups/($group_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a new user to the group.
@@ -3408,6 +3521,7 @@ export def "clusters-mgmt-clusters-groups-users post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'User' if this is a complete object or 'UserLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -3420,7 +3534,7 @@ export def "clusters-mgmt-clusters-groups-users post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of users.
@@ -3436,6 +3550,7 @@ export def "clusters-mgmt-clusters-groups-users list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string>, page: int, size: int, total: int> {
@@ -3445,7 +3560,7 @@ export def "clusters-mgmt-clusters-groups-users list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/groups/($group_id)/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the user.
@@ -3462,13 +3577,14 @@ export def "clusters-mgmt-clusters-groups-users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/groups/($group_id)/users/($user_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the user.
@@ -3485,13 +3601,14 @@ export def "clusters-mgmt-clusters-groups-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/groups/($group_id)/users/($user_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the Hypershift details for a single cluster.
@@ -3506,13 +3623,14 @@ export def "clusters-mgmt-clusters-hypershift get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<hcp_namespace: string, enabled: bool, management_cluster: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/hypershift")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the Hypershift details for a single cluster.
@@ -3527,6 +3645,7 @@ export def "clusters-mgmt-clusters-hypershift patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --hcp-namespace: string # Contains the name of the hcp namespace for this Hypershift cluster. Empty for non Hypershift clusters.
   --enabled: oneof<nothing, bool> # Boolean flag indicating if the cluster should be creating using _Hypershift_.  By default this is `false`.  To enable it the cluster needs to be ROSA cluster and the organization of the user needs to have the `hypershift` capability enabled.
   --management-cluster: string # Contains the name of the current management cluster for this Hypershift cluster. Empty for non Hypershift clusters.
@@ -3539,7 +3658,7 @@ export def "clusters-mgmt-clusters-hypershift patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds a new identity provider to the cluster.
@@ -3560,6 +3679,7 @@ export def "clusters-mgmt-clusters-identity-providers post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'IdentityProvider' if this is a complete object or 'IdentityProviderLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -3583,7 +3703,7 @@ export def "clusters-mgmt-clusters-identity-providers post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of identity providers.
@@ -3598,6 +3718,7 @@ export def "clusters-mgmt-clusters-identity-providers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, ldap: record, challenge: bool, github: record, gitlab: record, google: record, htpasswd: record, login: bool, mapping_method: string, name: string, open_id: record, type: string>, page: int, size: int, total: int> {
@@ -3607,7 +3728,7 @@ export def "clusters-mgmt-clusters-identity-providers list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/identity_providers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the identity provider.
@@ -3623,13 +3744,14 @@ export def "clusters-mgmt-clusters-identity-providers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/identity_providers/($identity_provider_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the identity provider.
@@ -3645,13 +3767,14 @@ export def "clusters-mgmt-clusters-identity-providers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, ldap: record<ca: string, url: string, attributes: record<id: list, email: list, name: list, preferred_username: list>, bind_dn: string, bind_password: string, insecure: bool>, challenge: bool, github: record<ca: string, client_id: string, client_secret: string, hostname: string, organizations: list<string>, teams: list<string>>, gitlab: record<ca: string, url: string, client_id: string, client_secret: string>, google: record<client_id: string, client_secret: string, hosted_domain: string>, htpasswd: record<password: string, username: string, users: list<record>>, login: bool, mapping_method: string, name: string, open_id: record<ca: string, claims: record<email: list, groups: list, name: list, preferred_username: list>, client_id: string, client_secret: string, extra_authorize_parameters: record, extra_scopes: list<string>, issuer: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/identity_providers/($identity_provider_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update identity provider in the cluster.
@@ -3673,6 +3796,7 @@ export def "clusters-mgmt-clusters-identity-providers patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'IdentityProvider' if this is a complete object or 'IdentityProviderLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -3696,7 +3820,7 @@ export def "clusters-mgmt-clusters-identity-providers patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds a new user to the _HTPasswd_ file.
@@ -3712,6 +3836,7 @@ export def "clusters-mgmt-clusters-identity-providers-htpasswd-users post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # ID for a secondary user in the _HTPasswd_ data file.
   --hashed-password: string # HTPasswd Hashed Password for a user in the _HTPasswd_ data file. The value of this field is set as-is in the _HTPasswd_ data file for the HTPasswd IDP
   --password: string # Password in plain-text for a  user in the _HTPasswd_ data file. The value of this field is hashed before setting it in the  _HTPasswd_ data file for the HTPasswd IDP
@@ -3725,7 +3850,7 @@ export def "clusters-mgmt-clusters-identity-providers-htpasswd-users post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of _HTPasswd_ IDP users.
@@ -3741,6 +3866,7 @@ export def "clusters-mgmt-clusters-identity-providers-htpasswd-users list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<id: string, hashed_password: string, password: string, username: string>, page: int, size: int, total: int> {
@@ -3750,7 +3876,7 @@ export def "clusters-mgmt-clusters-identity-providers-htpasswd-users list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/identity_providers/($identity_provider_id)/htpasswd_users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds multiple new users to the _HTPasswd_ file.
@@ -3767,6 +3893,7 @@ export def "clusters-mgmt-clusters-identity-providers-htpasswd-users-import post
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --items: list # List of users to add to the IDP. — item shape: {id?: string, hashed_password?: string, password?: string, username?: string}
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
@@ -3779,7 +3906,7 @@ export def "clusters-mgmt-clusters-identity-providers-htpasswd-users-import post
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the user.
@@ -3796,13 +3923,14 @@ export def "clusters-mgmt-clusters-identity-providers-htpasswd-users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/identity_providers/($identity_provider_id)/htpasswd_users/($htpasswd_user_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the user.
@@ -3819,13 +3947,14 @@ export def "clusters-mgmt-clusters-identity-providers-htpasswd-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, hashed_password: string, password: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/identity_providers/($identity_provider_id)/htpasswd_users/($htpasswd_user_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the user's password. The username is not editable
@@ -3842,6 +3971,7 @@ export def "clusters-mgmt-clusters-identity-providers-htpasswd-users patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # ID for a secondary user in the _HTPasswd_ data file.
   --hashed-password: string # HTPasswd Hashed Password for a user in the _HTPasswd_ data file. The value of this field is set as-is in the _HTPasswd_ data file for the HTPasswd IDP
   --password: string # Password in plain-text for a  user in the _HTPasswd_ data file. The value of this field is hashed before setting it in the  _HTPasswd_ data file for the HTPasswd IDP
@@ -3855,7 +3985,7 @@ export def "clusters-mgmt-clusters-identity-providers-htpasswd-users patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Creates a new image mirror configuration for the cluster. Cluster must be in ready state for this operation to succeed.
@@ -3870,6 +4000,7 @@ export def "clusters-mgmt-clusters-image-mirrors post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'ImageMirror' if this is a complete object or 'ImageMirrorLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -3887,7 +4018,7 @@ export def "clusters-mgmt-clusters-image-mirrors post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of image mirrors for the cluster.
@@ -3902,6 +4033,7 @@ export def "clusters-mgmt-clusters-image-mirrors list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria for sorting results.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria for filtering results. Searchable fields: id, name, cluster_id, source, type All searchable fields can be ordered with asc/desc direction, default order by id
@@ -3913,7 +4045,7 @@ export def "clusters-mgmt-clusters-image-mirrors list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/image_mirrors" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the image mirror configuration.
@@ -3929,13 +4061,14 @@ export def "clusters-mgmt-clusters-image-mirrors delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/image_mirrors/($image_mirror_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the image mirror.
@@ -3951,13 +4084,14 @@ export def "clusters-mgmt-clusters-image-mirrors get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, creation_timestamp: string, last_update_timestamp: string, mirrors: list<string>, source: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/image_mirrors/($image_mirror_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the image mirror configuration. Note: Id and Source fields are immutable and cannot be updated. The mirrors array is completely replaced, not merged.
@@ -3973,6 +4107,7 @@ export def "clusters-mgmt-clusters-image-mirrors patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'ImageMirror' if this is a complete object or 'ImageMirrorLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -3990,7 +4125,7 @@ export def "clusters-mgmt-clusters-image-mirrors patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of inflight checks.
@@ -4005,6 +4140,7 @@ export def "clusters-mgmt-clusters-inflight-checks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, details: record, ended_at: string, name: string, restarts: int, started_at: string, state: string>, page: int, size: int, total: int> {
@@ -4014,7 +4150,7 @@ export def "clusters-mgmt-clusters-inflight-checks list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/inflight_checks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the inflight check.
@@ -4030,13 +4166,14 @@ export def "clusters-mgmt-clusters-inflight-checks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, details: record, ended_at: string, name: string, restarts: int, started_at: string, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/inflight_checks/($inflight_check_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a new ingress to the cluster.
@@ -4052,6 +4189,7 @@ export def "clusters-mgmt-clusters-ingresses post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'Ingress' if this is a complete object or 'IngressLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -4076,7 +4214,7 @@ export def "clusters-mgmt-clusters-ingresses post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of ingresses.
@@ -4091,6 +4229,7 @@ export def "clusters-mgmt-clusters-ingresses list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, dns_name: string, cluster_routes_hostname: string, cluster_routes_tls_secret_ref: string, component_routes: record, default: bool, excluded_namespace_selectors: list, excluded_namespaces: list, listening: string, load_balancer_type: string, route_namespace_ownership_policy: string, route_selectors: record, route_wildcard_policy: string>, page: int, size: int, total: int> {
@@ -4100,7 +4239,7 @@ export def "clusters-mgmt-clusters-ingresses list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/ingresses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates all ingresses
@@ -4115,6 +4254,7 @@ export def "clusters-mgmt-clusters-ingresses patch-by-cluster_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
 ]: any -> table<kind: string, id: string, href: string, dns_name: string, cluster_routes_hostname: string, cluster_routes_tls_secret_ref: string, component_routes: record, default: bool, excluded_namespace_selectors: list<record>, excluded_namespaces: list<string>, listening: string, load_balancer_type: string, route_namespace_ownership_policy: string, route_selectors: record, route_wildcard_policy: string> {
   let input = $in
@@ -4124,7 +4264,7 @@ export def "clusters-mgmt-clusters-ingresses patch-by-cluster_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the ingress.
@@ -4140,13 +4280,14 @@ export def "clusters-mgmt-clusters-ingresses delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/ingresses/($ingress_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the ingress.
@@ -4162,13 +4303,14 @@ export def "clusters-mgmt-clusters-ingresses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, dns_name: string, cluster_routes_hostname: string, cluster_routes_tls_secret_ref: string, component_routes: record, default: bool, excluded_namespace_selectors: table<key: string, values: list>, excluded_namespaces: list<string>, listening: string, load_balancer_type: string, route_namespace_ownership_policy: string, route_selectors: record, route_wildcard_policy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/ingresses/($ingress_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the ingress.
@@ -4185,6 +4327,7 @@ export def "clusters-mgmt-clusters-ingresses patch-by-cluster_id-ingress_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'Ingress' if this is a complete object or 'IngressLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -4209,7 +4352,7 @@ export def "clusters-mgmt-clusters-ingresses patch-by-cluster_id-ingress_id" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Deletes the cluster KubeletConfig
@@ -4224,13 +4367,14 @@ export def "clusters-mgmt-clusters-kubelet-config delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/kubelet_config")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the KubeletConfig for a cluster
@@ -4245,13 +4389,14 @@ export def "clusters-mgmt-clusters-kubelet-config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, name: string, pod_pids_limit: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/kubelet_config")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a new cluster KubeletConfig
@@ -4266,6 +4411,7 @@ export def "clusters-mgmt-clusters-kubelet-config post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'KubeletConfig' if this is a complete object or 'KubeletConfigLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -4280,7 +4426,7 @@ export def "clusters-mgmt-clusters-kubelet-config post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Updates the existing cluster KubeletConfig
@@ -4295,6 +4441,7 @@ export def "clusters-mgmt-clusters-kubelet-config patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'KubeletConfig' if this is a complete object or 'KubeletConfigLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -4309,7 +4456,7 @@ export def "clusters-mgmt-clusters-kubelet-config patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds a new KubeletConfig to the cluster.
@@ -4324,6 +4471,7 @@ export def "clusters-mgmt-clusters-kubelet-configs post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'KubeletConfig' if this is a complete object or 'KubeletConfigLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -4338,7 +4486,7 @@ export def "clusters-mgmt-clusters-kubelet-configs post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of KubeletConfigs for the cluster.
@@ -4353,6 +4501,7 @@ export def "clusters-mgmt-clusters-kubelet-configs list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, name: string, pod_pids_limit: int>, page: int, size: int, total: int> {
@@ -4362,7 +4511,7 @@ export def "clusters-mgmt-clusters-kubelet-configs list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/kubelet_configs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the KubeletConfig specified by the id.
@@ -4378,13 +4527,14 @@ export def "clusters-mgmt-clusters-kubelet-configs delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/kubelet_configs/($kubelet_config_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the KubeletConfig specified by the id.
@@ -4400,13 +4550,14 @@ export def "clusters-mgmt-clusters-kubelet-configs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, name: string, pod_pids_limit: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/kubelet_configs/($kubelet_config_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the KubeletConfig specified by the id.
@@ -4422,6 +4573,7 @@ export def "clusters-mgmt-clusters-kubelet-configs patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'KubeletConfig' if this is a complete object or 'KubeletConfigLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -4436,7 +4588,7 @@ export def "clusters-mgmt-clusters-kubelet-configs patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds a new reason to the cluster.
@@ -4453,6 +4605,7 @@ export def "clusters-mgmt-clusters-limited-support-reasons post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'LimitedSupportReason' if this is a complete object or 'LimitedSupportReasonLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -4471,7 +4624,7 @@ export def "clusters-mgmt-clusters-limited-support-reasons post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of reasons.
@@ -4486,6 +4639,7 @@ export def "clusters-mgmt-clusters-limited-support-reasons list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, creation_timestamp: string, details: string, detection_type: string, override: record, summary: string, template: record>, page: int, size: int, total: int> {
@@ -4495,7 +4649,7 @@ export def "clusters-mgmt-clusters-limited-support-reasons list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/limited_support_reasons" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the reason.
@@ -4511,13 +4665,14 @@ export def "clusters-mgmt-clusters-limited-support-reasons delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/limited_support_reasons/($limited_support_reason_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the reason.
@@ -4533,13 +4688,14 @@ export def "clusters-mgmt-clusters-limited-support-reasons get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, creation_timestamp: string, details: string, detection_type: string, override: record<kind: string, id: string, href: string, enabled: bool>, summary: string, template: record<kind: string, id: string, href: string, details: string, summary: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/limited_support_reasons/($limited_support_reason_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the list of log links.
@@ -4554,6 +4710,7 @@ export def "clusters-mgmt-clusters-logs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, content: string>, page: int, size: int, total: int> {
@@ -4563,7 +4720,7 @@ export def "clusters-mgmt-clusters-logs get" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/logs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the log.
@@ -4578,6 +4735,7 @@ export def "clusters-mgmt-clusters-logs-install get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Line offset to start logs from. if 0 retreive entire log. If offset > #lines return an empty log. (format: int32)
   --tail: int # Returns the number of tail lines from the end of the log. If there are no line breaks or the number of lines < tail return the entire log. Either 'tail' or 'offset' can be set. Not both.  (format: int32)
 ]: nothing -> record<kind: string, id: string, href: string, content: string> {
@@ -4587,7 +4745,7 @@ export def "clusters-mgmt-clusters-logs-install get" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/logs/install" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the log.
@@ -4602,6 +4760,7 @@ export def "clusters-mgmt-clusters-logs-uninstall get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Line offset to start logs from. if 0 retreive entire log. If offset > #lines return an empty log. (format: int32)
   --tail: int # Returns the number of tail lines from the end of the log. If there are no line breaks or the number of lines < tail return the entire log. Either 'tail' or 'offset' can be set. Not both.  (format: int32)
 ]: nothing -> record<kind: string, id: string, href: string, content: string> {
@@ -4611,7 +4770,7 @@ export def "clusters-mgmt-clusters-logs-uninstall get" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/logs/uninstall" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a new machine pool to the cluster.
@@ -4632,6 +4791,7 @@ export def "clusters-mgmt-clusters-machine-pools post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'MachinePool' if this is a complete object or 'MachinePoolLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -4655,7 +4815,7 @@ export def "clusters-mgmt-clusters-machine-pools post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of machine pools.
@@ -4670,6 +4830,7 @@ export def "clusters-mgmt-clusters-machine-pools list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, aws: record, gcp: record, autoscaling: record, availability_zones: list, instance_type: string, labels: record, replicas: int, root_volume: record, security_group_filters: list, subnets: list, taints: list>, page: int, size: int, total: int> {
@@ -4679,7 +4840,7 @@ export def "clusters-mgmt-clusters-machine-pools list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/machine_pools" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the machine pool.
@@ -4695,13 +4856,14 @@ export def "clusters-mgmt-clusters-machine-pools delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/machine_pools/($machine_pool_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the machine pool.
@@ -4717,13 +4879,14 @@ export def "clusters-mgmt-clusters-machine-pools get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, aws: record<kind: string, id: string, href: string, additional_security_group_ids: list<string>, availability_zone_types: record, spot_market_options: record<kind: string, id: string, href: string, max_price: float>, subnet_outposts: record, tags: record>, gcp: record<secure_boot: bool>, autoscaling: record<kind: string, id: string, href: string, max_replicas: int, min_replicas: int>, availability_zones: list<string>, instance_type: string, labels: record, replicas: int, root_volume: record<aws: record<iops: int, size: int>, gcp: record<size: int>>, security_group_filters: table<name: string, value: string>, subnets: list<string>, taints: table<effect: string, key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/machine_pools/($machine_pool_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the machine pool.
@@ -4745,6 +4908,7 @@ export def "clusters-mgmt-clusters-machine-pools patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'MachinePool' if this is a complete object or 'MachinePoolLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -4768,7 +4932,7 @@ export def "clusters-mgmt-clusters-machine-pools patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/clusters_mgmt/v1/clusters/{cluster_id}/metric_queries/alerts
@@ -4781,13 +4945,14 @@ export def "clusters-mgmt-clusters-metric-queries-alerts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<alerts: table<name: string, severity: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/metric_queries/alerts")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/clusters_mgmt/v1/clusters/{cluster_id}/metric_queries/cluster_operators
@@ -4800,13 +4965,14 @@ export def "clusters-mgmt-clusters-metric-queries-cluster-operators get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<operators: table<condition: string, name: string, reason: string, time: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/metric_queries/cluster_operators")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the metrics.
@@ -4821,13 +4987,14 @@ export def "clusters-mgmt-clusters-metric-queries-cpu-total-by-node-roles-os get
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<cpu_totals: table<cpu_total: float, node_roles: list, operating_system: string, time: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/metric_queries/cpu_total_by_node_roles_os")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/clusters_mgmt/v1/clusters/{cluster_id}/metric_queries/nodes
@@ -4840,13 +5007,14 @@ export def "clusters-mgmt-clusters-metric-queries-nodes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<nodes: table<amount: int, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/metric_queries/nodes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the metrics.
@@ -4861,13 +5029,14 @@ export def "clusters-mgmt-clusters-metric-queries-socket-total-by-node-roles-os 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<socket_totals: table<node_roles: list, operating_system: string, socket_total: float, time: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/metric_queries/socket_total_by_node_roles_os")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a cluster migration to the database.
@@ -4884,6 +5053,7 @@ export def "clusters-mgmt-clusters-migrations post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'ClusterMigration' if this is a complete object or 'ClusterMigrationLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -4902,7 +5072,7 @@ export def "clusters-mgmt-clusters-migrations post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/clusters_mgmt/v1/clusters/{cluster_id}/migrations
@@ -4915,6 +5085,7 @@ export def "clusters-mgmt-clusters-migrations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the returned page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items that will be contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, cluster_id: string, creation_timestamp: string, sdn_to_ovn: record, state: record, type: string, updated_timestamp: string>, page: int, size: int, total: int> {
@@ -4924,7 +5095,7 @@ export def "clusters-mgmt-clusters-migrations list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/migrations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the cluster migration.
@@ -4940,13 +5111,14 @@ export def "clusters-mgmt-clusters-migrations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, cluster_id: string, creation_timestamp: string, sdn_to_ovn: record<join_ipv4: string, masquerade_ipv4: string, transit_ipv4: string>, state: record<description: string, value: string>, type: string, updated_timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/migrations/($migration_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a new node pool to the cluster.
@@ -4969,6 +5141,7 @@ export def "clusters-mgmt-clusters-node-pools post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'NodePool' if this is a complete object or 'NodePoolLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -4997,7 +5170,7 @@ export def "clusters-mgmt-clusters-node-pools post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of node pools.
@@ -5012,6 +5185,7 @@ export def "clusters-mgmt-clusters-node-pools list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the node pools instead of the names of the columns of a table. For example, in order to sort the node pools descending by identifier the value should be:  ```sql id desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of a SQL statement, but using the names of the attributes of the node pools instead of the names of the columns of a table. For example, in order to retrieve all the node pools with replicas of two the following is required:  ```sql replicas = 2 ```  If the parameter isn't provided, or if the value is empty, then all the node pools that the user has permission to see will be returned.
@@ -5023,7 +5197,7 @@ export def "clusters-mgmt-clusters-node-pools list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/node_pools" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the node pool.
@@ -5039,13 +5213,14 @@ export def "clusters-mgmt-clusters-node-pools delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/node_pools/($node_pool_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the node pool.
@@ -5061,13 +5236,14 @@ export def "clusters-mgmt-clusters-node-pools get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, aws_node_pool: record<kind: string, id: string, href: string, additional_security_group_ids: list<string>, availability_zone_types: record, capacity_reservation: record<id: string, market_type: string, preference: string>, ec2_metadata_http_tokens: string, instance_profile: string, instance_type: string, root_volume: record<iops: int, size: int>, subnet_outposts: record, tags: record>, auto_repair: bool, autoscaling: record<kind: string, id: string, href: string, max_replica: int, min_replica: int>, availability_zone: string, azure_node_pool: record<vm_size: string, encryption_at_host: record<state: string>, os_disk: record<persistence: string, size_gibibytes: int, sse_encryption_set_resource_id: string, storage_account_type: string>, resource_name: string>, image_type: string, kubelet_configs: list<string>, labels: record, management_upgrade: record<kind: string, id: string, href: string, max_surge: string, max_unavailable: string, type: string>, node_drain_grace_period: record<unit: string, value: float>, replicas: int, status: record<kind: string, id: string, href: string, current_replicas: int, message: string, state: record<kind: string, id: string, href: string, last_updated_timestamp: string, value: string>>, subnet: string, taints: table<effect: string, key: string, value: string>, tuning_configs: list<string>, version: record<kind: string, id: string, href: string, gcp_marketplace_enabled: bool, rosa_enabled: bool, available_channels: list<string>, available_upgrades: list<string>, channel_group: string, default: bool, enabled: bool, end_of_life_timestamp: string, hosted_control_plane_default: bool, hosted_control_plane_enabled: bool, image_overrides: record<kind: string, id: string, href: string, aws: list, gcp: list>, raw_id: string, release_image: string, release_images: record<arm64: record, multi: record>, wif_enabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/node_pools/($node_pool_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the node pool.
@@ -5091,6 +5267,7 @@ export def "clusters-mgmt-clusters-node-pools patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'NodePool' if this is a complete object or 'NodePoolLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -5119,7 +5296,7 @@ export def "clusters-mgmt-clusters-node-pools patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds a new upgrade policy to the node pool of the cluster.
@@ -5136,6 +5313,7 @@ export def "clusters-mgmt-clusters-node-pools-upgrade-policies post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'NodePoolUpgradePolicy' if this is a complete object or 'NodePoolUpgradePolicyLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -5159,7 +5337,7 @@ export def "clusters-mgmt-clusters-node-pools-upgrade-policies post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of upgrade policies for the node pool.
@@ -5175,6 +5353,7 @@ export def "clusters-mgmt-clusters-node-pools-upgrade-policies list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, cluster_id: string, creation_timestamp: string, enable_minor_version_upgrades: bool, last_update_timestamp: string, next_run: string, node_pool_id: string, schedule: string, schedule_type: string, state: record, upgrade_type: string, version: string>, page: int, size: int, total: int> {
@@ -5184,7 +5363,7 @@ export def "clusters-mgmt-clusters-node-pools-upgrade-policies list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/node_pools/($node_pool_id)/upgrade_policies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the upgrade policy for the node pool.
@@ -5201,13 +5380,14 @@ export def "clusters-mgmt-clusters-node-pools-upgrade-policies delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/node_pools/($node_pool_id)/upgrade_policies/($node_pool_upgrade_policy_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the upgrade policy for the node pool.
@@ -5224,13 +5404,14 @@ export def "clusters-mgmt-clusters-node-pools-upgrade-policies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, cluster_id: string, creation_timestamp: string, enable_minor_version_upgrades: bool, last_update_timestamp: string, next_run: string, node_pool_id: string, schedule: string, schedule_type: string, state: record<kind: string, id: string, href: string, description: string, value: string>, upgrade_type: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/node_pools/($node_pool_id)/upgrade_policies/($node_pool_upgrade_policy_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the upgrade policy for the node pool.
@@ -5248,6 +5429,7 @@ export def "clusters-mgmt-clusters-node-pools-upgrade-policies patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'NodePoolUpgradePolicy' if this is a complete object or 'NodePoolUpgradePolicyLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -5271,7 +5453,7 @@ export def "clusters-mgmt-clusters-node-pools-upgrade-policies patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Delete the provision shard.
@@ -5286,13 +5468,14 @@ export def "clusters-mgmt-clusters-provision-shard delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/provision_shard")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the provision shard.
@@ -5307,13 +5490,14 @@ export def "clusters-mgmt-clusters-provision-shard get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, aws_account_operator_config: record<kind: string, id: string, href: string, aws_shard: record<ecr_repository_urls: list, backup_configs: list>, kubeconfig: string, server: string, topology: string>, aws_base_domain: string, gcp_base_domain: string, gcp_project_operator: record<kind: string, id: string, href: string, aws_shard: record<ecr_repository_urls: list, backup_configs: list>, kubeconfig: string, server: string, topology: string>, cloud_provider: record<kind: string, id: string, href: string, display_name: string, name: string, regions: list<record>>, creation_timestamp: string, hive_config: record<kind: string, id: string, href: string, aws_shard: record<ecr_repository_urls: list, backup_configs: list>, kubeconfig: string, server: string, topology: string>, hypershift_config: record<kind: string, id: string, href: string, aws_shard: record<ecr_repository_urls: list, backup_configs: list>, kubeconfig: string, server: string, topology: string>, last_update_timestamp: string, management_cluster: string, region: record<kind: string, id: string, href: string, ccs_only: bool, kms_location_id: string, kms_location_name: string, cloud_provider: record<kind: string, id: string, href: string, display_name: string, name: string, regions: list>, display_name: string, enabled: bool, govcloud: bool, name: string, supports_hypershift: bool, supports_multi_az: bool>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/provision_shard")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the details of the provision shard.
@@ -5334,6 +5518,7 @@ export def "clusters-mgmt-clusters-provision-shard patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'ProvisionShard' if this is a complete object or 'ProvisionShardLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -5358,7 +5543,7 @@ export def "clusters-mgmt-clusters-provision-shard patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves a list of resources for a cluster in error state
@@ -5373,13 +5558,14 @@ export def "clusters-mgmt-clusters-resources get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, cluster_id: string, creation_timestamp: string, resources: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/resources")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves currently available cluster resources
@@ -5394,13 +5580,14 @@ export def "clusters-mgmt-clusters-resources-live get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, cluster_id: string, creation_timestamp: string, resources: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/resources/live")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/clusters_mgmt/v1/clusters/{cluster_id}/status
@@ -5413,13 +5600,14 @@ export def "clusters-mgmt-clusters-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, dns_ready: bool, oidc_ready: bool, configuration_mode: string, current_compute: int, description: string, limited_support_reason_count: int, provision_error_code: string, provision_error_message: string, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a new operator role to the cluster.
@@ -5434,6 +5622,7 @@ export def "clusters-mgmt-clusters-sts-operator-roles post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Randomly-generated ID to identify the operator role
   --name: string # Name of the credentials secret used to access cloud resources
   --namespace: string # Namespace where the credentials secret lives in the cluster
@@ -5448,7 +5637,7 @@ export def "clusters-mgmt-clusters-sts-operator-roles post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of operator roles.
@@ -5463,6 +5652,7 @@ export def "clusters-mgmt-clusters-sts-operator-roles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items that will be contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<id: string, name: string, namespace: string, role_arn: string, service_account: string>, page: int, size: int, total: int> {
@@ -5472,7 +5662,7 @@ export def "clusters-mgmt-clusters-sts-operator-roles get" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/sts_operator_roles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the operator role.
@@ -5488,13 +5678,14 @@ export def "clusters-mgmt-clusters-sts-operator-roles delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/sts_operator_roles/($operator_iam_role_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /api/clusters_mgmt/v1/clusters/{cluster_id}/sts_support_jump_role
@@ -5507,13 +5698,14 @@ export def "clusters-mgmt-clusters-sts-support-jump-role get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<role_arn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/sts_support_jump_role")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a new tuning config to the cluster.
@@ -5528,6 +5720,7 @@ export def "clusters-mgmt-clusters-tuning-configs post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'TuningConfig' if this is a complete object or 'TuningConfigLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -5542,7 +5735,7 @@ export def "clusters-mgmt-clusters-tuning-configs post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of tuning configs.
@@ -5557,6 +5750,7 @@ export def "clusters-mgmt-clusters-tuning-configs list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, name: string, spec: record>, page: int, size: int, total: int> {
@@ -5566,7 +5760,7 @@ export def "clusters-mgmt-clusters-tuning-configs list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/tuning_configs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the tuning config.
@@ -5582,13 +5776,14 @@ export def "clusters-mgmt-clusters-tuning-configs delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/tuning_configs/($tuning_config_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the tuning config.
@@ -5604,13 +5799,14 @@ export def "clusters-mgmt-clusters-tuning-configs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, name: string, spec: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/tuning_configs/($tuning_config_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the tuning config.
@@ -5626,6 +5822,7 @@ export def "clusters-mgmt-clusters-tuning-configs patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'TuningConfig' if this is a complete object or 'TuningConfigLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -5640,7 +5837,7 @@ export def "clusters-mgmt-clusters-tuning-configs patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds a new upgrade policy to the cluster.
@@ -5655,6 +5852,7 @@ export def "clusters-mgmt-clusters-upgrade-policies post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'UpgradePolicy' if this is a complete object or 'UpgradePolicyLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -5674,7 +5872,7 @@ export def "clusters-mgmt-clusters-upgrade-policies post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of upgrade policies.
@@ -5689,6 +5887,7 @@ export def "clusters-mgmt-clusters-upgrade-policies list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, cluster_id: string, enable_minor_version_upgrades: bool, next_run: string, schedule: string, schedule_type: string, upgrade_type: string, version: string>, page: int, size: int, total: int> {
@@ -5698,7 +5897,7 @@ export def "clusters-mgmt-clusters-upgrade-policies list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/upgrade_policies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the upgrade policy.
@@ -5714,13 +5913,14 @@ export def "clusters-mgmt-clusters-upgrade-policies delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/upgrade_policies/($upgrade_policy_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the upgrade policy.
@@ -5736,13 +5936,14 @@ export def "clusters-mgmt-clusters-upgrade-policies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, cluster_id: string, enable_minor_version_upgrades: bool, next_run: string, schedule: string, schedule_type: string, upgrade_type: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/upgrade_policies/($upgrade_policy_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the upgrade policy.
@@ -5758,6 +5959,7 @@ export def "clusters-mgmt-clusters-upgrade-policies patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'UpgradePolicy' if this is a complete object or 'UpgradePolicyLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -5777,7 +5979,7 @@ export def "clusters-mgmt-clusters-upgrade-policies patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the details of the upgrade policy state.
@@ -5793,13 +5995,14 @@ export def "clusters-mgmt-clusters-upgrade-policies-state get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, description: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/upgrade_policies/($upgrade_policy_id)/state")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Update the upgrade policy state.
@@ -5815,6 +6018,7 @@ export def "clusters-mgmt-clusters-upgrade-policies-state patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'UpgradePolicyState' if this is a complete object or 'UpgradePolicyStateLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -5829,7 +6033,7 @@ export def "clusters-mgmt-clusters-upgrade-policies-state patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/clusters_mgmt/v1/clusters/{cluster_id}/vpc
@@ -5842,13 +6046,14 @@ export def "clusters-mgmt-clusters-vpc get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<aws_security_groups: table<id: string, name: string, red_hat_managed: bool>, aws_subnets: table<cidr_block: string, availability_zone: string, name: string, public: bool, red_hat_managed: bool, subnet_id: string>, cidr_block: string, id: string, name: string, red_hat_managed: bool, subnets: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/clusters/($cluster_id)/vpc")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a list of deleted clusters
@@ -5862,6 +6067,7 @@ export def "clusters-mgmt-deleted-clusters list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.
@@ -5873,7 +6079,7 @@ export def "clusters-mgmt-deleted-clusters list" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/deleted_clusters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves a specific deleted cluster
@@ -5888,13 +6094,14 @@ export def "clusters-mgmt-deleted-clusters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, cluster: record<kind: string, id: string, href: string, api: record<cidr_block_access: record, url: string, listening: string>, aws: record<kms_key_arn: string, sts: record, access_key_id: string, account_id: string, additional_allowed_principals: list, additional_compute_security_group_ids: list, additional_control_plane_security_group_ids: list, additional_infra_security_group_ids: list, audit_log: record, auto_node: record, billing_account_id: string, ec2_metadata_http_tokens: string, etcd_encryption: record, hcp_internal_communication_hosted_zone_id: string, private_hosted_zone_id: string, private_hosted_zone_role_arn: string, private_link: bool, private_link_configuration: record, secret_access_key: string, subnet_ids: list, tags: record, vpc_endpoint_role_arn: string, zero_egress: record>, aws_infrastructure_access_role_grants: list<record>, ccs: record<kind: string, id: string, href: string, disable_scp_checks: bool, enabled: bool>, dns: record<base_domain: string>, fips: bool, gcp: record<auth_uri: string, auth_provider_x509_cert_url: string, authentication: record, client_id: string, client_x509_cert_url: string, client_email: string, private_key: string, private_key_id: string, private_service_connect: record, project_id: string, security: record, token_uri: string, type: string>, gcp_encryption_key: record<kms_key_service_account: string, key_location: string, key_name: string, key_ring: string>, gcp_network: record<vpc_name: string, vpc_project_id: string, compute_subnet: string, control_plane_subnet: string>, additional_trust_bundle: string, addons: list<record>, auto_node: record<mode: string, status: record>, autoscaler: record<kind: string, id: string, href: string, balance_similar_node_groups: bool, balancing_ignored_labels: list, ignore_daemonsets_utilization: bool, log_verbosity: int, max_node_provision_time: string, max_pod_grace_period: int, pod_priority_threshold: int, resource_limits: record, scale_down: record, skip_nodes_with_local_storage: bool>, azure: record<etcd_encryption: record, managed_resource_group_name: string, network_security_group_resource_id: string, nodes_outbound_connectivity: record, operators_authentication: record, resource_group_name: string, resource_name: string, subnet_resource_id: string, subscription_id: string, tenant_id: string>, billing_model: string, byo_oidc: record<enabled: bool>, channel: string, cloud_provider: record<kind: string, id: string, href: string, display_name: string, name: string, regions: list>, console: record<url: string>, control_plane: record<backup: record, log_forwarders: list>, creation_timestamp: string, delete_protection: record<enabled: bool>, disable_user_workload_monitoring: bool, domain_prefix: string, etcd_encryption: bool, expiration_timestamp: string, external_id: string, external_auth_config: record<kind: string, id: string, href: string, enabled: bool, external_auths: list, state: string>, external_configuration: record<labels: list, manifests: list, syncsets: list>, flavour: record<kind: string, id: string, href: string, aws: record, gcp: record, name: string, network: record, nodes: record>, groups: list<record>, health_state: string, htpasswd: record<password: string, username: string, users: list>, hypershift: record<enabled: bool>, identity_providers: list<record>, image_registry: record<state: string>, inflight_checks: list<record>, infra_id: string, ingresses: list<record>, kubelet_config: record<kind: string, id: string, href: string, name: string, pod_pids_limit: int>, load_balancer_quota: int, machine_pools: list<record>, managed: bool, managed_service: record<enabled: bool>, multi_az: bool, multi_arch_enabled: bool, name: string, network: record<host_prefix: int, machine_cidr: string, pod_cidr: string, service_cidr: string, type: string>, node_drain_grace_period: record<unit: string, value: float>, node_pools: list<record>, nodes: record<autoscale_compute: record, availability_zones: list, compute: int, compute_labels: record, compute_machine_type: record, compute_root_volume: record, infra: int, infra_machine_type: record, master: int, master_machine_type: record, security_group_filters: list, total: int>, openshift_version: string, product: record<kind: string, id: string, href: string, name: string>, properties: record, provision_shard: record<kind: string, id: string, href: string, aws_account_operator_config: record, aws_base_domain: string, gcp_base_domain: string, gcp_project_operator: record, cloud_provider: record, creation_timestamp: string, hive_config: record, hypershift_config: record, last_update_timestamp: string, management_cluster: string, region: record, status: string>, proxy: record<http_proxy: string, https_proxy: string, no_proxy: string>, region: record<kind: string, id: string, href: string, ccs_only: bool, kms_location_id: string, kms_location_name: string, cloud_provider: record, display_name: string, enabled: bool, govcloud: bool, name: string, supports_hypershift: bool, supports_multi_az: bool>, registry_config: record<additional_trusted_ca: record, allowed_registries_for_import: list, platform_allowlist: record, registry_sources: record>, state: string, status: record<kind: string, id: string, href: string, dns_ready: bool, oidc_ready: bool, configuration_mode: string, current_compute: int, description: string, limited_support_reason_count: int, provision_error_code: string, provision_error_message: string, state: string>, storage_quota: record<unit: string, value: float>, subscription: record<kind: string, id: string, href: string>, version: record<kind: string, id: string, href: string, gcp_marketplace_enabled: bool, rosa_enabled: bool, available_channels: list, available_upgrades: list, channel_group: string, default: bool, enabled: bool, end_of_life_timestamp: string, hosted_control_plane_default: bool, hosted_control_plane_enabled: bool, image_overrides: record, raw_id: string, release_image: string, release_images: record, wif_enabled: bool>>, deleted_timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/deleted_clusters/($deleted_cluster_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a DNS domain.
@@ -5911,6 +6118,7 @@ export def "clusters-mgmt-dns-domains post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'DNSDomain' if this is a complete object or 'DNSDomainLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -5930,7 +6138,7 @@ export def "clusters-mgmt-dns-domains post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/clusters_mgmt/v1/dns_domains
@@ -5942,6 +6150,7 @@ export def "clusters-mgmt-dns-domains list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of a SQL statement, but using the names of the attributes of the dns domain instead of the names of the columns of a table. For example, in order to retrieve all the dns domains with a ID starting with `02a5` should be:  ```sql id like '02a5%' ```  If the parameter isn't provided, or if the value is empty, then all the dns domains that the user has permission to see will be returned.
   --size: int # Maximum number of items that will be contained in the returned page. (format: int32)
@@ -5952,7 +6161,7 @@ export def "clusters-mgmt-dns-domains list" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/dns_domains" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the DNS domain.
@@ -5967,13 +6176,14 @@ export def "clusters-mgmt-dns-domains delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/dns_domains/($dns_domain_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the DNS domain.
@@ -5988,13 +6198,14 @@ export def "clusters-mgmt-dns-domains get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, cloud_provider: string, cluster: record<href: string, id: string>, cluster_arch: string, gcp: record<domain_prefix: string, network_id: string, project_id: string>, organization: record<href: string, id: string>, reserved_at_timestamp: string, user_defined: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/dns_domains/($dns_domain_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the environment.
@@ -6008,13 +6219,14 @@ export def "clusters-mgmt-environment get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<backplane_url: string, last_cluster_imageset_sync: string, last_hibernation_check: string, last_limited_support_check: string, last_limited_support_override_check: string, last_upgrade_available_check: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/clusters_mgmt/v1/environment")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the environment.  Attributes that can be updated are:  - `last_upgrade_available_check` - `last_limited_support_check`
@@ -6028,6 +6240,7 @@ export def "clusters-mgmt-environment patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --backplane-url: string # the backplane url for the environment
   --last-cluster-imageset-sync: string # last time that the cluster imageset sync worker checked for version updates (format: date-time)
   --last-hibernation-check: string # last time that the hibernation worker checked for hibernating clusters (format: date-time)
@@ -6044,7 +6257,7 @@ export def "clusters-mgmt-environment patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds a new event to be tracked. When sending a new event request, it gets tracked in Prometheus, Pendo, CloudWatch, or whichever analytics client is configured as part of clusters service. This allows for reporting on events that happen outside of a regular API request, but are found to be useful for understanding customer needs and possible blockers.
@@ -6058,6 +6271,7 @@ export def "clusters-mgmt-events post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --body-body: record # Body of the event to track the details of the tracking event as Key value pair
   --key: string # Key of the event to be tracked. This key should start with an uppercase letter followed by alphanumeric characters or underscores. The entire key needs to be smaller than 64 characters.
 ]: any -> record<body: record, key: string> {
@@ -6069,7 +6283,7 @@ export def "clusters-mgmt-events post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/clusters_mgmt/v1/flavours
@@ -6081,6 +6295,7 @@ export def "clusters-mgmt-flavours list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the flavour instead of the names of the columns of a table. For example, in order to sort the flavours descending by name the value should be:  ```sql name desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, but using the names of the attributes of the flavour instead of the names of the columns of a table. For example, in order to retrieve all the flavours with a name starting with `my`the value should be:  ```sql name like 'my%' ```  If the parameter isn't provided, or if the value is empty, then all the flavours that the user has permission to see will be returned.
@@ -6092,7 +6307,7 @@ export def "clusters-mgmt-flavours list" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/flavours" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the cluster flavour.
@@ -6107,13 +6322,14 @@ export def "clusters-mgmt-flavours get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, aws: record<compute_instance_type: string, infra_instance_type: string, infra_volume: record<iops: int, size: int>, master_instance_type: string, master_volume: record<iops: int, size: int>, worker_volume: record<iops: int, size: int>>, gcp: record<compute_instance_type: string, infra_instance_type: string, infra_volume: record<size: int>, master_instance_type: string, master_volume: record<size: int>, worker_volume: record<size: int>>, name: string, network: record<host_prefix: int, machine_cidr: string, pod_cidr: string, service_cidr: string, type: string>, nodes: record<master: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/flavours/($flavour_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the flavour.  Attributes that can be updated are:  - `aws.infra_volume` - `aws.infra_instance_type` - `gcp.infra_instance_type`
@@ -6132,6 +6348,7 @@ export def "clusters-mgmt-flavours patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'Flavour' if this is a complete object or 'FlavourLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -6149,7 +6366,7 @@ export def "clusters-mgmt-flavours patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Provision a new wif_config resource and add it to the collection of wif_configs.
@@ -6165,6 +6382,7 @@ export def "clusters-mgmt-gcp-wif-configs post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'WifConfig' if this is a complete object or 'WifConfigLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -6181,7 +6399,7 @@ export def "clusters-mgmt-gcp-wif-configs post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of wif_configs
@@ -6195,6 +6413,7 @@ export def "clusters-mgmt-gcp-wif-configs list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the cluster instead of the names of the columns of a table. For example, in order to sort the clusters descending by region identifier the value should be:  ```sql region.id desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of a SQL statement, but using the names of the attributes of the cluster instead of the names of the columns of a table. For example, in order to retrieve all the clusters with a name starting with `my` in the `us-east-1` region the value should be:  ```sql name like 'my%' and region.id = 'us-east-1' ```  If the parameter isn't provided, or if the value is empty, then all the wif_configs that the user has permission to see will be returned.
@@ -6206,7 +6425,7 @@ export def "clusters-mgmt-gcp-wif-configs list" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/gcp/wif_configs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the wif_config.
@@ -6221,15 +6440,16 @@ export def "clusters-mgmt-gcp-wif-configs delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dry-run: oneof<nothing, bool> # Dry run flag is used to check if the operation can be completed, but won't delete.
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --qp-dry-run: oneof<nothing, bool> # Dry run flag is used to check if the operation can be completed, but won't delete.
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dry_run" $dry_run "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dry_run" $qp_dry_run "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/gcp/wif_configs/($wif_config_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the WifConfig.
@@ -6244,13 +6464,14 @@ export def "clusters-mgmt-gcp-wif-configs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, display_name: string, gcp: record<federated_project_id: string, federated_project_number: string, impersonator_email: string, project_id: string, project_number: string, role_prefix: string, service_accounts: list<record>, support: record<principal: string, roles: list>, workload_identity_pool: record<identity_provider: record, pool_id: string, pool_name: string>>, organization: record<href: string, id: string>, wif_templates: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/gcp/wif_configs/($wif_config_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the WifConfig.
@@ -6267,6 +6488,7 @@ export def "clusters-mgmt-gcp-wif-configs patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'WifConfig' if this is a complete object or 'WifConfigLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -6283,7 +6505,7 @@ export def "clusters-mgmt-gcp-wif-configs patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/clusters_mgmt/v1/gcp/wif_configs/{wif_config_id}/status
@@ -6296,13 +6518,14 @@ export def "clusters-mgmt-gcp-wif-configs-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<configured: bool, description: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/gcp/wif_configs/($wif_config_id)/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the list of encryption keys. IMPORTANT: This collection doesn't currently support paging or searching, so the returned `page` will always be 1 and `size` and `total` will always be the total number of available regions of the provider.
@@ -6320,6 +6543,7 @@ export def "clusters-mgmt-gcp-inquiries-encryption-keys post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the returned page, where one corresponds to the first page. As this collection doesn't support paging the result will always be `1`. (format: int32)
   --size: int # Number of items that will be contained in the returned page. As this collection doesn't support paging or searching the result will always be the total number of regions of the provider. (format: int32)
   --aws: any # _Amazon Web Services_ specific settings of a cluster. — shape: {kms_key_arn?: string, sts?: any, access_key_id?: string, account_id?: string, additional_allowed_principals?: list, additional_compute_security_group_ids?: list, additional_control_plane_security_group_ids?: list, additional_infra_security_group_ids?: list, audit_log?: any, auto_node?: any, billing_account_id?: string, ec2_metadata_http_tokens?: "optional"|"required", etcd_encryption?: any, hcp_internal_communication_hosted_zone_id?: string, private_hosted_zone_id?: string, private_hosted_zone_role_arn?: string, private_link?: bool, private_link_configuration?: any, secret_access_key?: string, subnet_ids?: list, tags?: record, vpc_endpoint_role_arn?: string, zero_egress?: any}
@@ -6341,7 +6565,7 @@ export def "clusters-mgmt-gcp-inquiries-encryption-keys post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of available key rings of the cloud provider. IMPORTANT: This collection doesn't currently support paging or searching, so the returned `page` will always be 1 and `size` and `total` will always be the total number of available regions of the provider.
@@ -6359,6 +6583,7 @@ export def "clusters-mgmt-gcp-inquiries-key-rings post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the returned page, where one corresponds to the first page. As this collection doesn't support paging the result will always be `1`. (format: int32)
   --size: int # Number of items that will be contained in the returned page. As this collection doesn't support paging or searching the result will always be the total number of key rings of the provider. (format: int32)
   --aws: any # _Amazon Web Services_ specific settings of a cluster. — shape: {kms_key_arn?: string, sts?: any, access_key_id?: string, account_id?: string, additional_allowed_principals?: list, additional_compute_security_group_ids?: list, additional_control_plane_security_group_ids?: list, additional_infra_security_group_ids?: list, audit_log?: any, auto_node?: any, billing_account_id?: string, ec2_metadata_http_tokens?: "optional"|"required", etcd_encryption?: any, hcp_internal_communication_hosted_zone_id?: string, private_hosted_zone_id?: string, private_hosted_zone_role_arn?: string, private_link?: bool, private_link_configuration?: any, secret_access_key?: string, subnet_ids?: list, tags?: record, vpc_endpoint_role_arn?: string, zero_egress?: any}
@@ -6380,7 +6605,7 @@ export def "clusters-mgmt-gcp-inquiries-key-rings post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of machine types in the provided region.
@@ -6398,6 +6623,7 @@ export def "clusters-mgmt-gcp-inquiries-machine-types post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Maximum number of items that will be contained in the returned page. (format: int32)
   --aws: any # _Amazon Web Services_ specific settings of a cluster. — shape: {kms_key_arn?: string, sts?: any, access_key_id?: string, account_id?: string, additional_allowed_principals?: list, additional_compute_security_group_ids?: list, additional_control_plane_security_group_ids?: list, additional_infra_security_group_ids?: list, audit_log?: any, auto_node?: any, billing_account_id?: string, ec2_metadata_http_tokens?: "optional"|"required", etcd_encryption?: any, hcp_internal_communication_hosted_zone_id?: string, private_hosted_zone_id?: string, private_hosted_zone_role_arn?: string, private_link?: bool, private_link_configuration?: any, secret_access_key?: string, subnet_ids?: list, tags?: record, vpc_endpoint_role_arn?: string, zero_egress?: any}
@@ -6419,7 +6645,7 @@ export def "clusters-mgmt-gcp-inquiries-machine-types post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of available regions of the cloud provider. IMPORTANT: This list doesn't currently support paging or searching, so the returned `page` will always be 1 and `size` and `total` will always be the total number of available regions of the provider.
@@ -6437,6 +6663,7 @@ export def "clusters-mgmt-gcp-inquiries-regions post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the returned page, where one corresponds to the first page. As this collection doesn't support paging the result will always be `1`. (format: int32)
   --size: int # Number of items that will be contained in the returned page. As this collection doesn't support paging or searching the result will always be the total number of regions of the provider. (format: int32)
   --aws: any # _Amazon Web Services_ specific settings of a cluster. — shape: {kms_key_arn?: string, sts?: any, access_key_id?: string, account_id?: string, additional_allowed_principals?: list, additional_compute_security_group_ids?: list, additional_control_plane_security_group_ids?: list, additional_infra_security_group_ids?: list, audit_log?: any, auto_node?: any, billing_account_id?: string, ec2_metadata_http_tokens?: "optional"|"required", etcd_encryption?: any, hcp_internal_communication_hosted_zone_id?: string, private_hosted_zone_id?: string, private_hosted_zone_role_arn?: string, private_link?: bool, private_link_configuration?: any, secret_access_key?: string, subnet_ids?: list, tags?: record, vpc_endpoint_role_arn?: string, zero_egress?: any}
@@ -6458,7 +6685,7 @@ export def "clusters-mgmt-gcp-inquiries-regions post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of available vpcs of the cloud provider for specific region. IMPORTANT: This collection doesn't currently support paging or searching, so the returned `page` will always be 1 and `size` and `total` will always be the total number of available vpcs of the provider.
@@ -6476,6 +6703,7 @@ export def "clusters-mgmt-gcp-inquiries-vpcs post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the returned page, where one corresponds to the first page. As this collection doesn't support paging the result will always be `1`. (format: int32)
   --size: int # Number of items that will be contained in the returned page. As this collection doesn't support paging or searching the result will always be the total number of vpcs of the provider. (format: int32)
   --aws: any # _Amazon Web Services_ specific settings of a cluster. — shape: {kms_key_arn?: string, sts?: any, access_key_id?: string, account_id?: string, additional_allowed_principals?: list, additional_compute_security_group_ids?: list, additional_control_plane_security_group_ids?: list, additional_infra_security_group_ids?: list, audit_log?: any, auto_node?: any, billing_account_id?: string, ec2_metadata_http_tokens?: "optional"|"required", etcd_encryption?: any, hcp_internal_communication_hosted_zone_id?: string, private_hosted_zone_id?: string, private_hosted_zone_role_arn?: string, private_link?: bool, private_link_configuration?: any, secret_access_key?: string, subnet_ids?: list, tags?: record, vpc_endpoint_role_arn?: string, zero_egress?: any}
@@ -6497,7 +6725,7 @@ export def "clusters-mgmt-gcp-inquiries-vpcs post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of templates.
@@ -6511,6 +6739,7 @@ export def "clusters-mgmt-limited-support-reason-templates list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, details: string, summary: string>, page: int, size: int, total: int> {
@@ -6520,7 +6749,7 @@ export def "clusters-mgmt-limited-support-reason-templates list" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/limited_support_reason_templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the template.
@@ -6535,13 +6764,14 @@ export def "clusters-mgmt-limited-support-reason-templates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, details: string, summary: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/limited_support_reason_templates/($limited_support_reason_template_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the list of Load Balancer Quota Values.
@@ -6555,6 +6785,7 @@ export def "clusters-mgmt-load-balancer-quota-values get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: list<int>, page: int, size: int, total: int> {
@@ -6564,7 +6795,7 @@ export def "clusters-mgmt-load-balancer-quota-values get" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/load_balancer_quota_values" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the list of available applications for log forwarding.
@@ -6578,6 +6809,7 @@ export def "clusters-mgmt-log-forwarding-applications get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the log forwarder application instead of the names of the columns of a table. For example, in order to sort the applications descending by id the value should be:  ```sql id desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, but using the names of the attributes of the log forwarder application instead of the names of the columns of a table. For example, in order to retrieve all the applications with an id starting with `kube` the value should be:  ```sql id like 'kube%' ```  If the parameter isn't provided, or if the value is empty, then all the log forwarder applications that the user has permission to see will be returned.
@@ -6589,7 +6821,7 @@ export def "clusters-mgmt-log-forwarding-applications get" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/log_forwarding/applications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the list of available log forwarder group versions.
@@ -6603,6 +6835,7 @@ export def "clusters-mgmt-log-forwarding-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the log forwarder group instead of the names of the columns of a table. For example, in order to sort the groups descending by id the value should be:  ```sql id desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, but using the names of the attributes of the log forwarder group instead of the names of the columns of a table. For example, in order to retrieve all the groups with an id starting with `auth` the value should be:  ```sql id like 'auth%' ```  If the parameter isn't provided, or if the value is empty, then all the log forwarder groups that the user has permission to see will be returned.
@@ -6614,7 +6847,7 @@ export def "clusters-mgmt-log-forwarding-groups get" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/log_forwarding/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the list of machine types.
@@ -6628,6 +6861,7 @@ export def "clusters-mgmt-machine-types list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the machine type instead of the names of the columns of a table. For example, in order to sort the machine types descending by name identifier the value should be:  ```sql name desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of a SQL statement, but using the names of the attributes of the machine type instead of the names of the columns of a table. For example, in order to retrieve all the machine types with a name starting with `A` the value should be:  ```sql name like 'A%' ```  If the parameter isn't provided, or if the value is empty, then all the machine types that the user has permission to see will be returned.
@@ -6639,7 +6873,7 @@ export def "clusters-mgmt-machine-types list" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/machine_types" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the machine type.
@@ -6654,13 +6888,14 @@ export def "clusters-mgmt-machine-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, ccs_only: bool, cpu: record<unit: string, value: float>, architecture: string, category: string, cloud_provider: record<kind: string, id: string, href: string, display_name: string, name: string, regions: list<record>>, features: record<win_li: bool>, generic_name: string, memory: record<unit: string, value: float>, name: string, size: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/machine_types/($machine_type_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates an entry for a network verification for each subnet supplied setting then to initial state.
@@ -6676,6 +6911,7 @@ export def "clusters-mgmt-network-verifications post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cloud-provider-data: any # Description of a cloud provider data used for cloud provider inquiries. — shape: {aws?: any, gcp?: any, availability_zones?: list, key_location?: string, key_ring_name?: string, region?: any, subnets?: list, version?: any, vpc_ids?: list}
   --cluster-id: string # Cluster ID needed to execute the network verification.
   --items: list # Details about each subnet network verification. — item shape: {kind?: string, id?: string, href?: string, details?: list, platform?: "aws"|"aws-classic"|"aws-hosted-cp"|"gcp"|"hostedcluster", state?: string, tags?: record}
@@ -6690,7 +6926,7 @@ export def "clusters-mgmt-network-verifications post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the details of a subnet network verification.
@@ -6705,13 +6941,14 @@ export def "clusters-mgmt-network-verifications get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, details: list<string>, platform: string, state: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/network_verifications/($network_verification_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Creates a hosting under Red Hat's S3 bucket for byo oidc configuration.
@@ -6725,6 +6962,7 @@ export def "clusters-mgmt-oidc-configs post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string # HREF for the oidc config, filled in response.
   --id: string # ID for the oidc config, filled in response.
   --creation-timestamp: string # Creation timestamp, filled in response. (format: date-time)
@@ -6745,7 +6983,7 @@ export def "clusters-mgmt-oidc-configs post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of oidc configs.
@@ -6759,6 +6997,7 @@ export def "clusters-mgmt-oidc-configs list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<href: string, id: string, creation_timestamp: string, installer_role_arn: string, issuer_url: string, last_update_timestamp: string, last_used_timestamp: string, managed: bool, organization_id: string, reusable: bool, secret_arn: string>, page: int, size: int, total: int> {
@@ -6768,7 +7007,7 @@ export def "clusters-mgmt-oidc-configs list" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/oidc_configs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the OidcConfig.
@@ -6783,13 +7022,14 @@ export def "clusters-mgmt-oidc-configs delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/oidc_configs/($oidc_config_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of an OidcConfig.
@@ -6804,13 +7044,14 @@ export def "clusters-mgmt-oidc-configs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<href: string, id: string, creation_timestamp: string, installer_role_arn: string, issuer_url: string, last_update_timestamp: string, last_used_timestamp: string, managed: bool, organization_id: string, reusable: bool, secret_arn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/oidc_configs/($oidc_config_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates attributes of an OidcConfig.
@@ -6825,6 +7066,7 @@ export def "clusters-mgmt-oidc-configs patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --href: string # HREF for the oidc config, filled in response.
   --id: string # ID for the oidc config, filled in response.
   --creation-timestamp: string # Creation timestamp, filled in response. (format: date-time)
@@ -6845,7 +7087,7 @@ export def "clusters-mgmt-oidc-configs patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of pending delete clusters.
@@ -6859,6 +7101,7 @@ export def "clusters-mgmt-pending-delete-clusters list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the pending delete cluster instead of the names of the columns of a table. For example, in order to sort the pending delete clusters descending by creation timestamp (i.e. their deletion time) the value should be:  ```sql creation_timestamp desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of a SQL statement, but using the names of the attributes of the pending delete cluster instead of the names of the columns of a table. For example, in order to retrieve all the pending delete clusters with creation time later than 2023-03-01T00:00:00Z the following is required:  ```sql creation_timestamp > '2023-03-01T00:00:00Z' ```  If the parameter isn't provided, or if the value is empty, then all the pending delete clusters that the user has permission to see will be returned.
@@ -6870,7 +7113,7 @@ export def "clusters-mgmt-pending-delete-clusters list" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/pending_delete_clusters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the pending delete cluster.
@@ -6885,13 +7128,14 @@ export def "clusters-mgmt-pending-delete-clusters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, best_effort: bool, cluster: record<kind: string, id: string, href: string, api: record<cidr_block_access: record, url: string, listening: string>, aws: record<kms_key_arn: string, sts: record, access_key_id: string, account_id: string, additional_allowed_principals: list, additional_compute_security_group_ids: list, additional_control_plane_security_group_ids: list, additional_infra_security_group_ids: list, audit_log: record, auto_node: record, billing_account_id: string, ec2_metadata_http_tokens: string, etcd_encryption: record, hcp_internal_communication_hosted_zone_id: string, private_hosted_zone_id: string, private_hosted_zone_role_arn: string, private_link: bool, private_link_configuration: record, secret_access_key: string, subnet_ids: list, tags: record, vpc_endpoint_role_arn: string, zero_egress: record>, aws_infrastructure_access_role_grants: list<record>, ccs: record<kind: string, id: string, href: string, disable_scp_checks: bool, enabled: bool>, dns: record<base_domain: string>, fips: bool, gcp: record<auth_uri: string, auth_provider_x509_cert_url: string, authentication: record, client_id: string, client_x509_cert_url: string, client_email: string, private_key: string, private_key_id: string, private_service_connect: record, project_id: string, security: record, token_uri: string, type: string>, gcp_encryption_key: record<kms_key_service_account: string, key_location: string, key_name: string, key_ring: string>, gcp_network: record<vpc_name: string, vpc_project_id: string, compute_subnet: string, control_plane_subnet: string>, additional_trust_bundle: string, addons: list<record>, auto_node: record<mode: string, status: record>, autoscaler: record<kind: string, id: string, href: string, balance_similar_node_groups: bool, balancing_ignored_labels: list, ignore_daemonsets_utilization: bool, log_verbosity: int, max_node_provision_time: string, max_pod_grace_period: int, pod_priority_threshold: int, resource_limits: record, scale_down: record, skip_nodes_with_local_storage: bool>, azure: record<etcd_encryption: record, managed_resource_group_name: string, network_security_group_resource_id: string, nodes_outbound_connectivity: record, operators_authentication: record, resource_group_name: string, resource_name: string, subnet_resource_id: string, subscription_id: string, tenant_id: string>, billing_model: string, byo_oidc: record<enabled: bool>, channel: string, cloud_provider: record<kind: string, id: string, href: string, display_name: string, name: string, regions: list>, console: record<url: string>, control_plane: record<backup: record, log_forwarders: list>, creation_timestamp: string, delete_protection: record<enabled: bool>, disable_user_workload_monitoring: bool, domain_prefix: string, etcd_encryption: bool, expiration_timestamp: string, external_id: string, external_auth_config: record<kind: string, id: string, href: string, enabled: bool, external_auths: list, state: string>, external_configuration: record<labels: list, manifests: list, syncsets: list>, flavour: record<kind: string, id: string, href: string, aws: record, gcp: record, name: string, network: record, nodes: record>, groups: list<record>, health_state: string, htpasswd: record<password: string, username: string, users: list>, hypershift: record<enabled: bool>, identity_providers: list<record>, image_registry: record<state: string>, inflight_checks: list<record>, infra_id: string, ingresses: list<record>, kubelet_config: record<kind: string, id: string, href: string, name: string, pod_pids_limit: int>, load_balancer_quota: int, machine_pools: list<record>, managed: bool, managed_service: record<enabled: bool>, multi_az: bool, multi_arch_enabled: bool, name: string, network: record<host_prefix: int, machine_cidr: string, pod_cidr: string, service_cidr: string, type: string>, node_drain_grace_period: record<unit: string, value: float>, node_pools: list<record>, nodes: record<autoscale_compute: record, availability_zones: list, compute: int, compute_labels: record, compute_machine_type: record, compute_root_volume: record, infra: int, infra_machine_type: record, master: int, master_machine_type: record, security_group_filters: list, total: int>, openshift_version: string, product: record<kind: string, id: string, href: string, name: string>, properties: record, provision_shard: record<kind: string, id: string, href: string, aws_account_operator_config: record, aws_base_domain: string, gcp_base_domain: string, gcp_project_operator: record, cloud_provider: record, creation_timestamp: string, hive_config: record, hypershift_config: record, last_update_timestamp: string, management_cluster: string, region: record, status: string>, proxy: record<http_proxy: string, https_proxy: string, no_proxy: string>, region: record<kind: string, id: string, href: string, ccs_only: bool, kms_location_id: string, kms_location_name: string, cloud_provider: record, display_name: string, enabled: bool, govcloud: bool, name: string, supports_hypershift: bool, supports_multi_az: bool>, registry_config: record<additional_trusted_ca: record, allowed_registries_for_import: list, platform_allowlist: record, registry_sources: record>, state: string, status: record<kind: string, id: string, href: string, dns_ready: bool, oidc_ready: bool, configuration_mode: string, current_compute: int, description: string, limited_support_reason_count: int, provision_error_code: string, provision_error_message: string, state: string>, storage_quota: record<unit: string, value: float>, subscription: record<kind: string, id: string, href: string>, version: record<kind: string, id: string, href: string, gcp_marketplace_enabled: bool, rosa_enabled: bool, available_channels: list, available_upgrades: list, channel_group: string, default: bool, enabled: bool, end_of_life_timestamp: string, hosted_control_plane_default: bool, hosted_control_plane_enabled: bool, image_overrides: record, raw_id: string, release_image: string, release_images: record, wif_enabled: bool>>, creation_timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/pending_delete_clusters/($pending_delete_cluster_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the pending delete cluster entry.
@@ -6907,6 +7151,7 @@ export def "clusters-mgmt-pending-delete-clusters patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'PendingDeleteCluster' if this is a complete object or 'PendingDeleteClusterLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -6922,7 +7167,7 @@ export def "clusters-mgmt-pending-delete-clusters patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of products.
@@ -6936,6 +7181,7 @@ export def "clusters-mgmt-products list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the product instead of the names of the columns of a table. For example, in order to sort the products descending by name the value should be:  ```sql name desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, but using the names of the attributes of the product instead of the names of the columns of a table. For example, in order to retrieve all the products with a name starting with `my` the value should be:  ```sql name like 'my%' ```  If the parameter isn't provided, or if the value is empty, then all the products that the user has permission to see will be returned.
@@ -6947,7 +7193,7 @@ export def "clusters-mgmt-products list" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/products" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the product.
@@ -6962,13 +7208,14 @@ export def "clusters-mgmt-products get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/products/($product_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the list of product minimal versions.
@@ -6983,6 +7230,7 @@ export def "clusters-mgmt-products-minimal-versions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the product instead of the names of the columns of a table. For example, in order to sort the products descending by name the value should be:  ```sql name desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, but using the names of the attributes of the product instead of the names of the columns of a table. For example, in order to retrieve all the products with a name starting with `my` the value should be:  ```sql name like 'my%' ```  If the parameter isn't provided, or if the value is empty, then all the products that the user has permission to see will be returned.
@@ -6994,7 +7242,7 @@ export def "clusters-mgmt-products-minimal-versions list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/products/($product_id)/minimal_versions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the product minimal version.
@@ -7010,13 +7258,14 @@ export def "clusters-mgmt-products-minimal-versions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, rosa_cli: string, start_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/products/($product_id)/minimal_versions/($minimal_version_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the list of product technology previews.
@@ -7031,6 +7280,7 @@ export def "clusters-mgmt-products-technology-previews list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the product instead of the names of the columns of a table. For example, in order to sort the products descending by name the value should be:  ```sql name desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, but using the names of the attributes of the product instead of the names of the columns of a table. For example, in order to retrieve all the products with a name starting with `my` the value should be:  ```sql name like 'my%' ```  If the parameter isn't provided, or if the value is empty, then all the products that the user has permission to see will be returned.
@@ -7042,7 +7292,7 @@ export def "clusters-mgmt-products-technology-previews list" [
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/products/($product_id)/technology_previews" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the product technology preview.
@@ -7058,13 +7308,14 @@ export def "clusters-mgmt-products-technology-previews get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, additional_text: string, end_date: string, start_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/products/($product_id)/technology_previews/($technology_preview_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a provision shard.
@@ -7084,6 +7335,7 @@ export def "clusters-mgmt-provision-shards post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'ProvisionShard' if this is a complete object or 'ProvisionShardLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -7108,7 +7360,7 @@ export def "clusters-mgmt-provision-shards post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /api/clusters_mgmt/v1/provision_shards
@@ -7120,6 +7372,7 @@ export def "clusters-mgmt-provision-shards list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of a SQL statement, but using the names of the attributes of the cluster instead of the names of the columns of a table. For example, in order to retrieve all the clusters with a name starting with `my` in the `us-east-1` region the value should be:  ```sql name like 'my%' and region.id = 'us-east-1' ```  If the parameter isn't provided, or if the value is empty, then all the provision shards that the user has permission to see will be returned.
   --size: int # Maximum number of items that will be contained in the returned page. (format: int32)
@@ -7130,7 +7383,7 @@ export def "clusters-mgmt-provision-shards list" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/provision_shards" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Delete the provision shard.
@@ -7145,13 +7398,14 @@ export def "clusters-mgmt-provision-shards delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/provision_shards/($provision_shard_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the provision shard.
@@ -7166,13 +7420,14 @@ export def "clusters-mgmt-provision-shards get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, aws_account_operator_config: record<kind: string, id: string, href: string, aws_shard: record<ecr_repository_urls: list, backup_configs: list>, kubeconfig: string, server: string, topology: string>, aws_base_domain: string, gcp_base_domain: string, gcp_project_operator: record<kind: string, id: string, href: string, aws_shard: record<ecr_repository_urls: list, backup_configs: list>, kubeconfig: string, server: string, topology: string>, cloud_provider: record<kind: string, id: string, href: string, display_name: string, name: string, regions: list<record>>, creation_timestamp: string, hive_config: record<kind: string, id: string, href: string, aws_shard: record<ecr_repository_urls: list, backup_configs: list>, kubeconfig: string, server: string, topology: string>, hypershift_config: record<kind: string, id: string, href: string, aws_shard: record<ecr_repository_urls: list, backup_configs: list>, kubeconfig: string, server: string, topology: string>, last_update_timestamp: string, management_cluster: string, region: record<kind: string, id: string, href: string, ccs_only: bool, kms_location_id: string, kms_location_name: string, cloud_provider: record<kind: string, id: string, href: string, display_name: string, name: string, regions: list>, display_name: string, enabled: bool, govcloud: bool, name: string, supports_hypershift: bool, supports_multi_az: bool>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/provision_shards/($provision_shard_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the details of the provision shard.
@@ -7193,6 +7448,7 @@ export def "clusters-mgmt-provision-shards patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'ProvisionShard' if this is a complete object or 'ProvisionShardLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -7217,7 +7473,7 @@ export def "clusters-mgmt-provision-shards patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds an existing cluster to the collection.
@@ -7231,6 +7487,7 @@ export def "clusters-mgmt-register-cluster post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --console-url: string # Optional Console URL of the cluster.
   --external-id: string # Identifier of the cluster generated by the installer.
   --organization-id: string # Organization identifier of the cluster generated by the account manager.
@@ -7244,7 +7501,7 @@ export def "clusters-mgmt-register-cluster post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Adds a new break registry allowlist.
@@ -7259,6 +7516,7 @@ export def "clusters-mgmt-registry-allowlists post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'RegistryAllowlist' if this is a complete object or 'RegistryAllowlistLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -7274,7 +7532,7 @@ export def "clusters-mgmt-registry-allowlists post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves the list of registry allowlists.
@@ -7288,6 +7546,7 @@ export def "clusters-mgmt-registry-allowlists list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the registry allowlists instead of the the names of the columns of a table. For example, in order to sort the allowlists descending by identifier the value should be:  ```sql creation_timestamp desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of a SQL statement, but using the names of the attributes of the registry allowlists instead of the names of the columns of a table. For example, in order to retrieve all the allowlists with a specific cloud provider and creation time the following is required:  ```sql cloud_provider.id='aws' and creation_timestamp > '2023-03-01T00:00:00Z' ```  If the parameter isn't provided, or if the value is empty, then all the registry allowlists that the user has permission to see will be returned.
@@ -7299,7 +7558,7 @@ export def "clusters-mgmt-registry-allowlists list" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/registry_allowlists" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the allowlist.
@@ -7314,13 +7573,14 @@ export def "clusters-mgmt-registry-allowlists delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/registry_allowlists/($registry_allowlist_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the allowlist.
@@ -7335,13 +7595,14 @@ export def "clusters-mgmt-registry-allowlists get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, cloud_provider: record<kind: string, id: string, href: string, display_name: string, name: string, regions: list<record>>, creation_timestamp: string, registries: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/registry_allowlists/($registry_allowlist_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the list of Storage Quota Values.
@@ -7355,6 +7616,7 @@ export def "clusters-mgmt-storage-quota-values get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<unit: string, value: float>, page: int, size: int, total: int> {
@@ -7364,7 +7626,7 @@ export def "clusters-mgmt-storage-quota-values get" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/storage_quota_values" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the list of trusted ip addresses.
@@ -7378,6 +7640,7 @@ export def "clusters-mgmt-trusted-ip-addresses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<kind: string, id: string, href: string, enabled: bool>, page: int, size: int, total: int> {
@@ -7387,7 +7650,7 @@ export def "clusters-mgmt-trusted-ip-addresses get" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/trusted_ip_addresses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Adds a new version gate
@@ -7401,6 +7664,7 @@ export def "clusters-mgmt-version-gates post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'VersionGate' if this is a complete object or 'VersionGateLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -7422,7 +7686,7 @@ export def "clusters-mgmt-version-gates post" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves a list of version gates.
@@ -7436,6 +7700,7 @@ export def "clusters-mgmt-version-gates list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of an SQL statement, but using the names of the attributes of the version gate instead of the names of the columns of a table. For example, in order to sort the version gates descending by identifier the value should be:  ```sql id desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, but using the names of the attributes of the version gate instead of the names of the columns of a table.  If the parameter isn't provided, or if the value is empty, then all the version gates that the user has permission to see will be returned.
@@ -7447,7 +7712,7 @@ export def "clusters-mgmt-version-gates list" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/version_gates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Deletes the version gate.
@@ -7462,13 +7727,14 @@ export def "clusters-mgmt-version-gates delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/version_gates/($version_gate_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the version gate.
@@ -7483,13 +7749,14 @@ export def "clusters-mgmt-version-gates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, sts_only: bool, cluster_condition: string, creation_timestamp: string, description: string, documentation_url: string, label: string, value: string, version_raw_id_prefix: string, warning_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/version_gates/($version_gate_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Updates the version gate.
@@ -7504,6 +7771,7 @@ export def "clusters-mgmt-version-gates patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --kind: string # Indicates the type of this object. Will be 'VersionGate' if this is a complete object or 'VersionGateLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
@@ -7525,7 +7793,7 @@ export def "clusters-mgmt-version-gates patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # Retrieves a list of versions.
@@ -7539,6 +7807,7 @@ export def "clusters-mgmt-versions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the version instead of the names of the columns of a table. For example, in order to sort the versions descending by identifier the value should be:  ```sql id desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of a SQL statement, but using the names of the attributes of the version instead of the names of the columns of a table. For example, in order to retrieve all the versions that are enabled:  ```sql enabled = 't' ```  If the parameter isn't provided, or if the value is empty, then all the versions that the user has permission to see will be returned.
@@ -7550,7 +7819,7 @@ export def "clusters-mgmt-versions list" [
   let full_url = (build-url $base "/api/clusters_mgmt/v1/versions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Retrieves the details of the version.
@@ -7565,11 +7834,12 @@ export def "clusters-mgmt-versions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<kind: string, id: string, href: string, gcp_marketplace_enabled: bool, rosa_enabled: bool, available_channels: list<string>, available_upgrades: list<string>, channel_group: string, default: bool, enabled: bool, end_of_life_timestamp: string, hosted_control_plane_default: bool, hosted_control_plane_enabled: bool, image_overrides: record<kind: string, id: string, href: string, aws: list<record>, gcp: list<record>>, raw_id: string, release_image: string, release_images: record<arm64: record<available_upgrades: list, release_image: string>, multi: record<available_upgrades: list, release_image: string>>, wif_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/clusters_mgmt/v1/versions/($version_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -46,10 +46,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -81,7 +82,7 @@ def sort-completer-1 [] { ["pubdateasc" "pubdatedesc"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "1 get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -114,13 +115,14 @@ export def "1 get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1/")
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Latest news articles
@@ -135,6 +137,7 @@ export def "1-latest get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --apikey: string # User API key. Alternatively, send the `X-ACCESS-KEY` HTTP header. One of the two MUST be present.
   --q: string # Free-text query, matched against `title`, `link`, `full_description`, `description`, `content`, `keywords` with AND-default operator. Maximum length is governed by the user's `q_limit` (default 100). Reserved Elasticsearch characters (`+ - = & | > < ! { } [ ] ^ ~ * ? : \ /`) are auto-escaped. Mutually exclusive with `qInTitle` and `qInMeta`.
   --qInTitle: string # Free-text query, matched against `title` only. Mutually exclusive with `q` and `qInMeta`.
@@ -177,7 +180,7 @@ export def "1-latest get" [
   let full_url = (build-url $base "/1/latest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Latest news articles (alias of /1/latest)
@@ -194,6 +197,7 @@ export def "1-news get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --apikey: string # User API key. Alternatively, send the `X-ACCESS-KEY` HTTP header. One of the two MUST be present.
   --q: string # Free-text query, matched against `title`, `link`, `full_description`, `description`, `content`, `keywords` with AND-default operator. Maximum length is governed by the user's `q_limit` (default 100). Reserved Elasticsearch characters (`+ - = & | > < ! { } [ ] ^ ~ * ? : \ /`) are auto-escaped. Mutually exclusive with `qInTitle` and `qInMeta`.
   --country: list # Comma-separated ISO 3166-1 alpha-2 country codes. Max `filter_limit` values (default 5). Mutually exclusive with `excludecountry`.
@@ -207,7 +211,7 @@ export def "1-news get" [
   let full_url = (build-url $base "/1/news" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Historical news archive
@@ -222,6 +226,7 @@ export def "1-archive get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --apikey: string # User API key. Alternatively, send the `X-ACCESS-KEY` HTTP header. One of the two MUST be present.
   --q: string # Free-text query, matched against `title`, `link`, `full_description`, `description`, `content`, `keywords` with AND-default operator. Maximum length is governed by the user's `q_limit` (default 100). Reserved Elasticsearch characters (`+ - = & | > < ! { } [ ] ^ ~ * ? : \ /`) are auto-escaped. Mutually exclusive with `qInTitle` and `qInMeta`.
   --qInTitle: string # Free-text query, matched against `title` only. Mutually exclusive with `q` and `qInMeta`.
@@ -265,7 +270,7 @@ export def "1-archive get" [
   let full_url = (build-url $base "/1/archive" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Cryptocurrency news
@@ -280,6 +285,7 @@ export def "1-crypto get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --apikey: string # User API key. Alternatively, send the `X-ACCESS-KEY` HTTP header. One of the two MUST be present.
   --q: string # Free-text query, matched against `title`, `link`, `full_description`, `description`, `content`, `keywords` with AND-default operator. Maximum length is governed by the user's `q_limit` (default 100). Reserved Elasticsearch characters (`+ - = & | > < ! { } [ ] ^ ~ * ? : \ /`) are auto-escaped. Mutually exclusive with `qInTitle` and `qInMeta`.
   --qInTitle: string # Free-text query, matched against `title` only. Mutually exclusive with `q` and `qInMeta`.
@@ -316,7 +322,7 @@ export def "1-crypto get" [
   let full_url = (build-url $base "/1/crypto" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Financial-market news
@@ -331,6 +337,7 @@ export def "1-market get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --apikey: string # User API key. Alternatively, send the `X-ACCESS-KEY` HTTP header. One of the two MUST be present.
   --q: string # Free-text query, matched against `title`, `link`, `full_description`, `description`, `content`, `keywords` with AND-default operator. Maximum length is governed by the user's `q_limit` (default 100). Reserved Elasticsearch characters (`+ - = & | > < ! { } [ ] ^ ~ * ? : \ /`) are auto-escaped. Mutually exclusive with `qInTitle` and `qInMeta`.
   --qInTitle: string # Free-text query, matched against `title` only. Mutually exclusive with `q` and `qInMeta`.
@@ -373,7 +380,7 @@ export def "1-market get" [
   let full_url = (build-url $base "/1/market" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List news sources
@@ -388,6 +395,7 @@ export def "1-sources get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --apikey: string # User API key. Alternatively, send the `X-ACCESS-KEY` HTTP header. One of the two MUST be present.
   --country: list # Comma-separated ISO 3166-1 alpha-2 country codes. Max `filter_limit` values (default 5). Mutually exclusive with `excludecountry`.
   --category: list # Comma-separated category names. Mutually exclusive with `excludecategory`.
@@ -402,7 +410,7 @@ export def "1-sources get" [
   let full_url = (build-url $base "/1/sources" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Article count, with optional time-bucketing
@@ -417,6 +425,7 @@ export def "1-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --apikey: string # User API key. Alternatively, send the `X-ACCESS-KEY` HTTP header. One of the two MUST be present.
   --q: string # Free-text query, matched against `title`, `link`, `full_description`, `description`, `content`, `keywords` with AND-default operator. Maximum length is governed by the user's `q_limit` (default 100). Reserved Elasticsearch characters (`+ - = & | > < ! { } [ ] ^ ~ * ? : \ /`) are auto-escaped. Mutually exclusive with `qInTitle` and `qInMeta`.
   --qInTitle: string # Free-text query, matched against `title` only. Mutually exclusive with `q` and `qInMeta`.
@@ -456,7 +465,7 @@ export def "1-count get" [
   let full_url = (build-url $base "/1/count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Crypto article count
@@ -471,6 +480,7 @@ export def "1-crypto-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --apikey: string # User API key. Alternatively, send the `X-ACCESS-KEY` HTTP header. One of the two MUST be present.
   --q: string # Free-text query, matched against `title`, `link`, `full_description`, `description`, `content`, `keywords` with AND-default operator. Maximum length is governed by the user's `q_limit` (default 100). Reserved Elasticsearch characters (`+ - = & | > < ! { } [ ] ^ ~ * ? : \ /`) are auto-escaped. Mutually exclusive with `qInTitle` and `qInMeta`.
   --qInTitle: string # Free-text query, matched against `title` only. Mutually exclusive with `q` and `qInMeta`.
@@ -502,7 +512,7 @@ export def "1-crypto-count get" [
   let full_url = (build-url $base "/1/crypto/count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Market article count
@@ -517,6 +527,7 @@ export def "1-market-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --apikey: string # User API key. Alternatively, send the `X-ACCESS-KEY` HTTP header. One of the two MUST be present.
   --q: string # Free-text query, matched against `title`, `link`, `full_description`, `description`, `content`, `keywords` with AND-default operator. Maximum length is governed by the user's `q_limit` (default 100). Reserved Elasticsearch characters (`+ - = & | > < ! { } [ ] ^ ~ * ? : \ /`) are auto-escaped. Mutually exclusive with `qInTitle` and `qInMeta`.
   --symbol: list # Comma-separated financial-instrument symbols (e.g. `AAPL,MSFT`). Validated against the configured ticker file.
@@ -552,7 +563,7 @@ export def "1-market-count get" [
   let full_url = (build-url $base "/1/market/count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List curated topics
@@ -567,13 +578,14 @@ export def "1-topic-all get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<status: string, result: table<id: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1/topic/all")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Articles in a curated topic
@@ -588,6 +600,7 @@ export def "1-topic-view get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # Numeric topic id from `/1/topic/all`.
   --page: int # 1-based page number.
 ]: nothing -> record<status: string, results: list<record>> {
@@ -597,7 +610,7 @@ export def "1-topic-view get" [
   let full_url = (build-url $base "/1/topic/view" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Per-API-key access statistics (admin)
@@ -612,6 +625,7 @@ export def "1-log-user get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # Server-side admin secret (`LOG_VIEW_SECRET`).
   --apikey: string # The user's API key whose log is being requested.
 ]: nothing -> record<status: string, result: record<apikey: string, name: string, stats: list<record>, details: list<list>>> {
@@ -621,7 +635,7 @@ export def "1-log-user get" [
   let full_url = (build-url $base "/1/log/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Download access log as ZIP (admin)
@@ -636,6 +650,7 @@ export def "1-log-user-download downloadUserAccessLog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # Server-side admin secret (`LOG_VIEW_SECRET`).
   --apikey: string
 ]: nothing -> any {
@@ -645,7 +660,7 @@ export def "1-log-user-download downloadUserAccessLog" [
   let full_url = (build-url $base "/1/log/user/download" $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # Tail of the server-side API log (admin)
@@ -660,6 +675,7 @@ export def "1-log get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --access-key: string # Server-side admin secret (`LOG_VIEW_SECRET`).
   --size: int # Number of log lines to tail (1–2000, default 500). (default: 500)
 ]: nothing -> record<status: string, result: list<string>> {
@@ -669,5 +685,5 @@ export def "1-log get" [
   let full_url = (build-url $base "/1/log/api" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
